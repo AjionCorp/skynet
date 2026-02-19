@@ -61,7 +61,36 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
   exit 0
 fi
 echo $$ > "$LOCKFILE"
-trap 'cleanup_worktree 2>/dev/null || true; rm -f "$LOCKFILE"' EXIT
+# Track current task for cleanup on unexpected exit
+_CURRENT_TASK_TITLE=""
+cleanup_on_exit() {
+  local exit_code=$?
+  # Abort any in-progress git merge on the main branch
+  cd "$PROJECT_DIR" 2>/dev/null || true
+  if [ -f "$PROJECT_DIR/.git/MERGE_HEAD" ]; then
+    git merge --abort 2>/dev/null || true
+    log "Crash recovery: aborted in-progress merge"
+  fi
+  # Clean up worktree if it exists
+  cleanup_worktree 2>/dev/null || true
+  # Reset current task to idle if we were mid-task
+  if [ -n "$_CURRENT_TASK_TITLE" ]; then
+    cat > "$CURRENT_TASK" <<CLEANUP_EOF
+# Current Task
+**Status:** idle
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX] $_CURRENT_TASK_TITLE (crash exit $exit_code)
+CLEANUP_EOF
+    log "Crash recovery: reset current-task to idle for: $_CURRENT_TASK_TITLE"
+  fi
+  # Release PID lock
+  rm -f "$LOCKFILE"
+  # Log crash event (only on abnormal exit)
+  if [ "$exit_code" -ne 0 ]; then
+    log "task-fixer crashed (exit $exit_code). Cleanup complete."
+  fi
+}
+trap cleanup_on_exit EXIT
+trap 'log "ERR on line $LINENO"; exit 1' ERR
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
@@ -100,6 +129,7 @@ if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   exit 0
 fi
 
+_CURRENT_TASK_TITLE="$task_title"
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
@@ -184,6 +214,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
+    _CURRENT_TASK_TITLE=""
     cat > "$CURRENT_TASK" <<EOF
 # Current Task
 **Status:** idle
@@ -204,6 +235,7 @@ EOF
 **Status:** idle
 **Last completed:** $(date '+%Y-%m-%d %H:%M') -- [FIXED] $task_title (merged to $SKYNET_MAIN_BRANCH)
 EOF
+    _CURRENT_TASK_TITLE=""
     log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
     tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
   fi
@@ -216,6 +248,7 @@ else
   new_attempts=$((fix_attempts + 1))
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
+  _CURRENT_TASK_TITLE=""
   cat > "$CURRENT_TASK" <<EOF
 # Current Task
 **Status:** idle
