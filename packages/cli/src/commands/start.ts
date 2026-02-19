@@ -30,6 +30,8 @@ function loadConfig(projectDir: string): Record<string, string> {
 function isProcessRunning(lockFile: string): boolean {
   try {
     const pid = readFileSync(lockFile, "utf-8").trim();
+    // Validate PID is numeric to prevent shell injection
+    if (!/^\d+$/.test(pid)) return false;
     execSync(`kill -0 ${pid}`, { stdio: "ignore" });
     return true;
   } catch {
