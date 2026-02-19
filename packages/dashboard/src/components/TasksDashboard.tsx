@@ -9,8 +9,8 @@ import {
   Plus,
   RefreshCw,
 } from "lucide-react";
-import type { BacklogItem, TaskBacklogData } from "../types.js";
-import { useSkynet } from "./SkynetProvider.js";
+import type { BacklogItem, TaskBacklogData } from "../types";
+import { useSkynet } from "./SkynetProvider";
 
 const DEFAULT_TAG_COLORS: Record<string, string> = {
   FEAT: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",

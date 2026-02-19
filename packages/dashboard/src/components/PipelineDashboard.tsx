@@ -18,8 +18,8 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import type { PipelineStatus } from "../types.js";
-import { useSkynet } from "./SkynetProvider.js";
+import type { PipelineStatus } from "../types";
+import { useSkynet } from "./SkynetProvider";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";

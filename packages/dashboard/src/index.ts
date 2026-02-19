@@ -41,4 +41,4 @@ export {
 } from "./handlers";
 
 // Dashboard UI components
-export * from "./components/index.js";
+export * from "./components/index";

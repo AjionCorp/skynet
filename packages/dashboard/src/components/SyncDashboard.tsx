@@ -10,8 +10,8 @@ import {
   AlertTriangle,
   Database,
 } from "lucide-react";
-import type { SyncStatus } from "../types.js";
-import { useSkynet } from "./SkynetProvider.js";
+import type { SyncStatus } from "../types";
+import { useSkynet } from "./SkynetProvider";
 
 // ===== Helpers =====
 

@@ -2,20 +2,38 @@
   "name": "@ajioncorp/skynet",
   "version": "0.1.0",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
     },
     "./handlers": {
-      "import": "./dist/handlers/index.js",
-      "types": "./dist/handlers/index.d.ts"
+      "import": "./src/handlers/index.ts",
+      "types": "./src/handlers/index.ts"
     },
     "./components": {
-      "import": "./dist/components/index.js",
-      "types": "./dist/components/index.d.ts"
+      "import": "./src/components/index.ts",
+      "types": "./src/components/index.ts"
+    }
+  },
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      },
+      "./handlers": {
+        "import": "./dist/handlers/index.js",
+        "types": "./dist/handlers/index.d.ts"
+      },
+      "./components": {
+        "import": "./dist/components/index.js",
+        "types": "./dist/components/index.d.ts"
+      }
     }
   },
   "scripts": {

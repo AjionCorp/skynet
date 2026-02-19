@@ -30,8 +30,8 @@ import type {
   MonitoringStatus,
   AgentInfo,
   LogData,
-} from "../types.js";
-import { useSkynet } from "./SkynetProvider.js";
+} from "../types";
+import { useSkynet } from "./SkynetProvider";
 
 // ===== Constants =====
 
