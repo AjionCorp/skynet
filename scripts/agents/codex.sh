@@ -15,5 +15,6 @@ agent_check() {
 agent_run() {
   local prompt="$1"
   local log_file="${2:-/dev/null}"
+  # shellcheck disable=SC2086
   $SKYNET_CODEX_BIN $SKYNET_CODEX_FLAGS "$prompt" >> "$log_file" 2>&1
 }

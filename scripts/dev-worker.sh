@@ -313,6 +313,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
+  # shellcheck disable=SC2034
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
 

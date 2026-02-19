@@ -62,22 +62,32 @@ export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
 # Quality gates defaults (just typecheck by default)
 export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"
 
-# Convenience aliases used by all scripts
+# Convenience aliases used by all scripts (sourced externally)
+# shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"
 DEV_DIR="$SKYNET_DEV_DIR"
+# shellcheck disable=SC2034
 SCRIPTS_DIR="$SKYNET_DEV_DIR/scripts"
+# shellcheck disable=SC2034
 BACKLOG="$DEV_DIR/backlog.md"
+# shellcheck disable=SC2034
 COMPLETED="$DEV_DIR/completed.md"
+# shellcheck disable=SC2034
 FAILED="$DEV_DIR/failed-tasks.md"
+# shellcheck disable=SC2034
 BLOCKERS="$DEV_DIR/blockers.md"
+# shellcheck disable=SC2034
 CURRENT_TASK="$DEV_DIR/current-task.md"
+# shellcheck disable=SC2034
 SYNC_HEALTH="$DEV_DIR/sync-health.md"
+# shellcheck disable=SC2034
 MISSION="$DEV_DIR/mission.md"
 
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
 
 # Precompute uppercase project name (bash 3.2 doesn't support ${VAR^^})
+# shellcheck disable=SC2034
 SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
 
 # Source notification helpers

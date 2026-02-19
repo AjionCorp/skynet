@@ -18,7 +18,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
   exit 0
 fi
 echo $$ > "$LOCKFILE"
-trap "rm -f $LOCKFILE" EXIT
+trap 'rm -f "$LOCKFILE"' EXIT
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
@@ -49,6 +49,7 @@ sync_health_content=$(cat "$SYNC_HEALTH")
 # Count task metrics
 remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
 claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+# shellcheck disable=SC2034
 done_count=$(grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || echo "0")
 completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
 completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
@@ -57,8 +58,8 @@ failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || echo "0")
 # Get codebase structure summary
 api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
 pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
-scripts_list=$(ls "$SKYNET_SCRIPTS_DIR"/*.sh 2>/dev/null | xargs -I{} basename {} || true)
-packages_list=$(find "$PROJECT_DIR/packages" -maxdepth 2 -name "package.json" 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} || true)
+scripts_list=$(find "$SKYNET_SCRIPTS_DIR" -maxdepth 1 -name '*.sh' -exec basename {} \; 2>/dev/null || true)
+packages_list=$(find "$PROJECT_DIR/packages" -maxdepth 2 -name "package.json" -exec dirname {} \; 2>/dev/null | while read -r d; do basename "$d"; done || true)
 
 log "State: $remaining pending, $claimed claimed, $completed_count completed, $failed_count failed"
 

@@ -25,7 +25,7 @@ log "Running typecheck..."
 attempt=0
 typecheck_ok=false
 
-while [ $attempt -lt $MAX_FIX_ATTEMPTS ]; do
+while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
   attempt=$((attempt + 1))
 
   if $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
@@ -35,7 +35,7 @@ while [ $attempt -lt $MAX_FIX_ATTEMPTS ]; do
   else
     log "Typecheck failed (attempt $attempt/$MAX_FIX_ATTEMPTS)."
 
-    if [ $attempt -lt $MAX_FIX_ATTEMPTS ]; then
+    if [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; then
       log "Asking Claude Code to fix type errors..."
       errors=$($SKYNET_TYPECHECK_CMD 2>&1 | tail -50)
       PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.
