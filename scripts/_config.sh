@@ -54,6 +54,7 @@ export SKYNET_MAX_WORKERS="${SKYNET_MAX_WORKERS:-2}"
 export SKYNET_MAX_TASKS_PER_RUN="${SKYNET_MAX_TASKS_PER_RUN:-5}"
 export SKYNET_STALE_MINUTES="${SKYNET_STALE_MINUTES:-45}"
 export SKYNET_MAX_FIX_ATTEMPTS="${SKYNET_MAX_FIX_ATTEMPTS:-3}"
+export SKYNET_MAX_LOG_SIZE_KB="${SKYNET_MAX_LOG_SIZE_KB:-1024}"
 export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-permissions}"
 export SKYNET_DEV_SERVER_URL="${SKYNET_DEV_SERVER_URL:-http://localhost:3000}"
@@ -96,6 +97,22 @@ source "$SKYNET_SCRIPTS_DIR/_notify.sh"
 
 # Source AI agent abstraction (plugin-based — see scripts/agents/)
 source "$SKYNET_SCRIPTS_DIR/_agent.sh"
+
+# --- Log rotation ---
+# Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.
+# Keeps max 2 rotated copies: $logfile.1 (newest) and $logfile.2 (oldest).
+rotate_log_if_needed() {
+  local logfile="$1"
+  [ -f "$logfile" ] || return 0
+  local max_bytes=$(( SKYNET_MAX_LOG_SIZE_KB * 1024 ))
+  local current_size
+  current_size=$(file_size "$logfile")
+  if [ "$current_size" -gt "$max_bytes" ]; then
+    rm -f "${logfile}.2"
+    [ -f "${logfile}.1" ] && mv "${logfile}.1" "${logfile}.2"
+    mv "$logfile" "${logfile}.1"
+  fi
+}
 
 # --- Backlog health validation ---
 # Checks: (1) no duplicate pending titles, (2) no orphaned [>] claims,

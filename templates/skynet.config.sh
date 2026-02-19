@@ -44,6 +44,7 @@ export SKYNET_MAX_WORKERS=2
 export SKYNET_MAX_TASKS_PER_RUN=5
 export SKYNET_STALE_MINUTES=45
 export SKYNET_MAX_FIX_ATTEMPTS=3
+export SKYNET_MAX_LOG_SIZE_KB=1024  # Max log file size in KB before rotation (default 1MB)
 
 # ---- Auth (Claude Code OAuth) ----
 export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"
