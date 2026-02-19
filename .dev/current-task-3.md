@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enhance `skynet doctor` with runtime consistency checks — in `packages/cli/src/commands/doctor.ts`, add new checks: (1) **Worker count match** — read `SKYNET_MAX_WORKERS` from config, count actual running worker PID files, warn if mismatch. (2) **Orphaned worktrees** — run `git worktree list`, flag any worktrees that don't match an active worker's branch. (3) **Backlog integrity** — read backlog.md, check for duplicate task titles in pending `[ ]` entries, check that all `[>]` claimed tasks have a matching `current-task-N.md` in `in_progress` state. (4) **Stale heartbeats** — read worker-N.heartbeat files, warn if any are older than SKYNET_STALE_MINUTES. (5) **Config completeness** — verify all required SKYNET_* variables are set and non-empty. Output severity as PASS/WARN/FAIL per check
+## [FIX] Wire WorkerScaling component into admin dashboard navigation and add dedicated workers page — in `packages/admin/src/app/admin/layout.tsx`, add a navigation entry: `{ href: "/admin/workers", label: "Workers", icon: Users }` (import `Users` from lucide-react). Create `packages/admin/src/app/admin/workers/page.tsx` that imports `WorkerScaling` from `@ajioncorp/skynet/components` and wraps it in the page layout with `ErrorBoundary` and `Suspense`. The API route `packages/admin/src/app/api/admin/workers/scale/route.ts` already exists. The `WorkerScaling` component is exported from the dashboard package but currently unreachable via any admin page — this directly addresses criterion #4 (full dashboard visibility)
 **Status:** completed
-**Started:** 2026-02-19 17:50
+**Started:** 2026-02-19 17:51
 **Completed:** 2026-02-19
-**Branch:** dev/enhance-skynet-doctor-with-runtime-consi
+**Branch:** dev/wire-workerscaling-component-into-admin-
 **Worker:** 3
 
 ### Changes
