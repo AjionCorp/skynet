@@ -171,24 +171,51 @@ else
   log "Created new fix branch in worktree: $branch_name"
 fi
 
-# Get recent log context from all worker logs (the failure could have come from any worker)
-previous_log=""
-for _wlog in "$SCRIPTS_DIR"/dev-worker-*.log; do
-  [ -f "$_wlog" ] || continue
-  _wlog_tail=$(tail -100 "$_wlog" 2>/dev/null | grep -A 50 "$task_title" | tail -50 || true)
-  if [ -n "$_wlog_tail" ]; then
-    previous_log="$_wlog_tail"
+# Determine which worker originally ran the task using the branch name
+# (branch names are safe for grep -F: only a-z0-9- after slugification)
+worker_log=""
+
+# Method 1: Check current-task-N.md files for the branch name
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
+  _task_file="$DEV_DIR/current-task-${_wid}.md"
+  if [ -f "$_task_file" ] && grep -qF "$branch_name" "$_task_file" 2>/dev/null; then
+    worker_log="$SCRIPTS_DIR/dev-worker-${_wid}.log"
+    log "Matched failed task to worker $_wid via current-task-${_wid}.md"
     break
   fi
 done
-if [ -z "$previous_log" ]; then
-  # Fallback: grab last 100 lines from the most recently modified worker log
-  _latest_wlog=$(ls -t "$SCRIPTS_DIR"/dev-worker-*.log 2>/dev/null | head -1 || true)
-  if [ -n "$_latest_wlog" ]; then
-    previous_log=$(tail -100 "$_latest_wlog" 2>/dev/null || echo "No log context available")
+
+# Method 2: Search worker logs for the branch name (works after task-file reset)
+if [ -z "$worker_log" ]; then
+  for _wlog in "$SCRIPTS_DIR"/dev-worker-*.log; do
+    [ -f "$_wlog" ] || continue
+    if grep -qF "$branch_name" "$_wlog" 2>/dev/null; then
+      worker_log="$_wlog"
+      log "Matched failed task to log: $_wlog (via branch name)"
+      break
+    fi
+  done
+fi
+
+# Method 3: Fall back to most recently modified worker log
+if [ -z "$worker_log" ] || [ ! -f "$worker_log" ]; then
+  worker_log=$(ls -t "$SCRIPTS_DIR"/dev-worker-*.log 2>/dev/null | head -1 || true)
+  [ -n "$worker_log" ] && log "Falling back to most recent worker log: $worker_log"
+fi
+
+# Read relevant log context from the identified worker's log
+previous_log=""
+if [ -n "$worker_log" ] && [ -f "$worker_log" ]; then
+  # Try to extract task-specific output using fixed-string grep (handles [TAG] titles)
+  _task_context=$(tail -200 "$worker_log" 2>/dev/null | grep -F -A 50 "$task_title" | tail -80 || true)
+  if [ -n "$_task_context" ]; then
+    previous_log="$_task_context"
   else
-    previous_log="No worker log files found"
+    # Fall back to last 100 lines of the correct worker's log
+    previous_log=$(tail -100 "$worker_log" 2>/dev/null || echo "No log context available")
   fi
+else
+  previous_log="No worker log files found"
 fi
 
 # Get git diff of what was changed on the failed branch vs main
