@@ -9,8 +9,9 @@ import {
   AlertTriangle,
   RefreshCw,
   Crosshair,
+  FileText,
 } from "lucide-react";
-import type { MissionStatus } from "../types";
+import type { MissionStatus, MissionProgress } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
 export interface MissionDashboardProps {
@@ -18,22 +19,38 @@ export interface MissionDashboardProps {
   pollInterval?: number;
 }
 
+const statusBadge: Record<MissionProgress["status"], { label: string; classes: string }> = {
+  met: { label: "Met", classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
+  partial: { label: "Partial", classes: "bg-amber-500/10 text-amber-400 border-amber-500/20" },
+  "not-met": { label: "Not Met", classes: "bg-red-500/10 text-red-400 border-red-500/20" },
+};
+
 export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
   const [mission, setMission] = useState<MissionStatus | null>(null);
+  const [missionProgress, setMissionProgress] = useState<MissionProgress[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMission = useCallback(async () => {
     try {
-      const res = await fetch(`${apiPrefix}/mission/status`);
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
+      const [missionRes, pipelineRes] = await Promise.all([
+        fetch(`${apiPrefix}/mission/status`),
+        fetch(`${apiPrefix}/pipeline/status`),
+      ]);
+      const missionJson = await missionRes.json();
+      const pipelineJson = await pipelineRes.json();
+
+      if (missionJson.error) {
+        setError(missionJson.error);
       } else {
-        setMission(json.data);
+        setMission(missionJson.data);
         setError(null);
+      }
+
+      if (pipelineJson.data?.missionProgress) {
+        setMissionProgress(pipelineJson.data.missionProgress);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch mission status");
@@ -162,6 +179,56 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
 
       {mission?.raw && (
         <>
+          {/* Raw mission.md content */}
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+            <div className="mb-4 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-cyan-400" />
+              <h2 className="text-lg font-semibold text-white">Mission Document</h2>
+            </div>
+            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border border-zinc-800 bg-zinc-950 p-4 text-sm leading-relaxed text-zinc-300">
+              {mission.raw}
+            </pre>
+          </div>
+
+          {/* Mission Progress Table */}
+          {missionProgress.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Target className="h-4 w-4 text-cyan-400" />
+                <h2 className="text-lg font-semibold text-white">Progress by Criterion</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-zinc-800">
+                      <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-zinc-500">#</th>
+                      <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-zinc-500">Criterion</th>
+                      <th className="pb-3 pr-4 text-xs font-medium uppercase tracking-wider text-zinc-500">Status</th>
+                      <th className="pb-3 text-xs font-medium uppercase tracking-wider text-zinc-500">Evidence</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800/50">
+                    {missionProgress.map((mp) => {
+                      const badge = statusBadge[mp.status];
+                      return (
+                        <tr key={mp.id}>
+                          <td className="py-3 pr-4 text-zinc-500">{mp.id}</td>
+                          <td className="py-3 pr-4 text-zinc-300">{mp.criterion}</td>
+                          <td className="py-3 pr-4">
+                            <span className={`inline-flex rounded-full border px-2.5 py-0.5 text-xs font-medium ${badge.classes}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+                          <td className="py-3 text-zinc-400">{mp.evidence}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Purpose */}
           {mission.purpose && (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
