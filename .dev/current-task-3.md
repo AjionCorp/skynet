@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add log viewer page to admin dashboard for live log viewing — create `packages/admin/src/app/admin/logs/page.tsx` that imports a new `LogViewer` component from `@ajioncorp/skynet/components`. Create `packages/dashboard/src/components/LogViewer.tsx` — renders a dropdown to select log type (worker-1..N, fixer-1..N, watchdog, health-check, project-driver), fetches last 200 lines from `/api/admin/monitoring/logs?type=<selected>`, displays in a scrollable `<pre>` with monospace font and auto-scroll-to-bottom. Add auto-refresh toggle (5s polling). Add navigation entry in layout.tsx: `{ href: "/admin/logs", label: "Logs", icon: ScrollText }` (import from lucide-react). Export `LogViewer` from `packages/dashboard/src/components/index.ts`. Criterion #4 — logs currently only viewable via CLI
+## [TEST] Add unit tests for untested dashboard handlers — create test files for the 5 untested handlers: `packages/dashboard/src/handlers/mission-status.test.ts`, `monitoring-logs.test.ts`, `monitoring-status.test.ts`, `pipeline-logs.test.ts`, `pipeline-trigger.test.ts`. For each: test response shape matches expected interface, test error handling when `.dev/` files are missing, test with empty/malformed input. Follow patterns from `pipeline-status.test.ts`. Aim for 3+ test cases per handler, 15+ total new tests. Criterion #2 (catching failures early)
 **Status:** completed
-**Started:** 2026-02-19 17:55
+**Started:** 2026-02-19 18:09
 **Completed:** 2026-02-19
-**Branch:** dev/add-log-viewer-page-to-admin-dashboard-f
+**Branch:** dev/add-unit-tests-for-untested-dashboard-ha
 **Worker:** 3
 
 ### Changes
