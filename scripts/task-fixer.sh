@@ -209,8 +209,18 @@ fix_start_epoch=$(date +%s)
 
 # --- Set up worktree for the failed branch ---
 if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
-  setup_worktree "$branch_name" false
-  log "Checked out existing branch in worktree: $branch_name"
+  # Check if the branch can merge cleanly into main before reusing it
+  _merge_base=$(git merge-base "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null || true)
+  if [ -n "$_merge_base" ] && git merge-tree "$_merge_base" "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null | grep -q '<<<<<<<'; then
+    log "Branch $branch_name has merge conflicts — creating fresh branch"
+    git branch -D "$branch_name" 2>/dev/null || true
+    branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
+    setup_worktree "$branch_name" true
+    log "Created fresh fix branch in worktree: $branch_name"
+  else
+    setup_worktree "$branch_name" false
+    log "Checked out existing branch in worktree: $branch_name"
+  fi
 else
   branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
   setup_worktree "$branch_name" true
