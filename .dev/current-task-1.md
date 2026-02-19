@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add self-correction rate calculation to pipeline-status and dashboard — in `packages/dashboard/src/handlers/pipeline-status.ts`, read `.dev/failed-tasks.md` and compute: `fixedCount` (entries with `status=fixed`), `totalAttempted` (entries with status fixed + blocked + superseded), `autoFixRate = fixedCount / totalAttempted * 100`. Add `selfCorrectionRate: number` and `selfCorrectionStats: { fixed: number, blocked: number, superseded: number, pending: number }` to the `PipelineStatus` response. In `packages/dashboard/src/components/PipelineDashboard.tsx`, display the self-correction rate as a percentage badge next to health score (green >=90%, yellow >=70%, red <70%). In `packages/cli/src/commands/status.ts`, output "Self-correction rate: X% (N/M failures auto-fixed)". Add `SelfCorrectionStats` interface to `packages/dashboard/src/types.ts`. This directly measures mission success criterion #2
+## [FEAT] Add task retry budget and fixer cooldown to prevent infinite fix loops — in `scripts/task-fixer.sh`, after a fix attempt completes (success or failure), append a line to `.dev/fixer-stats.log`: `EPOCH|result|task_title` (where result is `success` or `failure`). Before starting a new fix attempt, read the last 5 entries — if all 5 are failures, write `$(date +%s)` to `.dev/fixer-cooldown` and exit with message "Fixer paused: 5 consecutive failures, cooling down 30min". In `scripts/watchdog.sh`, before kicking the task-fixer, check if `.dev/fixer-cooldown` exists and its timestamp is less than 1800 seconds old — if so, skip. Also track rolling stats: read fixer-stats.log, compute success rate for last 24h, log it to watchdog output. This prevents burning API credits on systemic failures
 **Status:** completed
-**Started:** 2026-02-19 17:36
+**Started:** 2026-02-19 17:45
 **Completed:** 2026-02-19
-**Branch:** dev/add-self-correction-rate-calculation-to-
+**Branch:** dev/add-task-retry-budget-and-fixer-cooldown
 **Worker:** 1
 
 ### Changes
