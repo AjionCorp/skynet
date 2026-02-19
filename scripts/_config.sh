@@ -152,7 +152,7 @@ validate_backlog() {
       local has_worker=false
 
       # Check dev-workers
-      for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
+      for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
         local wid_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
         [ -f "$wid_lock" ] && kill -0 "$(cat "$wid_lock" 2>/dev/null)" 2>/dev/null || continue
         local task_file="$DEV_DIR/current-task-${wid}.md"
@@ -166,18 +166,28 @@ validate_backlog() {
         fi
       done
 
-      # Check task-fixer
+      # Check task-fixers (fixer 1 uses task-fixer.lock, fixers 2+ use task-fixer-N.lock)
       if ! $has_worker; then
-        local fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
-        if [ -f "$fixer_lock" ] && kill -0 "$(cat "$fixer_lock" 2>/dev/null)" 2>/dev/null; then
-          local fixer_task="$DEV_DIR/current-task-fixer.md"
-          if [ -f "$fixer_task" ]; then
-            local fixer_title
-            fixer_title=$(grep "^##" "$fixer_task" 2>/dev/null | head -1 | sed 's/^## //')
-            local clean_title="${title%% | blockedBy:*}"
-            [ "$fixer_title" = "$clean_title" ] && has_worker=true
+        for _fid in $(seq 1 "${SKYNET_MAX_FIXERS:-3}"); do
+          local _fixer_lock _fixer_task
+          if [ "$_fid" = "1" ]; then
+            _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+            _fixer_task="$DEV_DIR/current-task-fixer.md"
+          else
+            _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
+            _fixer_task="$DEV_DIR/current-task-fixer-${_fid}.md"
           fi
-        fi
+          if [ -f "$_fixer_lock" ] && kill -0 "$(cat "$_fixer_lock" 2>/dev/null)" 2>/dev/null; then
+            if [ -f "$_fixer_task" ]; then
+              local fixer_title
+              fixer_title=$(grep "^##" "$_fixer_task" 2>/dev/null | head -1 | sed 's/^## //')
+              local clean_title="${title%% | blockedBy:*}"
+              if [ "$fixer_title" = "$clean_title" ]; then
+                has_worker=true; break
+              fi
+            fi
+          fi
+        done
       fi
 
       if ! $has_worker; then

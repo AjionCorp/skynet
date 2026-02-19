@@ -239,7 +239,7 @@ fi
 worker_log=""
 
 # Method 1: Check current-task-N.md files for the branch name
-for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   _task_file="$DEV_DIR/current-task-${_wid}.md"
   if [ -f "$_task_file" ] && grep -qF "$branch_name" "$_task_file" 2>/dev/null; then
     worker_log="$SCRIPTS_DIR/dev-worker-${_wid}.log"
