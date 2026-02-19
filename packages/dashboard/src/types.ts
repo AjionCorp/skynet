@@ -121,6 +121,7 @@ export interface PipelineStatus {
   backlogLocked: boolean;
   git: GitStatus;
   postCommitGate: PostCommitGate;
+  missionProgress: MissionProgress[];
   timestamp: string;
 }
 
@@ -175,6 +176,7 @@ export interface MonitoringStatus {
   backlogLocked: boolean;
   git: GitStatus;
   postCommitGate: PostCommitGate;
+  missionProgress: MissionProgress[];
   timestamp: string;
 }
 
@@ -255,6 +257,15 @@ export interface PromptTemplate {
   description: string;
   category: "core" | "testing" | "infra" | "data";
   prompt: string;
+}
+
+// ===== Mission Progress Types =====
+
+export interface MissionProgress {
+  id: number;
+  criterion: string;
+  status: "met" | "partial" | "not-met";
+  evidence: string;
 }
 
 // ===== Worker Scaling Types =====

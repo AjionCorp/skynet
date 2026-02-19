@@ -296,5 +296,120 @@ export async function statusCommand(options: StatusOptions) {
   const healthLabel = healthScore > 80 ? "Good" : healthScore > 50 ? "Degraded" : "Critical";
   console.log(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
+  // --- Mission Progress ---
+  const missionRaw = readFile(join(devDir, "mission.md"));
+  if (missionRaw) {
+    const scMatch = missionRaw.match(/## Success Criteria\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
+    if (scMatch) {
+      const criteriaLines = scMatch[1]
+        .split("\n")
+        .filter((l) => /^\d+\.\s/.test(l.trim()));
+
+      if (criteriaLines.length > 0) {
+        // Gather evaluation inputs
+        const failedContent = readFile(join(devDir, "failed-tasks.md"));
+        const totalFailedLines = failedContent
+          .split("\n")
+          .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
+        const fixedCount = totalFailedLines.filter((l) => l.includes("| fixed |")).length;
+        const totalFailed = totalFailedLines.length;
+
+        const watchdogLog = readFile(join(devDir, "scripts/watchdog.log"));
+        const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
+        const deadlockRefs = (watchdogLog.match(/deadlock/gi) || []).length;
+
+        const handlersDir = join(projectDir, "packages/dashboard/src/handlers");
+        let handlerCount = 0;
+        try {
+          if (existsSync(handlersDir)) {
+            handlerCount = readdirSync(handlersDir).filter(
+              (f) => f.endsWith(".ts") && !f.includes(".test.") && f !== "index.ts"
+            ).length;
+          }
+        } catch {
+          /* ignore */
+        }
+
+        const agentsDir = join(projectDir, "scripts/agents");
+        let agentPlugins: string[] = [];
+        try {
+          if (existsSync(agentsDir)) {
+            agentPlugins = readdirSync(agentsDir).filter((f) => f.endsWith(".sh"));
+          }
+        } catch {
+          /* ignore */
+        }
+
+        let metCount = 0;
+        let partialCount = 0;
+        const summaryLines: string[] = [];
+
+        for (const line of criteriaLines) {
+          const numMatch = line.trim().match(/^(\d+)\.\s+(.+)/);
+          if (!numMatch) continue;
+          const id = Number(numMatch[1]);
+          const criterion = numMatch[2];
+
+          let status: "met" | "partial" | "not-met" = "not-met";
+          let evidence = "";
+
+          switch (id) {
+            case 1:
+              if (handlerCount >= 5) { status = "met"; evidence = `${handlerCount} handlers`; }
+              else { status = "partial"; evidence = `${handlerCount} handlers`; }
+              break;
+            case 2:
+              if (totalFailed === 0) { status = "partial"; evidence = "No failures yet"; }
+              else {
+                const pct = Math.round((fixedCount / totalFailed) * 100);
+                if (pct >= 95) { status = "met"; evidence = `${pct}% fix rate`; }
+                else if (pct >= 50) { status = "partial"; evidence = `${pct}% fix rate`; }
+                else { status = "not-met"; evidence = `${pct}% fix rate`; }
+              }
+              break;
+            case 3: {
+              const issues = zombieRefs + deadlockRefs;
+              if (issues === 0) { status = "met"; evidence = "No issues in watchdog"; }
+              else if (issues <= 3) { status = "partial"; evidence = `${issues} issue(s)`; }
+              else { status = "not-met"; evidence = `${issues} issues`; }
+              break;
+            }
+            case 4:
+              if (handlerCount >= 8) { status = "met"; evidence = `${handlerCount} handlers`; }
+              else if (handlerCount >= 5) { status = "partial"; evidence = `${handlerCount} handlers`; }
+              else { status = "not-met"; evidence = `${handlerCount} handlers`; }
+              break;
+            case 5:
+              if (completedCount >= 10) { status = "met"; evidence = `${completedCount} tasks`; }
+              else if (completedCount >= 3) { status = "partial"; evidence = `${completedCount} tasks`; }
+              else { status = "not-met"; evidence = `${completedCount} tasks`; }
+              break;
+            case 6:
+              if (agentPlugins.length >= 2) { status = "met"; evidence = `${agentPlugins.length} agents`; }
+              else if (agentPlugins.length === 1) { status = "partial"; evidence = `1 agent`; }
+              else { status = "not-met"; evidence = "No agents"; }
+              break;
+          }
+
+          if (status === "met") metCount++;
+          else if (status === "partial") partialCount++;
+
+          const icon = status === "met" ? "[MET]" : status === "partial" ? "[PARTIAL]" : "[NOT MET]";
+          // Truncate criterion for display
+          const maxLen = 50;
+          const shortCriterion = criterion.length > maxLen
+            ? criterion.substring(0, maxLen) + "..."
+            : criterion;
+          summaryLines.push(`    ${id}. ${icon} ${shortCriterion} (${evidence})`);
+        }
+
+        console.log(`\n  Mission Progress: ${metCount}/${criteriaLines.length} met, ${partialCount} partial`);
+        for (const sl of summaryLines) {
+          console.log(sl);
+        }
+      }
+    }
+  }
+
   console.log("");
 }

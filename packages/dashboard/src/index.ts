@@ -25,6 +25,7 @@ export type {
   MissionCriterion,
   MissionStatus,
   PromptTemplate,
+  MissionProgress,
 } from "./types";
 
 // Config helpers
