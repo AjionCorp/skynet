@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Harden project-driver.sh against missing .dev/ state files — in `scripts/project-driver.sh`, before each `cat` call that reads `.dev/*.md` files (~lines 70-90), add an existence check: `if [ -f "$file" ]; then cat "$file"; else echo "(file not found)"; fi`. Guard: `completed.md`, `failed-tasks.md`, `blockers.md`, `sync-health.md`, and each `current-task-N.md`. Also guard the `find` commands for API routes and pages with `-d` directory checks. On a fresh `skynet init` project some files won't exist yet — the driver should handle this gracefully rather than crashing — criterion #3 (no crashes)
+## [INFRA] Add ESLint with TypeScript support to CI pipeline — install `eslint`, `@typescript-eslint/eslint-plugin`, `@typescript-eslint/parser` as root workspace devDependencies. Create `eslint.config.js` (flat config) extending recommended TypeScript rules, ignoring `dist/`, `node_modules/`, `.next/`. Add `"lint:ts": "eslint packages/*/src/"` to root `package.json`. Add `lint-ts` job to `.github/workflows/ci.yml`. Start with `warn` severity to avoid blocking existing code. Criterion #2 (catching type and quality bugs before merge)
 **Status:** completed
-**Started:** 2026-02-19 18:05
+**Started:** 2026-02-19 18:08
 **Completed:** 2026-02-19
-**Branch:** dev/harden-project-driversh-against-missing-
+**Branch:** dev/add-eslint-with-typescript-support-to-ci
 **Worker:** 4
 
 ### Changes
