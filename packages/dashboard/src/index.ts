@@ -22,6 +22,8 @@ export type {
   WorkerScalePayload,
   WorkerScaleInfo,
   WorkerScaleResult,
+  MissionCriterion,
+  MissionStatus,
   PromptTemplate,
 } from "./types";
 
@@ -46,6 +48,7 @@ export {
   createTasksHandlers,
   createPromptsHandler,
   createWorkerScalingHandler,
+  createMissionStatusHandler,
 } from "./handlers";
 
 // Dashboard UI components
