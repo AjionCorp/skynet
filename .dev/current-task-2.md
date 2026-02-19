@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Add PID lock to health-check.sh to prevent concurrent instances — health-check.sh has no PID lock, so overlapping launchd/cron runs could invoke Claude simultaneously. Add `LOCK_FILE="$SCRIPTS_DIR/health-check.lock"`, acquire via `mkdir "$LOCK_FILE"` at script start with stale detection (same pattern as dev-worker.sh lines ~50-70), release in an EXIT trap. This aligns with the robustness standard set by dev-worker.sh and task-fixer.sh
+## [FIX] Harden task-fixer.sh EXIT trap for mid-merge crash safety — current EXIT trap in task-fixer.sh is minimal. If the script crashes during `git merge` or `git push`, the task remains claimed and the branch is orphaned. Add a full `cleanup_on_exit` function (matching dev-worker.sh pattern): unclaim task in backlog.md via `unclaim_task()`, remove worktree via `git worktree remove --force`, release PID lock, stop any background processes, and log the crash event
 **Status:** completed
-**Started:** 2026-02-19 15:07
+**Started:** 2026-02-19 15:10
 **Completed:** 2026-02-19
-**Branch:** dev/add-pid-lock-to-health-checksh-to-preven
+**Branch:** dev/harden-task-fixersh-exit-trap-for-mid-me
 **Worker:** 2
 
 ### Changes
