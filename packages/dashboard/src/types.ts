@@ -231,6 +231,22 @@ export interface SyncStatus {
   error_message: string | null;
 }
 
+// ===== Mission Types =====
+
+export interface MissionCriterion {
+  text: string;
+  completed: boolean;
+}
+
+export interface MissionStatus {
+  purpose: string | null;
+  goals: MissionCriterion[];
+  successCriteria: MissionCriterion[];
+  currentFocus: string | null;
+  completionPercentage: number;
+  raw: string;
+}
+
 // ===== Prompt Types =====
 
 export interface PromptTemplate {

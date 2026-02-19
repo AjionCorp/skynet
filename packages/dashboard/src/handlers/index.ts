@@ -8,3 +8,4 @@ export { createMonitoringLogsHandler } from "./monitoring-logs";
 export { createTasksHandlers } from "./tasks";
 export { createPromptsHandler } from "./prompts";
 export { createWorkerScalingHandler } from "./worker-scaling";
+export { createMissionStatusHandler } from "./mission-status";
