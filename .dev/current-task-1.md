@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add interactive mission template generator to `skynet init` — in `packages/cli/src/commands/init.ts`, after creating `.dev/mission.md` with default content, add an interactive prompt: "Would you like to define your project's mission now? (Y/n)". If yes, ask: (1) "What does your project do?" (one sentence), (2) "What are your top 3 goals?" (free text), (3) "What does 'done' look like?" (free text). Generate a populated mission.md with answers formatted into Purpose, Core Mission, and Success Criteria sections matching the existing mission.md structure. If no or `--non-interactive` flag, leave the default template. Criterion #1 (reduce friction between init and autonomous work)
+## [FEAT] Add `/admin/settings` page for config editing via dashboard — create `packages/admin/src/app/admin/settings/page.tsx` that imports a new `SettingsDashboard` component from `@ajioncorp/skynet/components`. Create `packages/dashboard/src/components/SettingsDashboard.tsx` — reads config values from a new `/api/admin/config` route, displays them in an editable form with save button. Create `packages/dashboard/src/handlers/config.ts` (GET: parse skynet.config.sh and return key-value pairs; POST: validate and write back). Create API route `packages/admin/src/app/api/admin/config/route.ts`. Add navigation entry: `{ href: "/admin/settings", label: "Settings", icon: Settings }`. Export from `packages/dashboard/src/components/index.ts`. Criterion #4 (full visibility) and #1 (developer experience)
 **Status:** completed
-**Started:** 2026-02-19 18:06
+**Started:** 2026-02-19 18:11
 **Completed:** 2026-02-19
-**Branch:** dev/add-interactive-mission-template-generat
+**Branch:** dev/add-adminsettings-page-for-config-editin
 **Worker:** 1
 
 ### Changes
