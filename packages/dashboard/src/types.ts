@@ -59,6 +59,7 @@ export interface CompletedTask {
   date: string;
   task: string;
   branch: string;
+  duration: string;
   notes: string;
 }
 
@@ -105,6 +106,7 @@ export interface PipelineStatus {
   };
   completed: CompletedTask[];
   completedCount: number;
+  averageTaskDuration: string | null;
   failed: FailedTask[];
   failedPendingCount: number;
   hasBlockers: boolean;
@@ -157,6 +159,7 @@ export interface MonitoringStatus {
   };
   completed: CompletedTask[];
   completedCount: number;
+  averageTaskDuration: string | null;
   failed: FailedTask[];
   failedPendingCount: number;
   hasBlockers: boolean;

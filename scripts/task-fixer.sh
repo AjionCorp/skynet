@@ -16,6 +16,23 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
+# Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
+format_duration() {
+  local seconds=$1
+  local minutes=$(( seconds / 60 ))
+  if [ "$minutes" -lt 60 ]; then
+    echo "${minutes}m"
+  else
+    local hours=$(( minutes / 60 ))
+    local rem=$(( minutes % 60 ))
+    if [ "$rem" -eq 0 ]; then
+      echo "${hours}h"
+    else
+      echo "${hours}h ${rem}m"
+    fi
+  fi
+}
+
 # --- Worktree helpers ---
 setup_worktree() {
   local branch="$1"
@@ -134,6 +151,7 @@ log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTE
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
 # Lock current task
+fix_start_epoch=$(date +%s)
 cat > "$CURRENT_TASK" <<EOF
 # Current Task
 ## [FIX] $task_title
@@ -228,7 +246,8 @@ EOF
     git branch -d "$branch_name"
 
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
-    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
+    fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
+    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
 
     cat > "$CURRENT_TASK" <<EOF
 # Current Task
