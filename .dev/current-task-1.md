@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add real-time pipeline dashboard via Server-Sent Events — create /api/admin/pipeline/stream route that watches .dev/ files for changes using fs.watch and streams status updates, update packages/admin/src/app/admin/pipeline/page.tsx to consume SSE instead of polling
+## [FEAT] Add `skynet status` CLI command — create packages/cli/src/commands/status.ts that reads .dev/backlog.md, completed.md, failed-tasks.md, current-task.md, and worker PID lock files. Display: task counts by state, current task name+duration, worker PIDs and status, last activity timestamp, recent completions. Register in packages/cli/src/index.ts
 **Status:** completed
-**Started:** 2026-02-19 14:20
+**Started:** 2026-02-19 14:24
 **Completed:** 2026-02-19
-**Branch:** dev/add-real-time-pipeline-dashboard-via-ser
+**Branch:** dev/add-skynet-status-cli-command--create-pa
 **Worker:** 1
 
 ### Changes
