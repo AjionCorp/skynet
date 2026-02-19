@@ -164,7 +164,7 @@ remove_from_backlog() {
   local line_to_remove="$1"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    grep -Fxv "$line_to_remove" "$BACKLOG" > "$BACKLOG.tmp" || true
+    grep -Fxv -- "$line_to_remove" "$BACKLOG" > "$BACKLOG.tmp" || true
     mv "$BACKLOG.tmp" "$BACKLOG"
   fi
   release_lock
