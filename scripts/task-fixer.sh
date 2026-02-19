@@ -202,6 +202,9 @@ _CURRENT_TASK_TITLE="$task_title"
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
+# Rotate log if it exceeds max size (prevents unbounded growth)
+rotate_log_if_needed "$LOG"
+
 fix_start_epoch=$(date +%s)
 
 # --- Set up worktree for the failed branch ---

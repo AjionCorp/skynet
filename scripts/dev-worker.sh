@@ -312,6 +312,9 @@ tasks_attempted=0
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   tasks_attempted=$((tasks_attempted + 1))
 
+  # Rotate log if it exceeds max size (prevents unbounded growth)
+  rotate_log_if_needed "$LOG"
+
   # Atomically claim next unchecked task
   next_task=$(claim_next_task)
   if [ -z "$next_task" ]; then
