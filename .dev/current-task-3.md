@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix lint:sh glob to include scripts/notify/*.sh — in root `package.json`, update the `lint:sh` script from `"shellcheck -S warning scripts/*.sh scripts/agents/*.sh"` to `"shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh"`. The 3 notification channel plugins (telegram.sh, slack.sh, discord.sh) are currently not shellchecked, meaning syntax errors or unsafe patterns could slip into the notification system undetected
+## [FEAT] Add Linux cron support to monitoring agents dashboard handler — FRESH implementation (previous branch has merge conflict). In `packages/dashboard/src/handlers/monitoring-agents.ts`, add OS detection via `process.platform`. On `linux`, parse `crontab -l` output for entries between `# BEGIN skynet` / `# END skynet` markers (matching the format written by `packages/cli/src/commands/setup-agents.ts`). Map cron expressions to human-readable intervals (e.g., `*/3 * * * *` -> "Every 3 minutes"). Return the same `AgentInfo[]` response shape. On `darwin`, keep existing `launchctl` logic unchanged. Add a helper `parseCronSchedule(expr: string): { intervalSeconds: number, human: string }`
 **Status:** completed
-**Started:** 2026-02-19 17:16
+**Started:** 2026-02-19 17:19
 **Completed:** 2026-02-19
-**Branch:** dev/fix-lintsh-glob-to-include-scriptsnotify
+**Branch:** dev/add-linux-cron-support-to-monitoring-age
 **Worker:** 3
 
 ### Changes
