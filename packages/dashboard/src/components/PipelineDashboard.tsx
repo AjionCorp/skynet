@@ -72,6 +72,8 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
+  const [connected, setConnected] = useState(false);
+
   const fetchLogs = useCallback(async (script: string) => {
     setLogLoading(true);
     try {
@@ -85,12 +87,35 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
-  // Poll status every 5s
+  // Stream status via SSE, fall back to polling on error
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, [fetchStatus]);
+    const es = new EventSource(`${apiPrefix}/pipeline/stream`);
+
+    es.onopen = () => setConnected(true);
+
+    es.onmessage = (event) => {
+      try {
+        const json = JSON.parse(event.data);
+        if (json.error) {
+          setError(json.error);
+          return;
+        }
+        setStatus(json.data);
+        setError(null);
+      } catch {
+        /* ignore malformed frames */
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource auto-reconnects; no manual fallback needed
+    };
+
+    return () => es.close();
+  }, [apiPrefix]);
 
   // Poll logs every 3s when viewer is open
   useEffect(() => {
@@ -472,7 +497,7 @@ export function PipelineDashboard() {
 
       {/* Footer */}
       <p className="text-center text-xs text-zinc-700">
-        Auto-refreshes every 5s &middot; Logs refresh every 3s when open
+        {connected ? "Live updates via SSE" : "Reconnecting\u2026"} &middot; Logs refresh every 3s when open
       </p>
     </div>
   );
