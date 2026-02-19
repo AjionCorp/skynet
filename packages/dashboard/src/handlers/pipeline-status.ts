@@ -43,6 +43,30 @@ function parseBlockedBy(text: string): string[] {
 }
 
 /**
+ * Parse a human-readable duration string (e.g., "23m", "1h 12m") into minutes.
+ * Returns null if the string cannot be parsed.
+ */
+function parseDurationMinutes(s: string): number | null {
+  const hm = s.match(/^(\d+)h\s+(\d+)m$/);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+  const hOnly = s.match(/^(\d+)h$/);
+  if (hOnly) return Number(hOnly[1]) * 60;
+  const mOnly = s.match(/^(\d+)m$/);
+  if (mOnly) return Number(mOnly[1]);
+  return null;
+}
+
+/**
+ * Format minutes as a human-readable duration string (e.g., "23m", "1h 12m").
+ */
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const rem = Math.round(minutes % 60);
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+}
+
+/**
  * Parse backlog.md into items with status/tag/dependency info.
  */
 function parseBacklog(raw: string) {
@@ -162,13 +186,28 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         );
       const completed = completedLines.map((l) => {
         const parts = l.split("|").map((p) => p.trim());
+        // New format: | Date | Task | Branch | Duration | Notes | (7 parts incl. leading/trailing empty)
+        // Old format: | Date | Task | Branch | Notes | (6 parts)
+        const hasDuration = parts.length >= 7;
         return {
           date: parts[1] ?? "",
           task: parts[2] ?? "",
           branch: parts[3] ?? "",
-          notes: parts[4] ?? "",
+          duration: hasDuration ? (parts[4] ?? "") : "",
+          notes: hasDuration ? (parts[5] ?? "") : (parts[4] ?? ""),
         };
       });
+
+      // Compute average task duration from entries that have duration data
+      const durationMinutes = completed
+        .map((c) => parseDurationMinutes(c.duration))
+        .filter((d): d is number => d !== null);
+      const averageTaskDuration =
+        durationMinutes.length > 0
+          ? formatDuration(
+              durationMinutes.reduce((a, b) => a + b, 0) / durationMinutes.length
+            )
+          : null;
 
       // Failed tasks
       const failedRaw = readDevFile(devDir, "failed-tasks.md");
@@ -316,6 +355,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           backlog,
           completed,
           completedCount: completed.length,
+          averageTaskDuration,
           failed,
           failedPendingCount: failed.filter((f) =>
             f.status.includes("pending")

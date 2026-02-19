@@ -35,6 +35,23 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] $*" >> "$LOG"; }
 
+# Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
+format_duration() {
+  local seconds=$1
+  local minutes=$(( seconds / 60 ))
+  if [ "$minutes" -lt 60 ]; then
+    echo "${minutes}m"
+  else
+    local hours=$(( minutes / 60 ))
+    local rem=$(( minutes % 60 ))
+    if [ "$rem" -eq 0 ]; then
+      echo "${hours}h"
+    else
+      echo "${hours}h ${rem}m"
+    fi
+  fi
+}
+
 # --- Heartbeat helpers ---
 # Background loop writes epoch timestamp to .dev/worker-N.heartbeat every 60s
 # so the watchdog can detect stuck workers even if the process is alive.
@@ -328,6 +345,7 @@ EOF
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
 
   # Write current task status for this worker
+  task_start_epoch=$(date +%s)
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
@@ -479,7 +497,8 @@ EOF
 
   mark_in_backlog "- [>] $task_title" "- [x] $task_title"
   _CURRENT_TASK_TITLE=""
-  echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | success |" >> "$COMPLETED"
+  task_duration=$(format_duration $(( $(date +%s) - task_start_epoch )))
+  echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
 
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
