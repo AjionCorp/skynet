@@ -2,19 +2,29 @@
 # task-fixer.sh — Analyzes failed tasks, diagnoses root cause, attempts fixes
 # Reads failed-tasks.md, picks the oldest pending failure, tries to resolve it
 # Uses git worktrees for branch isolation (same as dev-worker.sh).
+# Supports multiple instances: pass instance ID as arg (default: 1)
+#   bash task-fixer.sh      → fixer 1
+#   bash task-fixer.sh 2    → fixer 2
 set -euo pipefail
+
+FIXER_ID="${1:-1}"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/task-fixer.log"
+# Instance-specific log: fixer 1 → task-fixer.log, fixer 2+ → task-fixer-N.log
+if [ "$FIXER_ID" = "1" ]; then
+  LOG="$SCRIPTS_DIR/task-fixer.log"
+else
+  LOG="$SCRIPTS_DIR/task-fixer-${FIXER_ID}.log"
+fi
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
 
-# Worktree for task-fixer (isolated from dev-workers)
-WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer"
+# Instance-specific worktree (isolated from dev-workers and other fixers)
+WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-${FIXER_ID}"
 
 cd "$PROJECT_DIR"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] $*" | tee -a "$LOG"; }
 
 # Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
 format_duration() {
@@ -64,22 +74,55 @@ update_failed_line() {
   local match_title="$1"
   local new_line="$2"
   if [ -f "$FAILED" ]; then
+    # Match pending OR fixing-N status (fixer claims change pending → fixing-N)
     awk -v title="$match_title" -v replacement="$new_line" \
-      'index($0, title) > 0 && /\| pending \|/ {print replacement; next} {print}' \
+      'index($0, title) > 0 && (/\| pending \|/ || /\| fixing-[0-9]+ \|/) {print replacement; next} {print}' \
       "$FAILED" > "$FAILED.tmp"
     mv "$FAILED.tmp" "$FAILED"
   fi
 }
 
-# --- PID lock ---
-LOCKFILE="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+# --- PID lock (instance-specific: fixer 1 → -task-fixer.lock, fixer 2+ → -task-fixer-N.lock) ---
+if [ "$FIXER_ID" = "1" ]; then
+  LOCKFILE="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+else
+  LOCKFILE="${SKYNET_LOCK_PREFIX}-task-fixer-${FIXER_ID}.lock"
+fi
 if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
   exit 0
 fi
 echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
+# Mutex for atomic claiming of failed tasks (shared with other fixers)
+FAILED_LOCK="${SKYNET_LOCK_PREFIX}-failed.lock"
+
+_acquire_failed_lock() {
+  local attempts=0
+  while ! mkdir "$FAILED_LOCK" 2>/dev/null; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 50 ]; then
+      if [ -d "$FAILED_LOCK" ]; then
+        local lock_mtime
+        lock_mtime=$(file_mtime "$FAILED_LOCK")
+        local lock_age=$(( $(date +%s) - lock_mtime ))
+        if [ "$lock_age" -gt 30 ]; then
+          rm -rf "$FAILED_LOCK" 2>/dev/null || true
+          mkdir "$FAILED_LOCK" 2>/dev/null && return 0
+        fi
+      fi
+      return 1
+    fi
+    sleep 0.1
+  done
+  return 0
+}
+
+_release_failed_lock() {
+  rmdir "$FAILED_LOCK" 2>/dev/null || rm -rf "$FAILED_LOCK" 2>/dev/null || true
+}
+
 cleanup_on_exit() {
   local exit_code=$?
   # Abort any in-progress git merge on the main branch
@@ -90,14 +133,16 @@ cleanup_on_exit() {
   fi
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
-  # Reset current task to idle if we were mid-task
+  # Unclaim task if we were mid-fix (revert fixing-N back to pending)
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
-    cat > "$CURRENT_TASK" <<CLEANUP_EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX] $_CURRENT_TASK_TITLE (crash exit $exit_code)
-CLEANUP_EOF
-    log "Crash recovery: reset current-task to idle for: $_CURRENT_TASK_TITLE"
+    if _acquire_failed_lock; then
+      if [ -f "$FAILED" ]; then
+        sed -i.bak "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
+        rm -f "$FAILED.bak"
+      fi
+      _release_failed_lock
+    fi
+    log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   # Release PID lock
   rm -f "$LOCKFILE"
@@ -115,16 +160,23 @@ if ! check_claude_auth; then
   exit 1
 fi
 
-# --- Pre-flight ---
+# --- Pre-flight: atomically claim next pending failed task ---
 
-# Check if a task is already running
-if grep -q "in_progress" "$CURRENT_TASK" 2>/dev/null; then
-  log "Another task is in_progress. Exiting."
-  exit 0
+pending_failure=""
+if _acquire_failed_lock; then
+  # Find first pending failure that isn't claimed by another fixer
+  pending_failure=$(grep '| pending |' "$FAILED" 2>/dev/null | head -1 || true)
+  if [ -n "$pending_failure" ]; then
+    # Mark as claimed by this fixer instance (pending → fixing-N)
+    # Use awk for exact line match to avoid sed escaping issues
+    task_match_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+    awk -v title="$task_match_title" -v fid="$FIXER_ID" \
+      'index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
+      "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
+  fi
+  _release_failed_lock
 fi
 
-# Check if there are pending failed tasks
-pending_failure=$(grep '| pending |' "$FAILED" 2>/dev/null | head -1 || true)
 if [ -z "$pending_failure" ]; then
   log "No pending failed tasks. Nothing to fix."
   exit 0
@@ -148,18 +200,9 @@ fi
 
 _CURRENT_TASK_TITLE="$task_title"
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
-tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
+tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
-# Lock current task
 fix_start_epoch=$(date +%s)
-cat > "$CURRENT_TASK" <<EOF
-# Current Task
-## [FIX] $task_title
-**Status:** in_progress
-**Started:** $(date '+%Y-%m-%d %H:%M')
-**Branch:** $branch_name
-**Mode:** task-fixer (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)
-EOF
 
 # --- Set up worktree for the failed branch ---
 if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
@@ -286,11 +329,6 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     new_attempts=$((fix_attempts + 1))
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
-    cat > "$CURRENT_TASK" <<EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX ATTEMPT $new_attempts] $task_title ($_gate_label failed)
-EOF
   else
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
     cleanup_worktree  # Remove worktree, keep branch for merge
@@ -302,11 +340,6 @@ EOF
     fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
     echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
 
-    cat > "$CURRENT_TASK" <<EOF
-# Current Task
-**Status:** idle
-**Last completed:** $(date '+%Y-%m-%d %H:%M') -- [FIXED] $task_title (merged to $SKYNET_MAIN_BRANCH)
-EOF
     _CURRENT_TASK_TITLE=""
     log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
     tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
@@ -321,11 +354,6 @@ else
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
   _CURRENT_TASK_TITLE=""
-  cat > "$CURRENT_TASK" <<EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX ATTEMPT $new_attempts] $task_title
-EOF
 fi
 
 log "Task-fixer finished."

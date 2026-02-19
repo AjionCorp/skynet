@@ -16,7 +16,7 @@ const TYPE_LABELS: Record<ScalableType, string> = {
 const TYPE_MAX: Record<ScalableType, number> = {
   "dev-worker": 4,
   "task-fixer": 3,
-  "project-driver": 2,
+  "project-driver": 1,
 };
 
 function isScalable(t: string): t is ScalableType {
@@ -42,11 +42,9 @@ function isProcessAlive(pid: number): boolean {
  * Without this, a newly spawned worker sees "in_progress" and exits immediately.
  */
 function resetStaleTaskFile(devDir: string, workerType: ScalableType, slotId: number): void {
-  // dev-worker uses per-worker files; task-fixer uses the shared current-task.md
-  const taskFile =
-    workerType === "dev-worker"
-      ? resolve(devDir, `current-task-${slotId}.md`)
-      : resolve(devDir, "current-task.md");
+  // Only dev-worker uses per-worker current-task files that can block startup
+  if (workerType !== "dev-worker") return;
+  const taskFile = resolve(devDir, `current-task-${slotId}.md`);
   try {
     const content = readFileSync(taskFile, "utf-8");
     if (content.includes("in_progress")) {
@@ -202,10 +200,8 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             logPath,
             constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
           );
-          // dev-worker expects worker ID as arg; others just get the script
-          const args = workerType === "dev-worker"
-            ? [scriptPath, String(newId)]
-            : [scriptPath];
+          // All worker types accept an instance ID as first arg
+          const args = [scriptPath, String(newId)];
           // Always pass SKYNET_DEV_DIR so scripts can find config
           const child = spawn("bash", args, {
             detached: true,
