@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet add-task` CLI command — create packages/cli/src/commands/add-task.ts. Usage: `skynet add-task "Task title" --tag FEAT --description "details" --position top`. Read .dev/backlog.md, find the insertion point (after the header comments, before first `[x]` entry for position=top, or before the `[x]` block for position=bottom). Write the new line as `- [ ] [TAG] Title — description`. Use atomic write (write to .tmp then rename). Register in packages/cli/src/index.ts
+## [FEAT] Add `skynet dashboard` CLI command to launch admin app — create packages/cli/src/commands/dashboard.ts. Resolve admin package path relative to skynet root (same pattern as init.ts). Run `pnpm --filter admin dev -- --port <PORT>` via child_process.spawn with stdio inherit. Default port 3100 (configurable via --port flag). Open browser automatically via `open` (macOS) or `xdg-open` (Linux). Register in packages/cli/src/index.ts
 **Status:** completed
-**Started:** 2026-02-19 16:52
+**Started:** 2026-02-19 16:54
 **Completed:** 2026-02-19
-**Branch:** dev/title--description-use-atomic-write-writ
+**Branch:** dev/add-skynet-dashboard-cli-command-to-laun
 **Worker:** 1
 
 ### Changes
