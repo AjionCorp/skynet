@@ -12,6 +12,7 @@ import { addTaskCommand } from "./commands/add-task.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { resetTaskCommand } from "./commands/reset-task.js";
 import { cleanupCommand } from "./commands/cleanup.js";
+import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
 
 const program = new Command();
 
@@ -105,5 +106,34 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--force", "Actually delete branches (default: dry-run)")
   .action(cleanupCommand);
+
+const configCmd = program
+  .command("config")
+  .description("View and edit pipeline configuration")
+  .option("--dir <dir>", "Project directory (default: cwd)");
+
+configCmd
+  .command("list", { isDefault: true })
+  .description("List all configuration variables (default)")
+  .action(async () => {
+    await configListCommand(configCmd.opts());
+  });
+
+configCmd
+  .command("get")
+  .description("Get a single configuration variable")
+  .argument("<key>", "Variable name (e.g. SKYNET_MAX_WORKERS)")
+  .action(async (key: string) => {
+    await configGetCommand(key, configCmd.opts());
+  });
+
+configCmd
+  .command("set")
+  .description("Set a configuration variable")
+  .argument("<key>", "Variable name")
+  .argument("<value>", "New value")
+  .action(async (key: string, value: string) => {
+    await configSetCommand(key, value, configCmd.opts());
+  });
 
 program.parse();

@@ -1,0 +1,261 @@
+import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
+import { resolve, join } from "path";
+import { execSync } from "child_process";
+
+interface ConfigOptions {
+  dir?: string;
+}
+
+/** Known variable descriptions, keyed by variable name. */
+const KNOWN_VARS: Record<string, string> = {
+  SKYNET_PROJECT_NAME: "Project name identifier",
+  SKYNET_PROJECT_DIR: "Project root directory",
+  SKYNET_DEV_DIR: "Dev state directory (.dev/)",
+  SKYNET_LOCK_PREFIX: "PID lock file prefix",
+  SKYNET_DEV_SERVER_CMD: "Dev server start command",
+  SKYNET_DEV_SERVER_URL: "Dev server URL",
+  SKYNET_DEV_SERVER_PORT: "Dev server port",
+  SKYNET_DEV_PORT: "Base port for dev server",
+  SKYNET_TYPECHECK_CMD: "Typecheck command",
+  SKYNET_LINT_CMD: "Lint command",
+  SKYNET_GATE_1: "Quality gate 1",
+  SKYNET_GATE_2: "Quality gate 2",
+  SKYNET_GATE_3: "Quality gate 3",
+  SKYNET_PLAYWRIGHT_DIR: "Playwright test directory",
+  SKYNET_SMOKE_TEST: "Smoke test spec file",
+  SKYNET_FEATURE_TEST: "Feature test spec file",
+  SKYNET_BRANCH_PREFIX: "Git branch prefix",
+  SKYNET_MAIN_BRANCH: "Main git branch name",
+  SKYNET_MAX_WORKERS: "Max parallel workers",
+  SKYNET_MAX_TASKS_PER_RUN: "Max tasks per worker run",
+  SKYNET_STALE_MINUTES: "Minutes before task is stale",
+  SKYNET_MAX_FIX_ATTEMPTS: "Max auto-fix attempts",
+  SKYNET_MAX_LOG_SIZE_KB: "Max log file size (KB)",
+  SKYNET_AUTH_TOKEN_CACHE: "Auth token cache path",
+  SKYNET_AUTH_FAIL_FLAG: "Auth failure flag path",
+  SKYNET_AUTH_KEYCHAIN_SERVICE: "Keychain service name",
+  SKYNET_AUTH_KEYCHAIN_ACCOUNT: "Keychain account name",
+  SKYNET_AUTH_NOTIFY_INTERVAL: "Auth notify interval (seconds)",
+  SKYNET_NOTIFY_CHANNELS: "Notification channels",
+  SKYNET_TG_ENABLED: "Telegram notifications enabled",
+  SKYNET_TG_BOT_TOKEN: "Telegram bot token",
+  SKYNET_TG_CHAT_ID: "Telegram chat ID",
+  SKYNET_SLACK_WEBHOOK_URL: "Slack webhook URL",
+  SKYNET_DISCORD_WEBHOOK_URL: "Discord webhook URL",
+  SKYNET_CLAUDE_BIN: "Claude binary path",
+  SKYNET_CLAUDE_FLAGS: "Claude CLI flags",
+  SKYNET_AGENT_PLUGIN: "Agent plugin (auto|claude|codex|path)",
+  SKYNET_CODEX_BIN: "Codex binary path",
+  SKYNET_CODEX_FLAGS: "Codex CLI flags",
+  SKYNET_EXTRA_PATH: "Additional PATH entries",
+  SKYNET_ERROR_ENV_KEYS: "Env vars to scan in server logs",
+};
+
+interface ParsedVar {
+  name: string;
+  value: string;
+  lineIndex: number;
+}
+
+function getConfigPath(projectDir: string): string {
+  return join(projectDir, ".dev/skynet.config.sh");
+}
+
+function readConfigFile(projectDir: string): string {
+  const configPath = getConfigPath(projectDir);
+  if (!existsSync(configPath)) {
+    throw new Error(`skynet.config.sh not found. Run 'skynet init' first.`);
+  }
+  return readFileSync(configPath, "utf-8");
+}
+
+/**
+ * Parse config lines matching `export VAR="value"` or `VAR="value"`.
+ * Returns parsed variables with their line indices for editing.
+ */
+function parseConfig(content: string): ParsedVar[] {
+  const vars: ParsedVar[] = [];
+  const resolved: Record<string, string> = {};
+  const lines = content.split("\n");
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const match = line.match(/^(?:export\s+)?(\w+)="(.*)"/);
+    if (match) {
+      let value = match[2];
+      // Resolve variable references
+      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => resolved[key] || process.env[key] || "");
+      resolved[match[1]] = value;
+      vars.push({ name: match[1], value, lineIndex: i });
+    }
+  }
+
+  return vars;
+}
+
+/**
+ * Validate a value for known keys that require specific formats.
+ * Returns an error message or null if valid.
+ */
+function validateValue(key: string, value: string, projectDir: string): string | null {
+  switch (key) {
+    case "SKYNET_MAX_WORKERS": {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n <= 0) {
+        return `SKYNET_MAX_WORKERS must be a positive integer (got "${value}").`;
+      }
+      return null;
+    }
+    case "SKYNET_STALE_MINUTES": {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 5) {
+        return `SKYNET_STALE_MINUTES must be an integer >= 5 (got "${value}").`;
+      }
+      return null;
+    }
+    case "SKYNET_MAIN_BRANCH": {
+      // Validate as a plausible git branch name using git check-ref-format
+      if (!value || value.trim().length === 0) {
+        return `SKYNET_MAIN_BRANCH cannot be empty.`;
+      }
+      try {
+        execSync(`git check-ref-format --allow-onelevel "${value}"`, {
+          cwd: projectDir,
+          stdio: "ignore",
+        });
+      } catch {
+        return `SKYNET_MAIN_BRANCH "${value}" is not a valid git branch name.`;
+      }
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * `skynet config list` — Display all config variables as a formatted table.
+ */
+export async function configListCommand(options: ConfigOptions) {
+  const projectDir = resolve(options.dir || process.cwd());
+  const content = readConfigFile(projectDir);
+  const vars = parseConfig(content);
+
+  if (vars.length === 0) {
+    console.log("\n  No variables found in skynet.config.sh.\n");
+    return;
+  }
+
+  // Calculate column widths
+  const header = { name: "Variable", value: "Value", desc: "Description" };
+  let nameWidth = header.name.length;
+  let valueWidth = header.value.length;
+  let descWidth = header.desc.length;
+
+  const rows = vars.map((v) => {
+    const desc = KNOWN_VARS[v.name] || "";
+    // Truncate long values for display
+    const displayValue = v.value.length > 50 ? v.value.substring(0, 47) + "..." : v.value;
+    nameWidth = Math.max(nameWidth, v.name.length);
+    valueWidth = Math.max(valueWidth, displayValue.length);
+    descWidth = Math.max(descWidth, desc.length);
+    return { name: v.name, value: displayValue, desc };
+  });
+
+  // Cap column widths
+  valueWidth = Math.min(valueWidth, 50);
+  descWidth = Math.min(descWidth, 40);
+
+  const sep = `  ${"─".repeat(nameWidth + 2)}┼${"─".repeat(valueWidth + 2)}┼${"─".repeat(descWidth + 2)}`;
+
+  console.log(`\n  Skynet Configuration (${getConfigPath(projectDir)})\n`);
+  console.log(`  ${header.name.padEnd(nameWidth)}  │ ${header.value.padEnd(valueWidth)} │ ${header.desc.padEnd(descWidth)}`);
+  console.log(sep);
+
+  for (const row of rows) {
+    console.log(`  ${row.name.padEnd(nameWidth)}  │ ${row.value.padEnd(valueWidth)} │ ${row.desc.padEnd(descWidth)}`);
+  }
+
+  console.log("");
+}
+
+/**
+ * `skynet config get KEY` — Show a single variable's value.
+ */
+export async function configGetCommand(key: string, options: ConfigOptions) {
+  if (!key || key.trim().length === 0) {
+    console.error("Error: KEY is required.");
+    process.exit(1);
+  }
+
+  const projectDir = resolve(options.dir || process.cwd());
+  const content = readConfigFile(projectDir);
+  const vars = parseConfig(content);
+
+  const found = vars.find((v) => v.name === key);
+  if (!found) {
+    console.error(`\n  Error: Variable "${key}" not found in skynet.config.sh.\n`);
+    process.exit(1);
+  }
+
+  console.log(found.value);
+}
+
+/**
+ * `skynet config set KEY VALUE` — Update a variable's value with atomic write.
+ */
+export async function configSetCommand(key: string, value: string, options: ConfigOptions) {
+  if (!key || key.trim().length === 0) {
+    console.error("Error: KEY is required.");
+    process.exit(1);
+  }
+  if (value === undefined || value === null) {
+    console.error("Error: VALUE is required.");
+    process.exit(1);
+  }
+
+  const projectDir = resolve(options.dir || process.cwd());
+  const configPath = getConfigPath(projectDir);
+  const content = readConfigFile(projectDir);
+  const lines = content.split("\n");
+
+  // Find the line containing this key
+  let targetLine = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const match = lines[i].match(/^(?:export\s+)?(\w+)="/);
+    if (match && match[1] === key) {
+      targetLine = i;
+      break;
+    }
+  }
+
+  if (targetLine === -1) {
+    console.error(`\n  Error: Variable "${key}" not found in skynet.config.sh.\n`);
+    process.exit(1);
+  }
+
+  // Validate the new value for known keys
+  const validationError = validateValue(key, value, projectDir);
+  if (validationError) {
+    console.error(`\n  Validation error: ${validationError}\n`);
+    process.exit(1);
+  }
+
+  // Replace the value on the target line, preserving export prefix and comments
+  const line = lines[targetLine];
+  const hasExport = line.startsWith("export ");
+  const prefix = hasExport ? "export " : "";
+
+  // Preserve any inline comment after the closing quote
+  const commentMatch = line.match(/"[^"]*"\s*(#.*)$/);
+  const inlineComment = commentMatch ? `  ${commentMatch[1]}` : "";
+
+  lines[targetLine] = `${prefix}${key}="${value}"${inlineComment}`;
+
+  // Atomic write: write to .tmp then rename
+  const tmpPath = configPath + ".tmp";
+  writeFileSync(tmpPath, lines.join("\n"), "utf-8");
+  renameSync(tmpPath, configPath);
+
+  console.log(`\n  Updated ${key}="${value}"\n`);
+}
