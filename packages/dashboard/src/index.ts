@@ -3,6 +3,7 @@ export type {
   SkynetConfig,
   SkynetWorkerDef,
   WorkerInfo,
+  WorkerHeartbeat,
   CurrentTask,
   BacklogItem,
   CompletedTask,
