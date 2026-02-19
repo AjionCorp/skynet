@@ -8,6 +8,7 @@ import { stopCommand } from "./commands/stop.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { logsCommand } from "./commands/logs.js";
 import { versionCommand } from "./commands/version.js";
+import { addTaskCommand } from "./commands/add-task.js";
 
 const program = new Command();
 
@@ -70,5 +71,15 @@ program
   .command("version")
   .description("Show CLI version and check for updates")
   .action(versionCommand);
+
+program
+  .command("add-task")
+  .description("Add a new task to the backlog")
+  .argument("<title>", "Task title")
+  .option("--tag <tag>", "Task tag (e.g. FEAT, FIX, INFRA, TEST)", "FEAT")
+  .option("--description <description>", "Task description")
+  .option("--position <position>", "Insert position: top or bottom", "top")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(addTaskCommand);
 
 program.parse();
