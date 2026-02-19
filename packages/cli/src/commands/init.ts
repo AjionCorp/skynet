@@ -17,9 +17,11 @@ function resolveAssetDir(name: string): string {
 const TEMPLATES_DIR = resolveAssetDir("templates");
 const SCRIPTS_DIR = resolveAssetDir("scripts");
 
+let nonInteractiveMode = false;
+
 function prompt(question: string, defaultValue?: string): Promise<string> {
-  // Non-interactive: use defaults when stdin is not a TTY (piped or redirected)
-  if (!process.stdin.isTTY) {
+  // Non-interactive: use defaults when stdin is not a TTY or --non-interactive flag
+  if (!process.stdin.isTTY || nonInteractiveMode) {
     return Promise.resolve(defaultValue || "");
   }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -32,13 +34,62 @@ function prompt(question: string, defaultValue?: string): Promise<string> {
   });
 }
 
+function isInteractive(): boolean {
+  return !!process.stdin.isTTY && !nonInteractiveMode;
+}
+
+function generateMissionContent(purpose: string, goals: string, doneCriteria: string): string {
+  // Format goals as numbered list if not already
+  const goalLines = goals
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const formattedGoals = goalLines
+    .map((g, i) => `${i + 1}. ${g.replace(/^\d+[\.\)]\s*/, "")}`)
+    .join("\n");
+
+  // Format success criteria as numbered list
+  const criteriaLines = doneCriteria
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  const formattedCriteria = criteriaLines
+    .map((c, i) => `${i + 1}. ${c.replace(/^\d+[\.\)]\s*/, "")}`)
+    .join("\n");
+
+  return `# Mission
+
+<!-- This file drives the project-driver agent. Define your project's purpose, goals, and success criteria. -->
+<!-- The project-driver reads this file and generates tasks that advance the mission. -->
+
+## Purpose
+
+${purpose}
+
+## Goals
+
+${formattedGoals}
+
+## Success Criteria
+
+The mission is complete when:
+${formattedCriteria}
+
+## Current Focus
+
+What should the pipeline prioritize right now?
+`;
+}
+
 interface InitOptions {
   name?: string;
   dir?: string;
   copyScripts?: boolean;
+  nonInteractive?: boolean;
 }
 
 export async function initCommand(options: InitOptions) {
+  nonInteractiveMode = !!options.nonInteractive;
   console.log("\n  Skynet Pipeline Setup\n");
 
   const projectDir = resolve(options.dir || process.cwd());
@@ -141,6 +192,27 @@ export async function initCommand(options: InitOptions) {
     }
   }
 
+  // Interactive mission template generator
+  if (isInteractive()) {
+    const defineMission = await prompt("Would you like to define your project's mission now? (Y/n)", "Y");
+    if (defineMission.toLowerCase() !== "n") {
+      console.log("\n  Let's define your project's mission:\n");
+      const purpose = await prompt("What does your project do? (one sentence)");
+      const goals = await prompt("What are your top 3 goals? (comma-separated or one per line)");
+      const doneCriteria = await prompt("What does 'done' look like? (comma-separated or one per line)");
+
+      if (purpose || goals || doneCriteria) {
+        // Split comma-separated input into lines
+        const goalsText = goals.includes(",") ? goals.split(",").map((g) => g.trim()).join("\n") : goals;
+        const criteriaText = doneCriteria.includes(",") ? doneCriteria.split(",").map((c) => c.trim()).join("\n") : doneCriteria;
+
+        const missionPath = join(devDir, "mission.md");
+        writeFileSync(missionPath, generateMissionContent(purpose, goalsText, criteriaText));
+        console.log("    .dev/mission.md (populated with your mission)");
+      }
+    }
+  }
+
   // Install scripts: symlink or copy (includes subdirectories like agents/)
   const scriptFiles = readdirSync(SCRIPTS_DIR).filter((f) => f.endsWith(".sh"));
   const scriptDirs = readdirSync(SCRIPTS_DIR).filter((f) => {
@@ -216,7 +288,7 @@ export async function initCommand(options: InitOptions) {
   console.log(`
   Done! Next steps:
 
-    1. Edit .dev/mission.md with your project's mission and goals
+    1. Review .dev/mission.md (edit if needed)
     2. Edit .dev/skynet.project.sh with worker conventions
     3. Run: npx skynet setup-agents  (to install macOS LaunchAgents)
     4. Or run manually: bash .dev/scripts/watchdog.sh

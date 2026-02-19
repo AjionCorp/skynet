@@ -27,6 +27,7 @@ program
   .option("--name <name>", "Project name")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--copy-scripts", "Copy scripts instead of symlinking")
+  .option("--non-interactive", "Skip all interactive prompts (use defaults)")
   .action(initCommand);
 
 program
