@@ -51,6 +51,11 @@ setup_worktree() {
   local from_main="${2:-true}"
   cleanup_worktree 2>/dev/null || true
   if $from_main; then
+    # Delete stale fix branch if it exists (left over from a previous crashed attempt)
+    if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+      log "Deleting stale branch $branch before creating worktree"
+      git branch -D "$branch" 2>/dev/null || true
+    fi
     git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH"
   else
     git worktree add "$WORKTREE_DIR" "$branch"
