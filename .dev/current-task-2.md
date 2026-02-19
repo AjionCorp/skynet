@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet reset-task` CLI command — create packages/cli/src/commands/reset-task.ts. Usage: `skynet reset-task "task title substring"`. Searches failed-tasks.md for a matching entry, resets its status to pending and attempts to 0, finds the corresponding `[x]` entry in backlog.md and changes it back to `[ ]`. If the failed branch still exists, offers to delete it (with --force flag to skip confirmation). Register in packages/cli/src/index.ts
+## [INFRA] Wire e2e CLI smoke test into CI workflow — in `.github/workflows/ci.yml`, add a new job `e2e-cli` alongside existing typecheck, unit-test, lint-sh jobs. Steps: checkout, setup Node 20, install pnpm, `pnpm install`, `pnpm --filter @ajioncorp/skynet-cli build` (compile CLI TypeScript), then `bash tests/e2e/init-smoke.test.sh`. This validates that `npx skynet init` scaffolding works correctly on every PR, catching regressions in the CLI path resolution and template copying logic
 **Status:** completed
-**Started:** 2026-02-19 17:01
+**Started:** 2026-02-19 17:19
 **Completed:** 2026-02-19
-**Branch:** dev/add-skynet-reset-task-cli-command--creat
+**Branch:** dev/wire-e2e-cli-smoke-test-into-ci-workflow
 **Worker:** 2
 
 ### Changes
