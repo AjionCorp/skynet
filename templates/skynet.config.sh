@@ -61,10 +61,15 @@ export SKYNET_TG_CHAT_ID=""
 export SKYNET_CLAUDE_BIN="claude"
 export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
 
+# ---- Agent Plugin ----
+# Which AI agent to use. Built-in: "auto", "claude", "codex"
+# Or set to an absolute path for a custom agent plugin script.
+# Custom plugins must define: agent_run "prompt" "logfile" and agent_check
+export SKYNET_AGENT_PLUGIN="auto"  # auto | claude | codex | /path/to/plugin.sh
+
 # ---- Codex CLI (OpenAI fallback) ----
 export SKYNET_CODEX_BIN="codex"
 export SKYNET_CODEX_FLAGS="--full-auto"
-export SKYNET_AGENT_PREFERENCE="auto"  # claude | codex | auto
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"
