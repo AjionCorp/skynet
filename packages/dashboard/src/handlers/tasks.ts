@@ -2,32 +2,72 @@ import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
 import type { SkynetConfig } from "../types";
 
 /**
- * Parse backlog.md into items with status/tag info.
+ * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
+ */
+function extractTitle(text: string): string {
+  // Remove blockedBy metadata suffix
+  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
+  // Remove tag prefix
+  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
+  // Remove description after em-dash
+  const dashIdx = withoutTag.indexOf(" \u2014 ");
+  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+}
+
+/**
+ * Parse blockedBy metadata from raw text.
+ */
+function parseBlockedBy(text: string): string[] {
+  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
+  if (!match) return [];
+  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Parse backlog.md into items with status/tag/dependency info.
  */
 function parseBacklog(raw: string) {
   const lines = raw.split("\n");
-  const items: { text: string; tag: string; status: "pending" | "claimed" | "done" }[] = [];
+  const items: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[]; blocked: boolean }[] = [];
   let pendingCount = 0;
   let claimedCount = 0;
   let doneCount = 0;
 
+  // First pass: collect all items
+  const rawItems: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[] }[] = [];
   for (const line of lines) {
+    let status: "pending" | "claimed" | "done" | null = null;
+    let text = "";
     if (line.startsWith("- [ ] ")) {
-      const text = line.replace("- [ ] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "pending" });
+      status = "pending";
+      text = line.replace("- [ ] ", "");
       pendingCount++;
     } else if (line.startsWith("- [>] ")) {
-      const text = line.replace("- [>] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "claimed" });
+      status = "claimed";
+      text = line.replace("- [>] ", "");
       claimedCount++;
     } else if (line.startsWith("- [x] ")) {
-      const text = line.replace("- [x] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "done" });
+      status = "done";
+      text = line.replace("- [x] ", "");
       doneCount++;
     }
+    if (status === null) continue;
+
+    const tagMatch = text.match(/^\[([^\]]+)\]/);
+    const blockedBy = parseBlockedBy(text);
+    rawItems.push({ text, tag: tagMatch?.[1] ?? "", status, blockedBy });
+  }
+
+  // Second pass: resolve blocked status (blocked if any dependency is not done)
+  const titleToStatus = new Map<string, string>();
+  for (const item of rawItems) {
+    titleToStatus.set(extractTitle(item.text), item.status);
+  }
+
+  for (const item of rawItems) {
+    const blocked = item.blockedBy.length > 0 &&
+      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done");
+    items.push({ ...item, blocked });
   }
 
   return { items, pendingCount, claimedCount, doneCount };
@@ -75,11 +115,12 @@ export function createTasksHandlers(config: SkynetConfig) {
   async function POST(request: Request): Promise<Response> {
     try {
       const body = await request.json();
-      const { tag, title, description, position } = body as {
+      const { tag, title, description, position, blockedBy } = body as {
         tag: string;
         title: string;
         description?: string;
         position?: "top" | "bottom";
+        blockedBy?: string;
       };
 
       if (!tag || !taskTags.includes(tag)) {
@@ -110,9 +151,12 @@ export function createTasksHandlers(config: SkynetConfig) {
 
       try {
         const desc = description?.trim()
-          ? ` — ${description.trim()}`
+          ? ` \u2014 ${description.trim()}`
           : "";
-        const taskLine = `- [ ] [${tag}] ${title.trim()}${desc}`;
+        const blocked = blockedBy?.trim()
+          ? ` | blockedBy: ${blockedBy.trim()}`
+          : "";
+        const taskLine = `- [ ] [${tag}] ${title.trim()}${desc}${blocked}`;
 
         const raw = readFileSync(backlogPath, "utf-8");
         const lines = raw.split("\n");

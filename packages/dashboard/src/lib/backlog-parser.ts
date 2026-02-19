@@ -4,6 +4,7 @@ export interface ParsedBacklogItem {
   tag: string | null;
   title: string;
   description: string | null;
+  blockedBy: string[];
 }
 
 /**
@@ -35,9 +36,24 @@ export function parseBacklog(content: string): ParsedBacklogItem[] {
 
     if (status === null) continue;
 
-    const tagMatch = text.match(/^\[([^\]]+)\]\s*/);
+    // Extract blockedBy metadata from " | blockedBy: ..." suffix
+    let blockedBy: string[] = [];
+    const blockedByMatch = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
+    const textWithoutMeta = blockedByMatch
+      ? text.slice(0, text.length - blockedByMatch[0].length)
+      : text;
+    if (blockedByMatch) {
+      blockedBy = blockedByMatch[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+
+    const tagMatch = textWithoutMeta.match(/^\[([^\]]+)\]\s*/);
     const tag = tagMatch?.[1] ?? null;
-    const afterTag = tagMatch ? text.slice(tagMatch[0].length) : text;
+    const afterTag = tagMatch
+      ? textWithoutMeta.slice(tagMatch[0].length)
+      : textWithoutMeta;
 
     // Split on " — " for title/description separation
     const dashIndex = afterTag.indexOf(" — ");
@@ -51,6 +67,7 @@ export function parseBacklog(content: string): ParsedBacklogItem[] {
       tag,
       title: title.trim(),
       description,
+      blockedBy,
     });
   }
 

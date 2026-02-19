@@ -373,7 +373,7 @@ export function PipelineDashboard() {
                   <span className="mt-0.5 text-xs text-zinc-600">{i + 1}.</span>
                   <div className="flex items-center gap-2">
                     {task.tag && <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">{task.tag}</span>}
-                    <span className={`text-sm ${task.status === "claimed" ? "text-cyan-400" : "text-zinc-300"}`}>{task.text}</span>
+                    <span className={`text-sm ${task.status === "claimed" ? "text-cyan-400" : "text-zinc-300"}`}>{task.text.replace(/\s*\|\s*blockedBy:.*$/i, "")}</span>
                   </div>
                 </div>
               ))

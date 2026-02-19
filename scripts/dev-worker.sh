@@ -57,14 +57,46 @@ release_lock() {
   rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
 }
 
+# --- Helper: check if a task's blockedBy dependencies are all done ---
+# Usage: is_task_blocked "- [ ] [TAG] Title | blockedBy: Dep1, Dep2"
+# Returns 0 (true) if blocked, 1 (false) if unblocked.
+is_task_blocked() {
+  local task_line="$1"
+  # Extract blockedBy metadata (case-insensitive match after " | blockedBy: ")
+  local blocked_by
+  blocked_by=$(echo "$task_line" | sed -n 's/.*| *blockedBy: *\(.*\)$/\1/Ip')
+  if [ -z "$blocked_by" ]; then
+    return 1  # no dependencies — not blocked
+  fi
+  # Split on comma and check each dependency
+  local IFS=','
+  for dep in $blocked_by; do
+    dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')  # trim whitespace
+    if [ -z "$dep" ]; then continue; fi
+    # Check if this dependency is done (has [x] marker) in the backlog
+    # Match: "- [x] [TAG] <dep>" or "- [x] <dep>" anywhere in the title portion
+    if ! grep -q "^\- \[x\] .*${dep}" "$BACKLOG" 2>/dev/null; then
+      return 0  # dependency not done — task is blocked
+    fi
+  done
+  return 1  # all dependencies done — not blocked
+}
+
 # --- Helper: atomically claim the next unchecked task from backlog ---
 # Uses mkdir lock to prevent two workers from grabbing the same task.
 # Changes "- [ ]" to "- [>]" (claimed) so the other worker skips it.
+# Skips tasks whose blockedBy dependencies are not yet completed.
 # Outputs the claimed task line (original "- [ ] ..." form) or empty string.
 claim_next_task() {
   if ! acquire_lock; then echo ""; return; fi
-  local task
-  task=$(grep -m1 '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  local task=""
+  # Iterate through all pending tasks, skip blocked ones
+  while IFS= read -r candidate; do
+    if ! is_task_blocked "$candidate"; then
+      task="$candidate"
+      break
+    fi
+  done < <(grep '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   if [ -n "$task" ]; then
     if ! awk -v target="$task" 'found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
       "$BACKLOG" > "$BACKLOG.tmp" || ! mv "$BACKLOG.tmp" "$BACKLOG"; then

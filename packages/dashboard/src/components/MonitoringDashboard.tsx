@@ -782,7 +782,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                             {item.tag}
                           </span>
                         )}
-                        <span className="text-sm text-zinc-300">{item.text.replace(/^\[[^\]]+\]\s*/, "")}</span>
+                        <span className="text-sm text-zinc-300">{item.text.replace(/^\[[^\]]+\]\s*/, "").replace(/\s*\|\s*blockedBy:.*$/i, "")}</span>
                       </div>
                     ))
                 )}
