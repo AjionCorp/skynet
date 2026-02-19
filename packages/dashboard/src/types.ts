@@ -51,6 +51,8 @@ export interface BacklogItem {
   text: string;
   tag: string;
   status: "pending" | "claimed" | "done";
+  blockedBy: string[];
+  blocked: boolean;
 }
 
 export interface CompletedTask {
@@ -195,6 +197,7 @@ export interface TaskCreatePayload {
   title: string;
   description?: string;
   position?: "top" | "bottom";
+  blockedBy?: string;
 }
 
 // ===== Sync Status =====
