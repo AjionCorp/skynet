@@ -305,4 +305,94 @@ describe("createMonitoringAgentsHandler", () => {
       expect(agent.loaded).toBe(false);
     }
   });
+
+  it("uses custom agentPrefix when configured", async () => {
+    const config = makeConfig({ agentPrefix: "io.custom.myapp" });
+    const handler = createMonitoringAgentsHandler(config);
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data.agents[0].label).toBe("io.custom.myapp.dev-worker-1");
+    expect(data.agents[1].label).toBe("io.custom.myapp.health-check");
+  });
+
+  it("returns empty agents array when no workers configured", async () => {
+    const config = makeConfig({ workers: [] });
+    const handler = createMonitoringAgentsHandler(config);
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.agents).toHaveLength(0);
+  });
+
+  it("handles plist read error gracefully when file exists", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error("Permission denied");
+    });
+
+    const handler = createMonitoringAgentsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(res.status).toBe(200);
+    const agent = data.agents[0];
+    expect(agent.plistExists).toBe(true);
+    expect(agent.interval).toBeNull();
+    expect(agent.runAtLoad).toBe(false);
+    expect(agent.scriptPath).toBeNull();
+    expect(agent.logPath).toBeNull();
+  });
+
+  it("checks correct plist path using homedir and agent label", async () => {
+    mockExistsSync.mockReturnValue(false);
+
+    const handler = createMonitoringAgentsHandler(makeConfig());
+    await handler();
+
+    const existsCalls = mockExistsSync.mock.calls.map((c) => String(c[0]));
+    expect(existsCalls).toContain(
+      "/Users/testuser/Library/LaunchAgents/com.test-project.dev-worker-1.plist"
+    );
+    expect(existsCalls).toContain(
+      "/Users/testuser/Library/LaunchAgents/com.test-project.health-check.plist"
+    );
+  });
+
+  it("handles plist with no StartInterval key", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      makePlist({ runAtLoad: true, script: "dev-worker-1.sh" }) as never
+    );
+
+    const handler = createMonitoringAgentsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    const agent = data.agents[0];
+    expect(agent.interval).toBeNull();
+    expect(agent.intervalHuman).toBeNull();
+    expect(agent.runAtLoad).toBe(true);
+    expect(agent.scriptPath).toBe("dev-worker-1.sh");
+  });
+
+  it("filters launchctl output to only matching agent prefix", async () => {
+    mockExecSync.mockReturnValue(
+      [
+        "PID\tStatus\tLabel",
+        "1234\t0\tcom.test-project.dev-worker-1",
+        "5678\t0\tcom.other-project.dev-worker-1",
+        "-\t0\tcom.apple.something",
+      ].join("\n") as never
+    );
+
+    const handler = createMonitoringAgentsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data.agents[0].loaded).toBe(true);
+    expect(data.agents[0].pid).toBe("1234");
+    expect(data.agents[1].loaded).toBe(false);
+  });
 });

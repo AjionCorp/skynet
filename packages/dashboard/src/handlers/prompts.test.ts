@@ -222,4 +222,93 @@ describe("createPromptsHandler", () => {
     expect(["core", "testing", "infra", "data"]).toContain(prompt.category);
     expect(typeof prompt.prompt).toBe("string");
   });
+
+  it("skips scripts with unclosed PROMPT quote", async () => {
+    mockReadFileSync.mockImplementation((path) => {
+      if (String(path).includes("dev-worker.sh"))
+        return 'PROMPT="unclosed prompt value' as never;
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data).toHaveLength(0);
+  });
+
+  it("preserves worker category from config", async () => {
+    mockReadFileSync.mockImplementation((path) => {
+      if (String(path).includes("health-check.sh"))
+        return makeScriptContent("Health prompt") as never;
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data).toHaveLength(1);
+    expect(data[0].category).toBe("infra");
+  });
+
+  it("defaults to devDir/scripts when scriptsDir not set", async () => {
+    mockReadFileSync.mockImplementation(() => {
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(
+      makeConfig({ scriptsDir: undefined })
+    );
+    await handler();
+
+    const calls = mockReadFileSync.mock.calls.map((c) => String(c[0]));
+    const matchingCalls = calls.filter((c) =>
+      c.startsWith("/tmp/test/.dev/scripts/")
+    );
+    expect(matchingCalls.length).toBeGreaterThan(0);
+  });
+
+  it("processes all six hardcoded script names", async () => {
+    const expectedScripts = [
+      "dev-worker",
+      "task-fixer",
+      "project-driver",
+      "health-check",
+      "ui-tester",
+      "feature-validator",
+    ];
+
+    mockReadFileSync.mockImplementation((path) => {
+      const p = String(path);
+      for (const name of expectedScripts) {
+        if (p.includes(`${name}.sh`))
+          return makeScriptContent(`Prompt for ${name}`) as never;
+      }
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data).toHaveLength(6);
+    const scriptNames = data.map((d: { scriptName: string }) => d.scriptName);
+    expect(scriptNames).toEqual(expectedScripts);
+  });
+
+  it("generates title-case fallback labels for multi-word script names", async () => {
+    mockReadFileSync.mockImplementation((path) => {
+      if (String(path).includes("feature-validator.sh"))
+        return makeScriptContent("Validate features") as never;
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(makeConfig({ workers: [] }));
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data).toHaveLength(1);
+    expect(data[0].workerLabel).toBe("Feature Validator");
+  });
 });

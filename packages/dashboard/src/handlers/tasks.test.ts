@@ -138,5 +138,80 @@ describe("createTasksHandlers", () => {
       expect(res.status).toBe(200);
       expect(body.data.inserted).toBe("- [ ] [FEAT] Spaced title");
     });
+
+    it("returns 500 with error message on write failure", async () => {
+      mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Write fail" }));
+      const body = await res.json();
+      expect(res.status).toBe(500);
+      expect(body.data).toBeNull();
+      expect(body.error).toBe("Disk full");
+    });
+
+    it("returns 400 when tag field is missing", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ title: "No tag" }));
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toContain("Invalid tag");
+    });
+
+    it("trims description whitespace", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Desc test", description: "  some desc  " }));
+      const body = await res.json();
+      expect(body.data.inserted).toContain("— some desc");
+    });
+
+    it("omits description separator when description is whitespace-only", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "No desc", description: "   " }));
+      const body = await res.json();
+      expect(body.data.inserted).toBe("- [ ] [FEAT] No desc");
+    });
+
+    it("inserts task at header end when backlog has no existing tasks", async () => {
+      mockReadFileSync.mockReturnValue("# Backlog\n\n" as never);
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "First task" }));
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.inserted).toContain("First task");
+      const written = mockWriteFileSync.mock.calls[0][1] as string;
+      expect(written).toContain("- [ ] [FEAT] First task");
+    });
+  });
+
+  describe("GET edge cases", () => {
+    it("returns empty items when backlog has only done items", async () => {
+      mockReadFileSync.mockReturnValue("# Backlog\n\n- [x] [FEAT] Done task\n- [x] [FIX] Also done" as never);
+      const { GET } = createTasksHandlers(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+      expect(data.items).toHaveLength(0);
+      expect(data.doneCount).toBe(2);
+    });
+
+    it("returns empty items from empty backlog file", async () => {
+      mockReadFileSync.mockReturnValue("# Backlog\n\n" as never);
+      const { GET } = createTasksHandlers(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+      expect(data.items).toHaveLength(0);
+      expect(data.pendingCount).toBe(0);
+      expect(data.claimedCount).toBe(0);
+      expect(data.doneCount).toBe(0);
+    });
+
+    it("parses items without tags gracefully", async () => {
+      mockReadFileSync.mockReturnValue("# Backlog\n\n- [ ] No tag here" as never);
+      const { GET } = createTasksHandlers(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+      expect(data.items).toHaveLength(1);
+      expect(data.items[0].tag).toBe("");
+      expect(data.items[0].text).toBe("No tag here");
+    });
   });
 });
