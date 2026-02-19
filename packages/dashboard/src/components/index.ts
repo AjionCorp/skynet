@@ -14,3 +14,5 @@ export { WorkerScaling } from "./WorkerScaling";
 export type { WorkerScalingProps } from "./WorkerScaling";
 export { MissionDashboard } from "./MissionDashboard";
 export type { MissionDashboardProps } from "./MissionDashboard";
+export { LogViewer } from "./LogViewer";
+export type { LogViewerProps } from "./LogViewer";
