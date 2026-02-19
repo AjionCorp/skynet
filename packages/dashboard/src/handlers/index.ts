@@ -5,3 +5,4 @@ export { createMonitoringStatusHandler } from "./monitoring-status";
 export { createMonitoringAgentsHandler } from "./monitoring-agents";
 export { createMonitoringLogsHandler } from "./monitoring-logs";
 export { createTasksHandlers } from "./tasks";
+export { createPromptsHandler } from "./prompts";

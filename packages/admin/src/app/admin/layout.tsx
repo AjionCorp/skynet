@@ -3,13 +3,14 @@
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@ajioncorp/skynet/components";
-import { Activity, Monitor, ListTodo, Database } from "lucide-react";
+import { Activity, Monitor, ListTodo, Database, FileText } from "lucide-react";
 
 const pages = [
   { href: "/admin/pipeline", label: "Pipeline", icon: Activity },
   { href: "/admin/monitoring", label: "Monitoring", icon: Monitor },
   { href: "/admin/tasks", label: "Tasks", icon: ListTodo },
   { href: "/admin/sync", label: "Sync", icon: Database },
+  { href: "/admin/prompts", label: "Prompts", icon: FileText },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

@@ -48,6 +48,9 @@ test("nav tabs navigate between pages", async ({ page }) => {
 
   await page.locator('a[href="/admin/sync"]').first().click();
   await expect(page).toHaveURL(/\/admin\/sync/);
+
+  await page.locator('a[href="/admin/prompts"]').first().click();
+  await expect(page).toHaveURL(/\/admin\/prompts/);
 });
 
 // ───── API endpoints ─────
@@ -130,6 +133,50 @@ test("monitoring dashboard tabs are clickable", async ({ page }) => {
 
   await page.getByRole("button", { name: "System" }).click();
   await expect(page.getByText("Authentication")).toBeVisible({ timeout: 10_000 });
+});
+
+// ───── Prompts page ─────
+
+test("prompts page loads", async ({ page }) => {
+  await page.goto("/admin/prompts");
+  await expect(page.locator("body")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Prompts" }).first()).toBeVisible();
+});
+
+test("prompts page shows prompt templates after loading", async ({ page }) => {
+  await page.goto("/admin/prompts");
+  await expect(page.getByText("Prompt Templates")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Dev Worker")).toBeVisible();
+});
+
+test("prompts expand and collapse", async ({ page }) => {
+  await page.goto("/admin/prompts");
+  await expect(page.getByText("Prompt Templates")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("button", { name: "Expand All" }).click();
+  await expect(page.getByText("SKYNET_PROJECT_NAME").first()).toBeVisible();
+
+  await page.getByRole("button", { name: "Collapse All" }).click();
+  await expect(page.getByText("SKYNET_PROJECT_NAME").first()).not.toBeVisible();
+});
+
+test("GET /api/admin/prompts returns data", async ({ request }) => {
+  const res = await request.get("/api/admin/prompts");
+  expect(res.status()).toBe(200);
+  const json = await res.json();
+  expect(json.data).toBeDefined();
+  expect(json.data).toBeInstanceOf(Array);
+  expect(json.data.length).toBeGreaterThan(0);
+  expect(json.data[0]).toHaveProperty("scriptName");
+  expect(json.data[0]).toHaveProperty("prompt");
+});
+
+test("no console errors on prompts page", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (err) => errors.push(err.message));
+  await page.goto("/admin/prompts");
+  await page.waitForTimeout(3000);
+  expect(errors).toEqual([]);
 });
 
 // ───── No client-side errors ─────

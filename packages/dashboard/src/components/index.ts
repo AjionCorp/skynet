@@ -8,3 +8,5 @@ export { SyncDashboard } from "./SyncDashboard";
 export type { SyncDashboardProps } from "./SyncDashboard";
 export { AdminLayout } from "./AdminLayout";
 export type { AdminLayoutProps, AdminLayoutPage } from "./AdminLayout";
+export { PromptsDashboard } from "./PromptsDashboard";
+export type { PromptsDashboardProps } from "./PromptsDashboard";

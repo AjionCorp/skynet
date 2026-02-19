@@ -206,3 +206,13 @@ export interface SyncStatus {
   records_count: number | null;
   error_message: string | null;
 }
+
+// ===== Prompt Types =====
+
+export interface PromptTemplate {
+  scriptName: string;
+  workerLabel: string;
+  description: string;
+  category: "core" | "testing" | "infra" | "data";
+  prompt: string;
+}
