@@ -1,0 +1,298 @@
+import type { SkynetConfig } from "../types";
+import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
+import { getWorkerStatus } from "../lib/worker-status";
+
+/**
+ * Parse current-task.md into a structured object.
+ */
+function parseCurrentTask(raw: string) {
+  const statusMatch = raw.match(/\*\*Status:\*\* (\w+)/);
+  const titleMatch = raw.match(/^## (.+)/m);
+  const branchMatch = raw.match(/\*\*Branch:\*\* (.+)/);
+  const startedMatch = raw.match(/\*\*Started:\*\* (.+)/);
+  const workerMatch = raw.match(/\*\*Worker:\*\* (.+)/);
+  const lastMatch = raw.match(/\*\*(?:Last.*|Note):\*\* (.+)/);
+
+  return {
+    status: statusMatch?.[1] ?? "unknown",
+    title: titleMatch?.[1] ?? null,
+    branch: branchMatch?.[1] ?? null,
+    started: startedMatch?.[1] ?? null,
+    worker: workerMatch?.[1] ?? null,
+    lastInfo: lastMatch?.[1] ?? null,
+  };
+}
+
+/**
+ * Parse backlog.md into items with status/tag info.
+ */
+function parseBacklog(raw: string) {
+  const lines = raw.split("\n");
+  const items: { text: string; tag: string; status: "pending" | "claimed" | "done" }[] = [];
+  let pendingCount = 0;
+  let claimedCount = 0;
+  let doneCount = 0;
+
+  for (const line of lines) {
+    if (line.startsWith("- [ ] ")) {
+      const text = line.replace("- [ ] ", "");
+      const tagMatch = text.match(/^\[([^\]]+)\]/);
+      items.push({ text, tag: tagMatch?.[1] ?? "", status: "pending" });
+      pendingCount++;
+    } else if (line.startsWith("- [>] ")) {
+      const text = line.replace("- [>] ", "");
+      const tagMatch = text.match(/^\[([^\]]+)\]/);
+      items.push({ text, tag: tagMatch?.[1] ?? "", status: "claimed" });
+      claimedCount++;
+    } else if (line.startsWith("- [x] ")) {
+      const text = line.replace("- [x] ", "");
+      const tagMatch = text.match(/^\[([^\]]+)\]/);
+      items.push({ text, tag: tagMatch?.[1] ?? "", status: "done" });
+      doneCount++;
+    }
+  }
+
+  return { items, pendingCount, claimedCount, doneCount };
+}
+
+/**
+ * Create a GET handler for the pipeline/status endpoint.
+ * Returns full monitoring status including workers, tasks, backlog, sync health, auth, and git.
+ */
+export function createPipelineStatusHandler(config: SkynetConfig) {
+  const { devDir, lockPrefix, workers: workerDefs } = config;
+  const scriptsDir = config.scriptsDir ?? `${devDir}/scripts`;
+
+  return async function GET(): Promise<Response> {
+    try {
+      // Worker statuses
+      const workers = workerDefs.map((w) => {
+        const lockFile = `${lockPrefix}${w.name}.lock`;
+        const status = getWorkerStatus(lockFile);
+        const logName = w.logFile ?? w.name;
+        const lastLog = getLastLogLine(devDir, logName);
+        const lastLogTime = extractTimestamp(lastLog);
+        return {
+          ...w,
+          category: w.category ?? ("core" as const),
+          logFile: logName,
+          ...status,
+          lastLog,
+          lastLogTime,
+        };
+      });
+
+      // Current task
+      const currentTaskRaw = readDevFile(devDir, "current-task.md");
+      const currentTask = parseCurrentTask(currentTaskRaw);
+
+      // Backlog
+      const backlogRaw = readDevFile(devDir, "backlog.md");
+      const backlog = parseBacklog(backlogRaw);
+
+      // Completed
+      const completedRaw = readDevFile(devDir, "completed.md");
+      const completedLines = completedRaw
+        .split("\n")
+        .filter(
+          (l) =>
+            l.startsWith("|") &&
+            !l.includes("Date") &&
+            !l.includes("---")
+        );
+      const completed = completedLines.map((l) => {
+        const parts = l.split("|").map((p) => p.trim());
+        return {
+          date: parts[1] ?? "",
+          task: parts[2] ?? "",
+          branch: parts[3] ?? "",
+          notes: parts[4] ?? "",
+        };
+      });
+
+      // Failed tasks
+      const failedRaw = readDevFile(devDir, "failed-tasks.md");
+      const failedLines = failedRaw
+        .split("\n")
+        .filter(
+          (l) =>
+            l.startsWith("|") &&
+            !l.includes("Date") &&
+            !l.includes("---")
+        );
+      const failed = failedLines.map((l) => {
+        const parts = l.split("|").map((p) => p.trim());
+        return {
+          date: parts[1] ?? "",
+          task: parts[2] ?? "",
+          branch: parts[3] ?? "",
+          error: parts[4] ?? "",
+          attempts: parts[5] ?? "",
+          status: parts[6] ?? "",
+        };
+      });
+
+      // Blockers
+      const blockersRaw = readDevFile(devDir, "blockers.md");
+      const hasBlockers =
+        blockersRaw.length > 0 &&
+        !blockersRaw.includes("No active blockers");
+      const blockerLines = hasBlockers
+        ? blockersRaw.split("\n").filter((l) => l.startsWith("- "))
+        : [];
+
+      // Sync health (from sync-health.md)
+      const syncRaw = readDevFile(devDir, "sync-health.md");
+      const lastSyncMatch = syncRaw.match(/_Last run: (.+)_/);
+      const syncEndpoints = syncRaw
+        .split("\n")
+        .filter(
+          (l) =>
+            l.startsWith("|") &&
+            !l.includes("Endpoint") &&
+            !l.includes("---")
+        )
+        .map((l) => {
+          const parts = l.split("|").map((p) => p.trim());
+          return {
+            endpoint: parts[1] ?? "",
+            lastRun: parts[2] ?? "",
+            status: parts[3] ?? "",
+            records: parts[4] ?? "",
+            notes: parts[5] ?? "",
+          };
+        });
+
+      // Auth status
+      const { existsSync, readFileSync, statSync } = await import("fs");
+      const tokenCachePath = config.authTokenCache ?? `${lockPrefix}claude-token`;
+      const authFailPath = config.authFailFlag ?? `${lockPrefix}auth-failed`;
+
+      const tokenCached = existsSync(tokenCachePath);
+      let tokenCacheAgeMs: number | null = null;
+      if (tokenCached) {
+        try {
+          tokenCacheAgeMs = Date.now() - statSync(tokenCachePath).mtimeMs;
+        } catch {
+          /* ignore */
+        }
+      }
+      const authFailFlag = existsSync(authFailPath);
+      let lastFailEpoch: number | null = null;
+      if (authFailFlag) {
+        try {
+          lastFailEpoch = Number(
+            readFileSync(authFailPath, "utf-8").trim()
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+
+      // Backlog mutex
+      const backlogLockPath = `${lockPrefix}backlog.lock`;
+      const backlogLocked = existsSync(backlogLockPath);
+
+      // Git status
+      const { execSync } = await import("child_process");
+      let gitBranch = "unknown";
+      let commitsAhead = 0;
+      let dirtyFiles = 0;
+      let lastGitCommit: string | null = null;
+      try {
+        gitBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+          encoding: "utf-8",
+          timeout: 3000,
+        }).trim();
+        const aheadMatch = execSync(
+          "git rev-list --count origin/main..HEAD 2>/dev/null || echo 0",
+          { encoding: "utf-8", timeout: 3000 }
+        ).trim();
+        commitsAhead = Number(aheadMatch) || 0;
+        const dirtyOutput = execSync("git status --porcelain", {
+          encoding: "utf-8",
+          timeout: 3000,
+        }).trim();
+        dirtyFiles = dirtyOutput ? dirtyOutput.split("\n").length : 0;
+        lastGitCommit =
+          execSync('git log -1 --format="%H %s" 2>/dev/null', {
+            encoding: "utf-8",
+            timeout: 3000,
+          }).trim() || null;
+      } catch {
+        /* ignore */
+      }
+
+      // Post-commit gate
+      let postCommitLastResult: string | null = null;
+      let postCommitLastCommit: string | null = null;
+      let postCommitLastTime: string | null = null;
+      try {
+        const gateLog = getLastLogLine(devDir, "post-commit-gate");
+        if (gateLog) {
+          postCommitLastResult = /PASS/i.test(gateLog)
+            ? "pass"
+            : /FAIL/i.test(gateLog)
+              ? "fail"
+              : "unknown";
+          postCommitLastTime = extractTimestamp(gateLog);
+          const commitMatch = gateLog.match(/\b([0-9a-f]{7,40})\b/);
+          postCommitLastCommit = commitMatch?.[1] ?? null;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      return Response.json({
+        data: {
+          workers,
+          currentTask,
+          backlog,
+          completed,
+          completedCount: completed.length,
+          failed,
+          failedPendingCount: failed.filter((f) =>
+            f.status.includes("pending")
+          ).length,
+          hasBlockers,
+          blockerLines,
+          syncHealth: {
+            lastRun: lastSyncMatch?.[1] ?? null,
+            endpoints: syncEndpoints,
+          },
+          auth: {
+            tokenCached,
+            tokenCacheAgeMs,
+            authFailFlag,
+            lastFailEpoch,
+          },
+          backlogLocked,
+          git: {
+            branch: gitBranch,
+            commitsAhead,
+            dirtyFiles,
+            lastCommit: lastGitCommit,
+          },
+          postCommitGate: {
+            lastResult: postCommitLastResult,
+            lastCommit: postCommitLastCommit,
+            lastTime: postCommitLastTime,
+          },
+          timestamp: new Date().toISOString(),
+        },
+        error: null,
+      });
+    } catch (err) {
+      return Response.json(
+        {
+          data: null,
+          error:
+            err instanceof Error
+              ? err.message
+              : "Failed to read pipeline status",
+        },
+        { status: 500 }
+      );
+    }
+  };
+}
