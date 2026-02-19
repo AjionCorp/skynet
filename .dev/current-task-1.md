@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `/admin/settings` page for config editing via dashboard — create `packages/admin/src/app/admin/settings/page.tsx` that imports a new `SettingsDashboard` component from `@ajioncorp/skynet/components`. Create `packages/dashboard/src/components/SettingsDashboard.tsx` — reads config values from a new `/api/admin/config` route, displays them in an editable form with save button. Create `packages/dashboard/src/handlers/config.ts` (GET: parse skynet.config.sh and return key-value pairs; POST: validate and write back). Create API route `packages/admin/src/app/api/admin/config/route.ts`. Add navigation entry: `{ href: "/admin/settings", label: "Settings", icon: Settings }`. Export from `packages/dashboard/src/components/index.ts`. Criterion #4 (full visibility) and #1 (developer experience)
+## [INFRA] Extend watchdog stale branch cleanup to handle fixed and superseded tasks — FRESH implementation (previous branch `dev/extend-watchdog-stale-branch-cleanup-to-` has merge conflict — delete it). The existing `_cleanup_stale_branches()` in `scripts/watchdog.sh` only handles entries with `status=blocked`. Extend it to also delete branches for entries with `status=fixed` or `status=superseded`. Also add logic to detect when a failed-task entry with `status=pending` has a matching task title in completed.md (completed via fresh implementation), and auto-mark those entries as `status=superseded`. Currently 10 stale dev/* branches exist — after this change, the watchdog should clean most of them up. Criterion #3 (clean state, no zombie branches)
 **Status:** completed
-**Started:** 2026-02-19 18:11
+**Started:** 2026-02-19 18:16
 **Completed:** 2026-02-19
-**Branch:** dev/add-adminsettings-page-for-config-editin
+**Branch:** dev/extend-watchdog-stale-branch-cleanup-to-
 **Worker:** 1
 
 ### Changes
