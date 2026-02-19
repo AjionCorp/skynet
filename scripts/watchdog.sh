@@ -324,6 +324,59 @@ for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   _handle_stale_worker "$_wid"
 done
 
+# --- Auto-supersede pending failed tasks that were re-completed ---
+# When a task fails and gets re-implemented as a fresh task, the new task
+# goes to completed.md while the old failed entry stays as status=pending.
+# This detects such cases by matching core task titles (before " — ") and
+# auto-marks the old failed entries as superseded.
+_auto_supersede_completed_tasks() {
+  [ -f "$FAILED" ] || return 0
+  [ -f "$COMPLETED" ] || return 0
+
+  # Build list of completed core titles (text before " — ")
+  local completed_cores
+  completed_cores=$(awk -F'|' 'NR > 2 {
+    t = $3; gsub(/^ +| +$/, "", t); sub(/ —.*/, "", t)
+    if (t != "") print t
+  }' "$COMPLETED")
+  [ -z "$completed_cores" ] && return 0
+
+  local updated=0
+
+  # Scan pending entries in failed-tasks.md for matches in completed.md
+  while IFS='|' read -r _ _date task branch _error _attempts status _; do
+    status=$(echo "$status" | sed 's/^ *//;s/ *$//')
+    [ "$status" = "pending" ] || continue
+
+    task=$(echo "$task" | sed 's/^ *//;s/ *$//')
+    branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+
+    # Extract core title (before first " — ")
+    local core_title="${task%% —*}"
+    [ -z "$core_title" ] && continue
+
+    # Check if any completed task shares this core title
+    if echo "$completed_cores" | grep -qxF "$core_title"; then
+      # Replace pending → superseded for this specific line (match by branch)
+      awk -v br="$branch" '{
+        if (index($0, br) > 0 && match($0, /\| *pending *\|/))
+          sub(/\| *pending *\|/, "| superseded |")
+        print
+      }' "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
+      updated=$((updated + 1))
+      log "Auto-superseded: $core_title (branch: $branch, completed via fresh implementation)"
+    fi
+  done < <(tail -n +3 "$FAILED")
+
+  if [ "$updated" -gt 0 ]; then
+    log "Auto-superseded $updated failed task(s) completed via fresh implementation"
+    tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Auto-superseded $updated task(s) re-completed via fresh branch"
+  fi
+}
+
+# --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
+_auto_supersede_completed_tasks
+
 # --- Cleanup stale branches for resolved failed tasks ---
 # Deletes local (and remote) dev/* branches for tasks in failed-tasks.md
 # whose status is fixed, superseded, or blocked. Skips "merged to main"
