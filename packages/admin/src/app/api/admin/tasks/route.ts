@@ -1,4 +1,4 @@
-import { createTasksHandlers } from "@ajioncorp/skynet";
+import { createTasksHandlers } from "@ajioncorp/skynet/handlers";
 import { config } from "@/lib/skynet-config";
 
 const handlers = createTasksHandlers(config);

@@ -1,4 +1,4 @@
-import { createPipelineTriggerHandler } from "@ajioncorp/skynet";
+import { createPipelineTriggerHandler } from "@ajioncorp/skynet/handlers";
 import { config } from "@/lib/skynet-config";
 
 export const POST = createPipelineTriggerHandler(config);

@@ -12,6 +12,10 @@ dist/
 *.tsbuildinfo
 .next/
 
+# Playwright
+test-results/
+playwright-report/
+
 # IDE
 .idea/
 .vscode/

@@ -1,4 +1,4 @@
-import { createPipelineStatusHandler } from "@ajioncorp/skynet";
+import { createPipelineStatusHandler } from "@ajioncorp/skynet/handlers";
 import { config } from "@/lib/skynet-config";
 
 export const GET = createPipelineStatusHandler(config);

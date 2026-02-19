@@ -1,4 +1,4 @@
-import { createMonitoringAgentsHandler } from "@ajioncorp/skynet";
+import { createMonitoringAgentsHandler } from "@ajioncorp/skynet/handlers";
 import { config } from "@/lib/skynet-config";
 
 export const GET = createMonitoringAgentsHandler(config);
