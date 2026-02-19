@@ -258,6 +258,96 @@ is_running "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock" && w2_running=true
 is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && fixer_running=true
 is_running "${SKYNET_LOCK_PREFIX}-project-driver.lock" && driver_running=true
 
+# --- Stale heartbeat detection ---
+# If a worker is alive but its heartbeat is older than SKYNET_STALE_MINUTES,
+# it's stuck. Kill it, unclaim its task, remove worktree, reset to idle.
+_handle_stale_worker() {
+  local wid="$1"
+  local hb_file="$DEV_DIR/worker-${wid}.heartbeat"
+  local lockfile="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
+  local task_file="$DEV_DIR/current-task-${wid}.md"
+  local worktree="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${wid}"
+  local stale_seconds=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
+
+  # Only check if heartbeat file exists (worker is actively executing a task)
+  [ -f "$hb_file" ] || return 0
+
+  local hb_epoch
+  hb_epoch=$(cat "$hb_file" 2>/dev/null || echo 0)
+  local now_epoch
+  now_epoch=$(date +%s)
+  local hb_age=$(( now_epoch - hb_epoch ))
+
+  if [ "$hb_age" -gt "$stale_seconds" ]; then
+    local age_min=$(( hb_age / 60 ))
+    log "STALE WORKER $wid: heartbeat is ${age_min}m old (threshold: ${SKYNET_STALE_MINUTES}m). Killing."
+
+    # Kill the worker process
+    if [ -f "$lockfile" ]; then
+      local wpid
+      wpid=$(cat "$lockfile" 2>/dev/null || echo "")
+      if [ -n "$wpid" ] && kill -0 "$wpid" 2>/dev/null; then
+        kill "$wpid" 2>/dev/null || true
+        sleep 2
+        kill -9 "$wpid" 2>/dev/null || true
+        log "Killed worker $wid (PID $wpid)"
+      fi
+      rm -f "$lockfile"
+    fi
+
+    # Unclaim its task in backlog
+    local task_title=""
+    if [ -f "$task_file" ]; then
+      task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
+    fi
+    if [ -n "$task_title" ]; then
+      # Acquire backlog lock for safe modification
+      local backlog_lock="${SKYNET_LOCK_PREFIX}-backlog.lock"
+      if mkdir "$backlog_lock" 2>/dev/null; then
+        if [ -f "$BACKLOG" ]; then
+          awk -v title="$task_title" '{
+            if ($0 == "- [>] " title) print "- [ ] " title
+            else print
+          }' "$BACKLOG" > "$BACKLOG.tmp"
+          mv "$BACKLOG.tmp" "$BACKLOG"
+        fi
+        rmdir "$backlog_lock" 2>/dev/null || rm -rf "$backlog_lock" 2>/dev/null || true
+      fi
+      log "Unclaimed task: $task_title"
+    fi
+
+    # Remove the worktree
+    cd "$PROJECT_DIR"
+    if [ -d "$worktree" ]; then
+      git worktree remove "$worktree" --force 2>/dev/null || rm -rf "$worktree" 2>/dev/null || true
+      git worktree prune 2>/dev/null || true
+      log "Removed worktree: $worktree"
+    fi
+
+    # Reset current-task-N.md to idle
+    cat > "$task_file" <<EOF
+# Current Task
+**Status:** idle
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- ${task_title:-unknown} (stale worker killed after ${age_min}m)
+EOF
+
+    # Clean up heartbeat file
+    rm -f "$hb_file"
+
+    tg "💀 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Killed stale worker $wid (stuck ${age_min}m). Task unclaimed: ${task_title:-unknown}"
+  fi
+}
+
+# Check each worker for stale heartbeats
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
+  _handle_stale_worker "$_wid"
+done
+
+# Refresh worker running state after potential kills
+w1_running=false; w2_running=false
+is_running "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock" && w1_running=true
+is_running "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock" && w2_running=true
+
 # --- Only kick Claude-dependent workers if auth is OK ---
 if $claude_auth_ok; then
   # Rule 1a: Backlog has tasks + worker 1 idle → kick off worker 1

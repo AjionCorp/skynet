@@ -51,6 +51,8 @@ export interface BacklogItem {
   text: string;
   tag: string;
   status: "pending" | "claimed" | "done";
+  blockedBy: string[];
+  blocked: boolean;
 }
 
 export interface CompletedTask {
@@ -77,11 +79,24 @@ export interface SyncEndpoint {
   notes: string;
 }
 
+// ===== Worker Heartbeat =====
+
+export interface WorkerHeartbeat {
+  /** Epoch timestamp of the last heartbeat, or null if no heartbeat file */
+  lastEpoch: number | null;
+  /** Age of the heartbeat in milliseconds, or null if no heartbeat */
+  ageMs: number | null;
+  /** True if the heartbeat is older than the stale threshold */
+  isStale: boolean;
+}
+
 // ===== Pipeline Status (matches pipeline-status handler response) =====
 
 export interface PipelineStatus {
   workers: WorkerInfo[];
   currentTask: CurrentTask;
+  currentTasks: Record<string, CurrentTask>;
+  heartbeats: Record<string, WorkerHeartbeat>;
   backlog: {
     items: BacklogItem[];
     pendingCount: number;
@@ -132,6 +147,8 @@ export interface AuthStatus {
 export interface MonitoringStatus {
   workers: WorkerInfo[];
   currentTask: CurrentTask;
+  currentTasks: Record<string, CurrentTask>;
+  heartbeats: Record<string, WorkerHeartbeat>;
   backlog: {
     items: BacklogItem[];
     pendingCount: number;
@@ -195,6 +212,7 @@ export interface TaskCreatePayload {
   title: string;
   description?: string;
   position?: "top" | "bottom";
+  blockedBy?: string;
 }
 
 // ===== Sync Status =====

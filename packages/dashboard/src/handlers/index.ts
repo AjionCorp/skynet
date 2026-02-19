@@ -1,4 +1,5 @@
 export { createPipelineStatusHandler } from "./pipeline-status";
+export { createPipelineStreamHandler } from "./pipeline-stream";
 export { createPipelineTriggerHandler } from "./pipeline-trigger";
 export { createPipelineLogsHandler } from "./pipeline-logs";
 export { createMonitoringStatusHandler } from "./monitoring-status";

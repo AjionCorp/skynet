@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
+  GitBranch,
+  HeartPulse,
   Play,
   CheckCircle2,
   XCircle,
@@ -72,6 +74,8 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
+  const [connected, setConnected] = useState(false);
+
   const fetchLogs = useCallback(async (script: string) => {
     setLogLoading(true);
     try {
@@ -85,12 +89,35 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
-  // Poll status every 5s
+  // Stream status via SSE, fall back to polling on error
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, [fetchStatus]);
+    const es = new EventSource(`${apiPrefix}/pipeline/stream`);
+
+    es.onopen = () => setConnected(true);
+
+    es.onmessage = (event) => {
+      try {
+        const json = JSON.parse(event.data);
+        if (json.error) {
+          setError(json.error);
+          return;
+        }
+        setStatus(json.data);
+        setError(null);
+      } catch {
+        /* ignore malformed frames */
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource auto-reconnects; no manual fallback needed
+    };
+
+    return () => es.close();
+  }, [apiPrefix]);
 
   // Poll logs every 3s when viewer is open
   useEffect(() => {
@@ -196,27 +223,73 @@ export function PipelineDashboard() {
         </div>
       )}
 
-      {/* Current Task */}
-      <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-        <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-          <Zap className="h-3.5 w-3.5" />
-          Current Task
-        </div>
-        {status.currentTask.status === "in_progress" ? (
-          <div className="mt-3">
-            <p className="text-sm font-semibold text-emerald-400">{status.currentTask.title}</p>
-            {status.currentTask.branch && (
-              <p className="mt-1 text-xs text-zinc-500">Branch: {status.currentTask.branch}</p>
-            )}
-            {status.currentTask.started && (
-              <p className="mt-0.5 text-xs text-zinc-500">Started: {status.currentTask.started}</p>
-            )}
-          </div>
-        ) : (
-          <div className="mt-3">
-            <p className="text-sm text-zinc-500">Idle</p>
-            {status.currentTask.lastInfo && (
-              <p className="mt-1 text-xs text-zinc-600 truncate">{status.currentTask.lastInfo}</p>
+      {/* Current Tasks (per-worker) */}
+      <div className="grid gap-4 sm:grid-cols-2">
+        {Object.entries(status.currentTasks ?? {}).map(([key, task]) => {
+          const wid = key.replace("worker-", "");
+          const hb = status.heartbeats?.[key];
+          return (
+            <div key={key} className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  <Zap className="h-3.5 w-3.5" />
+                  Worker {wid}
+                </div>
+                {hb?.lastEpoch != null && (
+                  <div className={`flex items-center gap-1 text-xs ${hb.isStale ? "text-red-400" : "text-emerald-400"}`}>
+                    <HeartPulse className="h-3 w-3" />
+                    {hb.isStale ? "Stale" : formatAge(hb.ageMs)}
+                  </div>
+                )}
+              </div>
+              {task.status === "in_progress" || task.status === "working" ? (
+                <div className="mt-3">
+                  <p className="text-sm font-semibold text-emerald-400">{task.title}</p>
+                  {task.branch && (
+                    <p className="mt-1 text-xs text-zinc-500">
+                      <GitBranch className="mr-1 inline h-3 w-3" />
+                      {task.branch}
+                    </p>
+                  )}
+                  {task.started && (
+                    <p className="mt-0.5 text-xs text-zinc-500">Started: {task.started}</p>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-3">
+                  <p className="text-sm text-zinc-500">{task.status === "completed" ? "Completed" : "Idle"}</p>
+                  {task.lastInfo && (
+                    <p className="mt-1 text-xs text-zinc-600 truncate">{task.lastInfo}</p>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {/* Fallback: show legacy single task if no per-worker tasks */}
+        {(!status.currentTasks || Object.keys(status.currentTasks).length === 0) && (
+          <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:col-span-2">
+            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+              <Zap className="h-3.5 w-3.5" />
+              Current Task
+            </div>
+            {status.currentTask.status === "in_progress" ? (
+              <div className="mt-3">
+                <p className="text-sm font-semibold text-emerald-400">{status.currentTask.title}</p>
+                {status.currentTask.branch && (
+                  <p className="mt-1 text-xs text-zinc-500">Branch: {status.currentTask.branch}</p>
+                )}
+                {status.currentTask.started && (
+                  <p className="mt-0.5 text-xs text-zinc-500">Started: {status.currentTask.started}</p>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3">
+                <p className="text-sm text-zinc-500">Idle</p>
+                {status.currentTask.lastInfo && (
+                  <p className="mt-1 text-xs text-zinc-600 truncate">{status.currentTask.lastInfo}</p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -373,7 +446,7 @@ export function PipelineDashboard() {
                   <span className="mt-0.5 text-xs text-zinc-600">{i + 1}.</span>
                   <div className="flex items-center gap-2">
                     {task.tag && <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">{task.tag}</span>}
-                    <span className={`text-sm ${task.status === "claimed" ? "text-cyan-400" : "text-zinc-300"}`}>{task.text}</span>
+                    <span className={`text-sm ${task.status === "claimed" ? "text-cyan-400" : "text-zinc-300"}`}>{task.text.replace(/\s*\|\s*blockedBy:.*$/i, "")}</span>
                   </div>
                 </div>
               ))
@@ -472,7 +545,7 @@ export function PipelineDashboard() {
 
       {/* Footer */}
       <p className="text-center text-xs text-zinc-700">
-        Auto-refreshes every 5s &middot; Logs refresh every 3s when open
+        {connected ? "Live updates via SSE" : "Reconnecting\u2026"} &middot; Logs refresh every 3s when open
       </p>
     </div>
   );

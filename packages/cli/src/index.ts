@@ -2,7 +2,9 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { setupAgentsCommand } from "./commands/setup-agents.js";
+import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
+import { stopCommand } from "./commands/stop.js";
 
 const program = new Command();
 
@@ -21,10 +23,23 @@ program
 
 program
   .command("setup-agents")
-  .description("Generate and install macOS LaunchAgent plists")
+  .description("Install scheduled agents (launchd on macOS, cron on Linux)")
   .option("--dir <dir>", "Project directory (default: cwd)")
-  .option("--dry-run", "Print plists without installing")
+  .option("--dry-run", "Print config without installing")
+  .option("--cron", "Force cron mode (default on Linux, optional on macOS)")
   .action(setupAgentsCommand);
+
+program
+  .command("start")
+  .description("Start the Skynet pipeline (load agents or launch watchdog)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(startCommand);
+
+program
+  .command("stop")
+  .description("Stop all running Skynet workers and unload agents")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(stopCommand);
 
 program
   .command("status")

@@ -3,6 +3,7 @@ export type {
   SkynetConfig,
   SkynetWorkerDef,
   WorkerInfo,
+  WorkerHeartbeat,
   CurrentTask,
   BacklogItem,
   CompletedTask,
@@ -32,6 +33,7 @@ export type { ParsedBacklogItem } from "./lib/backlog-parser";
 // Handler factories
 export {
   createPipelineStatusHandler,
+  createPipelineStreamHandler,
   createPipelineTriggerHandler,
   createPipelineLogsHandler,
   createMonitoringStatusHandler,

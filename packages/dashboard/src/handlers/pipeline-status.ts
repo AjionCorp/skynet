@@ -24,33 +24,65 @@ function parseCurrentTask(raw: string) {
 }
 
 /**
- * Parse backlog.md into items with status/tag info.
+ * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
+ */
+function extractTitle(text: string): string {
+  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
+  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
+  const dashIdx = withoutTag.indexOf(" \u2014 ");
+  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+}
+
+/**
+ * Parse blockedBy metadata from raw text.
+ */
+function parseBlockedBy(text: string): string[] {
+  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
+  if (!match) return [];
+  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Parse backlog.md into items with status/tag/dependency info.
  */
 function parseBacklog(raw: string) {
   const lines = raw.split("\n");
-  const items: { text: string; tag: string; status: "pending" | "claimed" | "done" }[] = [];
+  const rawItems: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[] }[] = [];
   let pendingCount = 0;
   let claimedCount = 0;
   let doneCount = 0;
 
   for (const line of lines) {
+    let status: "pending" | "claimed" | "done" | null = null;
+    let text = "";
     if (line.startsWith("- [ ] ")) {
-      const text = line.replace("- [ ] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "pending" });
+      status = "pending";
+      text = line.replace("- [ ] ", "");
       pendingCount++;
     } else if (line.startsWith("- [>] ")) {
-      const text = line.replace("- [>] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "claimed" });
+      status = "claimed";
+      text = line.replace("- [>] ", "");
       claimedCount++;
     } else if (line.startsWith("- [x] ")) {
-      const text = line.replace("- [x] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "done" });
+      status = "done";
+      text = line.replace("- [x] ", "");
       doneCount++;
     }
+    if (status === null) continue;
+
+    const tagMatch = text.match(/^\[([^\]]+)\]/);
+    rawItems.push({ text, tag: tagMatch?.[1] ?? "", status, blockedBy: parseBlockedBy(text) });
   }
+
+  // Resolve blocked status
+  const titleToStatus = new Map<string, string>();
+  for (const item of rawItems) {
+    titleToStatus.set(extractTitle(item.text), item.status);
+  }
+  const items = rawItems.map((item) => ({
+    ...item,
+    blocked: item.blockedBy.length > 0 && item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
+  }));
 
   return { items, pendingCount, claimedCount, doneCount };
 }
@@ -94,6 +126,24 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const currentTask = parseCurrentTask(currentTaskRaw);
       if (Object.keys(currentTasks).length === 0 && currentTaskRaw) {
         currentTasks["worker-1"] = currentTask;
+      }
+
+      // Worker heartbeats — read .dev/worker-N.heartbeat epoch files
+      const heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
+      const staleThresholdMs = 45 * 60 * 1000; // matches SKYNET_STALE_MINUTES default
+      for (let wid = 1; wid <= 2; wid++) {
+        const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
+        if (hbRaw) {
+          const epoch = Number(hbRaw);
+          const ageMs = Date.now() - epoch * 1000;
+          heartbeats[`worker-${wid}`] = {
+            lastEpoch: epoch,
+            ageMs,
+            isStale: ageMs > staleThresholdMs,
+          };
+        } else {
+          heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+        }
       }
 
       // Backlog
@@ -261,6 +311,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         data: {
           workers,
           currentTask,
+          currentTasks,
+          heartbeats,
           backlog,
           completed,
           completedCount: completed.length,

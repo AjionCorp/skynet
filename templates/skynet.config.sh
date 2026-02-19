@@ -20,6 +20,15 @@ export SKYNET_DEV_SERVER_PORT=3000
 export SKYNET_TYPECHECK_CMD="pnpm typecheck"
 export SKYNET_LINT_CMD="pnpm lint"
 
+# ---- Quality Gates (run in order before merge) ----
+# Define quality gates as numbered SKYNET_GATE_N variables.
+# Each gate is a command run from the worktree directory.
+# If any gate fails, the branch is NOT merged.
+# Default: just typecheck (SKYNET_GATE_1 falls back to SKYNET_TYPECHECK_CMD)
+export SKYNET_GATE_1="pnpm typecheck"
+# export SKYNET_GATE_2="pnpm lint"
+# export SKYNET_GATE_3="npx playwright test e2e/smoke.spec.ts --reporter=list"
+
 # ---- Playwright (leave empty to skip tests) ----
 export SKYNET_PLAYWRIGHT_DIR=""
 export SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"
@@ -52,10 +61,15 @@ export SKYNET_TG_CHAT_ID=""
 export SKYNET_CLAUDE_BIN="claude"
 export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
 
+# ---- Agent Plugin ----
+# Which AI agent to use. Built-in: "auto", "claude", "codex"
+# Or set to an absolute path for a custom agent plugin script.
+# Custom plugins must define: agent_run "prompt" "logfile" and agent_check
+export SKYNET_AGENT_PLUGIN="auto"  # auto | claude | codex | /path/to/plugin.sh
+
 # ---- Codex CLI (OpenAI fallback) ----
 export SKYNET_CODEX_BIN="codex"
 export SKYNET_CODEX_FLAGS="--full-auto"
-export SKYNET_AGENT_PREFERENCE="auto"  # claude | codex | auto
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"
