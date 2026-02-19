@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add backlog health validation to watchdog — add a `validate_backlog()` function in scripts/_config.sh that checks: (1) no duplicate task titles in pending items, (2) no orphaned `[>]` (claimed) entries without a matching active worker in current-task-N.md files, (3) `blockedBy` references point to tasks that actually exist in backlog or completed. Call from watchdog.sh on each run. Log warnings for any issues found, auto-fix orphaned claims by resetting to `[ ]`
+## [FEAT] Add task duration tracking to completed.md — in dev-worker.sh, record task start timestamp (already available as `$STARTED`) and compute duration when logging to completed.md. Add a Duration column to the completed.md table: `| Date | Task | Branch | Duration | Notes |`. Format as human-readable (e.g., "23m", "1h 12m"). Also update task-fixer.sh to track fix duration. Update the pipeline-status handler in packages/dashboard/src/handlers/pipeline-status.ts to parse and include average task duration in its response
 **Status:** completed
-**Started:** 2026-02-19 15:21
+**Started:** 2026-02-19 15:26
 **Completed:** 2026-02-19
-**Branch:** dev/add-backlog-health-validation-to-watchdo
+**Branch:** dev/add-task-duration-tracking-to-completedm
 **Worker:** 1
 
 ### Changes
