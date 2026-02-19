@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add pipeline health score to dashboard and `skynet status` — create a `calculate_health_score()` function. Formula: start at 100, subtract 5 per pending failed task, subtract 10 per active blocker, subtract 2 per stale heartbeat, subtract 1 per task pending >24h. Clamp to 0-100. Add to packages/dashboard/src/handlers/pipeline-status.ts response as `healthScore: number`. Display as a colored badge in PipelineDashboard component (green >80, yellow >50, red <=50). Also output in packages/cli/src/commands/status.ts
+## [FEAT] Add `skynet reset-task` CLI command — create packages/cli/src/commands/reset-task.ts. Usage: `skynet reset-task "task title substring"`. Searches failed-tasks.md for a matching entry, resets its status to pending and attempts to 0, finds the corresponding `[x]` entry in backlog.md and changes it back to `[ ]`. If the failed branch still exists, offers to delete it (with --force flag to skip confirmation). Register in packages/cli/src/index.ts
 **Status:** completed
-**Started:** 2026-02-19 16:58
+**Started:** 2026-02-19 17:01
 **Completed:** 2026-02-19
-**Branch:** dev/add-pipeline-health-score-to-dashboard-a
+**Branch:** dev/add-skynet-reset-task-cli-command--creat
 **Worker:** 2
 
 ### Changes
