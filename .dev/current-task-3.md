@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add worker activity log rotation — in scripts/dev-worker.sh and task-fixer.sh, before starting a new task cycle, check if the log file exceeds 1MB. If so, rotate: rename current log to `$LOG.1`, remove `$LOG.2` if it exists (keep max 2 rotations). This prevents log files from growing unbounded during long pipeline runs. Add SKYNET_MAX_LOG_SIZE_KB=1024 to skynet.config.sh
+## [FIX] Fix lint:sh glob to include scripts/notify/*.sh — in root `package.json`, update the `lint:sh` script from `"shellcheck -S warning scripts/*.sh scripts/agents/*.sh"` to `"shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh"`. The 3 notification channel plugins (telegram.sh, slack.sh, discord.sh) are currently not shellchecked, meaning syntax errors or unsafe patterns could slip into the notification system undetected
 **Status:** completed
-**Started:** 2026-02-19 17:01
+**Started:** 2026-02-19 17:16
 **Completed:** 2026-02-19
-**Branch:** dev/add-worker-activity-log-rotation--in-scr
+**Branch:** dev/fix-lintsh-glob-to-include-scriptsnotify
 **Worker:** 3
 
 ### Changes
