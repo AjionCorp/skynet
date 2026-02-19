@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `npx skynet init` end-to-end smoke test — create tests/e2e/init-smoke.test.sh. Steps: (1) run `npm pack` in packages/cli, (2) create temp directory, init git repo, (3) install the tarball via npm, (4) run `npx skynet init --name test-project --dir $TMPDIR` non-interactively, (5) verify .dev/ directory created with all expected files (skynet.config.sh, backlog.md, mission.md, etc.), (6) verify scripts symlinked correctly, (7) cleanup. Add `"test:e2e:cli": "bash tests/e2e/init-smoke.test.sh"` to root package.json
+## [FEAT] Add worker activity log rotation — in scripts/dev-worker.sh and task-fixer.sh, before starting a new task cycle, check if the log file exceeds 1MB. If so, rotate: rename current log to `$LOG.1`, remove `$LOG.2` if it exists (keep max 2 rotations). This prevents log files from growing unbounded during long pipeline runs. Add SKYNET_MAX_LOG_SIZE_KB=1024 to skynet.config.sh
 **Status:** completed
-**Started:** 2026-02-19 16:59
+**Started:** 2026-02-19 17:01
 **Completed:** 2026-02-19
-**Branch:** dev/add-npx-skynet-init-end-to-end-smoke-tes
+**Branch:** dev/add-worker-activity-log-rotation--in-scr
 **Worker:** 3
 
 ### Changes
