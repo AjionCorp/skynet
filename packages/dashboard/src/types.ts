@@ -207,6 +207,26 @@ export interface SyncStatus {
   error_message: string | null;
 }
 
+// ===== Mission Types =====
+
+export interface MissionCriterion {
+  text: string;
+  status: "pending" | "done";
+}
+
+export interface MissionSection {
+  heading: string;
+  level: number;
+  content: string;
+}
+
+export interface MissionData {
+  raw: string;
+  title: string;
+  sections: MissionSection[];
+  criteria: MissionCriterion[];
+}
+
 // ===== Prompt Types =====
 
 export interface PromptTemplate {

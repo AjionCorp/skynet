@@ -6,3 +6,4 @@ export { createMonitoringAgentsHandler } from "./monitoring-agents";
 export { createMonitoringLogsHandler } from "./monitoring-logs";
 export { createTasksHandlers } from "./tasks";
 export { createPromptsHandler } from "./prompts";
+export { createMissionHandler } from "./mission";

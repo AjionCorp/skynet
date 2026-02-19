@@ -18,6 +18,9 @@ export type {
   TaskBacklogData,
   TaskCreatePayload,
   SyncStatus,
+  MissionCriterion,
+  MissionSection,
+  MissionData,
 } from "./types";
 
 // Config helpers
@@ -38,6 +41,7 @@ export {
   createMonitoringAgentsHandler,
   createMonitoringLogsHandler,
   createTasksHandlers,
+  createMissionHandler,
 } from "./handlers";
 
 // Dashboard UI components
