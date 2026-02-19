@@ -50,6 +50,7 @@ export {
   createPromptsHandler,
   createWorkerScalingHandler,
   createMissionStatusHandler,
+  createConfigHandler,
 } from "./handlers";
 
 // Dashboard UI components

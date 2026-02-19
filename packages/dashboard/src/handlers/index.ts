@@ -10,3 +10,4 @@ export { createPromptsHandler } from "./prompts";
 export { createWorkerScalingHandler } from "./worker-scaling";
 export { createMissionStatusHandler } from "./mission-status";
 export { createMissionRawHandler } from "./mission-raw";
+export { createConfigHandler } from "./config";
