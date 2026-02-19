@@ -10,6 +10,7 @@ import { logsCommand } from "./commands/logs.js";
 import { versionCommand } from "./commands/version.js";
 import { addTaskCommand } from "./commands/add-task.js";
 import { dashboardCommand } from "./commands/dashboard.js";
+import { resetTaskCommand } from "./commands/reset-task.js";
 
 const program = new Command();
 
@@ -88,5 +89,13 @@ program
   .description("Launch the Skynet admin dashboard")
   .option("--port <port>", "Port to run the dashboard on", "3100")
   .action(dashboardCommand);
+
+program
+  .command("reset-task")
+  .description("Reset a failed task back to pending")
+  .argument("<title>", "Task title substring to match")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--force", "Skip confirmation when deleting failed branch")
+  .action(resetTaskCommand);
 
 program.parse();
