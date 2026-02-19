@@ -12,6 +12,8 @@ import { addTaskCommand } from "./commands/add-task.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { resetTaskCommand } from "./commands/reset-task.js";
 import { cleanupCommand } from "./commands/cleanup.js";
+import { pauseCommand } from "./commands/pause.js";
+import { resumeCommand } from "./commands/resume.js";
 import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
 
 const program = new Command();
@@ -107,6 +109,18 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--force", "Actually delete branches (default: dry-run)")
   .action(cleanupCommand);
+
+program
+  .command("pause")
+  .description("Pause the Skynet pipeline (workers exit at next checkpoint)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(pauseCommand);
+
+program
+  .command("resume")
+  .description("Resume a paused Skynet pipeline")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(resumeCommand);
 
 const configCmd = program
   .command("config")
