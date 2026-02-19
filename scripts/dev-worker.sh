@@ -13,6 +13,11 @@ WORKER_ID="${1:-1}"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
+# Per-worker port offset to prevent dev-server collisions in multi-worker mode
+WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
+export PORT="$WORKER_PORT"
+WORKER_DEV_URL="http://localhost:${WORKER_PORT}"
+
 LOG="$SCRIPTS_DIR/dev-worker-${WORKER_ID}.log"
 STALE_MINUTES="$SKYNET_STALE_MINUTES"
 MAX_TASKS_PER_RUN="$SKYNET_MAX_TASKS_PER_RUN"
@@ -245,10 +250,11 @@ if ! check_claude_auth; then
 fi
 
 # --- Ensure dev server is running with log capture ---
-SERVER_LOG="$SCRIPTS_DIR/next-dev.log"
-SERVER_PID_FILE="$SCRIPTS_DIR/next-dev.pid"
-if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-  # Dev server is up — ensure we're tracking its PID
+SERVER_LOG="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.log"
+SERVER_PID_FILE="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.pid"
+log "Worker port: $WORKER_PORT (base $SKYNET_DEV_PORT + worker $WORKER_ID - 1)"
+if curl -sf "$WORKER_DEV_URL" > /dev/null 2>&1; then
+  # Dev server is up on this worker's port — ensure we're tracking its PID
   if [ ! -f "$SERVER_PID_FILE" ] || ! kill -0 "$(cat "$SERVER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
     server_pid=$(pgrep -f "next-server" 2>/dev/null | head -1 || true)
     if [ -n "$server_pid" ]; then
@@ -257,9 +263,9 @@ if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
     fi
   fi
 else
-  # Dev server not running — start it with log capture
-  log "Dev server not running. Starting via start-dev.sh..."
-  bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || true
+  # Dev server not running on worker port — start it with log capture
+  log "Dev server not running on port $WORKER_PORT. Starting via start-dev.sh..."
+  PORT="$WORKER_PORT" bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || true
   sleep 5
 fi
 
@@ -370,16 +376,16 @@ Instructions:
 1. Read the codebase to understand existing patterns (check CLAUDE.md, existing sync code, API routes)
 2. Implement the task following existing conventions
 3. Run '$SKYNET_TYPECHECK_CMD' to verify no type errors -- fix any that arise (up to 3 attempts)
-4. After implementing, check the dev server log for runtime errors: cat $SCRIPTS_DIR/next-dev.log | tail -50
+4. After implementing, check the dev server log for runtime errors: cat $SERVER_LOG | tail -50
    - If you see 500 errors, missing table errors, or import failures related to YOUR changes, fix them before committing
-   - Also test your new API routes with curl (e.g. curl -s ${SKYNET_DEV_SERVER_URL}/api/your/route | head -20)
+   - Also test your new API routes with curl (e.g. curl -s ${WORKER_DEV_URL}/api/your/route | head -20)
 5. Stage and commit your changes to the current branch with a descriptive commit message
 6. Do NOT modify any files in ${DEV_DIR##*/}/ -- those are managed by the pipeline
 
 Debugging tools available to you:
-- Server log: cat $SCRIPTS_DIR/next-dev.log | tail -100 (shows Next.js runtime errors, 500s, missing tables)
-- Test an API route: curl -s ${SKYNET_DEV_SERVER_URL}/api/... | head -20
-- Check if dev server is running: curl -sf ${SKYNET_DEV_SERVER_URL}
+- Server log: cat $SERVER_LOG | tail -100 (shows Next.js runtime errors, 500s, missing tables)
+- Test an API route: curl -s ${WORKER_DEV_URL}/api/... | head -20
+- Check if dev server is running: curl -sf ${WORKER_DEV_URL}
 
 If you encounter a blocker you cannot resolve (missing API keys, unclear requirements, etc.):
 - Write it to $BLOCKERS with the date and task name
@@ -447,7 +453,7 @@ EOF
   log "All quality gates passed."
 
   # --- Non-blocking: Check server logs for runtime errors ---
-  if [ -f "$SCRIPTS_DIR/next-dev.log" ]; then
+  if [ -f "$SERVER_LOG" ]; then
     log "Checking server logs for runtime errors..."
     bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
       log "Server errors found -- written to blockers.md (non-blocking for merge)"

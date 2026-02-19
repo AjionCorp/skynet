@@ -15,6 +15,7 @@ export SKYNET_LOCK_PREFIX="/tmp/skynet-${SKYNET_PROJECT_NAME}"
 export SKYNET_DEV_SERVER_CMD="pnpm dev"
 export SKYNET_DEV_SERVER_URL="http://localhost:3000"
 export SKYNET_DEV_SERVER_PORT=3000
+export SKYNET_DEV_PORT=3000  # Base port for dev server; workers offset from this
 
 # ---- Build & Test Commands ----
 export SKYNET_TYPECHECK_CMD="pnpm typecheck"
