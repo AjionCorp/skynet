@@ -111,6 +111,10 @@ export async function statusCommand(options: StatusOptions) {
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
   const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
 
+  // --- Health Score Inputs ---
+  let staleHeartbeatCount = 0;
+  let staleTasks24hCount = 0;
+
   console.log(`\n  Skynet Pipeline Status (${projectName})\n`);
 
   // --- Task Counts ---
@@ -187,6 +191,30 @@ export async function statusCommand(options: StatusOptions) {
     console.log("    Idle — no active tasks");
   }
 
+  // --- Heartbeat staleness + task age for health score ---
+  const staleThresholdMs = 45 * 60 * 1000;
+  const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+  for (let wid = 1; wid <= 2; wid++) {
+    const hbPath = join(devDir, `worker-${wid}.heartbeat`);
+    if (existsSync(hbPath)) {
+      const epoch = Number(readFile(hbPath).trim());
+      if (epoch && Date.now() - epoch * 1000 > staleThresholdMs) {
+        staleHeartbeatCount++;
+      }
+    }
+    const taskPath = join(devDir, `current-task-${wid}.md`);
+    const taskContent = readFile(taskPath);
+    if (taskContent) {
+      const startedMatch = taskContent.match(/\*\*Started:\*\* (.+)/);
+      if (startedMatch?.[1]) {
+        const started = new Date(startedMatch[1]);
+        if (!isNaN(started.getTime()) && Date.now() - started.getTime() > twentyFourHoursMs) {
+          staleTasks24hCount++;
+        }
+      }
+    }
+  }
+
   // --- Workers ---
   const workers = [
     "dev-worker-1", "dev-worker-2", "task-fixer", "project-driver",
@@ -245,16 +273,28 @@ export async function statusCommand(options: StatusOptions) {
 
   // --- Blockers ---
   const blockers = readFile(join(devDir, "blockers.md"));
+  let blockerCount = 0;
   if (blockers.includes("No active blockers")) {
     console.log("  Blockers: None");
   } else {
-    const blockerCount = (blockers.match(/^- /gm) || []).length;
+    blockerCount = (blockers.match(/^- /gm) || []).length;
     if (blockerCount > 0) {
       console.log(`  Blockers: ${blockerCount} active`);
     } else {
       console.log("  Blockers: None");
     }
   }
+
+  // --- Health Score ---
+  let healthScore = 100;
+  healthScore -= failedPending * 5;
+  healthScore -= blockerCount * 10;
+  healthScore -= staleHeartbeatCount * 2;
+  healthScore -= staleTasks24hCount * 1;
+  healthScore = Math.max(0, Math.min(100, healthScore));
+
+  const healthLabel = healthScore > 80 ? "Good" : healthScore > 50 ? "Degraded" : "Critical";
+  console.log(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
   console.log("");
 }

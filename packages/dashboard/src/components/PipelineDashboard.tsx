@@ -179,11 +179,26 @@ export function PipelineDashboard() {
   }
 
   const runningCount = status.workers.filter((w) => w.running).length;
+  const healthColor =
+    status.healthScore > 80
+      ? "emerald"
+      : status.healthScore > 50
+        ? "amber"
+        : "red";
 
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className={`rounded-xl border border-${healthColor}-500/20 bg-${healthColor}-500/5 p-4`}>
+          <p className={`text-xs font-medium uppercase tracking-wider text-${healthColor}-400`}>Health</p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-2xl font-bold text-white">{status.healthScore}</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${healthColor}-500/20 text-${healthColor}-400`}>
+              {status.healthScore > 80 ? "Good" : status.healthScore > 50 ? "Degraded" : "Critical"}
+            </span>
+          </div>
+        </div>
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-cyan-400">Workers Active</p>
           <p className="mt-1 text-2xl font-bold text-white">{runningCount} / {status.workers.length}</p>
