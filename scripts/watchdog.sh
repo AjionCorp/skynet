@@ -346,6 +346,63 @@ for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
   _handle_stale_worker "$_wid"
 done
 
+# --- Cleanup stale branches for resolved failed tasks ---
+# Deletes local (and remote) dev/* branches for tasks in failed-tasks.md
+# whose status is fixed, superseded, or blocked. Skips "merged to main"
+# entries, the current branch, and branches still being worked on.
+_cleanup_stale_branches() {
+  [ -f "$FAILED" ] || return 0
+
+  local current_branch
+  current_branch=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  local deleted=0
+
+  # Parse failed-tasks.md table: Branch is field $4, Status is field $7 (pipe-delimited)
+  while IFS='|' read -r _ _date _task branch _error _attempts status _; do
+    # Trim whitespace
+    branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+    status=$(echo "$status" | sed 's/^ *//;s/ *$//')
+
+    # Only act on resolved statuses
+    case "$status" in
+      fixed|superseded|blocked) ;;
+      *) continue ;;
+    esac
+
+    # Skip entries without a real branch (e.g. "merged to main")
+    [[ "$branch" == dev/* ]] || continue
+
+    # Never delete the branch we're currently on
+    [ "$branch" = "$current_branch" ] && continue
+
+    # Delete local branch if it exists
+    if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
+      git -C "$PROJECT_DIR" branch -D "$branch" 2>/dev/null && {
+        log "Deleted stale local branch: $branch (status: $status)"
+        deleted=$((deleted + 1))
+      }
+    fi
+
+    # Delete remote branch if it exists
+    if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+      git -C "$PROJECT_DIR" push origin --delete "$branch" 2>/dev/null && {
+        log "Deleted stale remote branch: $branch (status: $status)"
+      }
+    fi
+  done < <(tail -n +3 "$FAILED")  # skip header + separator rows
+
+  # Prune worktrees that may have referenced deleted branches
+  if [ "$deleted" -gt 0 ]; then
+    git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+    log "Stale branch cleanup: deleted $deleted branch(es)"
+    tg "🧹 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Cleaned up $deleted stale dev branch(es)"
+  fi
+}
+
+# --- Run stale branch cleanup ---
+_cleanup_stale_branches
+
 # Refresh worker running state after potential kills
 w1_running=false; w2_running=false
 is_running "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock" && w1_running=true
