@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add notification channel plugin system — refactor scripts/_notify.sh to support pluggable channels. Create scripts/notify/ directory with telegram.sh (move existing tg() function), slack.sh (POST to SKYNET_SLACK_WEBHOOK_URL with JSON payload), and discord.sh (POST to SKYNET_DISCORD_WEBHOOK_URL). Update _notify.sh to source all scripts/notify/*.sh files. Add SKYNET_NOTIFY_CHANNELS="telegram" to skynet.config.sh (comma-separated list). Update the `tg()` wrapper to call all enabled channels
+## [INFRA] Add `npx skynet init` end-to-end smoke test — create tests/e2e/init-smoke.test.sh. Steps: (1) run `npm pack` in packages/cli, (2) create temp directory, init git repo, (3) install the tarball via npm, (4) run `npx skynet init --name test-project --dir $TMPDIR` non-interactively, (5) verify .dev/ directory created with all expected files (skynet.config.sh, backlog.md, mission.md, etc.), (6) verify scripts symlinked correctly, (7) cleanup. Add `"test:e2e:cli": "bash tests/e2e/init-smoke.test.sh"` to root package.json
 **Status:** completed
-**Started:** 2026-02-19 16:53
+**Started:** 2026-02-19 16:59
 **Completed:** 2026-02-19
-**Branch:** dev/add-notification-channel-plugin-system--
+**Branch:** dev/add-npx-skynet-init-end-to-end-smoke-tes
 **Worker:** 3
 
 ### Changes
