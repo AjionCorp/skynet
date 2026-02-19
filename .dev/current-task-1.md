@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet dashboard` CLI command to launch admin app — create packages/cli/src/commands/dashboard.ts. Resolve admin package path relative to skynet root (same pattern as init.ts). Run `pnpm --filter admin dev -- --port <PORT>` via child_process.spawn with stdio inherit. Default port 3100 (configurable via --port flag). Open browser automatically via `open` (macOS) or `xdg-open` (Linux). Register in packages/cli/src/index.ts
+## [TEST] Add vitest unit tests for dashboard health score and task parsing — create packages/dashboard/src/handlers/pipeline-status.health.test.ts. Test: health score calculation with various inputs (no failures=100, max failures=0, mixed), backlog item parsing with blockedBy metadata, completed.md duration parsing, failed task status categorization. Aim for 10+ test cases covering edge cases
 **Status:** completed
-**Started:** 2026-02-19 16:54
+**Started:** 2026-02-19 17:03
 **Completed:** 2026-02-19
-**Branch:** dev/add-skynet-dashboard-cli-command-to-laun
+**Branch:** dev/add-vitest-unit-tests-for-dashboard-heal
 **Worker:** 1
 
 ### Changes
