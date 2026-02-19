@@ -128,6 +128,24 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         currentTasks["worker-1"] = currentTask;
       }
 
+      // Worker heartbeats — read .dev/worker-N.heartbeat epoch files
+      const heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
+      const staleThresholdMs = 45 * 60 * 1000; // matches SKYNET_STALE_MINUTES default
+      for (let wid = 1; wid <= 2; wid++) {
+        const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
+        if (hbRaw) {
+          const epoch = Number(hbRaw);
+          const ageMs = Date.now() - epoch * 1000;
+          heartbeats[`worker-${wid}`] = {
+            lastEpoch: epoch,
+            ageMs,
+            isStale: ageMs > staleThresholdMs,
+          };
+        } else {
+          heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+        }
+      }
+
       // Backlog
       const backlogRaw = readDevFile(devDir, "backlog.md");
       const backlog = parseBacklog(backlogRaw);
@@ -293,6 +311,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         data: {
           workers,
           currentTask,
+          currentTasks,
+          heartbeats,
           backlog,
           completed,
           completedCount: completed.length,
