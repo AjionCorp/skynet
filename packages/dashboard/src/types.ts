@@ -112,6 +112,7 @@ export interface PipelineStatus {
   failedPendingCount: number;
   hasBlockers: boolean;
   blockerLines: string[];
+  healthScore: number;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];
@@ -165,6 +166,7 @@ export interface MonitoringStatus {
   failedPendingCount: number;
   hasBlockers: boolean;
   blockerLines: string[];
+  healthScore: number;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];

@@ -112,6 +112,28 @@ function parseBacklog(raw: string) {
 }
 
 /**
+ * Calculate a pipeline health score (0–100).
+ * Starts at 100 and deducts for issues:
+ *   -5 per pending failed task
+ *  -10 per active blocker
+ *   -2 per stale heartbeat
+ *   -1 per task that has been in progress >24 hours
+ */
+function calculateHealthScore(opts: {
+  failedPendingCount: number;
+  blockerCount: number;
+  staleHeartbeatCount: number;
+  staleTasks24hCount: number;
+}): number {
+  let score = 100;
+  score -= opts.failedPendingCount * 5;
+  score -= opts.blockerCount * 10;
+  score -= opts.staleHeartbeatCount * 2;
+  score -= opts.staleTasks24hCount * 1;
+  return Math.max(0, Math.min(100, score));
+}
+
+/**
  * Create a GET handler for the pipeline/status endpoint.
  * Returns full monitoring status including workers, tasks, backlog, sync health, auth, and git.
  */
@@ -349,6 +371,27 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
+      // Health score inputs
+      const failedPendingCount = failed.filter((f) =>
+        f.status.includes("pending")
+      ).length;
+      const staleHeartbeatCount = Object.values(heartbeats).filter(
+        (hb) => hb.isStale
+      ).length;
+      const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+      const staleTasks24hCount = Object.values(currentTasks).filter((t) => {
+        if (!t.started) return false;
+        const startedDate = new Date(t.started);
+        return !isNaN(startedDate.getTime()) && Date.now() - startedDate.getTime() > twentyFourHoursMs;
+      }).length;
+
+      const healthScore = calculateHealthScore({
+        failedPendingCount,
+        blockerCount: blockerLines.length,
+        staleHeartbeatCount,
+        staleTasks24hCount,
+      });
+
       return Response.json({
         data: {
           workers,
@@ -360,11 +403,10 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           completedCount: completed.length,
           averageTaskDuration,
           failed,
-          failedPendingCount: failed.filter((f) =>
-            f.status.includes("pending")
-          ).length,
+          failedPendingCount,
           hasBlockers,
           blockerLines,
+          healthScore,
           syncHealth: {
             lastRun: lastSyncMatch?.[1] ?? null,
             endpoints: syncEndpoints,
