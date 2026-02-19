@@ -363,17 +363,8 @@ EOF
 
   log "Typecheck passed."
 
-  # --- Gate 2: Playwright smoke tests (if dev server is running) ---
-  if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-    db_healthy=true
-    api_check=$(curl -sf "${SKYNET_DEV_SERVER_URL}/api/gov/officials?page=1&pageSize=1" 2>/dev/null || echo '{"error":"unreachable"}')
-    if echo "$api_check" | grep -qi "schema cache\|PGRST\|Could not query"; then
-      db_healthy=false
-      log "WARNING: Supabase DB is down (PGRST002). Skipping Playwright gate — not a code issue."
-      tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Supabase DB down — skipping Playwright gate for $task_title"
-    fi
-
-    if $db_healthy; then
+  # --- Gate 2: Playwright smoke tests (if configured and dev server running) ---
+  if [ -n "$SKYNET_PLAYWRIGHT_DIR" ] && [ -n "$SKYNET_SMOKE_TEST" ] && curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
       log "Dev server reachable. Running Playwright smoke tests..."
       if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
         log "PLAYWRIGHT FAILED. Branch NOT merged."
@@ -391,9 +382,8 @@ EOF
         continue
       fi
       log "Playwright tests passed."
-    fi
   else
-    log "Dev server not reachable. Skipping Playwright tests."
+    log "Skipping Playwright (not configured or dev server unreachable)."
   fi
 
   # --- Gate 3: Check server logs for runtime errors ---

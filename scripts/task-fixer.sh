@@ -176,9 +176,9 @@ EOF
   else
     log "Typecheck passed."
 
-    # Gate 2: Playwright (in worktree, if dev server running)
+    # Gate 2: Playwright (if configured and dev server running)
     playwright_ok=true
-    if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
+    if [ -n "$SKYNET_PLAYWRIGHT_DIR" ] && [ -n "$SKYNET_SMOKE_TEST" ] && curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
       log "Running Playwright smoke tests..."
       if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test --reporter=list >> "$LOG" 2>&1); then
         log "Playwright FAILED. Branch NOT merged."
@@ -187,7 +187,7 @@ EOF
         log "Playwright tests passed."
       fi
     else
-      log "Dev server not reachable. Skipping Playwright."
+      log "Skipping Playwright (not configured or dev server unreachable)."
     fi
 
     if $playwright_ok; then
