@@ -111,8 +111,10 @@ unclaim_task() {
   local task_title="$1"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    sed "s/^- \[>\] $(printf '%s' "$task_title" | sed 's/[&/\]/\\&/g')/- [ ] $task_title/" \
-      "$BACKLOG" > "$BACKLOG.tmp"
+    awk -v title="$task_title" '{
+      if ($0 == "- [>] " title) print "- [ ] " title
+      else print
+    }' "$BACKLOG" > "$BACKLOG.tmp"
     mv "$BACKLOG.tmp" "$BACKLOG"
   fi
   release_lock
