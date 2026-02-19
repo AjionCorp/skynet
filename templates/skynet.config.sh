@@ -52,11 +52,21 @@ export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"
 export SKYNET_AUTH_NOTIFY_INTERVAL=3600
 
-# ---- Notifications (Telegram) ----
-# Leave empty to disable Telegram notifications
+# ---- Notifications ----
+# Comma-separated list of enabled notification channels.
+# Built-in channels: telegram, slack, discord
+export SKYNET_NOTIFY_CHANNELS="telegram"
+
+# Telegram — leave empty to disable
 export SKYNET_TG_ENABLED=false
 export SKYNET_TG_BOT_TOKEN=""
 export SKYNET_TG_CHAT_ID=""
+
+# Slack — set webhook URL to enable (create at https://api.slack.com/messaging/webhooks)
+export SKYNET_SLACK_WEBHOOK_URL=""
+
+# Discord — set webhook URL to enable (Server Settings > Integrations > Webhooks)
+export SKYNET_DISCORD_WEBHOOK_URL=""
 
 # ---- Claude Code ----
 export SKYNET_CLAUDE_BIN="claude"
