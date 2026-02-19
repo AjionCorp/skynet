@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add worker port offset to prevent dev-server conflicts in multi-worker mode — in dev-worker.sh, when starting the dev server (start-dev.sh or SKYNET_START_DEV_CMD), pass a port offset based on WORKER_ID. Calculate: `WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))`. Export as PORT env var before launching. Add SKYNET_DEV_PORT to skynet.config.sh (default: 3000). This prevents port collisions when workers 1 and 2 run simultaneously
+## [FEAT] Add backlog health validation to watchdog — add a `validate_backlog()` function in scripts/_config.sh that checks: (1) no duplicate task titles in pending items, (2) no orphaned `[>]` (claimed) entries without a matching active worker in current-task-N.md files, (3) `blockedBy` references point to tasks that actually exist in backlog or completed. Call from watchdog.sh on each run. Log warnings for any issues found, auto-fix orphaned claims by resetting to `[ ]`
 **Status:** completed
-**Started:** 2026-02-19 15:15
+**Started:** 2026-02-19 15:21
 **Completed:** 2026-02-19
-**Branch:** dev/add-worker-port-offset-to-prevent-dev-se
+**Branch:** dev/add-backlog-health-validation-to-watchdo
 **Worker:** 1
 
 ### Changes
