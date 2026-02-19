@@ -407,8 +407,15 @@ _cleanup_stale_branches() {
 cd "$PROJECT_DIR"
 _cleanup_stale_branches
 
+# --- Pipeline pause check (skip dispatch but still run health checks above) ---
+pipeline_paused=false
+if [ -f "$DEV_DIR/pipeline-paused" ]; then
+  pipeline_paused=true
+  log "Pipeline is paused. Skipping worker dispatch."
+fi
+
 # --- Only kick Claude-dependent workers if auth is OK ---
-if $claude_auth_ok; then
+if $claude_auth_ok && ! $pipeline_paused; then
   # Rule 1: Kick dev-workers proportional to backlog size
   # Worker N starts when backlog has >= N tasks and worker N is idle
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do

@@ -115,7 +115,22 @@ export async function statusCommand(options: StatusOptions) {
   let staleHeartbeatCount = 0;
   let staleTasks24hCount = 0;
 
-  console.log(`\n  Skynet Pipeline Status (${projectName})\n`);
+  // --- Pause status ---
+  const pauseFile = join(devDir, "pipeline-paused");
+  let isPaused = false;
+  if (existsSync(pauseFile)) {
+    isPaused = true;
+    let pauseInfo = "";
+    try {
+      const sentinel = JSON.parse(readFileSync(pauseFile, "utf-8"));
+      pauseInfo = ` (since ${sentinel.pausedAt}, by ${sentinel.pausedBy})`;
+    } catch {
+      // sentinel exists but unreadable — still paused
+    }
+    console.log(`\n  Skynet Pipeline Status (${projectName}) — PAUSED${pauseInfo}\n`);
+  } else {
+    console.log(`\n  Skynet Pipeline Status (${projectName})\n`);
+  }
 
   // --- Task Counts ---
   const backlog = readFile(join(devDir, "backlog.md"));
