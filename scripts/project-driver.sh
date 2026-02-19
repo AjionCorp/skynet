@@ -20,6 +20,12 @@ fi
 echo $$ > "$LOCKFILE"
 trap 'rm -f "$LOCKFILE"' EXIT
 
+# --- Pipeline pause check ---
+if [ -f "$DEV_DIR/pipeline-paused" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pipeline paused — exiting" >> "$LOG"
+  exit 0
+fi
+
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then

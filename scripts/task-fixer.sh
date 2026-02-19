@@ -163,6 +163,12 @@ trap 'log "ERR on line $LINENO"; exit 1' ERR
 SHUTDOWN_REQUESTED=false
 trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at next checkpoint"' SIGTERM SIGINT
 
+# --- Pipeline pause check ---
+if [ -f "$DEV_DIR/pipeline-paused" ]; then
+  log "Pipeline paused — exiting"
+  exit 0
+fi
+
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then
