@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add task retry budget and fixer cooldown to prevent infinite fix loops — in `scripts/task-fixer.sh`, after a fix attempt completes (success or failure), append a line to `.dev/fixer-stats.log`: `EPOCH|result|task_title` (where result is `success` or `failure`). Before starting a new fix attempt, read the last 5 entries — if all 5 are failures, write `$(date +%s)` to `.dev/fixer-cooldown` and exit with message "Fixer paused: 5 consecutive failures, cooling down 30min". In `scripts/watchdog.sh`, before kicking the task-fixer, check if `.dev/fixer-cooldown` exists and its timestamp is less than 1800 seconds old — if so, skip. Also track rolling stats: read fixer-stats.log, compute success rate for last 24h, log it to watchdog output. This prevents burning API credits on systemic failures
+## [DOCS] Add troubleshooting section to README.md — append a `## Troubleshooting` section to `README.md` covering: (1) **Workers stuck or stale** — run `skynet doctor`, check heartbeats with `skynet status`, restart with `skynet stop && skynet start`. (2) **Task keeps failing** — check fixer logs with `skynet logs fixer`, manually retry with `skynet reset-task "task name"`. (3) **Merge conflicts on retry** — task-fixer auto-detects conflicts and creates fresh branches, explain the mechanism. (4) **Dashboard not loading** — verify port 3100 is free, try `skynet dashboard --port 3101`, check Node.js version. (5) **Auth expired** — re-authenticate with `claude auth login`, the auth-refresh agent syncs automatically. (6) **Backlog empty but mission not complete** — watchdog kicks project-driver automatically when backlog < 5 tasks. Keep under 60 lines total
 **Status:** completed
-**Started:** 2026-02-19 17:45
+**Started:** 2026-02-19 17:46
 **Completed:** 2026-02-19
-**Branch:** dev/add-task-retry-budget-and-fixer-cooldown
+**Branch:** dev/add-troubleshooting-section-to-readmemd-
 **Worker:** 1
 
 ### Changes
