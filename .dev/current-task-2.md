@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add task dependency tracking — extend backlog.md syntax to support `blockedBy: task-title` metadata, update claim_next_task() in dev-worker.sh to skip tasks whose dependencies are not yet completed, add dependency visualization to dashboard tasks page
+## [FEAT] Add configurable quality gates via skynet.config.sh — replace hardcoded typecheck+playwright gates in dev-worker.sh (lines ~140-180) and task-fixer.sh (lines ~165-220) with a SKYNET_GATES array. Add SKYNET_GATE_1="pnpm typecheck" etc. to skynet.config.sh. Loop through defined gates in both scripts. Default: just typecheck. This makes the pipeline generic for any project's CI needs
 **Status:** completed
-**Started:** 2026-02-19 14:18
+**Started:** 2026-02-19 14:22
 **Completed:** 2026-02-19
-**Branch:** dev/add-task-dependency-tracking--extend-bac
+**Branch:** dev/add-configurable-quality-gates-via-skyne
 **Worker:** 2
 
 ### Changes
