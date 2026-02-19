@@ -185,17 +185,32 @@ export function PipelineDashboard() {
       : status.healthScore > 50
         ? "amber"
         : "red";
+  const scrColor =
+    status.selfCorrectionRate >= 90
+      ? "emerald"
+      : status.selfCorrectionRate >= 70
+        ? "amber"
+        : "red";
 
   return (
     <div className="space-y-6">
       {/* Summary cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <div className={`rounded-xl border border-${healthColor}-500/20 bg-${healthColor}-500/5 p-4`}>
           <p className={`text-xs font-medium uppercase tracking-wider text-${healthColor}-400`}>Health</p>
           <div className="mt-1 flex items-center gap-2">
             <p className="text-2xl font-bold text-white">{status.healthScore}</p>
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${healthColor}-500/20 text-${healthColor}-400`}>
               {status.healthScore > 80 ? "Good" : status.healthScore > 50 ? "Degraded" : "Critical"}
+            </span>
+          </div>
+        </div>
+        <div className={`rounded-xl border border-${scrColor}-500/20 bg-${scrColor}-500/5 p-4`}>
+          <p className={`text-xs font-medium uppercase tracking-wider text-${scrColor}-400`}>Self-Correction</p>
+          <div className="mt-1 flex items-center gap-2">
+            <p className="text-2xl font-bold text-white">{status.selfCorrectionRate}%</p>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${scrColor}-500/20 text-${scrColor}-400`}>
+              {status.selfCorrectionStats.fixed}/{status.selfCorrectionStats.fixed + status.selfCorrectionStats.blocked + status.selfCorrectionStats.superseded} fixed
             </span>
           </div>
         </div>

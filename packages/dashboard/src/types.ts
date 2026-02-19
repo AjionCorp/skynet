@@ -113,6 +113,8 @@ export interface PipelineStatus {
   hasBlockers: boolean;
   blockerLines: string[];
   healthScore: number;
+  selfCorrectionRate: number;
+  selfCorrectionStats: SelfCorrectionStats;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];
@@ -168,6 +170,8 @@ export interface MonitoringStatus {
   hasBlockers: boolean;
   blockerLines: string[];
   healthScore: number;
+  selfCorrectionRate: number;
+  selfCorrectionStats: SelfCorrectionStats;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];
@@ -266,6 +270,15 @@ export interface MissionProgress {
   criterion: string;
   status: "met" | "partial" | "not-met";
   evidence: string;
+}
+
+// ===== Self-Correction Stats =====
+
+export interface SelfCorrectionStats {
+  fixed: number;
+  blocked: number;
+  superseded: number;
+  pending: number;
 }
 
 // ===== Worker Scaling Types =====
