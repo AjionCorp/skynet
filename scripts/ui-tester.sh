@@ -21,7 +21,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
   exit 0
 fi
 echo $$ > "$LOCKFILE"
-trap "rm -f $LOCKFILE" EXIT
+trap 'rm -f "$LOCKFILE"' EXIT
 
 log "UI tester starting."
 tg "🧪 *$SKYNET_PROJECT_NAME_UPPER UI-TESTER* starting — running Playwright smoke tests"

@@ -25,6 +25,7 @@ fi
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting dev server..." >> "$LOG"
 
 # Start server in background with log capture
+# shellcheck disable=SC2086
 nohup $SKYNET_DEV_SERVER_CMD >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
 
