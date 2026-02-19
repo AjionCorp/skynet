@@ -11,6 +11,7 @@ import { versionCommand } from "./commands/version.js";
 import { addTaskCommand } from "./commands/add-task.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { resetTaskCommand } from "./commands/reset-task.js";
+import { cleanupCommand } from "./commands/cleanup.js";
 
 const program = new Command();
 
@@ -97,5 +98,12 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--force", "Skip confirmation when deleting failed branch")
   .action(resetTaskCommand);
+
+program
+  .command("cleanup")
+  .description("Clean up merged and orphaned dev/* branches and prune worktrees")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--force", "Actually delete branches (default: dry-run)")
+  .action(cleanupCommand);
 
 program.parse();
