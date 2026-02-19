@@ -154,6 +154,13 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 trap 'log "ERR on line $LINENO"; exit 1' ERR
 
+# --- Graceful shutdown handling ---
+# When SIGTERM/SIGINT is received (e.g. from `skynet stop`), set a flag so we
+# can finish the current phase cleanly and exit at the next safe checkpoint.
+# This prevents mid-merge kills from leaving branches in inconsistent state.
+SHUTDOWN_REQUESTED=false
+trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at next checkpoint"' SIGTERM SIGINT
+
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then
@@ -312,6 +319,21 @@ If this task is genuinely impossible right now (missing API key, external depend
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
+# --- Graceful shutdown checkpoint (before fix attempt) ---
+if $SHUTDOWN_REQUESTED; then
+  log "Shutdown requested before fix attempt — unclaiming and exiting cleanly"
+  if _acquire_failed_lock; then
+    if [ -f "$FAILED" ]; then
+      sed -i.bak "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
+      rm -f "$FAILED.bak"
+    fi
+    _release_failed_lock
+  fi
+  _CURRENT_TASK_TITLE=""
+  cleanup_worktree "$branch_name"
+  exit 0
+fi
+
 if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   log "Task-fixer succeeded. Running quality gates before merge..."
 
@@ -343,6 +365,16 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
   else
+    # --- Graceful shutdown checkpoint (before merge) ---
+    if $SHUTDOWN_REQUESTED; then
+      log "Shutdown requested before merge — reverting claim and exiting cleanly"
+      cleanup_worktree  # Keep branch for next attempt
+      new_attempts=$((fix_attempts + 1))
+      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
+      _CURRENT_TASK_TITLE=""
+      exit 0
+    fi
+
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"

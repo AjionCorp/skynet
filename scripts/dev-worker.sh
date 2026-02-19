@@ -260,6 +260,13 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 trap 'log "ERR on line $LINENO"; exit 1' ERR
 
+# --- Graceful shutdown handling ---
+# When SIGTERM/SIGINT is received (e.g. from `skynet stop`), set a flag so we
+# can finish the current phase cleanly and exit at the next safe checkpoint.
+# This prevents mid-merge kills from leaving branches in inconsistent state.
+SHUTDOWN_REQUESTED=false
+trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at next checkpoint"' SIGTERM SIGINT
+
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then
@@ -314,6 +321,12 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
 
   # Rotate log if it exceeds max size (prevents unbounded growth)
   rotate_log_if_needed "$LOG"
+
+  # --- Graceful shutdown checkpoint ---
+  if $SHUTDOWN_REQUESTED; then
+    log "Shutdown requested, exiting cleanly"
+    break
+  fi
 
   # Atomically claim next unchecked task
   next_task=$(claim_next_task)
@@ -478,6 +491,15 @@ EOF
     log "Checking server logs for runtime errors..."
     bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
       log "Server errors found -- written to blockers.md (non-blocking for merge)"
+  fi
+
+  # --- Graceful shutdown checkpoint (before merge) ---
+  if $SHUTDOWN_REQUESTED; then
+    log "Shutdown requested before merge — unclaiming task and exiting cleanly"
+    unclaim_task "$task_title"
+    _CURRENT_TASK_TITLE=""
+    cleanup_worktree "$branch_name"
+    break
   fi
 
   # --- All gates passed -- merge to main ---
