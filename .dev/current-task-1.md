@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add Playwright E2E test job to CI workflow — in `.github/workflows/ci.yml`, add a new `e2e-admin` job: checkout, setup Node 20, install pnpm, `pnpm install`, `pnpm build`, `pnpm exec playwright install --with-deps chromium`, then `pnpm test:e2e`. The Playwright config at `packages/admin/playwright.config.ts` already uses `webServer` to auto-start the dev server. Spec files exist in `packages/admin/e2e/`. This validates the dashboard loads and navigates correctly on every PR — criterion #2 (catching regressions before merge)
+## [FEAT] Add interactive mission template generator to `skynet init` — in `packages/cli/src/commands/init.ts`, after creating `.dev/mission.md` with default content, add an interactive prompt: "Would you like to define your project's mission now? (Y/n)". If yes, ask: (1) "What does your project do?" (one sentence), (2) "What are your top 3 goals?" (free text), (3) "What does 'done' look like?" (free text). Generate a populated mission.md with answers formatted into Purpose, Core Mission, and Success Criteria sections matching the existing mission.md structure. If no or `--non-interactive` flag, leave the default template. Criterion #1 (reduce friction between init and autonomous work)
 **Status:** completed
-**Started:** 2026-02-19 18:04
+**Started:** 2026-02-19 18:06
 **Completed:** 2026-02-19
-**Branch:** dev/add-playwright-e2e-test-job-to-ci-workfl
+**Branch:** dev/add-interactive-mission-template-generat
 **Worker:** 1
 
 ### Changes
