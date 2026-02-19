@@ -4,9 +4,18 @@ import { fileURLToPath } from "url";
 import { createInterface } from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKYNET_ROOT = resolve(__dirname, "../../../..");
-const TEMPLATES_DIR = resolve(SKYNET_ROOT, "templates");
-const SCRIPTS_DIR = resolve(SKYNET_ROOT, "scripts");
+
+// When installed from npm, scripts/ and templates/ are at the package root
+// (two levels up from dist/commands/init.js). In monorepo development, fall
+// back to the monorepo root (four levels up).
+function resolveAssetDir(name: string): string {
+  const pkgPath = fileURLToPath(new URL(`../../${name}`, import.meta.url));
+  if (existsSync(pkgPath)) return pkgPath;
+  return resolve(__dirname, "../../../..", name);
+}
+
+const TEMPLATES_DIR = resolveAssetDir("templates");
+const SCRIPTS_DIR = resolveAssetDir("scripts");
 
 function prompt(question: string, defaultValue?: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
