@@ -9,6 +9,7 @@ import { doctorCommand } from "./commands/doctor.js";
 import { logsCommand } from "./commands/logs.js";
 import { versionCommand } from "./commands/version.js";
 import { addTaskCommand } from "./commands/add-task.js";
+import { dashboardCommand } from "./commands/dashboard.js";
 
 const program = new Command();
 
@@ -81,5 +82,11 @@ program
   .option("--position <position>", "Insert position: top or bottom", "top")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(addTaskCommand);
+
+program
+  .command("dashboard")
+  .description("Launch the Skynet admin dashboard")
+  .option("--port <port>", "Port to run the dashboard on", "3100")
+  .action(dashboardCommand);
 
 program.parse();
