@@ -21,9 +21,10 @@ program
 
 program
   .command("setup-agents")
-  .description("Generate and install macOS LaunchAgent plists")
+  .description("Install scheduled agents (launchd on macOS, cron on Linux)")
   .option("--dir <dir>", "Project directory (default: cwd)")
-  .option("--dry-run", "Print plists without installing")
+  .option("--dry-run", "Print config without installing")
+  .option("--cron", "Force cron mode (default on Linux, optional on macOS)")
   .action(setupAgentsCommand);
 
 program
