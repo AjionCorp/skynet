@@ -14,6 +14,8 @@ export interface AdminLayoutProps {
   user?: { email?: string | null };
   /** Navigation pages to display in the admin header and sub-nav. */
   pages?: AdminLayoutPage[];
+  /** Current path for active page highlighting (e.g. "/admin/pipeline"). */
+  currentPath?: string;
   /** Href for the back arrow link. Defaults to "/". */
   backHref?: string;
   /** Label for the back arrow link. Defaults to "Dashboard". */
@@ -26,6 +28,7 @@ export interface AdminLayoutProps {
 export function AdminLayout({
   user,
   pages = [],
+  currentPath,
   backHref = "/",
   backLabel = "Dashboard",
   linkComponent,
@@ -85,16 +88,23 @@ export function AdminLayout({
       {pages.length > 0 && (
         <nav className="border-b border-zinc-800 bg-zinc-950/60 px-8 backdrop-blur-sm">
           <div className="mx-auto flex max-w-7xl gap-1">
-            {pages.map((page) => (
-              <Link
-                key={page.href}
-                href={page.href}
-                className="flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2.5 text-xs font-medium text-zinc-500 transition hover:border-zinc-600 hover:text-zinc-300"
-              >
-                {page.icon && <page.icon className="h-3.5 w-3.5" />}
-                {page.label}
-              </Link>
-            ))}
+            {pages.map((page) => {
+              const isActive = currentPath === page.href;
+              return (
+                <Link
+                  key={page.href}
+                  href={page.href}
+                  className={`flex items-center gap-1.5 border-b-2 px-3 py-2.5 text-xs font-medium transition ${
+                    isActive
+                      ? "border-cyan-400 text-white"
+                      : "border-transparent text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
+                  }`}
+                >
+                  {page.icon && <page.icon className="h-3.5 w-3.5" />}
+                  {page.label}
+                </Link>
+              );
+            })}
           </div>
         </nav>
       )}

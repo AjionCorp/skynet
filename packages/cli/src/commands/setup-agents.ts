@@ -78,8 +78,7 @@ export async function setupAgentsCommand(options: SetupAgentsOptions) {
     } else {
       // Unload existing agent if loaded
       try {
-        const label = plistName.replace(".plist", "");
-        execSync(`launchctl remove ${label} 2>/dev/null`, { stdio: "ignore" });
+        execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
       } catch {
         // Not loaded, that's fine
       }

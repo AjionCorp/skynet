@@ -19,29 +19,28 @@ MAX_TASKS_PER_RUN="$SKYNET_MAX_TASKS_PER_RUN"
 # Shared lock dir for atomic backlog access (mkdir is atomic on all Unix)
 BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
+# Per-worker task file (worker 1 → current-task-1.md, worker 2 → current-task-2.md)
+WORKER_TASK_FILE="$DEV_DIR/current-task-${WORKER_ID}.md"
+
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] $*" >> "$LOG"; }
 
 # --- Mutex helpers using mkdir (works on macOS + Linux) ---
 acquire_lock() {
-  # Clean up stale file lock left by old flock-based code
-  [ -f "$BACKLOG_LOCK" ] && rm -f "$BACKLOG_LOCK"
-
   local attempts=0
   while ! mkdir "$BACKLOG_LOCK" 2>/dev/null; do
     attempts=$((attempts + 1))
     if [ "$attempts" -ge 50 ]; then
-      # Stale lock? Remove if older than 30s
-      local lock_age=0
-      if [ -d "$BACKLOG_LOCK" ] || [ -f "$BACKLOG_LOCK" ]; then
+      # Check for stale lock (older than 30s)
+      if [ -d "$BACKLOG_LOCK" ]; then
         local lock_mtime
         lock_mtime=$(file_mtime "$BACKLOG_LOCK")
-        lock_age=$(( $(date +%s) - lock_mtime ))
-      fi
-      if [ "$lock_age" -gt 30 ]; then
-        rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
-        mkdir "$BACKLOG_LOCK" 2>/dev/null && return 0
+        local lock_age=$(( $(date +%s) - lock_mtime ))
+        if [ "$lock_age" -gt 30 ]; then
+          rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
+          mkdir "$BACKLOG_LOCK" 2>/dev/null && return 0
+        fi
       fi
       return 1
     fi
@@ -63,12 +62,17 @@ claim_next_task() {
   local task
   task=$(grep -m1 '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   if [ -n "$task" ]; then
-    awk -v target="$task" 'found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
-      "$BACKLOG" > "$BACKLOG.tmp"
-    mv "$BACKLOG.tmp" "$BACKLOG"
+    if ! awk -v target="$task" 'found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
+      "$BACKLOG" > "$BACKLOG.tmp" || ! mv "$BACKLOG.tmp" "$BACKLOG"; then
+      release_lock
+      echo ""
+      return
+    fi
+    release_lock
     echo "$task"
+  else
+    release_lock
   fi
-  release_lock
 }
 
 # --- Helper: safely remove a line from backlog by exact match ---
@@ -117,15 +121,20 @@ unclaim_task() {
 # Preserves backlog.md (shared state between workers) and completed/failed logs.
 safe_checkout() {
   local target_branch="$1"
-  # Save pipeline state files that may have been updated by this worker
   cp "$BACKLOG" "/tmp/${SKYNET_PROJECT_NAME}-backlog-save-w${WORKER_ID}.md" 2>/dev/null || true
   cp "$COMPLETED" "/tmp/${SKYNET_PROJECT_NAME}-completed-save-w${WORKER_ID}.md" 2>/dev/null || true
   cp "$FAILED" "/tmp/${SKYNET_PROJECT_NAME}-failed-save-w${WORKER_ID}.md" 2>/dev/null || true
-  # Discard ALL local changes (tracked + untracked) so checkout never fails
   git checkout -- . 2>/dev/null || true
   git clean -fd . 2>/dev/null || true
   git checkout "$target_branch" 2>/dev/null || true
-  # Restore pipeline state files (they were reverted by git checkout)
+  # Verify checkout succeeded before restoring state
+  local actual_branch
+  actual_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+  if [ "$actual_branch" != "$target_branch" ]; then
+    log "WARNING: safe_checkout failed — wanted $target_branch, got $actual_branch"
+    return 1
+  fi
+  # Restore pipeline state files
   cp "/tmp/${SKYNET_PROJECT_NAME}-backlog-save-w${WORKER_ID}.md" "$BACKLOG" 2>/dev/null || true
   cp "/tmp/${SKYNET_PROJECT_NAME}-completed-save-w${WORKER_ID}.md" "$COMPLETED" 2>/dev/null || true
   cp "/tmp/${SKYNET_PROJECT_NAME}-failed-save-w${WORKER_ID}.md" "$FAILED" 2>/dev/null || true
@@ -138,7 +147,18 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
   exit 0
 fi
 echo $$ > "$LOCKFILE"
-trap "rm -f $LOCKFILE" EXIT
+# Track current task for cleanup on unexpected exit
+_CURRENT_TASK_TITLE=""
+cleanup_on_exit() {
+  # Unclaim task if we were in the middle of one
+  if [ -n "$_CURRENT_TASK_TITLE" ]; then
+    unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
+    log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
+  fi
+  rm -f "$LOCKFILE"
+}
+trap cleanup_on_exit EXIT
+trap 'log "ERR on line $LINENO"; exit 1' ERR
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
@@ -168,22 +188,20 @@ fi
 remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
 tg "🚀 *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}* starting — $remaining_count tasks in backlog"
 
-# --- Pre-flight checks (only worker 1 manages current-task.md) ---
-if [ "$WORKER_ID" = "1" ]; then
-  if grep -q "in_progress" "$CURRENT_TASK" 2>/dev/null; then
-    last_modified=$(file_mtime "$CURRENT_TASK")
-    now=$(date +%s)
-    age_minutes=$(( (now - last_modified) / 60 ))
+# --- Pre-flight checks: detect stale in-progress task for this worker ---
+if grep -q "in_progress" "$WORKER_TASK_FILE" 2>/dev/null; then
+  last_modified=$(file_mtime "$WORKER_TASK_FILE")
+  now=$(date +%s)
+  age_minutes=$(( (now - last_modified) / 60 ))
 
-    if [ "$age_minutes" -lt "$STALE_MINUTES" ]; then
-      log "Task already in_progress (${age_minutes}m old). Exiting."
-      exit 0
-    else
-      log "Stale lock detected (${age_minutes}m old). Moving to failed."
-      task_title=$(grep "^##" "$CURRENT_TASK" | head -1 | sed 's/^## //')
-      echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
-      remove_from_backlog "- [ ] $task_title"
-    fi
+  if [ "$age_minutes" -lt "$STALE_MINUTES" ]; then
+    log "Task already in_progress (${age_minutes}m old). Exiting."
+    exit 0
+  else
+    log "Stale lock detected (${age_minutes}m old). Moving to failed."
+    task_title=$(grep "^##" "$WORKER_TASK_FILE" | head -1 | sed 's/^## //')
+    echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
+    remove_from_backlog "- [ ] $task_title"
   fi
 fi
 
@@ -197,14 +215,12 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   next_task=$(claim_next_task)
   if [ -z "$next_task" ]; then
     log "Backlog empty. Kicking off project-driver to refill."
-    if [ "$WORKER_ID" = "1" ]; then
-      cat > "$CURRENT_TASK" <<EOF
+    cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
 **Updated:** $(date '+%Y-%m-%d %H:%M')
 **Note:** Backlog empty — project-driver kicked off to replenish
 EOF
-    fi
     # Kick off project-driver if not already running
     if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver.lock" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver.lock")" 2>/dev/null); then
       nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
@@ -218,6 +234,7 @@ EOF
 
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
+  _CURRENT_TASK_TITLE="$task_title"
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
 
@@ -225,9 +242,8 @@ EOF
   log "Branch: $branch_name"
   tg "🔨 *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}* starting: $task_title"
 
-  # Lock current task (worker 1 writes current-task.md, worker 2 skips)
-  if [ "$WORKER_ID" = "1" ]; then
-    cat > "$CURRENT_TASK" <<EOF
+  # Write current task status for this worker
+  cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
 **Status:** in_progress
@@ -235,7 +251,6 @@ EOF
 **Branch:** $branch_name
 **Worker:** $WORKER_ID
 EOF
-  fi
 
   # Create feature branch from main (force-clean working tree first)
   safe_checkout "$SKYNET_MAIN_BRANCH"
@@ -279,9 +294,7 @@ If you encounter a blocker you cannot resolve (missing API keys, unclear require
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
-  unset CLAUDECODE 2>/dev/null || true
-
-  $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1 && exit_code=0 || exit_code=$?
+  run_agent "$PROMPT" "$LOG" && exit_code=0 || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
@@ -289,13 +302,12 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
     # Mark claimed task as failed in backlog
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
-    if [ "$WORKER_ID" = "1" ]; then
-      cat > "$CURRENT_TASK" <<EOF
+    _CURRENT_TASK_TITLE=""
+    cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
 **Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (claude failed)
 EOF
-    fi
     log "Moved to failed-tasks. Trying next..."
     continue
   fi
@@ -312,13 +324,12 @@ EOF
     safe_checkout "$SKYNET_MAIN_BRANCH"
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed | 0 | pending |" >> "$FAILED"
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed)_"
-    if [ "$WORKER_ID" = "1" ]; then
-      cat > "$CURRENT_TASK" <<EOF
+    _CURRENT_TASK_TITLE=""
+    cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
 **Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (typecheck failed, branch kept)
 EOF
-    fi
     log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
     continue
   fi
@@ -347,13 +358,12 @@ EOF
         safe_checkout "$SKYNET_MAIN_BRANCH"
         echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright tests failed | 0 | pending |" >> "$FAILED"
         mark_in_backlog "- [>] $task_title" "- [x] $task_title _(playwright failed)_"
-        if [ "$WORKER_ID" = "1" ]; then
-          cat > "$CURRENT_TASK" <<EOF
+        _CURRENT_TASK_TITLE=""
+        cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
 **Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (playwright failed, branch kept)
 EOF
-        fi
         log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
         continue
       fi
@@ -379,6 +389,7 @@ EOF
     git merge --abort 2>/dev/null || true
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
+    _CURRENT_TASK_TITLE=""
     tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}*: merge failed for $task_title"
     safe_checkout "$SKYNET_MAIN_BRANCH"
     continue
@@ -386,10 +397,10 @@ EOF
   git branch -d "$branch_name" 2>/dev/null || true
 
   mark_in_backlog "- [>] $task_title" "- [x] $task_title"
+  _CURRENT_TASK_TITLE=""
   echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | success |" >> "$COMPLETED"
 
-  if [ "$WORKER_ID" = "1" ]; then
-    cat > "$CURRENT_TASK" <<EOF
+  cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
 **Status:** completed
@@ -401,10 +412,9 @@ EOF
 ### Changes
 -- See git log for details
 EOF
-  fi
 
   # Commit pipeline status updates so safe_checkout won't revert them
-  git add "$BACKLOG" "$CURRENT_TASK" "$COMPLETED" "$FAILED" 2>/dev/null || true
+  git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
   git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"

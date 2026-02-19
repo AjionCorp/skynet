@@ -1,4 +1,6 @@
-import { exec } from "child_process";
+import { spawn } from "child_process";
+import { openSync, constants } from "fs";
+import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 
 /**
@@ -24,11 +26,24 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         );
       }
 
-      const scriptPath = `${scriptsDir}/${script}.sh`;
-      const logPath = `${scriptsDir}/${script}.log`;
+      // Validate script name is safe (alphanumeric + hyphens only)
+      if (!/^[a-z0-9-]+$/.test(script)) {
+        return Response.json(
+          { data: null, error: "Invalid script name" },
+          { status: 400 }
+        );
+      }
 
-      // Fire and forget -- scripts have PID locks to prevent overlap
-      exec(`nohup bash "${scriptPath}" >> "${logPath}" 2>&1 &`);
+      const scriptPath = resolve(scriptsDir, `${script}.sh`);
+      const logPath = resolve(scriptsDir, `${script}.log`);
+
+      // Fire and forget using spawn with explicit argv (no shell injection)
+      const logFd = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
+      const child = spawn("bash", [scriptPath], {
+        detached: true,
+        stdio: ["ignore", logFd, logFd],
+      });
+      child.unref();
 
       return Response.json({
         data: { triggered: true, script },

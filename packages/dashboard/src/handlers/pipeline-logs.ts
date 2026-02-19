@@ -1,12 +1,13 @@
-import { execSync, type ExecSyncOptionsWithStringEncoding } from "child_process";
-import { statSync } from "fs";
+import { spawnSync } from "child_process";
+import { readFileSync, statSync } from "fs";
+import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 
 /**
- * Sanitize a search string for use in grep, stripping special characters.
+ * Sanitize a search string for use as a grep fixed-string pattern.
  */
 function sanitizeSearch(input: string): string {
-  return input.replace(/[^a-zA-Z0-9 ._\-:\[\]]/g, "").slice(0, 100);
+  return input.replace(/[^a-zA-Z0-9 ._\-:]/g, "").slice(0, 100);
 }
 
 /**
@@ -22,13 +23,11 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
   const { devDir, workers } = config;
   const scriptsDir = config.scriptsDir ?? `${devDir}/scripts`;
 
-  // Build the allowed scripts list from worker defs + their logFiles
   const allowedScripts = new Set<string>();
   for (const w of workers) {
     allowedScripts.add(w.name);
     if (w.logFile) allowedScripts.add(w.logFile);
   }
-  // Also add common extra scripts
   allowedScripts.add("post-commit-gate");
   allowedScripts.add("dev-worker");
 
@@ -51,42 +50,50 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
       );
     }
 
-    const logPath = `${scriptsDir}/${script}.log`;
-    const execOpts: ExecSyncOptionsWithStringEncoding = {
-      encoding: "utf-8",
-      timeout: 5000,
-    };
+    // Validate script name (alphanumeric + hyphens only)
+    if (!/^[a-z0-9-]+$/.test(script)) {
+      return Response.json(
+        { data: null, error: "Invalid script name" },
+        { status: 400 }
+      );
+    }
+
+    const logPath = resolve(scriptsDir, `${script}.log`);
 
     try {
       let output: string;
+
       if (search) {
         const sanitized = sanitizeSearch(search);
         if (!sanitized) {
           return Response.json({
-            data: {
-              script,
-              lines: [],
-              totalLines: 0,
-              fileSizeBytes: 0,
-              count: 0,
-            },
+            data: { script, lines: [], totalLines: 0, fileSizeBytes: 0, count: 0 },
             error: null,
           });
         }
-        output = execSync(
-          `grep -i "${sanitized}" "${logPath}" | tail -${lines}`,
-          execOpts
-        );
+        // Use spawnSync with explicit argv — no shell injection possible
+        const grepResult = spawnSync("grep", ["-i", sanitized, logPath], {
+          encoding: "utf-8",
+          timeout: 5000,
+        });
+        const grepOutput = grepResult.stdout || "";
+        const allLines = grepOutput.split("\n").filter(Boolean);
+        output = allLines.slice(-lines).join("\n");
       } else {
-        output = execSync(`tail -${lines} "${logPath}"`, execOpts);
+        const tailResult = spawnSync("tail", ["-n", String(lines), logPath], {
+          encoding: "utf-8",
+          timeout: 5000,
+        });
+        output = tailResult.stdout || "";
       }
 
       let totalLines = 0;
       let fileSizeBytes = 0;
       try {
-        const wcOutput = execSync(`wc -l < "${logPath}"`, execOpts).trim();
-        totalLines = Number(wcOutput) || 0;
         fileSizeBytes = statSync(logPath).size;
+        // Count lines by reading the file — avoids shell injection via wc
+        const content = readFileSync(logPath, "utf-8");
+        totalLines = content.split("\n").length;
       } catch {
         /* ignore */
       }
@@ -103,13 +110,7 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
       });
     } catch {
       return Response.json({
-        data: {
-          script,
-          lines: [],
-          totalLines: 0,
-          fileSizeBytes: 0,
-          count: 0,
-        },
+        data: { script, lines: [], totalLines: 0, fileSizeBytes: 0, count: 0 },
         error: null,
       });
     }

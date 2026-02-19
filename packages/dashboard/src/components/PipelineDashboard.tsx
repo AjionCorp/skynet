@@ -163,15 +163,15 @@ export function PipelineDashboard() {
         </div>
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-amber-400">Backlog</p>
-          <p className="mt-1 text-2xl font-bold text-white">{status.backlogCount}</p>
+          <p className="mt-1 text-2xl font-bold text-white">{status.backlog.pendingCount}</p>
         </div>
         <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
           <p className="text-xs font-medium uppercase tracking-wider text-emerald-400">Completed</p>
           <p className="mt-1 text-2xl font-bold text-white">{status.completedCount}</p>
         </div>
-        <div className={`rounded-xl border p-4 ${status.failedPending.length > 0 ? "border-red-500/20 bg-red-500/5" : "border-zinc-800 bg-zinc-900"}`}>
-          <p className={`text-xs font-medium uppercase tracking-wider ${status.failedPending.length > 0 ? "text-red-400" : "text-zinc-500"}`}>Failed</p>
-          <p className="mt-1 text-2xl font-bold text-white">{status.failedPending.length}</p>
+        <div className={`rounded-xl border p-4 ${status.failedPendingCount > 0 ? "border-red-500/20 bg-red-500/5" : "border-zinc-800 bg-zinc-900"}`}>
+          <p className={`text-xs font-medium uppercase tracking-wider ${status.failedPendingCount > 0 ? "text-red-400" : "text-zinc-500"}`}>Failed</p>
+          <p className="mt-1 text-2xl font-bold text-white">{status.failedPendingCount}</p>
         </div>
       </div>
 
@@ -359,19 +359,22 @@ export function PipelineDashboard() {
           <div className="flex items-center gap-2">
             <ListTodo className="h-4 w-4 text-amber-400" />
             <span className="text-sm font-semibold text-white">Backlog</span>
-            <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">{status.backlogCount}</span>
+            <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">{status.backlog.pendingCount}</span>
           </div>
           {expandedSections.backlog ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
         </button>
         {expandedSections.backlog && (
           <div className="divide-y divide-zinc-800/50">
-            {status.backlog.length === 0 ? (
+            {status.backlog.items.length === 0 ? (
               <p className="px-5 py-3 text-sm text-zinc-500">Backlog is empty</p>
             ) : (
-              status.backlog.map((task, i) => (
+              status.backlog.items.filter((t) => t.status !== "done").map((task, i) => (
                 <div key={i} className="flex items-start gap-3 bg-zinc-900/50 px-5 py-3">
                   <span className="mt-0.5 text-xs text-zinc-600">{i + 1}.</span>
-                  <span className="text-sm text-zinc-300">{task}</span>
+                  <div className="flex items-center gap-2">
+                    {task.tag && <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs text-zinc-400">{task.tag}</span>}
+                    <span className={`text-sm ${task.status === "claimed" ? "text-cyan-400" : "text-zinc-300"}`}>{task.text}</span>
+                  </div>
                 </div>
               ))
             )}
@@ -394,7 +397,7 @@ export function PipelineDashboard() {
         </button>
         {expandedSections.completed && (
           <div className="divide-y divide-zinc-800/50">
-            {status.recentCompleted.map((task, i) => (
+            {status.completed.map((task, i) => (
               <div key={i} className="flex items-center justify-between bg-zinc-900/50 px-5 py-3">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500/50" />
@@ -408,15 +411,15 @@ export function PipelineDashboard() {
       </div>
 
       {/* Failed Tasks */}
-      {status.failedPending.length > 0 && (
+      {status.failed.length > 0 && (
         <div className="rounded-xl border border-red-500/20 overflow-hidden">
           <div className="flex items-center gap-2 bg-red-500/5 px-5 py-3">
             <XCircle className="h-4 w-4 text-red-400" />
             <span className="text-sm font-semibold text-red-400">Failed Tasks</span>
-            <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-400">{status.failedPending.length}</span>
+            <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-400">{status.failedPendingCount}</span>
           </div>
           <div className="divide-y divide-red-500/10">
-            {status.failedPending.map((task, i) => (
+            {status.failed.filter((f) => f.status.includes("pending")).map((task, i) => (
               <div key={i} className="bg-zinc-900/50 px-5 py-3">
                 <p className="text-sm text-zinc-300">{task.task}</p>
                 <p className="mt-1 text-xs text-zinc-500">
@@ -437,15 +440,15 @@ export function PipelineDashboard() {
           <div className="flex items-center gap-2">
             <Activity className="h-4 w-4 text-cyan-400" />
             <span className="text-sm font-semibold text-white">Sync Health</span>
-            {status.lastSyncRun && (
-              <span className="text-xs text-zinc-600">Last: {status.lastSyncRun}</span>
+            {status.syncHealth.lastRun && (
+              <span className="text-xs text-zinc-600">Last: {status.syncHealth.lastRun}</span>
             )}
           </div>
           {expandedSections.sync ? <ChevronDown className="h-4 w-4 text-zinc-500" /> : <ChevronRight className="h-4 w-4 text-zinc-500" />}
         </button>
         {expandedSections.sync && (
           <div className="divide-y divide-zinc-800/50">
-            {status.syncHealth.map((s, i) => (
+            {status.syncHealth.endpoints.map((s, i) => (
               <div key={i} className="flex items-center justify-between bg-zinc-900/50 px-5 py-3">
                 <div className="flex items-center gap-3">
                   {s.status === "ok" ? (

@@ -77,20 +77,31 @@ export interface SyncEndpoint {
   notes: string;
 }
 
-// ===== Pipeline Status (simpler, from pipeline-dashboard) =====
+// ===== Pipeline Status (matches pipeline-status handler response) =====
 
 export interface PipelineStatus {
   workers: WorkerInfo[];
   currentTask: CurrentTask;
-  backlog: string[];
-  backlogCount: number;
+  backlog: {
+    items: BacklogItem[];
+    pendingCount: number;
+    claimedCount: number;
+    doneCount: number;
+  };
+  completed: CompletedTask[];
   completedCount: number;
-  recentCompleted: CompletedTask[];
-  failedPending: FailedTask[];
+  failed: FailedTask[];
+  failedPendingCount: number;
   hasBlockers: boolean;
   blockerLines: string[];
-  syncHealth: SyncEndpoint[];
-  lastSyncRun: string | null;
+  syncHealth: {
+    lastRun: string | null;
+    endpoints: SyncEndpoint[];
+  };
+  auth: AuthStatus;
+  backlogLocked: boolean;
+  git: GitStatus;
+  postCommitGate: PostCommitGate;
   timestamp: string;
 }
 
@@ -186,7 +197,7 @@ export interface TaskCreatePayload {
   position?: "top" | "bottom";
 }
 
-// ===== Sync Status (replaces @basedgov/types SyncStatus) =====
+// ===== Sync Status =====
 
 export interface SyncStatus {
   api_name: string;

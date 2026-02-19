@@ -14,3 +14,8 @@ dist/
 # IDE
 .idea/
 .vscode/
+
+# Skynet pipeline (self-use)
+.dev/skynet.config.sh
+.dev/scripts/
+.dev/prompts/

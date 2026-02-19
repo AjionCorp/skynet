@@ -134,8 +134,7 @@ If this task is genuinely impossible right now (missing API key, external depend
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
-unset CLAUDECODE 2>/dev/null || true
-if $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1; then
+if run_agent "$PROMPT" "$LOG"; then
   log "Task-fixer succeeded. Verifying typecheck before merge..."
 
   # Clean .dev/ before typecheck to avoid false failures

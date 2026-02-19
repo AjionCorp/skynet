@@ -57,6 +57,13 @@ if [ "$test_exit" -eq 0 ]; then
 fi
 
 # --- Tests failed — analyze and create fix tasks ---
+# Auth check: only needed for the AI analysis part (Playwright tests don't need auth)
+source "$SCRIPTS_DIR/auth-check.sh"
+if ! check_claude_auth; then
+  log "Claude auth failed. Skipping failure analysis."
+  exit 0
+fi
+
 log "Feature tests: $passed passed, $failed failed out of $total."
 tg "⚠️ *${SKYNET_PROJECT_NAME^^} FEATURES*: $failed/$total tests failed — analyzing"
 
@@ -106,8 +113,7 @@ $(cat "$BACKLOG")
 6. If a failure is a test issue (not a real bug), fix the test instead.
 7. Write updated files directly — no confirmation needed."
 
-unset CLAUDECODE 2>/dev/null || true
-if $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1; then
+if run_agent "$PROMPT" "$LOG"; then
   log "Feature validator analysis completed."
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   tg "🔍 *${SKYNET_PROJECT_NAME^^} FEATURES*: Analysis done — $new_remaining tasks in backlog"

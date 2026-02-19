@@ -52,6 +52,11 @@ export SKYNET_TG_CHAT_ID=""
 export SKYNET_CLAUDE_BIN="claude"
 export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
 
+# ---- Codex CLI (OpenAI fallback) ----
+export SKYNET_CODEX_BIN="codex"
+export SKYNET_CODEX_FLAGS="--full-auto"
+export SKYNET_AGENT_PREFERENCE="auto"  # claude | codex | auto
+
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"
 

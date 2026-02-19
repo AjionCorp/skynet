@@ -29,10 +29,24 @@ export async function initCommand(options: InitOptions) {
   console.log("\n  Skynet Pipeline Setup\n");
 
   const projectDir = resolve(options.dir || process.cwd());
-  const projectName =
+  let projectName =
     options.name || (await prompt("Project name", projectDir.split("/").pop()));
+
+  // Validate project name
+  if (!/^[a-z0-9-]+$/.test(projectName)) {
+    console.error("  Error: Project name must be lowercase alphanumeric with hyphens only (e.g. 'my-project')");
+    process.exit(1);
+  }
+
   const devServerCmd = await prompt("Dev server command", "pnpm dev");
   const devServerPort = await prompt("Dev server port", "3000");
+
+  // Validate port
+  const portNum = Number(devServerPort);
+  if (!Number.isInteger(portNum) || portNum < 1 || portNum > 65535) {
+    console.error("  Error: Port must be a number between 1 and 65535");
+    process.exit(1);
+  }
   const typecheckCmd = await prompt("Typecheck command", "pnpm typecheck");
   const lintCmd = await prompt("Lint command", "pnpm lint");
   const playwrightDir = await prompt("Playwright directory (relative, empty to skip)", "");
@@ -55,26 +69,29 @@ export async function initCommand(options: InitOptions) {
   mkdirSync(join(devDir, "prompts"), { recursive: true });
   mkdirSync(scriptsTarget, { recursive: true });
 
+  // Shell-escape a value for safe embedding in bash double-quoted strings
+  const shellEscape = (s: string) => s.replace(/["\\$`!]/g, "\\$&");
+
   // Generate skynet.config.sh from template
   let configContent = readFileSync(join(TEMPLATES_DIR, "skynet.config.sh"), "utf-8");
   configContent = configContent
-    .replace("PLACEHOLDER_PROJECT_NAME", projectName)
-    .replace("PLACEHOLDER_PROJECT_DIR", projectDir)
-    .replace('export SKYNET_DEV_SERVER_CMD="pnpm dev"', `export SKYNET_DEV_SERVER_CMD="${devServerCmd}"`)
-    .replace("export SKYNET_DEV_SERVER_PORT=3000", `export SKYNET_DEV_SERVER_PORT=${devServerPort}`)
+    .replace("PLACEHOLDER_PROJECT_NAME", shellEscape(projectName))
+    .replace("PLACEHOLDER_PROJECT_DIR", shellEscape(projectDir))
+    .replace('export SKYNET_DEV_SERVER_CMD="pnpm dev"', `export SKYNET_DEV_SERVER_CMD="${shellEscape(devServerCmd)}"`)
+    .replace("export SKYNET_DEV_SERVER_PORT=3000", `export SKYNET_DEV_SERVER_PORT=${portNum}`)
     .replace(
       'export SKYNET_DEV_SERVER_URL="http://localhost:3000"',
-      `export SKYNET_DEV_SERVER_URL="http://localhost:${devServerPort}"`
+      `export SKYNET_DEV_SERVER_URL="http://localhost:${portNum}"`
     )
-    .replace('export SKYNET_TYPECHECK_CMD="pnpm typecheck"', `export SKYNET_TYPECHECK_CMD="${typecheckCmd}"`)
-    .replace('export SKYNET_LINT_CMD="pnpm lint"', `export SKYNET_LINT_CMD="${lintCmd}"`)
-    .replace('export SKYNET_PLAYWRIGHT_DIR=""', `export SKYNET_PLAYWRIGHT_DIR="${playwrightDir}"`)
-    .replace('export SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"', `export SKYNET_SMOKE_TEST="${smokeTest}"`)
-    .replace('export SKYNET_FEATURE_TEST="e2e/features.spec.ts"', `export SKYNET_FEATURE_TEST="${featureTest}"`)
-    .replace('export SKYNET_MAIN_BRANCH="main"', `export SKYNET_MAIN_BRANCH="${mainBranch}"`)
+    .replace('export SKYNET_TYPECHECK_CMD="pnpm typecheck"', `export SKYNET_TYPECHECK_CMD="${shellEscape(typecheckCmd)}"`)
+    .replace('export SKYNET_LINT_CMD="pnpm lint"', `export SKYNET_LINT_CMD="${shellEscape(lintCmd)}"`)
+    .replace('export SKYNET_PLAYWRIGHT_DIR=""', `export SKYNET_PLAYWRIGHT_DIR="${shellEscape(playwrightDir)}"`)
+    .replace('export SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"', `export SKYNET_SMOKE_TEST="${shellEscape(smokeTest)}"`)
+    .replace('export SKYNET_FEATURE_TEST="e2e/features.spec.ts"', `export SKYNET_FEATURE_TEST="${shellEscape(featureTest)}"`)
+    .replace('export SKYNET_MAIN_BRANCH="main"', `export SKYNET_MAIN_BRANCH="${shellEscape(mainBranch)}"`)
     .replace("export SKYNET_TG_ENABLED=false", `export SKYNET_TG_ENABLED=${tgToken ? "true" : "false"}`)
-    .replace('export SKYNET_TG_BOT_TOKEN=""', `export SKYNET_TG_BOT_TOKEN="${tgToken}"`)
-    .replace('export SKYNET_TG_CHAT_ID=""', `export SKYNET_TG_CHAT_ID="${tgChatId}"`);
+    .replace('export SKYNET_TG_BOT_TOKEN=""', `export SKYNET_TG_BOT_TOKEN="${shellEscape(tgToken)}"`)
+    .replace('export SKYNET_TG_CHAT_ID=""', `export SKYNET_TG_CHAT_ID="${shellEscape(tgChatId)}"`);;
 
   writeFileSync(join(devDir, "skynet.config.sh"), configContent);
   console.log("    .dev/skynet.config.sh");

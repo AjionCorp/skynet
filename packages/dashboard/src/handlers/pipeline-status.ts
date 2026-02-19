@@ -82,9 +82,19 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         };
       });
 
-      // Current task
+      // Current tasks (per-worker files)
+      const currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
+      // Try per-worker files first, fall back to legacy single file
+      for (let wid = 1; wid <= 2; wid++) {
+        const raw = readDevFile(devDir, `current-task-${wid}.md`);
+        if (raw) currentTasks[`worker-${wid}`] = parseCurrentTask(raw);
+      }
+      // Legacy single file fallback
       const currentTaskRaw = readDevFile(devDir, "current-task.md");
       const currentTask = parseCurrentTask(currentTaskRaw);
+      if (Object.keys(currentTasks).length === 0 && currentTaskRaw) {
+        currentTasks["worker-1"] = currentTask;
+      }
 
       // Backlog
       const backlogRaw = readDevFile(devDir, "backlog.md");
@@ -193,8 +203,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const backlogLockPath = `${lockPrefix}backlog.lock`;
       const backlogLocked = existsSync(backlogLockPath);
 
-      // Git status
+      // Git status — run in project root (parent of devDir)
       const { execSync } = await import("child_process");
+      const projectRoot = devDir.replace(/\/?\.dev\/?$/, "");
       let gitBranch = "unknown";
       let commitsAhead = 0;
       let dirtyFiles = 0;
@@ -203,21 +214,24 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         gitBranch = execSync("git rev-parse --abbrev-ref HEAD", {
           encoding: "utf-8",
           timeout: 3000,
+          cwd: projectRoot,
         }).trim();
         const aheadMatch = execSync(
           "git rev-list --count origin/main..HEAD 2>/dev/null || echo 0",
-          { encoding: "utf-8", timeout: 3000 }
+          { encoding: "utf-8", timeout: 3000, cwd: projectRoot }
         ).trim();
         commitsAhead = Number(aheadMatch) || 0;
         const dirtyOutput = execSync("git status --porcelain", {
           encoding: "utf-8",
           timeout: 3000,
+          cwd: projectRoot,
         }).trim();
         dirtyFiles = dirtyOutput ? dirtyOutput.split("\n").length : 0;
         lastGitCommit =
           execSync('git log -1 --format="%H %s" 2>/dev/null', {
             encoding: "utf-8",
             timeout: 3000,
+            cwd: projectRoot,
           }).trim() || null;
       } catch {
         /* ignore */

@@ -74,3 +74,6 @@ source "$SKYNET_SCRIPTS_DIR/_compat.sh"
 
 # Source notification helpers
 source "$SKYNET_SCRIPTS_DIR/_notify.sh"
+
+# Source AI agent abstraction (Claude + Codex fallback)
+source "$SKYNET_SCRIPTS_DIR/_agent.sh"

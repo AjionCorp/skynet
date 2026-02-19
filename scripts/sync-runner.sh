@@ -106,7 +106,7 @@ run_sync() {
 if [ -n "${SKYNET_SYNC_ENDPOINTS+x}" ]; then
   for entry in "${SKYNET_SYNC_ENDPOINTS[@]}"; do
     # Each entry is "name|endpoint" or "name|endpoint|optional"
-    local ep_name ep_path ep_optional
+    ep_name="" ep_path="" ep_optional=""
     IFS='|' read -r ep_name ep_path ep_optional <<< "$entry"
     _sync_names+=("$ep_name")
 
@@ -137,7 +137,7 @@ _Last run: ${now}_
 EOF
 
 for i in "${!_sync_names[@]}"; do
-  local val="${_sync_results[$i]:-pending|0|unknown}"
+  val="${_sync_results[$i]:-pending|0|unknown}"
   IFS='|' read -r status records notes <<< "$val"
   echo "| ${_sync_names[$i]} | $now | $status | $records | $notes |" >> "$SYNC_HEALTH"
 done
@@ -152,11 +152,11 @@ fi
 # --- Check for errors and add to blockers if needed ---
 has_errors=false
 for i in "${!_sync_names[@]}"; do
-  local val="${_sync_results[$i]:-ok|0|}"
+  val="${_sync_results[$i]:-ok|0|}"
   IFS='|' read -r status records notes <<< "$val"
   if [ "$status" = "error" ]; then
     has_errors=true
-    local ep="${_sync_names[$i]}"
+    ep="${_sync_names[$i]}"
     # Only add to blockers if not already there
     if ! grep -q "$ep sync error" "$BLOCKERS" 2>/dev/null; then
       mkdir -p "$(dirname "$BLOCKERS")"

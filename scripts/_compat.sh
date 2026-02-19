@@ -57,7 +57,7 @@ realpath_portable() {
   if command -v realpath &>/dev/null; then
     realpath "$1"
   elif $SKYNET_IS_MACOS; then
-    python3 -c "import os; print(os.path.realpath('$1'))" 2>/dev/null || echo "$1"
+    python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1" 2>/dev/null || echo "$1"
   else
     readlink -f "$1" 2>/dev/null || echo "$1"
   fi

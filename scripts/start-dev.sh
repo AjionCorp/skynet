@@ -19,7 +19,7 @@ fi
 
 # Truncate log if too large (keep last 5000 lines)
 if [ -f "$LOG" ] && [ "$(wc -l < "$LOG")" -gt 5000 ]; then
-  tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+  tail -5000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting dev server..." >> "$LOG"

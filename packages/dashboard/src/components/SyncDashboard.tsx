@@ -225,8 +225,17 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
         </button>
       </div>
 
+      {/* Empty state */}
+      {displayEndpoints.length === 0 && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 py-16">
+          <Database className="h-8 w-8 text-zinc-600" />
+          <p className="mt-3 text-sm font-medium text-zinc-400">No sync endpoints configured</p>
+          <p className="mt-1 text-xs text-zinc-600">Add SKYNET_SYNC_ENDPOINTS to your skynet.project.sh</p>
+        </div>
+      )}
+
       {/* Sync endpoints table */}
-      <div className="overflow-hidden rounded-xl border border-zinc-800">
+      {displayEndpoints.length > 0 && <div className="overflow-hidden rounded-xl border border-zinc-800">
         {/* Table header */}
         <div className="hidden border-b border-zinc-800 bg-zinc-900/80 px-6 py-3 lg:grid lg:grid-cols-12 lg:gap-4">
           <div className="col-span-3 text-xs font-medium uppercase tracking-wider text-zinc-500">
@@ -327,7 +336,7 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
             );
           })}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

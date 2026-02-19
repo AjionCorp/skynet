@@ -57,7 +57,14 @@ if [ "$test_exit" -eq 0 ]; then
 fi
 
 # --- Tests failed — analyze failures and add tasks ---
-log "Some tests failed. Asking Claude to analyze and create tasks."
+# Auth check: only needed for the AI analysis part (Playwright tests don't need auth)
+source "$SCRIPTS_DIR/auth-check.sh"
+if ! check_claude_auth; then
+  log "Claude auth failed. Skipping failure analysis."
+  exit 0
+fi
+
+log "Some tests failed. Asking AI agent to analyze and create tasks."
 tg "⚠️ *${SKYNET_PROJECT_NAME^^} TESTS*: Some Playwright tests failed — analyzing"
 
 # Count existing unchecked tasks to avoid overfilling backlog
@@ -99,8 +106,7 @@ $(cat "$BACKLOG")
 5. Do NOT add more than 3 new tasks per run.
 6. Write updated files directly — no confirmation needed."
 
-unset CLAUDECODE 2>/dev/null || true
-if $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1; then
+if run_agent "$PROMPT" "$LOG"; then
   log "UI tester analysis completed."
 else
   exit_code=$?

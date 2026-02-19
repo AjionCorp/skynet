@@ -1,5 +1,6 @@
 import { readFileSync, existsSync } from "fs";
 import { execSync } from "child_process";
+import { homedir } from "os";
 import type { SkynetConfig } from "../types";
 
 /**
@@ -47,7 +48,7 @@ function parsePlist(content: string) {
  */
 export function createMonitoringAgentsHandler(config: SkynetConfig) {
   const agentPrefix = config.agentPrefix ?? `com.${config.projectName}`;
-  const plistDir = `${process.env.HOME ?? "/Users/ajion"}/Library/LaunchAgents`;
+  const plistDir = `${homedir()}/Library/LaunchAgents`;
 
   // Build agent definitions from worker config
   const agentDefs = config.workers.map((w) => ({

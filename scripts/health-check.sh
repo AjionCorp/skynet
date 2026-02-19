@@ -50,8 +50,7 @@ Fix these type errors. Do NOT change the behavior of the code — only fix the t
 After fixing, run '$SKYNET_TYPECHECK_CMD' to verify.
 Commit fixes with message 'fix: resolve type errors (auto health-check)'."
 
-      unset CLAUDECODE 2>/dev/null || true
-      $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1 || true
+      run_agent "$PROMPT" "$LOG" || true
     fi
   fi
 done
@@ -59,7 +58,7 @@ done
 if ! $typecheck_ok; then
   log "Typecheck still failing after $MAX_FIX_ATTEMPTS attempts. Adding blocker."
   if ! grep -q "typecheck failing" "$BLOCKERS" 2>/dev/null; then
-    sed_inplace 's/_No active blockers._//' "$BLOCKERS"
+    [ -f "$BLOCKERS" ] && sed_inplace 's/_No active blockers._//' "$BLOCKERS"
     echo "- **$(date '+%Y-%m-%d')**: TypeScript typecheck failing after $MAX_FIX_ATTEMPTS auto-fix attempts. Manual intervention needed." >> "$BLOCKERS"
   fi
 fi

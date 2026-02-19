@@ -10,6 +10,8 @@
 # - On repeat failures: throttles alerts to once per hour (not every 3 min)
 # - On recovery: sends Telegram "restored" message, clears blocker
 
+type log &>/dev/null || log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+
 AUTH_NOTIFY_INTERVAL=3600  # seconds between repeat Telegram alerts
 
 check_claude_auth() {

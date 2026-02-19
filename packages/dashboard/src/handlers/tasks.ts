@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
 import type { SkynetConfig } from "../types";
 
 /**
@@ -98,60 +98,67 @@ export function createTasksHandlers(config: SkynetConfig) {
         );
       }
 
-      if (existsSync(backlogLockPath)) {
+      // Atomic lock acquisition using mkdir (same pattern as shell scripts)
+      try {
+        mkdirSync(backlogLockPath);
+      } catch {
         return Response.json(
           { data: null, error: "Backlog is locked by another process" },
           { status: 423 }
         );
       }
 
-      const desc = description?.trim()
-        ? ` — ${description.trim()}`
-        : "";
-      const taskLine = `- [ ] [${tag}] ${title.trim()}${desc}`;
+      try {
+        const desc = description?.trim()
+          ? ` — ${description.trim()}`
+          : "";
+        const taskLine = `- [ ] [${tag}] ${title.trim()}${desc}`;
 
-      const raw = readFileSync(backlogPath, "utf-8");
-      const lines = raw.split("\n");
+        const raw = readFileSync(backlogPath, "utf-8");
+        const lines = raw.split("\n");
 
-      if (position === "bottom") {
-        let lastPendingIndex = -1;
-        for (let i = 0; i < lines.length; i++) {
-          if (
-            lines[i].startsWith("- [ ] ") ||
-            lines[i].startsWith("- [>] ")
-          ) {
-            lastPendingIndex = i;
+        if (position === "bottom") {
+          let lastPendingIndex = -1;
+          for (let i = 0; i < lines.length; i++) {
+            if (
+              lines[i].startsWith("- [ ] ") ||
+              lines[i].startsWith("- [>] ")
+            ) {
+              lastPendingIndex = i;
+            }
+          }
+          if (lastPendingIndex === -1) {
+            const headerEnd = lines.findIndex(
+              (l, i) => i > 0 && l.trim() === ""
+            );
+            lines.splice(headerEnd + 1, 0, taskLine);
+          } else {
+            lines.splice(lastPendingIndex + 1, 0, taskLine);
+          }
+        } else {
+          const firstTaskIndex = lines.findIndex(
+            (l) =>
+              l.startsWith("- [ ] ") || l.startsWith("- [>] ")
+          );
+          if (firstTaskIndex === -1) {
+            const headerEnd = lines.findIndex(
+              (l, i) => i > 0 && l.trim() === ""
+            );
+            lines.splice(headerEnd + 1, 0, taskLine);
+          } else {
+            lines.splice(firstTaskIndex, 0, taskLine);
           }
         }
-        if (lastPendingIndex === -1) {
-          const headerEnd = lines.findIndex(
-            (l, i) => i > 0 && l.trim() === ""
-          );
-          lines.splice(headerEnd + 1, 0, taskLine);
-        } else {
-          lines.splice(lastPendingIndex + 1, 0, taskLine);
-        }
-      } else {
-        const firstTaskIndex = lines.findIndex(
-          (l) =>
-            l.startsWith("- [ ] ") || l.startsWith("- [>] ")
-        );
-        if (firstTaskIndex === -1) {
-          const headerEnd = lines.findIndex(
-            (l, i) => i > 0 && l.trim() === ""
-          );
-          lines.splice(headerEnd + 1, 0, taskLine);
-        } else {
-          lines.splice(firstTaskIndex, 0, taskLine);
-        }
+
+        writeFileSync(backlogPath, lines.join("\n"), "utf-8");
+
+        return Response.json({
+          data: { inserted: taskLine, position: position ?? "top" },
+          error: null,
+        });
+      } finally {
+        try { rmdirSync(backlogLockPath); } catch { /* ignore */ }
       }
-
-      writeFileSync(backlogPath, lines.join("\n"), "utf-8");
-
-      return Response.json({
-        data: { inserted: taskLine, position: position ?? "top" },
-        error: null,
-      });
     } catch (err) {
       return Response.json(
         {

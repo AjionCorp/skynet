@@ -118,8 +118,7 @@ $db_tables
 - Max 15 unchecked tasks at a time (focus > sprawl)
 - Balance between data infrastructure and user-facing features"
 
-unset CLAUDECODE 2>/dev/null || true
-if $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$PROMPT" >> "$LOG" 2>&1; then
+if run_agent "$PROMPT" "$LOG"; then
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   log "Project driver completed successfully."
   tg "📋 *${SKYNET_PROJECT_NAME^^} BACKLOG* updated: $new_remaining tasks queued"

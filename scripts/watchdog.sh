@@ -108,10 +108,26 @@ if $claude_auth_ok; then
     nohup bash "$SCRIPTS_DIR/task-fixer.sh" >> "$SCRIPTS_DIR/task-fixer.log" 2>&1 &
   fi
 
-  # Rule 3: Always kick off project-driver if it's not already running
+  # Rule 3: Kick off project-driver if needed (rate-limited)
   if ! $driver_running; then
-    log "Project-driver idle (backlog: $backlog_count). Kicking off."
-    tg "👁 *WATCHDOG*: Kicking off project-driver (backlog: $backlog_count tasks)"
-    nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+    should_kick=false
+    last_kick_file="${SKYNET_LOCK_PREFIX}-project-driver-last-kick"
+    if [ "$backlog_count" -lt 5 ]; then
+      should_kick=true
+    elif [ ! -f "$last_kick_file" ]; then
+      should_kick=true
+    else
+      last_kick=$(cat "$last_kick_file" 2>/dev/null || echo 0)
+      now_kick=$(date +%s)
+      if [ $((now_kick - last_kick)) -gt 3600 ]; then
+        should_kick=true
+      fi
+    fi
+    if $should_kick; then
+      date +%s > "$last_kick_file"
+      log "Project-driver idle (backlog: $backlog_count). Kicking off."
+      tg "📋 *${SKYNET_PROJECT_NAME^^}*: Kicking off project-driver (backlog: $backlog_count tasks)"
+      nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+    fi
   fi
 fi
