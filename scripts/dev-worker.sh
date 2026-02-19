@@ -30,6 +30,32 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] $*" >> "$LOG"; }
 
+# --- Heartbeat helpers ---
+# Background loop writes epoch timestamp to .dev/worker-N.heartbeat every 60s
+# so the watchdog can detect stuck workers even if the process is alive.
+HEARTBEAT_FILE="$DEV_DIR/worker-${WORKER_ID}.heartbeat"
+_heartbeat_pid=""
+
+_start_heartbeat() {
+  (
+    while true; do
+      date +%s > "$HEARTBEAT_FILE"
+      sleep 60
+    done
+  ) &
+  _heartbeat_pid=$!
+  log "Heartbeat started (PID $_heartbeat_pid, file $HEARTBEAT_FILE)"
+}
+
+_stop_heartbeat() {
+  if [ -n "$_heartbeat_pid" ]; then
+    kill "$_heartbeat_pid" 2>/dev/null || true
+    wait "$_heartbeat_pid" 2>/dev/null || true
+    _heartbeat_pid=""
+  fi
+  rm -f "$HEARTBEAT_FILE"
+}
+
 # --- Mutex helpers using mkdir (works on macOS + Linux) ---
 acquire_lock() {
   local attempts=0
@@ -198,6 +224,8 @@ echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
+  # Stop heartbeat writer
+  _stop_heartbeat 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
@@ -302,11 +330,15 @@ EOF
 **Worker:** $WORKER_ID
 EOF
 
+  # Start heartbeat for this task (watchdog uses this to detect stuck workers)
+  _start_heartbeat
+
   # --- Set up isolated worktree for this task ---
   if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
     # Branch exists from a prior failed attempt — reuse it
     if ! setup_worktree "$branch_name" false; then
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
+      _stop_heartbeat
       cleanup_worktree "$branch_name"
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
@@ -317,6 +349,7 @@ EOF
     # Create new feature branch from main
     if ! setup_worktree "$branch_name" true; then
       log "Failed to create worktree for $branch_name — unclaiming."
+      _stop_heartbeat
       cleanup_worktree "$branch_name"
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
@@ -354,6 +387,7 @@ If you encounter a blocker you cannot resolve (missing API keys, unclear require
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
   (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
+  _stop_heartbeat
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
