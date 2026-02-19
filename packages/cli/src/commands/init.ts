@@ -18,6 +18,10 @@ const TEMPLATES_DIR = resolveAssetDir("templates");
 const SCRIPTS_DIR = resolveAssetDir("scripts");
 
 function prompt(question: string, defaultValue?: string): Promise<string> {
+  // Non-interactive: use defaults when stdin is not a TTY (piped or redirected)
+  if (!process.stdin.isTTY) {
+    return Promise.resolve(defaultValue || "");
+  }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const suffix = defaultValue ? ` (${defaultValue})` : "";
   return new Promise((resolve) => {
