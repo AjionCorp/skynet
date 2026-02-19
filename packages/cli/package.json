@@ -2,12 +2,20 @@
   "name": "@ajioncorp/skynet-cli",
   "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist",
+    "scripts",
+    "templates"
+  ],
   "bin": {
     "skynet": "dist/index.js"
   },
   "scripts": {
     "build": "tsc",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "cp -r ../../scripts ./scripts && cp -r ../../templates ./templates",
+    "postpack": "rm -rf ./scripts ./templates",
+    "prepublishOnly": "tsc"
   },
   "dependencies": {
     "commander": "^13.0.0"

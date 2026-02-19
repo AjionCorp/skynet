@@ -5,8 +5,17 @@ import { execSync } from "child_process";
 import { platform } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKYNET_ROOT = resolve(__dirname, "../../../..");
-const PLIST_TEMPLATES_DIR = resolve(SKYNET_ROOT, "templates/launchagents");
+
+// When installed from npm, templates/ is at the package root (two levels up
+// from dist/commands/setup-agents.js). In monorepo development, fall back to
+// the monorepo root (four levels up).
+function resolveAssetDir(name: string): string {
+  const pkgPath = fileURLToPath(new URL(`../../${name}`, import.meta.url));
+  if (existsSync(pkgPath)) return pkgPath;
+  return resolve(__dirname, "../../../..", name);
+}
+
+const PLIST_TEMPLATES_DIR = resolve(resolveAssetDir("templates"), "launchagents");
 
 interface SetupAgentsOptions {
   dir?: string;
