@@ -83,5 +83,5 @@ SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
 # Source notification helpers
 source "$SKYNET_SCRIPTS_DIR/_notify.sh"
 
-# Source AI agent abstraction (Claude + Codex fallback)
+# Source AI agent abstraction (plugin-based — see scripts/agents/)
 source "$SKYNET_SCRIPTS_DIR/_agent.sh"
