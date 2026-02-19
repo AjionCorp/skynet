@@ -68,6 +68,7 @@ FAILED="$DEV_DIR/failed-tasks.md"
 BLOCKERS="$DEV_DIR/blockers.md"
 CURRENT_TASK="$DEV_DIR/current-task.md"
 SYNC_HEALTH="$DEV_DIR/sync-health.md"
+MISSION="$DEV_DIR/mission.md"
 
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"

@@ -28,27 +28,8 @@ export SKYNET_WORKER_CONTEXT="
 - No Playwright tests for skynet itself (yet)
 "
 
-export SKYNET_PROJECT_VISION="
-# Skynet: AI-Powered Development Pipeline
-
-## Mission
-Build the most reliable, self-improving AI development pipeline. Skynet automates the entire
-development cycle: task generation, implementation via AI agents, quality gates, and deployment.
-
-## Core Goals
-1. Rock-solid worker orchestration — no race conditions, no lost tasks, no zombie processes
-2. Seamless Claude/Codex fallback — never idle due to auth issues
-3. Beautiful monitoring dashboard — real-time visibility into pipeline health
-4. Easy adoption — 'npx skynet init' and you're running
-5. Self-improving — the pipeline should be able to improve itself
-
-## Current Priorities
-- Harden lock acquisition and task claiming across parallel workers
-- Add comprehensive test suite for shell scripts and TypeScript handlers
-- Improve dashboard UX: better error states, loading skeletons, responsive design
-- Add webhook/notification integrations beyond Telegram
-- Performance: lazy-load dashboard tabs, cache API responses
-"
+# Mission is now defined in .dev/mission.md (read by project-driver directly)
+export SKYNET_PROJECT_VISION=""
 
 export SKYNET_WORKER_CONVENTIONS="
 Follow existing code patterns exactly:

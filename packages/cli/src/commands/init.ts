@@ -103,6 +103,7 @@ export async function initCommand(options: InitOptions) {
 
   // Copy markdown state files
   const stateFiles = [
+    "mission.md",
     "backlog.md",
     "current-task.md",
     "completed.md",
@@ -176,9 +177,10 @@ export async function initCommand(options: InitOptions) {
   console.log(`
   Done! Next steps:
 
-    1. Edit .dev/skynet.project.sh with your project vision and conventions
-    2. Run: npx skynet setup-agents  (to install macOS LaunchAgents)
-    3. Or run manually: bash .dev/scripts/watchdog.sh
-    4. Add the dashboard: npm install @ajioncorp/skynet
+    1. Edit .dev/mission.md with your project's mission and goals
+    2. Edit .dev/skynet.project.sh with worker conventions
+    3. Run: npx skynet setup-agents  (to install macOS LaunchAgents)
+    4. Or run manually: bash .dev/scripts/watchdog.sh
+    5. Add the dashboard: npm install @ajioncorp/skynet
 `);
 }

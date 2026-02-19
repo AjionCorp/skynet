@@ -14,14 +14,11 @@ SKYNET_WORKER_CONTEXT="
 # Add your project-specific context here...
 "
 
-# ---- Project Vision ----
-# Fed to the project-driver agent for backlog generation and prioritization.
-# Describe your project's mission, goals, and roadmap.
-SKYNET_PROJECT_VISION="
-# Project Vision
-Describe your project's purpose and goals here.
-The project-driver will use this to generate and prioritize tasks.
-"
+# ---- Project Vision (fallback) ----
+# The project-driver primarily reads .dev/mission.md for strategic direction.
+# This variable is only used as a fallback if mission.md doesn't exist.
+# Edit .dev/mission.md instead — it supports richer formatting and is easier to maintain.
+SKYNET_PROJECT_VISION=""
 
 # ---- Sync Endpoints ----
 # Format: "name|path" — used by sync-runner to hit your API endpoints

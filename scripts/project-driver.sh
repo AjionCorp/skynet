@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# project-driver.sh — Strategic agent that digests project state and drives progress
-# Reads all .dev/ status files + codebase, then updates backlog with new/reprioritized tasks
+# project-driver.sh — Mission-driven strategic agent
+# Reads mission.md + all .dev/ state files, then generates/prioritizes tasks that advance the mission
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
@@ -27,9 +27,18 @@ if ! check_claude_auth; then
 fi
 
 log "Project driver starting."
-tg "🧠 *${SKYNET_PROJECT_NAME^^} PROJECT-DRIVER* starting — analyzing state and generating tasks"
+tg "🧠 *${SKYNET_PROJECT_NAME^^} PROJECT-DRIVER* starting — analyzing state and driving mission forward"
 
-# --- Gather all context ---
+# --- Load mission ---
+if [ -f "$MISSION" ]; then
+  mission_content=$(cat "$MISSION")
+  log "Mission loaded from $MISSION"
+else
+  mission_content="${SKYNET_PROJECT_VISION:-No mission defined. Create .dev/mission.md to drive autonomous development.}"
+  log "No mission.md found. Using SKYNET_PROJECT_VISION fallback."
+fi
+
+# --- Gather all state ---
 backlog_content=$(cat "$BACKLOG")
 completed_content=$(cat "$COMPLETED")
 failed_content=$(cat "$FAILED")
@@ -37,28 +46,33 @@ current_task_content=$(cat "$CURRENT_TASK")
 blockers_content=$(cat "$BLOCKERS")
 sync_health_content=$(cat "$SYNC_HEALTH")
 
-# Count remaining vs completed tasks
+# Count task metrics
 remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+done_count=$(grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || echo "0")
 completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
 completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
 failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || echo "0")
 
 # Get codebase structure summary
-api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" 2>/dev/null | sort || true)
-sync_libs=$(find "$PROJECT_DIR" -path "*/lib/sync/*.ts" 2>/dev/null | sort || true)
-pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" 2>/dev/null | sort || true)
-db_tables=$(grep "create table" "$PROJECT_DIR"/supabase/migrations/*.sql 2>/dev/null | sed 's/.*create table //' | sed 's/ (.*//' | sort || true)
+api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+scripts_list=$(ls "$SKYNET_SCRIPTS_DIR"/*.sh 2>/dev/null | xargs -I{} basename {} || true)
+packages_list=$(find "$PROJECT_DIR/packages" -maxdepth 2 -name "package.json" 2>/dev/null | xargs -I{} dirname {} | xargs -I{} basename {} || true)
 
-log "State: $remaining pending, $completed_count completed, $failed_count failed"
+log "State: $remaining pending, $claimed claimed, $completed_count completed, $failed_count failed"
 
-# --- Ask Claude to analyze and update backlog ---
-PROMPT="You are the Project Driver for ${SKYNET_PROJECT_NAME} — driving the vision forward.
+# --- Build the prompt ---
+PROMPT="You are the Project Driver for ${SKYNET_PROJECT_NAME}. Your sole purpose is to drive this project toward its mission by generating, prioritizing, and managing the task backlog.
 
 ## THE MISSION
 
-${SKYNET_PROJECT_VISION:-No project vision configured. Focus on completing existing backlog tasks.}
+$mission_content
 
-## CURRENT STATE
+## CURRENT PIPELINE STATE
+
+### Task Metrics
+- Pending: $remaining | Claimed: $claimed | Completed: $completed_count | Failed (pending retry): $failed_count
 
 ### Backlog (.dev/backlog.md)
 $backlog_content
@@ -78,50 +92,63 @@ $blockers_content
 ### Sync Health (.dev/sync-health.md)
 $sync_health_content
 
-### Existing API Routes
+## CODEBASE STRUCTURE
+
+### Scripts
+$scripts_list
+
+### Packages
+$packages_list
+
+### API Routes
 $api_routes
 
-### Existing Sync Libraries
-$sync_libs
-
-### Existing Pages
+### Pages
 $pages
 
-### Database Tables
-$db_tables
+## YOUR DIRECTIVES
 
-## YOUR INSTRUCTIONS
+You are the strategic brain of this pipeline. Every action you take must advance the mission.
 
-1. **Analyze** what's been completed, what's in progress, what's blocked, what's failed
-2. **Identify gaps** between current state and the full vision above
-3. **Generate new tasks** if the backlog is getting thin (fewer than 5 unchecked items)
-4. **Prioritize** tasks that move us toward the core mission
-5. **Reprioritize** — if a blocker was resolved, move unblocked tasks up
-6. **Clear resolved blockers** from blockers.md
+### 1. Assess Mission Progress
+- What has been accomplished toward each mission objective?
+- What gaps remain between current state and mission completion?
+- Are there blockers preventing mission progress?
+
+### 2. Generate Mission-Aligned Tasks
+- Every task MUST trace back to a specific mission objective or success criterion
+- Tasks should be atomic — completable by an AI agent in a single session
+- Be specific: include file paths, function names, expected behavior
+- Prioritize tasks that unblock other tasks or accelerate the most mission-critical path
+
+### 3. Manage the Backlog
+- If fewer than 5 pending tasks remain, generate new ones from mission gaps
+- Reprioritize based on: mission impact > unblocking others > ease of completion
+- Clear resolved blockers from blockers.md
+- Don't duplicate tasks already in backlog, completed, or failed
+
+### 4. Self-Improvement Awareness
+- If you notice the pipeline itself has gaps (missing scripts, broken flows, missing tests), generate tasks to fix them
+- The pipeline improving itself IS part of the mission
 
 ## Task Format
-- \`[FEAT]\` new features
-- \`[FIX]\` bug fixes
-- \`[DATA]\` data pipeline / sync / ingestion
-- \`[SCORE]\` scoring and analysis
-- \`[CIVIC]\` civic engagement features
-- \`[MOBILE]\` mobile app features
-- \`[INFRA]\` infrastructure/devops
-- \`[TEST]\` tests
+\`\`\`
+- [ ] [TAG] Task title — specific description of what to implement/fix
+\`\`\`
+Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\` tests, \`[DATA]\` data/sync, \`[DOCS]\` documentation
 
 ## Rules
 - Write the updated backlog.md directly to $BACKLOG
-- Keep checked items [x] at the bottom as history
-- Top = highest priority
-- Be specific and actionable — every task should be completable by Claude Code in one session
-- Don't duplicate tasks already in the backlog or completed
-- Max 15 unchecked tasks at a time (focus > sprawl)
-- Balance between data infrastructure and user-facing features"
+- Checked items [x] stay at the bottom as history
+- Top of list = highest priority
+- Max 15 unchecked tasks (focus > sprawl)
+- Every task must be actionable by Claude Code in one session
+- If the mission is achieved (all success criteria met), write that to $BLOCKERS as a celebration, not a blocker"
 
 if run_agent "$PROMPT" "$LOG"; then
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   log "Project driver completed successfully."
-  tg "📋 *${SKYNET_PROJECT_NAME^^} BACKLOG* updated: $new_remaining tasks queued"
+  tg "📋 *${SKYNET_PROJECT_NAME^^} BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
 else
   exit_code=$?
   log "Project driver exited with code $exit_code."
