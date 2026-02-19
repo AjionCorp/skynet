@@ -296,6 +296,17 @@ export async function statusCommand(options: StatusOptions) {
   const healthLabel = healthScore > 80 ? "Good" : healthScore > 50 ? "Degraded" : "Critical";
   console.log(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
+  // --- Self-Correction Rate ---
+  const failedLines = failed
+    .split("\n")
+    .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
+  const scrFixed = failedLines.filter((l) => l.includes("| fixed |")).length;
+  const scrBlocked = failedLines.filter((l) => l.includes("| blocked |")).length;
+  const scrSuperseded = failedLines.filter((l) => l.includes("| superseded |")).length;
+  const scrTotal = scrFixed + scrBlocked + scrSuperseded;
+  const scrRate = scrTotal > 0 ? Math.round((scrFixed / scrTotal) * 100) : 0;
+  console.log(`  Self-correction rate: ${scrRate}% (${scrFixed}/${scrTotal} failures auto-fixed)`);
+
   // --- Mission Progress ---
   const missionRaw = readFile(join(devDir, "mission.md"));
   if (missionRaw) {

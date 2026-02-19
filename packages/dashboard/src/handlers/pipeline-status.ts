@@ -519,6 +519,18 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         staleTasks24hCount,
       });
 
+      // Self-correction stats
+      const selfCorrectionStats = {
+        fixed: failed.filter((f) => f.status.includes("fixed")).length,
+        blocked: failed.filter((f) => f.status.includes("blocked")).length,
+        superseded: failed.filter((f) => f.status.includes("superseded")).length,
+        pending: failedPendingCount,
+      };
+      const totalAttempted = selfCorrectionStats.fixed + selfCorrectionStats.blocked + selfCorrectionStats.superseded;
+      const selfCorrectionRate = totalAttempted > 0
+        ? Math.round((selfCorrectionStats.fixed / totalAttempted) * 100)
+        : 0;
+
       // Mission progress — count handlers from this package
       const { readdirSync: readdir } = await import("fs");
       let handlerCount = 0;
@@ -553,6 +565,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           hasBlockers,
           blockerLines,
           healthScore,
+          selfCorrectionRate,
+          selfCorrectionStats,
           syncHealth: {
             lastRun: lastSyncMatch?.[1] ?? null,
             endpoints: syncEndpoints,
