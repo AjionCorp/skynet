@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, readFileSync, unlinkSync, constants } from "fs";
+import { openSync, readFileSync, writeFileSync, unlinkSync, constants } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 
@@ -34,6 +34,29 @@ function isProcessAlive(pid: number): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Reset a stale current-task file if it shows in_progress but no worker is running.
+ * Without this, a newly spawned worker sees "in_progress" and exits immediately.
+ */
+function resetStaleTaskFile(devDir: string, workerType: ScalableType, slotId: number): void {
+  // dev-worker uses per-worker files; task-fixer uses the shared current-task.md
+  const taskFile =
+    workerType === "dev-worker"
+      ? resolve(devDir, `current-task-${slotId}.md`)
+      : resolve(devDir, "current-task.md");
+  try {
+    const content = readFileSync(taskFile, "utf-8");
+    if (content.includes("in_progress")) {
+      writeFileSync(
+        taskFile,
+        `# Current Task\n**Status:** idle\n**Updated:** ${new Date().toISOString()}\n**Note:** Reset by scaling handler — previous worker exited\n`
+      );
+    }
+  } catch {
+    // File doesn't exist — nothing to reset
   }
 }
 
@@ -155,11 +178,16 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
       if (delta > 0) {
         // Scale up — spawn new worker processes
         const usedIds = new Set(running.map((r) => r.id));
+        // Logs go to devDir/scripts/ (e.g. .dev/scripts/), not the source scriptsDir
+        const logDir = resolve(devDir, "scripts");
 
         for (let i = 0; i < delta; i++) {
           let newId = 1;
           while (usedIds.has(newId)) newId++;
           usedIds.add(newId);
+
+          // Clear stale in_progress task file so the new worker doesn't bail out
+          resetStaleTaskFile(devDir, workerType, newId);
 
           const scriptPath = resolve(scriptsDir, `${workerType}.sh`);
           // First instance of non-dev-worker uses unnumbered log; extras get numbered
@@ -169,22 +197,20 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
               : newId === 1
                 ? workerType
                 : `${workerType}-${newId}`;
-          const logPath = resolve(scriptsDir, `${logSuffix}.log`);
+          const logPath = resolve(logDir, `${logSuffix}.log`);
           const logFd = openSync(
             logPath,
             constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
           );
-          // dev-worker expects worker ID as arg; others get it via WORKER_ID env
+          // dev-worker expects worker ID as arg; others just get the script
           const args = workerType === "dev-worker"
             ? [scriptPath, String(newId)]
             : [scriptPath];
-          const env = workerType !== "dev-worker" && newId > 1
-            ? { ...process.env, WORKER_ID: String(newId) }
-            : undefined;
+          // Always pass SKYNET_DEV_DIR so scripts can find config
           const child = spawn("bash", args, {
             detached: true,
             stdio: ["ignore", logFd, logFd],
-            ...(env ? { env } : {}),
+            env: { ...process.env, SKYNET_DEV_DIR: devDir },
           });
           child.unref();
         }
