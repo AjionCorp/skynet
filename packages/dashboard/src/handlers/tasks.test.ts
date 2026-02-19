@@ -16,7 +16,7 @@ const mockMkdirSync = vi.mocked(mkdirSync);
 const mockRmdirSync = vi.mocked(rmdirSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
-  return { projectName: "test-project", devDir: "/tmp/test/.dev", lockPrefix: "/tmp/skynet-test-", workers: [], triggerableScripts: [], taskTags: ["FEAT", "FIX", "INFRA", "TEST"], ...overrides };
+  return { projectName: "test-project", devDir: "/tmp/test/.dev", lockPrefix: "/tmp/skynet-test-", workers: [], triggerableScripts: [], taskTags: ["FEAT", "FIX", "INFRA", "TEST", "NMI"], ...overrides };
 }
 function makeRequest(body: unknown): Request {
   return new Request("http://localhost/api/tasks", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });

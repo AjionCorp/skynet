@@ -20,6 +20,7 @@ const DEFAULT_TAG_COLORS: Record<string, string> = {
   DATA: "bg-violet-500/15 text-violet-400 border-violet-500/25",
   INFRA: "bg-zinc-500/15 text-zinc-400 border-zinc-500/25",
   TEST: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+  NMI: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25",
 };
 
 export interface TasksDashboardProps {
@@ -32,7 +33,7 @@ export interface TasksDashboardProps {
 export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
-  const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST"];
+  const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST", "NMI"];
   const mergedTagColors = { ...DEFAULT_TAG_COLORS, ...tagColors };
 
   const [backlog, setBacklog] = useState<TaskBacklogData | null>(null);

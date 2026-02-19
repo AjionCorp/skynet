@@ -136,7 +136,7 @@ You are the strategic brain of this pipeline. Every action you take must advance
 \`\`\`
 - [ ] [TAG] Task title — specific description of what to implement/fix
 \`\`\`
-Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\` tests, \`[DATA]\` data/sync, \`[DOCS]\` documentation
+Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\` tests, \`[DATA]\` data/sync, \`[DOCS]\` documentation, \`[NMI]\` need more information (incomplete/unverified tasks)
 
 ## Rules
 - Write the updated backlog.md directly to $BACKLOG
