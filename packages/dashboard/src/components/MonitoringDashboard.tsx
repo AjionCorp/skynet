@@ -35,6 +35,7 @@ import type {
   LogData,
 } from "../types";
 import { useSkynet } from "./SkynetProvider";
+import { WorkerScaling } from "./WorkerScaling";
 
 // ===== Constants =====
 
@@ -743,6 +744,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       {activeTab === "workers" && (
         <div className="space-y-6">
           <SummaryCards status={status} />
+          <WorkerScaling />
 
           {(["core", "testing", "infra", "data"] as const).map((category) => {
             const categoryWorkers = status.workers.filter((w) => w.category === category);
