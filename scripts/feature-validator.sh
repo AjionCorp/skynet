@@ -25,7 +25,7 @@ echo $$ > "$LOCKFILE"
 trap "rm -f $LOCKFILE" EXIT
 
 log "Feature validator starting."
-tg "🔍 *${SKYNET_PROJECT_NAME^^} FEATURE-VALIDATOR* starting — deep page + API tests"
+tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURE-VALIDATOR* starting — deep page + API tests"
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL" > /dev/null 2>&1; then
@@ -52,7 +52,7 @@ total=$((passed + failed))
 
 if [ "$test_exit" -eq 0 ]; then
   log "All feature tests passed ($passed/$total)."
-  tg "✅ *${SKYNET_PROJECT_NAME^^} FEATURES*: All $total feature tests passed"
+  tg "✅ *$SKYNET_PROJECT_NAME_UPPER FEATURES*: All $total feature tests passed"
   exit 0
 fi
 
@@ -65,7 +65,7 @@ if ! check_claude_auth; then
 fi
 
 log "Feature tests: $passed passed, $failed failed out of $total."
-tg "⚠️ *${SKYNET_PROJECT_NAME^^} FEATURES*: $failed/$total tests failed — analyzing"
+tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER FEATURES*: $failed/$total tests failed — analyzing"
 
 # Count existing unchecked tasks to avoid overfilling backlog
 remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
@@ -116,7 +116,7 @@ $(cat "$BACKLOG")
 if run_agent "$PROMPT" "$LOG"; then
   log "Feature validator analysis completed."
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
-  tg "🔍 *${SKYNET_PROJECT_NAME^^} FEATURES*: Analysis done — $new_remaining tasks in backlog"
+  tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURES*: Analysis done — $new_remaining tasks in backlog"
 else
   exit_code=$?
   log "Feature validator analysis exited with code $exit_code."

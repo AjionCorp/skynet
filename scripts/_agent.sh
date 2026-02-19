@@ -74,7 +74,7 @@ run_agent() {
     # Claude failed — if auto mode, try Codex as fallback
     if [ "$SKYNET_AGENT_PREFERENCE" = "auto" ] && command -v "$SKYNET_CODEX_BIN" &>/dev/null; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code) — falling back to Codex CLI" >> "$log_file"
-      type tg &>/dev/null 2>&1 && tg "🔄 *${SKYNET_PROJECT_NAME^^}*: Claude failed — switching to Codex" 2>/dev/null || true
+      type tg &>/dev/null 2>&1 && tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed — switching to Codex" 2>/dev/null || true
       _run_codex "$prompt" "$log_file"
       return $?
     fi
@@ -84,7 +84,7 @@ run_agent() {
   # Claude unavailable — try Codex if in auto mode
   if [ "$SKYNET_AGENT_PREFERENCE" = "auto" ] && command -v "$SKYNET_CODEX_BIN" &>/dev/null; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude unavailable — falling back to Codex CLI" >> "$log_file"
-    type tg &>/dev/null 2>&1 && tg "🔄 *${SKYNET_PROJECT_NAME^^}*: Claude down — switching to Codex" 2>/dev/null || true
+    type tg &>/dev/null 2>&1 && tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude down — switching to Codex" 2>/dev/null || true
     _run_codex "$prompt" "$log_file"
     return $?
   fi

@@ -18,7 +18,7 @@ if ! check_claude_auth; then
 fi
 
 log "Starting health check."
-tg "🏥 *${SKYNET_PROJECT_NAME^^} HEALTH-CHECK* starting — typecheck + lint"
+tg "🏥 *$SKYNET_PROJECT_NAME_UPPER HEALTH-CHECK* starting — typecheck + lint"
 
 # --- Typecheck ---
 log "Running typecheck..."
@@ -81,10 +81,10 @@ fi
 # --- Summary ---
 if $typecheck_ok; then
   log "Health check: ALL CLEAR"
-  tg "🏥 *${SKYNET_PROJECT_NAME^^} HEALTH*: All clear — typecheck passed, $uncommitted uncommitted files"
+  tg "🏥 *$SKYNET_PROJECT_NAME_UPPER HEALTH*: All clear — typecheck passed, $uncommitted uncommitted files"
 else
   log "Health check: ISSUES FOUND (see blockers.md)"
-  tg "⚠️ *${SKYNET_PROJECT_NAME^^} HEALTH*: Typecheck failing after $MAX_FIX_ATTEMPTS auto-fix attempts. Needs manual review."
+  tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER HEALTH*: Typecheck failing after $MAX_FIX_ATTEMPTS auto-fix attempts. Needs manual review."
 fi
 
 log "Health check finished."

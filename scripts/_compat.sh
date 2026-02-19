@@ -52,6 +52,11 @@ sed_inplace() {
   fi
 }
 
+# Portable uppercase (bash 3.2 doesn't support ${VAR^^})
+to_upper() {
+  echo "$1" | tr '[:lower:]' '[:upper:]'
+}
+
 # Portable readlink -f (resolve symlinks)
 realpath_portable() {
   if command -v realpath &>/dev/null; then

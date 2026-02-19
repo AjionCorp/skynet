@@ -49,7 +49,7 @@ EOF
 fi
 
 log "Server reachable. Starting syncs."
-tg "🔄 *${SKYNET_PROJECT_NAME^^} SYNC-RUNNER* starting — syncing all endpoints"
+tg "🔄 *$SKYNET_PROJECT_NAME_UPPER SYNC-RUNNER* starting — syncing all endpoints"
 
 # --- Run each sync endpoint ---
 # Results stored as: name=status|records|notes
@@ -168,10 +168,10 @@ done
 
 if $has_errors; then
   log "Some syncs had errors. Check blockers.md."
-  tg "⚠️ *${SKYNET_PROJECT_NAME^^} SYNC*: Some endpoints had errors. Check blockers.md"
+  tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER SYNC*: Some endpoints had errors. Check blockers.md"
 else
   log "All available syncs completed OK."
-  tg "🔄 *${SKYNET_PROJECT_NAME^^} SYNC*: All endpoints OK"
+  tg "🔄 *$SKYNET_PROJECT_NAME_UPPER SYNC*: All endpoints OK"
 fi
 
 log "Sync runner finished."

@@ -36,7 +36,7 @@ if [ -n "$_access_token" ] && curl -sf -o /dev/null --max-time 10 \
   if [ -f "$SKYNET_AUTH_FAIL_FLAG" ]; then
     rm -f "$SKYNET_AUTH_FAIL_FLAG"
     log "Claude auth restored!"
-    tg "✅ *${SKYNET_PROJECT_NAME^^} AUTH RESTORED* — Pipeline resuming."
+    tg "✅ *$SKYNET_PROJECT_NAME_UPPER AUTH RESTORED* — Pipeline resuming."
     # Remove auth blocker
     if [ -f "$BLOCKERS" ]; then
       grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" 2>/dev/null || true
@@ -55,7 +55,7 @@ else
   if $should_notify; then
     echo "$now_epoch" > "$SKYNET_AUTH_FAIL_FLAG"
     log "Claude auth FAILED. Skipping Claude workers. Telegram alert sent."
-    tg "🔴 *${SKYNET_PROJECT_NAME^^} AUTH DOWN* — Claude not authenticated. Pipeline paused. Run: claude then /login"
+    tg "🔴 *$SKYNET_PROJECT_NAME_UPPER AUTH DOWN* — Claude not authenticated. Pipeline paused. Run: claude then /login"
     if ! grep -q "Claude Code authentication expired" "$BLOCKERS" 2>/dev/null; then
       echo "- **$(date '+%Y-%m-%d %H:%M')**: Claude Code authentication expired. Run \`claude\` and \`/login\` to restore." >> "$BLOCKERS"
     fi
@@ -126,7 +126,7 @@ if $claude_auth_ok; then
     if $should_kick; then
       date +%s > "$last_kick_file"
       log "Project-driver idle (backlog: $backlog_count). Kicking off."
-      tg "📋 *${SKYNET_PROJECT_NAME^^}*: Kicking off project-driver (backlog: $backlog_count tasks)"
+      tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)"
       nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
     fi
   fi

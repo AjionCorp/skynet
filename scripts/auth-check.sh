@@ -33,7 +33,7 @@ check_claude_auth() {
     if [ -f "$SKYNET_AUTH_FAIL_FLAG" ]; then
       rm -f "$SKYNET_AUTH_FAIL_FLAG"
       log "Claude Code auth restored. Pipeline resuming."
-      tg "✅ *${SKYNET_PROJECT_NAME^^} AUTH RESTORED* — Claude Code authenticated again. Pipeline resuming."
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER AUTH RESTORED* — Claude Code authenticated again. Pipeline resuming."
       # Remove auth blocker from blockers.md
       if [ -f "$BLOCKERS" ]; then
         grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" || true
@@ -59,7 +59,7 @@ check_claude_auth() {
 
   if $should_notify; then
     echo "$now" > "$SKYNET_AUTH_FAIL_FLAG"
-    tg "🔴 *${SKYNET_PROJECT_NAME^^} AUTH DOWN* — Claude Code not authenticated. All pipeline jobs paused. Run: claude then /login"
+    tg "🔴 *$SKYNET_PROJECT_NAME_UPPER AUTH DOWN* — Claude Code not authenticated. All pipeline jobs paused. Run: claude then /login"
     log "Claude Code not authenticated. Telegram alert sent."
     # Add to blockers if not already there
     if ! grep -q "Claude Code authentication expired" "$BLOCKERS" 2>/dev/null; then

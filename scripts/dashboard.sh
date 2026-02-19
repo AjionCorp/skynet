@@ -124,7 +124,7 @@ render() {
 
   # Header
   hline "┌" "┐"
-  row "${BOLD}${WHITE}          ${SKYNET_PROJECT_NAME^^} PIPELINE DASHBOARD${RESET}"
+  row "${BOLD}${WHITE}          $SKYNET_PROJECT_NAME_UPPER PIPELINE DASHBOARD${RESET}"
   row "${DIM}          $now${RESET}"
   hline "├" "┤"
 

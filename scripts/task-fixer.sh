@@ -79,7 +79,7 @@ if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
 fi
 
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
-tg "🔧 *${SKYNET_PROJECT_NAME^^} TASK-FIXER* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
+tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
 # Lock current task
 cat > "$CURRENT_TASK" <<EOF
@@ -185,7 +185,7 @@ EOF
 **Last completed:** $(date '+%Y-%m-%d %H:%M') -- [FIXED] $task_title (merged to $SKYNET_MAIN_BRANCH)
 EOF
       log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-      tg "✅ *${SKYNET_PROJECT_NAME^^} FIXED*: $task_title (attempt $((fix_attempts + 1)))"
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
     else
       safe_checkout "$SKYNET_MAIN_BRANCH"
       new_attempts=$((fix_attempts + 1))
@@ -200,7 +200,7 @@ EOF
 else
   exit_code=$?
   log "Task-fixer failed again (exit $exit_code): $task_title"
-  tg "❌ *${SKYNET_PROJECT_NAME^^} FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
+  tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
 
   # Increment attempt count
   new_attempts=$((fix_attempts + 1))

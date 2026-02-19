@@ -73,6 +73,9 @@ MISSION="$DEV_DIR/mission.md"
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
 
+# Precompute uppercase project name (bash 3.2 doesn't support ${VAR^^})
+SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
+
 # Source notification helpers
 source "$SKYNET_SCRIPTS_DIR/_notify.sh"
 

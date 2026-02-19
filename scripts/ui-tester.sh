@@ -24,7 +24,7 @@ echo $$ > "$LOCKFILE"
 trap "rm -f $LOCKFILE" EXIT
 
 log "UI tester starting."
-tg "🧪 *${SKYNET_PROJECT_NAME^^} UI-TESTER* starting — running Playwright smoke tests"
+tg "🧪 *$SKYNET_PROJECT_NAME_UPPER UI-TESTER* starting — running Playwright smoke tests"
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL" > /dev/null 2>&1; then
@@ -46,7 +46,7 @@ log "$test_output"
 
 if [ "$test_exit" -eq 0 ]; then
   log "All smoke tests passed."
-  tg "🧪 *${SKYNET_PROJECT_NAME^^} TESTS*: All Playwright smoke tests passed"
+  tg "🧪 *$SKYNET_PROJECT_NAME_UPPER TESTS*: All Playwright smoke tests passed"
   # Still check server logs for runtime errors even if tests passed
   if [ -f "$SCRIPTS_DIR/next-dev.log" ]; then
     log "Checking server logs for runtime errors..."
@@ -65,7 +65,7 @@ if ! check_claude_auth; then
 fi
 
 log "Some tests failed. Asking AI agent to analyze and create tasks."
-tg "⚠️ *${SKYNET_PROJECT_NAME^^} TESTS*: Some Playwright tests failed — analyzing"
+tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER TESTS*: Some Playwright tests failed — analyzing"
 
 # Count existing unchecked tasks to avoid overfilling backlog
 remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")

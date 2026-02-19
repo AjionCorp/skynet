@@ -27,7 +27,7 @@ if ! check_claude_auth; then
 fi
 
 log "Project driver starting."
-tg "🧠 *${SKYNET_PROJECT_NAME^^} PROJECT-DRIVER* starting — analyzing state and driving mission forward"
+tg "🧠 *$SKYNET_PROJECT_NAME_UPPER PROJECT-DRIVER* starting — analyzing state and driving mission forward"
 
 # --- Load mission ---
 if [ -f "$MISSION" ]; then
@@ -148,11 +148,11 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 if run_agent "$PROMPT" "$LOG"; then
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   log "Project driver completed successfully."
-  tg "📋 *${SKYNET_PROJECT_NAME^^} BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
+  tg "📋 *$SKYNET_PROJECT_NAME_UPPER BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
 else
   exit_code=$?
   log "Project driver exited with code $exit_code."
-  tg "⚠️ *${SKYNET_PROJECT_NAME^^}*: Project driver failed (exit $exit_code)"
+  tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Project driver failed (exit $exit_code)"
 fi
 
 log "Project driver finished."

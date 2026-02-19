@@ -186,7 +186,7 @@ else
 fi
 
 remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
-tg "🚀 *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}* starting — $remaining_count tasks in backlog"
+tg "🚀 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting — $remaining_count tasks in backlog"
 
 # --- Pre-flight checks: detect stale in-progress task for this worker ---
 if grep -q "in_progress" "$WORKER_TASK_FILE" 2>/dev/null; then
@@ -240,7 +240,7 @@ EOF
 
   log "Starting task ($tasks_attempted/$MAX_TASKS_PER_RUN): $task_title"
   log "Branch: $branch_name"
-  tg "🔨 *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}* starting: $task_title"
+  tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
 
   # Write current task status for this worker
   cat > "$WORKER_TASK_FILE" <<EOF
@@ -297,7 +297,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
   run_agent "$PROMPT" "$LOG" && exit_code=0 || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
-    tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
     safe_checkout "$SKYNET_MAIN_BRANCH"
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
     # Mark claimed task as failed in backlog
@@ -320,7 +320,7 @@ EOF
 
   if ! $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
     log "TYPECHECK FAILED. Branch NOT merged."
-    tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID} FAILED*: $task_title (typecheck failed)"
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (typecheck failed)"
     safe_checkout "$SKYNET_MAIN_BRANCH"
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed | 0 | pending |" >> "$FAILED"
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed)_"
@@ -346,14 +346,14 @@ EOF
     if echo "$api_check" | grep -qi "schema cache\|PGRST\|Could not query"; then
       db_healthy=false
       log "WARNING: Supabase DB is down (PGRST002). Skipping Playwright gate — not a code issue."
-      tg "⚠️ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}*: Supabase DB down — skipping Playwright gate for $task_title"
+      tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Supabase DB down — skipping Playwright gate for $task_title"
     fi
 
     if $db_healthy; then
       log "Dev server reachable. Running Playwright smoke tests..."
       if ! (cd "$PROJECT_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
         log "PLAYWRIGHT FAILED. Branch NOT merged."
-        tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID} FAILED*: $task_title (playwright failed)"
+        tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (playwright failed)"
         cd "$PROJECT_DIR"
         safe_checkout "$SKYNET_MAIN_BRANCH"
         echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright tests failed | 0 | pending |" >> "$FAILED"
@@ -390,7 +390,7 @@ EOF
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
     _CURRENT_TASK_TITLE=""
-    tg "❌ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID}*: merge failed for $task_title"
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
     safe_checkout "$SKYNET_MAIN_BRANCH"
     continue
   fi
@@ -419,7 +419,7 @@ EOF
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
-  tg "✅ *${SKYNET_PROJECT_NAME^^} W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
+  tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
 
   # Ensure we're on main for next iteration
   safe_checkout "$SKYNET_MAIN_BRANCH"
