@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add task duration tracking to completed.md — in dev-worker.sh, record task start timestamp (already available as `$STARTED`) and compute duration when logging to completed.md. Add a Duration column to the completed.md table: `| Date | Task | Branch | Duration | Notes |`. Format as human-readable (e.g., "23m", "1h 12m"). Also update task-fixer.sh to track fix duration. Update the pipeline-status handler in packages/dashboard/src/handlers/pipeline-status.ts to parse and include average task duration in its response
+## [INFRA] Add root `test` script and CI unit test job — add `"test": "pnpm -r --filter '@ajioncorp/*' test"` to root package.json so `pnpm test` runs vitest in packages/dashboard (which already has 42 unit tests across 4 test files). Add a `unit-test` job to .github/workflows/ci.yml that runs `pnpm test` after install, alongside the existing typecheck and lint-sh jobs
 **Status:** completed
-**Started:** 2026-02-19 15:26
+**Started:** 2026-02-19 16:36
 **Completed:** 2026-02-19
-**Branch:** dev/add-task-duration-tracking-to-completedm
+**Branch:** dev/add-root-test-script-and-ci-unit-test-jo
 **Worker:** 1
 
 ### Changes
