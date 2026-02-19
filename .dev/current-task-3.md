@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add Linux cron support to monitoring agents dashboard handler — FRESH implementation (previous branch has merge conflict). In `packages/dashboard/src/handlers/monitoring-agents.ts`, add OS detection via `process.platform`. On `linux`, parse `crontab -l` output for entries between `# BEGIN skynet` / `# END skynet` markers (matching the format written by `packages/cli/src/commands/setup-agents.ts`). Map cron expressions to human-readable intervals (e.g., `*/3 * * * *` -> "Every 3 minutes"). Return the same `AgentInfo[]` response shape. On `darwin`, keep existing `launchctl` logic unchanged. Add a helper `parseCronSchedule(expr: string): { intervalSeconds: number, human: string }`
+## [TEST] Add Playwright e2e tests for admin dashboard core flows — create `packages/admin/e2e/dashboard.spec.ts` and `packages/admin/playwright.config.ts`. Configure Playwright with `webServer` pointing to `pnpm dev` on port 3100. Test cases: (1) pipeline page loads and shows health badge, (2) tasks page loads and displays pending/claimed/done counts, (3) monitoring page shows agent status, (4) sidebar navigation works between all tabs, (5) worker scaling controls render with +/- buttons, (6) mission page loads after mission viewer is built. Add `"test:e2e": "playwright test"` to `packages/admin/package.json`
 **Status:** completed
-**Started:** 2026-02-19 17:19
+**Started:** 2026-02-19 17:24
 **Completed:** 2026-02-19
-**Branch:** dev/add-linux-cron-support-to-monitoring-age
+**Branch:** dev/add-playwright-e2e-tests-for-admin-dashb
 **Worker:** 3
 
 ### Changes
