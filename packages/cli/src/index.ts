@@ -6,6 +6,7 @@ import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { logsCommand } from "./commands/logs.js";
 import { versionCommand } from "./commands/version.js";
 
 const program = new Command();
@@ -54,6 +55,16 @@ program
   .description("Run diagnostics on the Skynet pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(doctorCommand);
+
+program
+  .command("logs")
+  .description("View pipeline log files")
+  .argument("[type]", "Log type: worker, fixer, watchdog, health-check")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--id <n>", "Worker ID (for worker logs, default: 1)")
+  .option("--tail <n>", "Number of lines to show (default: 50)")
+  .option("--follow", "Follow log output (stream new lines)")
+  .action(logsCommand);
 
 program
   .command("version")
