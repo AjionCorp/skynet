@@ -231,13 +231,16 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         };
       });
 
-      // Blockers
+      // Blockers — only parse the ## Active section
       const blockersRaw = readDevFile(devDir, "blockers.md");
+      const activeMatch = blockersRaw.match(/## Active\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
+      const activeSection = activeMatch?.[1]?.trim() ?? "";
       const hasBlockers =
-        blockersRaw.length > 0 &&
-        !blockersRaw.includes("No active blockers");
+        activeSection.length > 0 &&
+        activeSection.toLowerCase() !== "none" &&
+        !activeSection.includes("No active blockers");
       const blockerLines = hasBlockers
-        ? blockersRaw.split("\n").filter((l) => l.startsWith("- "))
+        ? activeSection.split("\n").filter((l) => l.startsWith("- "))
         : [];
 
       // Sync health (from sync-health.md)

@@ -123,7 +123,7 @@ describe("createPipelineStatusHandler", () => {
 
   it("detects blockers", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
-      if (filename === "blockers.md") return "- Missing API key\n- Waiting on approval";
+      if (filename === "blockers.md") return "## Active\n\n- Missing API key\n- Waiting on approval";
       return "";
     });
     const handler = createPipelineStatusHandler(makeConfig());
