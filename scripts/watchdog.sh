@@ -9,7 +9,6 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 LOG="$SCRIPTS_DIR/watchdog.log"
-AUTH_NOTIFY_INTERVAL=3600
 
 cd "$PROJECT_DIR"
 
@@ -69,12 +68,15 @@ crash_recovery() {
   local recovered=0
 
   # Phase 1: Check all known lock files for stale/zombie PIDs
-  local all_locks=(
-    "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock"
-    "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock"
-    "${SKYNET_LOCK_PREFIX}-task-fixer.lock"
-    "${SKYNET_LOCK_PREFIX}-project-driver.lock"
-  )
+  local all_locks=()
+  for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+    all_locks+=("${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
+  done
+  all_locks+=("${SKYNET_LOCK_PREFIX}-task-fixer.lock")
+  for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+    all_locks+=("${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
+  done
+  all_locks+=("${SKYNET_LOCK_PREFIX}-project-driver.lock")
 
   for lockfile in "${all_locks[@]}"; do
     [ -f "$lockfile" ] || continue
@@ -112,7 +114,7 @@ crash_recovery() {
   done
 
   # Phase 2: Recover partial task states — unclaim [>] tasks from dead workers
-  for wid in 1 2; do
+  for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
     local wid_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
     local task_file="$DEV_DIR/current-task-${wid}.md"
 
@@ -134,10 +136,13 @@ crash_recovery() {
   # Also check for any [>] entries in backlog with no live worker at all
   if [ -f "$BACKLOG" ]; then
     local any_worker_alive=false
-    for wid in 1 2; do
+    for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
       is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock" && any_worker_alive=true
     done
     is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && any_worker_alive=true
+    for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+      is_running "${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock" && any_worker_alive=true
+    done
 
     if ! $any_worker_alive; then
       local claimed_lines
@@ -154,11 +159,14 @@ crash_recovery() {
   fi
 
   # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
-  local worktree_dirs=(
-    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w1:${SKYNET_LOCK_PREFIX}-dev-worker-1.lock"
-    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w2:${SKYNET_LOCK_PREFIX}-dev-worker-2.lock"
-    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
-  )
+  local worktree_dirs=()
+  for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+    worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${_wid}:${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
+  done
+  worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock")
+  for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+    worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-${_fid}:${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
+  done
 
   for entry in "${worktree_dirs[@]}"; do
     local wt_dir="${entry%%:*}"
@@ -199,45 +207,11 @@ crash_recovery
 validate_backlog
 
 # --- Auth pre-check: don't kick off Claude workers if auth is down ---
-# Read token from cache file (written by auth-refresh LaunchAgent)
+# Uses shared check_claude_auth which auto-triggers auth-refresh on failure
+source "$SCRIPTS_DIR/auth-check.sh"
 claude_auth_ok=false
-_access_token=""
-[ -f "$SKYNET_AUTH_TOKEN_CACHE" ] && _access_token=$(cat "$SKYNET_AUTH_TOKEN_CACHE" 2>/dev/null)
-if [ -n "$_access_token" ] && curl -sf -o /dev/null --max-time 10 \
-     https://api.anthropic.com/api/oauth/claude_cli/roles \
-     -H "Authorization: Bearer $_access_token" \
-     -H "Content-Type: application/json"; then
+if check_claude_auth; then
   claude_auth_ok=true
-  # Clear failure flag if it was set
-  if [ -f "$SKYNET_AUTH_FAIL_FLAG" ]; then
-    rm -f "$SKYNET_AUTH_FAIL_FLAG"
-    log "Claude auth restored!"
-    tg "✅ *$SKYNET_PROJECT_NAME_UPPER AUTH RESTORED* — Pipeline resuming."
-    # Remove auth blocker
-    if [ -f "$BLOCKERS" ]; then
-      grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" 2>/dev/null || true
-      mv "$BLOCKERS.tmp" "$BLOCKERS"
-    fi
-  fi
-else
-  # Auth failed — throttle Telegram alerts
-  now_epoch=$(date +%s)
-  should_notify=true
-  if [ -f "$SKYNET_AUTH_FAIL_FLAG" ]; then
-    last_notify=$(cat "$SKYNET_AUTH_FAIL_FLAG")
-    elapsed=$((now_epoch - last_notify))
-    [ "$elapsed" -lt "$AUTH_NOTIFY_INTERVAL" ] && should_notify=false
-  fi
-  if $should_notify; then
-    echo "$now_epoch" > "$SKYNET_AUTH_FAIL_FLAG"
-    log "Claude auth FAILED. Skipping Claude workers. Telegram alert sent."
-    tg "🔴 *$SKYNET_PROJECT_NAME_UPPER AUTH DOWN* — Claude not authenticated. Pipeline paused. Run: claude then /login"
-    if ! grep -q "Claude Code authentication expired" "$BLOCKERS" 2>/dev/null; then
-      echo "- **$(date '+%Y-%m-%d %H:%M')**: Claude Code authentication expired. Run \`claude\` and \`/login\` to restore." >> "$BLOCKERS"
-    fi
-  else
-    log "Claude auth still down. Skipping Claude workers. (alert throttled)"
-  fi
 fi
 
 # Count backlog tasks (grep -c exits 1 on no match, so use || true and default)
@@ -250,15 +224,19 @@ failed_pending=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
 failed_pending=${failed_pending:-0}
 failed_pending=$((failed_pending + 0))
 
-# Check worker states
-w1_running=false
-w2_running=false
-fixer_running=false
-driver_running=false
+# Check worker states dynamically
+dev_workers_running=0
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+  is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock" && dev_workers_running=$((dev_workers_running + 1))
+done
 
-is_running "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock" && w1_running=true
-is_running "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock" && w2_running=true
-is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && fixer_running=true
+fixers_running=0
+is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && fixers_running=$((fixers_running + 1))
+for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+  is_running "${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock" && fixers_running=$((fixers_running + 1))
+done
+
+driver_running=false
 is_running "${SKYNET_LOCK_PREFIX}-project-driver.lock" && driver_running=true
 
 # --- Stale heartbeat detection ---
@@ -342,37 +320,125 @@ EOF
 }
 
 # Check each worker for stale heartbeats
-for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-2}"); do
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   _handle_stale_worker "$_wid"
 done
 
 # Refresh worker running state after potential kills
-w1_running=false; w2_running=false
-is_running "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock" && w1_running=true
-is_running "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock" && w2_running=true
+dev_workers_running=0
+for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+  is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock" && dev_workers_running=$((dev_workers_running + 1))
+done
+fixers_running=0
+is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && fixers_running=$((fixers_running + 1))
+for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+  is_running "${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock" && fixers_running=$((fixers_running + 1))
+done
+
+# --- Stale branch cleanup for permanently failed tasks ---
+# Tasks that hit max fix attempts get marked "blocked" in failed-tasks.md and
+# escalated to blockers.md. After 24h, their local branches are just clutter.
+_cleanup_stale_branches() {
+  [ -f "$FAILED" ] || return 0
+  [ -f "$BLOCKERS" ] || return 0
+
+  local cleaned=0
+  local now_epoch
+  now_epoch=$(date +%s)
+  local cutoff_secs=$((24 * 60 * 60))
+
+  # Find blocked entries in failed-tasks.md (attempts >= MAX_FIX_ATTEMPTS, status=blocked)
+  local blocked_lines
+  blocked_lines=$(grep '| blocked |' "$FAILED" 2>/dev/null || true)
+  [ -z "$blocked_lines" ] && return 0
+
+  while IFS= read -r line; do
+    # Extract fields: | Date | Task | Branch | Error | Attempts | Status |
+    local task_title branch_name attempts
+    task_title=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+    branch_name=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
+    attempts=$(echo "$line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
+
+    # Skip if attempts below threshold (safety check)
+    if [ "$attempts" -lt "$SKYNET_MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
+      continue
+    fi
+
+    # Skip if branch is empty or already cleaned (e.g., "merged to main")
+    [ -z "$branch_name" ] && continue
+    echo "$branch_name" | grep -q "merged" && continue
+
+    # Check blockers.md for when this task was escalated
+    # Blocker format: - **YYYY-MM-DD**: Task 'title' failed N times...
+    local blocker_date
+    blocker_date=$(grep -F "$task_title" "$BLOCKERS" 2>/dev/null | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -1 || true)
+    [ -z "$blocker_date" ] && continue
+
+    # Parse blocker date to epoch (cross-platform)
+    local blocker_epoch
+    if $SKYNET_IS_MACOS; then
+      blocker_epoch=$(date -j -f '%Y-%m-%d' "$blocker_date" +%s 2>/dev/null || echo 0)
+    else
+      blocker_epoch=$(date -d "$blocker_date" +%s 2>/dev/null || echo 0)
+    fi
+    [ "$blocker_epoch" -eq 0 ] && continue
+
+    local age_secs=$(( now_epoch - blocker_epoch ))
+    if [ "$age_secs" -lt "$cutoff_secs" ]; then
+      continue
+    fi
+
+    # Branch has been blocked for >24h — clean up if it still exists locally
+    if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+      git branch -D "$branch_name" 2>/dev/null || true
+      log "Deleted stale branch: $branch_name (blocked ${age_secs}s ago, task: $task_title)"
+      cleaned=$((cleaned + 1))
+    fi
+  done <<< "$blocked_lines"
+
+  # Prune worktrees once if any branches were cleaned
+  if [ "$cleaned" -gt 0 ]; then
+    git worktree prune 2>/dev/null || true
+    log "Stale branch cleanup: removed $cleaned branch(es) from permanently failed tasks"
+    tg "🧹 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Cleaned $cleaned stale branch(es) from permanently failed tasks"
+  fi
+}
+
+cd "$PROJECT_DIR"
+_cleanup_stale_branches
 
 # --- Only kick Claude-dependent workers if auth is OK ---
 if $claude_auth_ok; then
-  # Rule 1a: Backlog has tasks + worker 1 idle → kick off worker 1
-  if [ "$backlog_count" -gt 0 ] && ! $w1_running; then
-    log "Backlog has $backlog_count tasks, worker 1 idle. Kicking off."
-    tg "👁 *WATCHDOG*: Kicking off dev-worker 1 ($backlog_count tasks waiting)"
-    nohup bash "$SCRIPTS_DIR/dev-worker.sh" 1 >> "$SCRIPTS_DIR/dev-worker-1.log" 2>&1 &
-  fi
+  # Rule 1: Kick dev-workers proportional to backlog size
+  # Worker N starts when backlog has >= N tasks and worker N is idle
+  for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+    if [ "$backlog_count" -ge "$_wid" ] && ! is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock"; then
+      log "Backlog has $backlog_count tasks (>=$_wid), worker $_wid idle. Kicking off."
+      tg "👁 *WATCHDOG*: Kicking off dev-worker $_wid ($backlog_count tasks waiting)"
+      SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/dev-worker.sh" "$_wid" >> "$SCRIPTS_DIR/dev-worker-${_wid}.log" 2>&1 &
+    fi
+  done
 
-  # Rule 1b: Backlog has 2+ tasks + worker 2 idle → kick off worker 2
-  if [ "$backlog_count" -ge 2 ] && ! $w2_running; then
-    log "Backlog has $backlog_count tasks (>=2), worker 2 idle. Kicking off."
-    tg "👁 *WATCHDOG*: Kicking off dev-worker 2 ($backlog_count tasks waiting)"
-    nohup bash "$SCRIPTS_DIR/dev-worker.sh" 2 >> "$SCRIPTS_DIR/dev-worker-2.log" 2>&1 &
-  fi
-
-  # Rule 2: Failed tasks pending + fixer idle → kick off task-fixer
-  if [ "$failed_pending" -gt 0 ] && ! $fixer_running; then
-    log "Failed tasks pending ($failed_pending), task-fixer idle. Kicking off."
-    tg "👁 *WATCHDOG*: Kicking off task-fixer ($failed_pending failed tasks)"
-    nohup bash "$SCRIPTS_DIR/task-fixer.sh" >> "$SCRIPTS_DIR/task-fixer.log" 2>&1 &
-  fi
+  # Rule 2: Kick task-fixers proportional to failed task count
+  # Fixer N starts when failed_pending >= N and fixer N is idle
+  for _fid in $(seq 1 "${SKYNET_MAX_FIXERS:-3}"); do
+    if [ "$failed_pending" -ge "$_fid" ]; then
+      _fixer_lock=""
+      _fixer_log=""
+      if [ "$_fid" = "1" ]; then
+        _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+        _fixer_log="$SCRIPTS_DIR/task-fixer.log"
+      else
+        _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
+        _fixer_log="$SCRIPTS_DIR/task-fixer-${_fid}.log"
+      fi
+      if ! is_running "$_fixer_lock"; then
+        log "Failed tasks pending ($failed_pending, >=$_fid), task-fixer $_fid idle. Kicking off."
+        tg "👁 *WATCHDOG*: Kicking off task-fixer $_fid ($failed_pending failed tasks)"
+        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/task-fixer.sh" "$_fid" >> "$_fixer_log" 2>&1 &
+      fi
+    fi
+  done
 
   # Rule 3: Kick off project-driver if needed (rate-limited)
   if ! $driver_running; then
@@ -393,7 +459,7 @@ if $claude_auth_ok; then
       date +%s > "$last_kick_file"
       log "Project-driver idle (backlog: $backlog_count). Kicking off."
       tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)"
-      nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+      SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
     fi
   fi
 fi
