@@ -19,6 +19,9 @@ export type {
   TaskBacklogData,
   TaskCreatePayload,
   SyncStatus,
+  WorkerScalePayload,
+  WorkerScaleInfo,
+  WorkerScaleResult,
 } from "./types";
 
 // Config helpers
@@ -40,6 +43,7 @@ export {
   createMonitoringAgentsHandler,
   createMonitoringLogsHandler,
   createTasksHandlers,
+  createWorkerScalingHandler,
 } from "./handlers";
 
 // Dashboard UI components

@@ -20,6 +20,7 @@ export interface SkynetConfig {
   taskTags: string[];
   scriptsDir?: string; // defaults to devDir + "/scripts"
   agentPrefix?: string; // for LaunchAgent labels
+  maxWorkers?: number; // max dev-worker instances (default 4)
 }
 
 // ===== Worker / Pipeline Types =====
@@ -233,4 +234,26 @@ export interface PromptTemplate {
   description: string;
   category: "core" | "testing" | "infra" | "data";
   prompt: string;
+}
+
+// ===== Worker Scaling Types =====
+
+export interface WorkerScalePayload {
+  workerType: string;
+  count: number;
+}
+
+export interface WorkerScaleInfo {
+  type: string;
+  label: string;
+  count: number;
+  maxCount: number;
+  pids: number[];
+}
+
+export interface WorkerScaleResult {
+  workerType: string;
+  previousCount: number;
+  currentCount: number;
+  maxCount: number;
 }
