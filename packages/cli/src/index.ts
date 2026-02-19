@@ -6,6 +6,7 @@ import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { versionCommand } from "./commands/version.js";
 
 const program = new Command();
 
@@ -53,5 +54,10 @@ program
   .description("Run diagnostics on the Skynet pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(doctorCommand);
+
+program
+  .command("version")
+  .description("Show CLI version and check for updates")
+  .action(versionCommand);
 
 program.parse();
