@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # dev-worker.sh — Pick next task from backlog, implement it via Claude Code
-# Flow: branch -> implement -> typecheck -> playwright -> merge to main -> cleanup
+# Flow: worktree -> implement -> typecheck -> playwright -> merge to main -> cleanup
+# Uses git worktrees so multiple workers can run concurrently without conflicts.
 # On failure: moves task to failed-tasks.md, then tries the NEXT task
 # Supports multiple workers: pass worker ID as arg (default: 1)
 #   bash dev-worker.sh      → worker 1
@@ -21,6 +22,9 @@ BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 # Per-worker task file (worker 1 → current-task-1.md, worker 2 → current-task-2.md)
 WORKER_TASK_FILE="$DEV_DIR/current-task-${WORKER_ID}.md"
+
+# Per-worker worktree directory (isolated from other workers)
+WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${WORKER_ID}"
 
 cd "$PROJECT_DIR"
 
@@ -87,12 +91,9 @@ remove_from_backlog() {
 }
 
 # --- Helper: mark a backlog item as checked (completed/failed) ---
-# Matches both claimed [>] and unclaimed [ ] versions of the task title,
-# because safe_checkout may revert the claim marker before we get here.
 mark_in_backlog() {
   local old_line="$1"
   local new_line="$2"
-  # Extract the task title (strip the leading "- [>] " or "- [ ] ")
   local title="${old_line#- \[>\] }"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
@@ -117,27 +118,40 @@ unclaim_task() {
   release_lock
 }
 
-# --- Helper: force-switch to a branch, cleaning dirty .dev/ and test files ---
-# Preserves backlog.md (shared state between workers) and completed/failed logs.
-safe_checkout() {
-  local target_branch="$1"
-  cp "$BACKLOG" "/tmp/${SKYNET_PROJECT_NAME}-backlog-save-w${WORKER_ID}.md" 2>/dev/null || true
-  cp "$COMPLETED" "/tmp/${SKYNET_PROJECT_NAME}-completed-save-w${WORKER_ID}.md" 2>/dev/null || true
-  cp "$FAILED" "/tmp/${SKYNET_PROJECT_NAME}-failed-save-w${WORKER_ID}.md" 2>/dev/null || true
-  git checkout -- . 2>/dev/null || true
-  git clean -fd . 2>/dev/null || true
-  git checkout "$target_branch" 2>/dev/null || true
-  # Verify checkout succeeded before restoring state
-  local actual_branch
-  actual_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  if [ "$actual_branch" != "$target_branch" ]; then
-    log "WARNING: safe_checkout failed — wanted $target_branch, got $actual_branch"
-    return 1
+# --- Worktree helpers ---
+# Each worker gets its own worktree directory so multiple workers can run
+# on different branches without conflicting in the same working directory.
+
+# Create a worktree for a feature branch. Installs deps via pnpm.
+setup_worktree() {
+  local branch="$1"
+  local from_main="${2:-true}"  # true = create new branch from main, false = use existing
+
+  # Clean any leftover worktree from previous runs
+  cleanup_worktree 2>/dev/null || true
+
+  if $from_main; then
+    git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH"
+  else
+    git worktree add "$WORKTREE_DIR" "$branch"
   fi
-  # Restore pipeline state files
-  cp "/tmp/${SKYNET_PROJECT_NAME}-backlog-save-w${WORKER_ID}.md" "$BACKLOG" 2>/dev/null || true
-  cp "/tmp/${SKYNET_PROJECT_NAME}-completed-save-w${WORKER_ID}.md" "$COMPLETED" 2>/dev/null || true
-  cp "/tmp/${SKYNET_PROJECT_NAME}-failed-save-w${WORKER_ID}.md" "$FAILED" 2>/dev/null || true
+
+  # Install dependencies (fast — pnpm content-addressable store is cached)
+  log "Installing deps in worktree..."
+  (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+}
+
+# Remove worktree. Optionally delete the branch too.
+cleanup_worktree() {
+  local delete_branch="${1:-}"
+  cd "$PROJECT_DIR"  # ensure we're not inside the worktree
+  if [ -d "$WORKTREE_DIR" ]; then
+    git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
+  fi
+  git worktree prune 2>/dev/null || true
+  if [ -n "$delete_branch" ]; then
+    git branch -D "$delete_branch" 2>/dev/null || true
+  fi
 }
 
 # --- PID lock to prevent duplicate runs (per worker ID) ---
@@ -150,6 +164,8 @@ echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
+  # Clean up worktree if it exists
+  cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
@@ -252,22 +268,31 @@ EOF
 **Worker:** $WORKER_ID
 EOF
 
-  # Create feature branch from main (force-clean working tree first)
-  safe_checkout "$SKYNET_MAIN_BRANCH"
-  if ! git checkout -b "$branch_name" 2>/dev/null; then
-    # Branch already exists (from a prior failed attempt) — safe_checkout handles dirty files
-    safe_checkout "$branch_name"
+  # --- Set up isolated worktree for this task ---
+  if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+    # Branch exists from a prior failed attempt — reuse it
+    if ! setup_worktree "$branch_name" false; then
+      log "Failed to create worktree for existing branch $branch_name — unclaiming."
+      cleanup_worktree "$branch_name"
+      unclaim_task "$task_title"
+      _CURRENT_TASK_TITLE=""
+      continue
+    fi
+    log "Reusing existing branch $branch_name in worktree"
+  else
+    # Create new feature branch from main
+    if ! setup_worktree "$branch_name" true; then
+      log "Failed to create worktree for $branch_name — unclaiming."
+      cleanup_worktree "$branch_name"
+      unclaim_task "$task_title"
+      _CURRENT_TASK_TITLE=""
+      continue
+    fi
   fi
-  # Verify we're actually on the right branch (checkout can silently fail)
-  current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-  if [ "$current_branch" != "$branch_name" ]; then
-    log "CHECKOUT FAILED: expected $branch_name, got $current_branch — unclaiming task."
-    unclaim_task "$task_title"
-    continue
-  fi
+  log "Worktree ready at $WORKTREE_DIR"
 
-  # --- Implementation via Claude Code ---
-  PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.
+  # --- Implementation via Claude Code (runs in isolated worktree) ---
+  PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
 Your task: $task_title
 
@@ -294,13 +319,12 @@ If you encounter a blocker you cannot resolve (missing API keys, unclear require
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
-  run_agent "$PROMPT" "$LOG" && exit_code=0 || exit_code=$?
+  (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
-    safe_checkout "$SKYNET_MAIN_BRANCH"
+    cleanup_worktree "$branch_name"
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
-    # Mark claimed task as failed in backlog
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
     _CURRENT_TASK_TITLE=""
     cat > "$WORKER_TASK_FILE" <<EOF
@@ -314,14 +338,15 @@ EOF
 
   log "Claude Code completed. Running checks before merge..."
 
-  # --- Gate 1: Typecheck ---
-  git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true
-  git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true
+  # --- Gate 1: Typecheck (in worktree) ---
+  # Clean .dev/ changes Claude may have made in the worktree
+  (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
+  (cd "$WORKTREE_DIR" && git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true)
 
-  if ! $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
+  if ! (cd "$WORKTREE_DIR" && $SKYNET_TYPECHECK_CMD) >> "$LOG" 2>&1; then
     log "TYPECHECK FAILED. Branch NOT merged."
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (typecheck failed)"
-    safe_checkout "$SKYNET_MAIN_BRANCH"
+    cleanup_worktree  # Keep branch for task-fixer
     echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed | 0 | pending |" >> "$FAILED"
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed)_"
     _CURRENT_TASK_TITLE=""
@@ -337,10 +362,7 @@ EOF
   log "Typecheck passed."
 
   # --- Gate 2: Playwright smoke tests (if dev server is running) ---
-  # Only run smoke test as the merge gate — full suite is run by ui-tester/feature-validator
   if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-    # Pre-check: is the database reachable? If Supabase is down, skip Playwright
-    # (API routes will all 500 with "schema cache" errors regardless of code quality)
     db_healthy=true
     api_check=$(curl -sf "${SKYNET_DEV_SERVER_URL}/api/gov/officials?page=1&pageSize=1" 2>/dev/null || echo '{"error":"unreachable"}')
     if echo "$api_check" | grep -qi "schema cache\|PGRST\|Could not query"; then
@@ -351,11 +373,10 @@ EOF
 
     if $db_healthy; then
       log "Dev server reachable. Running Playwright smoke tests..."
-      if ! (cd "$PROJECT_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
+      if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
         log "PLAYWRIGHT FAILED. Branch NOT merged."
         tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (playwright failed)"
-        cd "$PROJECT_DIR"
-        safe_checkout "$SKYNET_MAIN_BRANCH"
+        cleanup_worktree  # Keep branch for task-fixer
         echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright tests failed | 0 | pending |" >> "$FAILED"
         mark_in_backlog "- [>] $task_title" "- [x] $task_title _(playwright failed)_"
         _CURRENT_TASK_TITLE=""
@@ -383,7 +404,10 @@ EOF
   # --- All gates passed -- merge to main ---
   log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
 
-  safe_checkout "$SKYNET_MAIN_BRANCH"
+  # Remove worktree first (branch stays), then merge from main repo
+  cleanup_worktree
+  cd "$PROJECT_DIR"
+
   if ! git merge "$branch_name" --no-edit 2>>"$LOG"; then
     log "MERGE FAILED for $branch_name — aborting and moving to failed."
     git merge --abort 2>/dev/null || true
@@ -391,7 +415,6 @@ EOF
     mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
     _CURRENT_TASK_TITLE=""
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
-    safe_checkout "$SKYNET_MAIN_BRANCH"
     continue
   fi
   git branch -d "$branch_name" 2>/dev/null || true
@@ -413,16 +436,13 @@ EOF
 -- See git log for details
 EOF
 
-  # Commit pipeline status updates so safe_checkout won't revert them
+  # Commit pipeline status updates
   git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
   git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
-
-  # Ensure we're on main for next iteration
-  safe_checkout "$SKYNET_MAIN_BRANCH"
 done
 
 log "Dev worker $WORKER_ID finished. Attempted $tasks_attempted task(s)."

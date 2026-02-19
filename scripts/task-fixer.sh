@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # task-fixer.sh — Analyzes failed tasks, diagnoses root cause, attempts fixes
 # Reads failed-tasks.md, picks the oldest pending failure, tries to resolve it
+# Uses git worktrees for branch isolation (same as dev-worker.sh).
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
@@ -8,16 +9,37 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 LOG="$SCRIPTS_DIR/task-fixer.log"
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
 
+# Worktree for task-fixer (isolated from dev-workers)
+WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer"
+
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# --- Helper: force-switch to a branch, cleaning .dev/ changes ---
-safe_checkout() {
-  local target_branch="$1"
-  git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true
-  git clean -fd "${DEV_DIR##*/}/" test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true
-  git checkout "$target_branch" 2>/dev/null || true
+# --- Worktree helpers ---
+setup_worktree() {
+  local branch="$1"
+  local from_main="${2:-true}"
+  cleanup_worktree 2>/dev/null || true
+  if $from_main; then
+    git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH"
+  else
+    git worktree add "$WORKTREE_DIR" "$branch"
+  fi
+  log "Installing deps in worktree..."
+  (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+}
+
+cleanup_worktree() {
+  local delete_branch="${1:-}"
+  cd "$PROJECT_DIR"
+  if [ -d "$WORKTREE_DIR" ]; then
+    git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
+  fi
+  git worktree prune 2>/dev/null || true
+  if [ -n "$delete_branch" ]; then
+    git branch -D "$delete_branch" 2>/dev/null || true
+  fi
 }
 
 # --- Helper: update a line in failed-tasks.md by matching task title ---
@@ -39,7 +61,7 @@ if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
   exit 0
 fi
 echo $$ > "$LOCKFILE"
-trap "rm -f $LOCKFILE" EXIT
+trap 'cleanup_worktree 2>/dev/null || true; rm -f "$LOCKFILE"' EXIT
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
@@ -91,21 +113,20 @@ cat > "$CURRENT_TASK" <<EOF
 **Mode:** task-fixer (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)
 EOF
 
-# Checkout the failed branch if it exists, otherwise create fresh from main
-safe_checkout "$SKYNET_MAIN_BRANCH"
+# --- Set up worktree for the failed branch ---
 if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
-  git checkout "$branch_name"
-  log "Checked out existing branch: $branch_name"
+  setup_worktree "$branch_name" false
+  log "Checked out existing branch in worktree: $branch_name"
 else
   branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
-  git checkout -b "$branch_name"
-  log "Created new fix branch: $branch_name"
+  setup_worktree "$branch_name" true
+  log "Created new fix branch in worktree: $branch_name"
 fi
 
 # Get recent log context for the failure
-recent_log=$(tail -100 "$SCRIPTS_DIR/dev-worker.log" 2>/dev/null | grep -A 50 "$task_title" | tail -50 || echo "No log context available")
+recent_log=$(tail -100 "$SCRIPTS_DIR/dev-worker-1.log" 2>/dev/null | grep -A 50 "$task_title" | tail -50 || echo "No log context available")
 
-PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.
+PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
 A previous attempt to implement this task FAILED. Your job is to diagnose why and fix it.
 
@@ -134,17 +155,17 @@ If this task is genuinely impossible right now (missing API key, external depend
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
-if run_agent "$PROMPT" "$LOG"; then
+if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   log "Task-fixer succeeded. Verifying typecheck before merge..."
 
-  # Clean .dev/ before typecheck to avoid false failures
-  git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true
-  git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true
+  # Clean .dev/ in worktree before typecheck
+  (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
+  (cd "$WORKTREE_DIR" && git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true)
 
-  # Gate 1: Typecheck
-  if ! $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
+  # Gate 1: Typecheck (in worktree)
+  if ! (cd "$WORKTREE_DIR" && $SKYNET_TYPECHECK_CMD) >> "$LOG" 2>&1; then
     log "Typecheck still failing after fix. Branch NOT merged."
-    safe_checkout "$SKYNET_MAIN_BRANCH"
+    cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed after fix attempt $new_attempts | $new_attempts | pending |"
     cat > "$CURRENT_TASK" <<EOF
@@ -155,24 +176,24 @@ EOF
   else
     log "Typecheck passed."
 
-    # Gate 2: Playwright (if dev server running)
+    # Gate 2: Playwright (in worktree, if dev server running)
     playwright_ok=true
     if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
       log "Running Playwright smoke tests..."
-      if ! (cd "$PROJECT_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test --reporter=list >> "$LOG" 2>&1); then
+      if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test --reporter=list >> "$LOG" 2>&1); then
         log "Playwright FAILED. Branch NOT merged."
         playwright_ok=false
       else
         log "Playwright tests passed."
       fi
-      cd "$PROJECT_DIR"
     else
       log "Dev server not reachable. Skipping Playwright."
     fi
 
     if $playwright_ok; then
       log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
-      safe_checkout "$SKYNET_MAIN_BRANCH"
+      cleanup_worktree  # Remove worktree, keep branch for merge
+      cd "$PROJECT_DIR"
       git merge "$branch_name" --no-edit
       git branch -d "$branch_name"
 
@@ -187,7 +208,7 @@ EOF
       log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
     else
-      safe_checkout "$SKYNET_MAIN_BRANCH"
+      cleanup_worktree  # Keep branch for next attempt
       new_attempts=$((fix_attempts + 1))
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright failed after fix attempt $new_attempts | $new_attempts | pending |"
       cat > "$CURRENT_TASK" <<EOF
@@ -202,7 +223,7 @@ else
   log "Task-fixer failed again (exit $exit_code): $task_title"
   tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
 
-  # Increment attempt count
+  cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
@@ -213,5 +234,4 @@ else
 EOF
 fi
 
-safe_checkout "$SKYNET_MAIN_BRANCH"
 log "Task-fixer finished."
