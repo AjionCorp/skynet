@@ -171,4 +171,131 @@ else
   tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Project driver failed (exit $exit_code)"
 fi
 
+# --- Mission completion detection ---
+# Check if all 6 success criteria are met and no pending tasks remain.
+# Uses a sentinel file to prevent repeated notifications.
+MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete"
+
+if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
+  # Re-read pending count (may have changed after run_agent)
+  mc_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+
+  if [ "$mc_pending" -eq 0 ]; then
+    log "Zero pending tasks — evaluating mission success criteria."
+
+    mc_all_met=true
+
+    # Criterion 1: Completed tasks > 50
+    mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
+    mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
+    if [ "$mc_completed" -gt 50 ]; then
+      log "  Criterion 1 (completed tasks >50): MET ($mc_completed)"
+    else
+      log "  Criterion 1 (completed tasks >50): NOT MET ($mc_completed)"
+      mc_all_met=false
+    fi
+
+    # Criterion 2: Self-correction rate > 95%
+    mc_fixed=$(grep -c '| fixed |' "$FAILED" 2>/dev/null || echo "0")
+    mc_blocked=$(grep -c '| blocked |' "$FAILED" 2>/dev/null || echo "0")
+    mc_superseded=$(grep -c '| superseded |' "$FAILED" 2>/dev/null || echo "0")
+    mc_total_attempted=$((mc_fixed + mc_blocked + mc_superseded))
+    if [ "$mc_total_attempted" -gt 0 ]; then
+      mc_fix_rate=$((mc_fixed * 100 / mc_total_attempted))
+    else
+      mc_fix_rate=0
+    fi
+    if [ "$mc_fix_rate" -gt 95 ]; then
+      log "  Criterion 2 (self-correction >95%): MET (${mc_fix_rate}%)"
+    else
+      log "  Criterion 2 (self-correction >95%): NOT MET (${mc_fix_rate}%)"
+      mc_all_met=false
+    fi
+
+    # Criterion 3: No zombie/deadlock evidence in watchdog logs
+    mc_watchdog_log="$SCRIPTS_DIR/watchdog.log"
+    mc_zombie_refs=0
+    mc_deadlock_refs=0
+    if [ -f "$mc_watchdog_log" ]; then
+      mc_zombie_refs=$(grep -ci 'zombie' "$mc_watchdog_log" 2>/dev/null || echo "0")
+      mc_deadlock_refs=$(grep -ci 'deadlock' "$mc_watchdog_log" 2>/dev/null || echo "0")
+    fi
+    mc_issue_refs=$((mc_zombie_refs + mc_deadlock_refs))
+    if [ "$mc_issue_refs" -eq 0 ]; then
+      log "  Criterion 3 (no zombie/deadlock): MET (0 references)"
+    else
+      log "  Criterion 3 (no zombie/deadlock): NOT MET ($mc_issue_refs references)"
+      mc_all_met=false
+    fi
+
+    # Criterion 4: Dashboard handler count >= 10
+    mc_handlers_dir="$PROJECT_DIR/packages/dashboard/src/handlers"
+    mc_handler_count=0
+    if [ -d "$mc_handlers_dir" ]; then
+      mc_handler_count=$(find "$mc_handlers_dir" -maxdepth 1 -name '*.ts' \
+        ! -name '*.test.*' ! -name 'index.ts' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [ "$mc_handler_count" -ge 10 ]; then
+      log "  Criterion 4 (handler count >=10): MET ($mc_handler_count)"
+    else
+      log "  Criterion 4 (handler count >=10): NOT MET ($mc_handler_count)"
+      mc_all_met=false
+    fi
+
+    # Criterion 5: Mission tracking exists (mission.md with Success Criteria section)
+    if [ -f "$MISSION" ] && grep -q '## Success Criteria' "$MISSION" 2>/dev/null; then
+      log "  Criterion 5 (mission tracking exists): MET"
+    else
+      log "  Criterion 5 (mission tracking exists): NOT MET"
+      mc_all_met=false
+    fi
+
+    # Criterion 6: Agent plugins exist (>= 2 .sh files in scripts/agents/)
+    mc_agents_dir="$SKYNET_SCRIPTS_DIR/agents"
+    mc_agent_count=0
+    if [ -d "$mc_agents_dir" ]; then
+      mc_agent_count=$(find "$mc_agents_dir" -maxdepth 1 -name '*.sh' 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [ "$mc_agent_count" -ge 2 ]; then
+      log "  Criterion 6 (agent plugins exist): MET ($mc_agent_count plugins)"
+    else
+      log "  Criterion 6 (agent plugins exist): NOT MET ($mc_agent_count plugins)"
+      mc_all_met=false
+    fi
+
+    # If ALL criteria met: celebrate!
+    if $mc_all_met; then
+      log "ALL 6 MISSION SUCCESS CRITERIA MET — mission complete!"
+
+      # Emit structured event
+      emit_event "mission_complete" "All 6 success criteria met. Completed: $mc_completed, Fix rate: ${mc_fix_rate}%, Handlers: $mc_handler_count, Agents: $mc_agent_count"
+
+      # Notify all configured channels
+      tg "🎉🏆 *$SKYNET_PROJECT_NAME_UPPER MISSION COMPLETE!* All 6 success criteria met. Completed: $mc_completed tasks, Self-correction: ${mc_fix_rate}%, Handlers: $mc_handler_count, Agent plugins: $mc_agent_count. The pipeline has achieved its mission!"
+
+      # Write celebration entry to blockers.md
+      {
+        echo ""
+        echo "## 🎉 Mission Complete — $(date '+%Y-%m-%d %H:%M')"
+        echo ""
+        echo "All 6 mission success criteria have been met:"
+        echo "1. Completed tasks: $mc_completed (>50)"
+        echo "2. Self-correction rate: ${mc_fix_rate}% (>95%)"
+        echo "3. Zombie/deadlock references: $mc_issue_refs (0)"
+        echo "4. Dashboard handlers: $mc_handler_count (>=10)"
+        echo "5. Mission tracking: present in mission.md"
+        echo "6. Agent plugins: $mc_agent_count (>=2)"
+        echo ""
+        echo "The Skynet pipeline has achieved autonomous self-improving development."
+      } >> "$BLOCKERS"
+
+      # Set sentinel to prevent repeated notifications
+      echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"completedTasks\": $mc_completed, \"fixRate\": $mc_fix_rate, \"handlerCount\": $mc_handler_count, \"agentPlugins\": $mc_agent_count}" > "$MISSION_COMPLETE_SENTINEL"
+      log "Mission-complete sentinel written to $MISSION_COMPLETE_SENTINEL"
+    else
+      log "Mission not yet complete — some criteria not met."
+    fi
+  fi
+fi
+
 log "Project driver finished."
