@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Add repository README.md with quickstart and architecture — create `README.md` at repo root. Sections: (1) **What is Skynet** — one paragraph: autonomous AI dev pipeline, LLM agents build/test/ship/self-correct. (2) **Quickstart** — `npm install -g @ajioncorp/skynet-cli && skynet init && skynet setup-agents && skynet start`. (3) **How It Works** — describe the loop: project-driver generates tasks, workers claim and implement, quality gates validate, task-fixer retries failures, watchdog monitors health. (4) **CLI Reference** — table of all 12 commands: init, setup-agents, start, stop, status, doctor, logs, version, add-task, reset-task, dashboard, cleanup. (5) **Dashboard** — describe admin UI, mention `skynet dashboard` command. (6) **Configuration** — key skynet.config.sh variables. (7) **Architecture** — packages/cli, packages/dashboard, packages/admin, scripts/. Keep concise, under 200 lines
+## [TEST] Add worker-scaling handler unit tests — create `packages/dashboard/src/handlers/worker-scaling.test.ts`. Test cases: (1) GET returns current worker counts by type with correct `WorkerScaleInfo[]` shape, (2) POST scale-up returns correct `WorkerScaleResult`, (3) POST scale-down cleans PID files, (4) max worker limit enforced (returns 400 if count exceeds `maxCount`), (5) invalid worker type returns 400, (6) scale to same count is a no-op, (7) handles missing PID files gracefully, (8) concurrent scale requests don't corrupt state. Mock `child_process.spawn` and `fs` operations. Follow patterns from existing tests in `packages/dashboard/src/handlers/*.test.ts`
 **Status:** completed
-**Started:** 2026-02-19 17:18
+**Started:** 2026-02-19 17:22
 **Completed:** 2026-02-19
-**Branch:** dev/add-repository-readmemd-with-quickstart-
+**Branch:** dev/add-worker-scaling-handler-unit-tests--c
 **Worker:** 4
 
 ### Changes
