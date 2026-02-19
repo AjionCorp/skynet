@@ -2,7 +2,9 @@
 import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { setupAgentsCommand } from "./commands/setup-agents.js";
+import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
+import { stopCommand } from "./commands/stop.js";
 
 const program = new Command();
 
@@ -25,6 +27,18 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--dry-run", "Print plists without installing")
   .action(setupAgentsCommand);
+
+program
+  .command("start")
+  .description("Start the Skynet pipeline (load agents or launch watchdog)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(startCommand);
+
+program
+  .command("stop")
+  .description("Stop all running Skynet workers and unload agents")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(stopCommand);
 
 program
   .command("status")
