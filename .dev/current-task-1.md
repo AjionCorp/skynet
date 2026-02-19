@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add mission progress tracking to pipeline-status handler — FRESH implementation (previous branch stale). In `packages/dashboard/src/handlers/pipeline-status.ts`, add a `parseMissionProgress()` function that reads `.dev/mission.md`, extracts the numbered success criteria under `## Success Criteria`, and evaluates each against current state: read completed.md task count, failed-tasks.md fix rate, check for zombie/deadlock references in watchdog logs, check dashboard handler count, check if agent plugins exist. Return as `missionProgress: { id: number, criterion: string, status: 'met'|'partial'|'not-met', evidence: string }[]` in the pipeline-status response. Add `MissionProgress` interface to `packages/dashboard/src/types.ts`. Also update `packages/cli/src/commands/status.ts` to display mission progress summary
+## [FEAT] Add self-correction rate calculation to pipeline-status and dashboard — in `packages/dashboard/src/handlers/pipeline-status.ts`, read `.dev/failed-tasks.md` and compute: `fixedCount` (entries with `status=fixed`), `totalAttempted` (entries with status fixed + blocked + superseded), `autoFixRate = fixedCount / totalAttempted * 100`. Add `selfCorrectionRate: number` and `selfCorrectionStats: { fixed: number, blocked: number, superseded: number, pending: number }` to the `PipelineStatus` response. In `packages/dashboard/src/components/PipelineDashboard.tsx`, display the self-correction rate as a percentage badge next to health score (green >=90%, yellow >=70%, red <70%). In `packages/cli/src/commands/status.ts`, output "Self-correction rate: X% (N/M failures auto-fixed)". Add `SelfCorrectionStats` interface to `packages/dashboard/src/types.ts`. This directly measures mission success criterion #2
 **Status:** completed
-**Started:** 2026-02-19 17:17
+**Started:** 2026-02-19 17:36
 **Completed:** 2026-02-19
-**Branch:** dev/add-mission-progress-tracking-to-pipelin
+**Branch:** dev/add-self-correction-rate-calculation-to-
 **Worker:** 1
 
 ### Changes
