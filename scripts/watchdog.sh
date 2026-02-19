@@ -3,6 +3,7 @@
 # Runs every 3 min via crontab. Checks if workers are idle with work waiting, kicks them off.
 # Does NOT invoke Claude itself — just launches the worker scripts.
 # Auth-aware: skips Claude-dependent workers when auth is expired.
+# Crash recovery: detects stale locks, unclaims orphaned tasks, kills orphan processes.
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
@@ -21,6 +22,178 @@ is_running() {
   local lockfile="$1"
   [ -f "$lockfile" ] && kill -0 "$(cat "$lockfile")" 2>/dev/null
 }
+
+# --- Backlog mutex helpers (same pattern as dev-worker.sh) ---
+BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
+
+acquire_lock() {
+  local attempts=0
+  while ! mkdir "$BACKLOG_LOCK" 2>/dev/null; do
+    attempts=$((attempts + 1))
+    if [ "$attempts" -ge 50 ]; then
+      if [ -d "$BACKLOG_LOCK" ]; then
+        local lock_mtime
+        lock_mtime=$(file_mtime "$BACKLOG_LOCK")
+        local lock_age=$(( $(date +%s) - lock_mtime ))
+        if [ "$lock_age" -gt 30 ]; then
+          rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
+          mkdir "$BACKLOG_LOCK" 2>/dev/null && return 0
+        fi
+      fi
+      return 1
+    fi
+    sleep 0.1
+  done
+  return 0
+}
+
+release_lock() {
+  rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
+}
+
+unclaim_task() {
+  local task_title="$1"
+  acquire_lock || return
+  if [ -f "$BACKLOG" ]; then
+    awk -v title="$task_title" '{
+      if ($0 == "- [>] " title) print "- [ ] " title
+      else print
+    }' "$BACKLOG" > "$BACKLOG.tmp"
+    mv "$BACKLOG.tmp" "$BACKLOG"
+  fi
+  release_lock
+}
+
+# --- Crash recovery: detect stale locks, orphaned tasks, and zombie processes ---
+crash_recovery() {
+  local recovered=0
+
+  # Phase 1: Check all known lock files for stale/zombie PIDs
+  local all_locks=(
+    "${SKYNET_LOCK_PREFIX}-dev-worker-1.lock"
+    "${SKYNET_LOCK_PREFIX}-dev-worker-2.lock"
+    "${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+    "${SKYNET_LOCK_PREFIX}-project-driver.lock"
+  )
+
+  for lockfile in "${all_locks[@]}"; do
+    [ -f "$lockfile" ] || continue
+
+    local lock_pid
+    lock_pid=$(cat "$lockfile" 2>/dev/null || echo "")
+    [ -z "$lock_pid" ] && { rm -f "$lockfile"; recovered=$((recovered + 1)); continue; }
+
+    local stale=false
+
+    if ! kill -0 "$lock_pid" 2>/dev/null; then
+      # PID is dead — lock is stale (crash bypassed EXIT trap)
+      stale=true
+      log "Stale lock: $lockfile (PID $lock_pid dead)"
+    else
+      # PID alive — check if it's been running too long (zombie/hung worker)
+      local lock_mtime
+      lock_mtime=$(file_mtime "$lockfile")
+      local lock_age_secs=$(( $(date +%s) - lock_mtime ))
+      local stale_secs=$((SKYNET_STALE_MINUTES * 60))
+      if [ "$lock_age_secs" -gt "$stale_secs" ]; then
+        stale=true
+        log "Zombie worker: $lockfile (PID $lock_pid, ${lock_age_secs}s old > ${stale_secs}s limit)"
+        # Graceful kill first, then force
+        kill -TERM "$lock_pid" 2>/dev/null || true
+        sleep 2
+        kill -0 "$lock_pid" 2>/dev/null && kill -9 "$lock_pid" 2>/dev/null || true
+      fi
+    fi
+
+    if $stale; then
+      rm -f "$lockfile"
+      recovered=$((recovered + 1))
+    fi
+  done
+
+  # Phase 2: Recover partial task states — unclaim [>] tasks from dead workers
+  for wid in 1 2; do
+    local wid_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
+    local task_file="$DEV_DIR/current-task-${wid}.md"
+
+    # Skip if this worker is actually alive
+    is_running "$wid_lock" && continue
+
+    # Check if this worker's task file shows in_progress
+    if [ -f "$task_file" ] && grep -q "in_progress" "$task_file" 2>/dev/null; then
+      local stuck_title
+      stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
+      if [ -n "$stuck_title" ]; then
+        unclaim_task "$stuck_title"
+        log "Unclaimed stuck task from worker $wid: $stuck_title"
+        recovered=$((recovered + 1))
+      fi
+    fi
+  done
+
+  # Also check for any [>] entries in backlog with no live worker at all
+  if [ -f "$BACKLOG" ]; then
+    local any_worker_alive=false
+    for wid in 1 2; do
+      is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock" && any_worker_alive=true
+    done
+    is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && any_worker_alive=true
+
+    if ! $any_worker_alive; then
+      local claimed_lines
+      claimed_lines=$(grep '^\- \[>\]' "$BACKLOG" 2>/dev/null || true)
+      if [ -n "$claimed_lines" ]; then
+        while IFS= read -r line; do
+          local title="${line#- \[>\] }"
+          unclaim_task "$title"
+          log "Unclaimed orphaned task (no workers alive): $title"
+          recovered=$((recovered + 1))
+        done <<< "$claimed_lines"
+      fi
+    fi
+  fi
+
+  # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
+  local worktree_dirs=(
+    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w1:${SKYNET_LOCK_PREFIX}-dev-worker-1.lock"
+    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w2:${SKYNET_LOCK_PREFIX}-dev-worker-2.lock"
+    "/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+  )
+
+  for entry in "${worktree_dirs[@]}"; do
+    local wt_dir="${entry%%:*}"
+    local wt_lock="${entry##*:}"
+
+    # If worktree exists but its worker is NOT running — it's orphaned
+    [ -d "$wt_dir" ] || continue
+    is_running "$wt_lock" && continue
+
+    # Kill any orphan processes running inside the worktree (claude, node, etc.)
+    local orphan_pids
+    orphan_pids=$(pgrep -f "$wt_dir" 2>/dev/null || true)
+    if [ -n "$orphan_pids" ]; then
+      log "Killing orphan processes in $wt_dir: $(echo $orphan_pids | tr '\n' ' ')"
+      echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
+      sleep 1
+      echo "$orphan_pids" | xargs kill -9 2>/dev/null || true
+    fi
+
+    # Remove the orphan worktree
+    cd "$PROJECT_DIR"
+    git worktree remove "$wt_dir" --force 2>/dev/null || rm -rf "$wt_dir" 2>/dev/null || true
+    git worktree prune 2>/dev/null || true
+    log "Cleaned orphan worktree: $wt_dir"
+    recovered=$((recovered + 1))
+  done
+
+  if [ "$recovered" -gt 0 ]; then
+    log "Crash recovery complete: recovered $recovered item(s)"
+    tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — cleaned $recovered stale lock(s)/orphaned task(s)"
+  fi
+}
+
+# --- Run crash recovery before dispatching ---
+crash_recovery
 
 # --- Auth pre-check: don't kick off Claude workers if auth is down ---
 # Read token from cache file (written by auth-refresh LaunchAgent)
