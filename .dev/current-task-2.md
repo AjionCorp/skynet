@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add worker heartbeat and stale detection — workers write a timestamp to .dev/worker-N.heartbeat every 60s during task execution (add periodic write in dev-worker.sh main implementation loop). watchdog.sh checks heartbeats on each run: if any heartbeat is older than SKYNET_STALE_MINUTES, kill the worker, unclaim its task in backlog.md, remove the worktree, reset current-task-N.md to idle
+## [FEAT] Lets improve Pipeline and Monitoring for admin — some things are either dated or missing
 **Status:** completed
-**Started:** 2026-02-19 14:27
+**Started:** 2026-02-19 14:33
 **Completed:** 2026-02-19
-**Branch:** dev/add-worker-heartbeat-and-stale-detection
+**Branch:** dev/lets-improve-pipeline-and-monitoring-for
 **Worker:** 2
 
 ### Changes
