@@ -126,6 +126,56 @@ skynet/
 
 Workers use `mkdir`-based mutex locks (atomic on all Unix) and PID lock files in `/tmp/skynet-{project}-*.lock`. State is plain markdown in `.dev/`. Git worktrees provide full isolation so parallel workers never conflict.
 
+## Troubleshooting
+
+### Workers stuck or stale
+
+Run `skynet doctor` to check tools, config, and git state. Use `skynet status` to inspect worker heartbeats. If workers appear stuck (heartbeat older than `SKYNET_STALE_MINUTES`), restart:
+
+```bash
+skynet stop && skynet start
+```
+
+The watchdog auto-kills workers exceeding the stale threshold, but a manual restart also clears lock files and orphaned worktrees.
+
+### Task keeps failing
+
+Check fixer logs with `skynet logs fixer`. The task-fixer retries up to `SKYNET_MAX_FIX_ATTEMPTS` (default 3) with full error context before marking a task as blocked. To manually reset a failed task back to pending:
+
+```bash
+skynet reset-task "task name"
+```
+
+This clears the attempt counter and optionally deletes the branch so the next worker gets a clean start.
+
+### Merge conflicts on retry
+
+The task-fixer auto-detects merge conflicts when retrying failed tasks. When a conflict is found, it deletes the stale branch and creates a fresh one from the current `main`, so the retried agent always works against the latest code. No manual intervention is needed — if a task failed due to conflicts, the fixer handles it on the next attempt.
+
+### Dashboard not loading
+
+Verify port 3100 (default) is available, or specify an alternate port:
+
+```bash
+skynet dashboard --port 3101
+```
+
+The dashboard requires Node.js 18+. Check your version with `node -v` and ensure the dev dependencies are installed (`pnpm install` in the project root).
+
+### Auth expired
+
+Re-authenticate the Claude Code CLI:
+
+```bash
+claude auth login
+```
+
+The `auth-refresh` worker runs every 30 minutes and syncs credentials automatically. After re-authenticating, the next auth-refresh cycle picks up the new token — no restart required.
+
+### Backlog empty but mission not complete
+
+This is expected behavior. The watchdog monitors backlog size and automatically kicks `project-driver` when fewer than 5 tasks remain. The project-driver reads `mission.md`, reviews completed work, and generates the next batch of prioritized tasks. If the backlog stays empty, check that `mission.md` has remaining goals and that project-driver isn't blocked (`skynet logs watchdog`).
+
 ## License
 
 MIT
