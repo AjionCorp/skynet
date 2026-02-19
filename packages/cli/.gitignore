@@ -1,0 +1,6 @@
+# Build output
+dist/
+
+# Bundled assets copied during prepack (from monorepo root)
+templates/
+scripts/

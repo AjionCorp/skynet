@@ -22,6 +22,7 @@ export type {
   WorkerScalePayload,
   WorkerScaleInfo,
   WorkerScaleResult,
+  PromptTemplate,
 } from "./types";
 
 // Config helpers
@@ -43,6 +44,7 @@ export {
   createMonitoringAgentsHandler,
   createMonitoringLogsHandler,
   createTasksHandlers,
+  createPromptsHandler,
   createWorkerScalingHandler,
 } from "./handlers";
 
