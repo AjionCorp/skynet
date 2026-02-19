@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add configurable quality gates via skynet.config.sh — replace hardcoded typecheck+playwright gates in dev-worker.sh (lines ~140-180) and task-fixer.sh (lines ~165-220) with a SKYNET_GATES array. Add SKYNET_GATE_1="pnpm typecheck" etc. to skynet.config.sh. Loop through defined gates in both scripts. Default: just typecheck. This makes the pipeline generic for any project's CI needs
+## [FEAT] Add worker heartbeat and stale detection — workers write a timestamp to .dev/worker-N.heartbeat every 60s during task execution (add periodic write in dev-worker.sh main implementation loop). watchdog.sh checks heartbeats on each run: if any heartbeat is older than SKYNET_STALE_MINUTES, kill the worker, unclaim its task in backlog.md, remove the worktree, reset current-task-N.md to idle
 **Status:** completed
-**Started:** 2026-02-19 14:22
+**Started:** 2026-02-19 14:27
 **Completed:** 2026-02-19
-**Branch:** dev/add-configurable-quality-gates-via-skyne
+**Branch:** dev/add-worker-heartbeat-and-stale-detection
 **Worker:** 2
 
 ### Changes
