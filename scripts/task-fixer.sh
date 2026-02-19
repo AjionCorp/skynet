@@ -171,8 +171,28 @@ else
   log "Created new fix branch in worktree: $branch_name"
 fi
 
-# Get recent log context for the failure
-recent_log=$(tail -100 "$SCRIPTS_DIR/dev-worker-1.log" 2>/dev/null | grep -A 50 "$task_title" | tail -50 || echo "No log context available")
+# Get recent log context from all worker logs (the failure could have come from any worker)
+previous_log=""
+for _wlog in "$SCRIPTS_DIR"/dev-worker-*.log; do
+  [ -f "$_wlog" ] || continue
+  _wlog_tail=$(tail -100 "$_wlog" 2>/dev/null | grep -A 50 "$task_title" | tail -50 || true)
+  if [ -n "$_wlog_tail" ]; then
+    previous_log="$_wlog_tail"
+    break
+  fi
+done
+if [ -z "$previous_log" ]; then
+  # Fallback: grab last 100 lines from the most recently modified worker log
+  _latest_wlog=$(ls -t "$SCRIPTS_DIR"/dev-worker-*.log 2>/dev/null | head -1 || true)
+  if [ -n "$_latest_wlog" ]; then
+    previous_log=$(tail -100 "$_latest_wlog" 2>/dev/null || echo "No log context available")
+  else
+    previous_log="No worker log files found"
+  fi
+fi
+
+# Get git diff of what was changed on the failed branch vs main
+previous_diff=$(cd "$PROJECT_DIR" && git diff "${SKYNET_MAIN_BRANCH}...${branch_name}" 2>/dev/null | head -500 || echo "No diff available (branch may have no changes yet)")
 
 PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
@@ -184,9 +204,15 @@ A previous attempt to implement this task FAILED. Your job is to diagnose why an
 **Error:** $error_summary
 **Previous attempts:** $fix_attempts
 
-## Recent Log Context
+## Previous Failure
+### Error Output (from worker log)
 \`\`\`
-$recent_log
+$previous_log
+\`\`\`
+
+### Changes on Failed Branch (git diff main...$branch_name)
+\`\`\`diff
+$previous_diff
 \`\`\`
 
 ## Instructions
