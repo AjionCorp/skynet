@@ -38,13 +38,13 @@ else
   log "No mission.md found. Using SKYNET_PROJECT_VISION fallback."
 fi
 
-# --- Gather all state ---
-backlog_content=$(cat "$BACKLOG")
-completed_content=$(cat "$COMPLETED")
-failed_content=$(cat "$FAILED")
-current_task_content=$(cat "$CURRENT_TASK")
-blockers_content=$(cat "$BLOCKERS")
-sync_health_content=$(cat "$SYNC_HEALTH")
+# --- Gather all state (guard against missing files on fresh projects) ---
+if [ -f "$BACKLOG" ]; then backlog_content=$(cat "$BACKLOG"); else backlog_content="(file not found)"; fi
+if [ -f "$COMPLETED" ]; then completed_content=$(cat "$COMPLETED"); else completed_content="(file not found)"; fi
+if [ -f "$FAILED" ]; then failed_content=$(cat "$FAILED"); else failed_content="(file not found)"; fi
+if [ -f "$CURRENT_TASK" ]; then current_task_content=$(cat "$CURRENT_TASK"); else current_task_content="(file not found)"; fi
+if [ -f "$BLOCKERS" ]; then blockers_content=$(cat "$BLOCKERS"); else blockers_content="(file not found)"; fi
+if [ -f "$SYNC_HEALTH" ]; then sync_health_content=$(cat "$SYNC_HEALTH"); else sync_health_content="(file not found)"; fi
 
 # Count task metrics
 remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
@@ -55,11 +55,20 @@ completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
 completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
 failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || echo "0")
 
-# Get codebase structure summary
-api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
-pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+# Get codebase structure summary (guard directories that may not exist yet)
+if [ -d "$PROJECT_DIR" ]; then
+  api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+  pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+else
+  api_routes="(project directory not found)"
+  pages="(project directory not found)"
+fi
 scripts_list=$(find "$SKYNET_SCRIPTS_DIR" -maxdepth 1 -name '*.sh' -exec basename {} \; 2>/dev/null || true)
-packages_list=$(find "$PROJECT_DIR/packages" -maxdepth 2 -name "package.json" -exec dirname {} \; 2>/dev/null | while read -r d; do basename "$d"; done || true)
+if [ -d "$PROJECT_DIR/packages" ]; then
+  packages_list=$(find "$PROJECT_DIR/packages" -maxdepth 2 -name "package.json" -exec dirname {} \; 2>/dev/null | while read -r d; do basename "$d"; done || true)
+else
+  packages_list="(no packages directory)"
+fi
 
 log "State: $remaining pending, $claimed claimed, $completed_count completed, $failed_count failed"
 
