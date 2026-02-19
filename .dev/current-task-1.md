@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Add troubleshooting section to README.md — append a `## Troubleshooting` section to `README.md` covering: (1) **Workers stuck or stale** — run `skynet doctor`, check heartbeats with `skynet status`, restart with `skynet stop && skynet start`. (2) **Task keeps failing** — check fixer logs with `skynet logs fixer`, manually retry with `skynet reset-task "task name"`. (3) **Merge conflicts on retry** — task-fixer auto-detects conflicts and creates fresh branches, explain the mechanism. (4) **Dashboard not loading** — verify port 3100 is free, try `skynet dashboard --port 3101`, check Node.js version. (5) **Auth expired** — re-authenticate with `claude auth login`, the auth-refresh agent syncs automatically. (6) **Backlog empty but mission not complete** — watchdog kicks project-driver automatically when backlog < 5 tasks. Keep under 60 lines total
+## [INFRA] Add Playwright E2E test job to CI workflow — in `.github/workflows/ci.yml`, add a new `e2e-admin` job: checkout, setup Node 20, install pnpm, `pnpm install`, `pnpm build`, `pnpm exec playwright install --with-deps chromium`, then `pnpm test:e2e`. The Playwright config at `packages/admin/playwright.config.ts` already uses `webServer` to auto-start the dev server. Spec files exist in `packages/admin/e2e/`. This validates the dashboard loads and navigates correctly on every PR — criterion #2 (catching regressions before merge)
 **Status:** completed
-**Started:** 2026-02-19 17:46
+**Started:** 2026-02-19 18:04
 **Completed:** 2026-02-19
-**Branch:** dev/add-troubleshooting-section-to-readmemd-
+**Branch:** dev/add-playwright-e2e-test-job-to-ci-workfl
 **Worker:** 1
 
 ### Changes
