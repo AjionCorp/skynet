@@ -87,6 +87,48 @@ function cronToIntervalSeconds(schedule: string): number | null {
   return null;
 }
 
+/**
+ * Parse a cron schedule expression into interval seconds and a human-readable
+ * description.  Returns null when the expression cannot be interpreted.
+ */
+function parseCronSchedule(
+  expr: string,
+): { intervalSeconds: number; human: string } | null {
+  const intervalSeconds = cronToIntervalSeconds(expr);
+  if (intervalSeconds === null) return null;
+
+  const parts = expr.trim().split(/\s+/);
+  const [minute, hour] = parts;
+
+  let human: string;
+
+  const minStep = minute.match(/^\*\/(\d+)$/);
+  const hourStep = hour.match(/^\*\/(\d+)$/);
+
+  if (minStep && hour === "*") {
+    const n = Number(minStep[1]);
+    human = n === 1 ? "Every minute" : `Every ${n} minutes`;
+  } else if (hourStep && minute === "0") {
+    const n = Number(hourStep[1]);
+    human = n === 1 ? "Every hour" : `Every ${n} hours`;
+  } else if (minute === "0" && hour.includes(",")) {
+    const hours = hour.split(",").map(Number);
+    const fmt = hours.map(
+      (h) => `${h % 12 || 12}${h < 12 ? "am" : "pm"}`,
+    );
+    human = `Daily at ${fmt.join(" and ")}`;
+  } else if (minute === "0" && hour === "*") {
+    human = "Every hour";
+  } else if (/^\d+$/.test(minute) && /^\d+$/.test(hour)) {
+    const h = Number(hour);
+    human = `Daily at ${h % 12 || 12}${h < 12 ? "am" : "pm"}`;
+  } else {
+    human = formatInterval(intervalSeconds);
+  }
+
+  return { intervalSeconds, human };
+}
+
 interface CronEntry {
   schedule: string;
   scriptPath: string | null;
@@ -279,9 +321,7 @@ function getLinuxAgents(
   const agents = agentDefs.map((agent) => {
     const entry = cronEntries.get(agent.workerName);
     const installed = !!entry;
-    const interval = entry
-      ? cronToIntervalSeconds(entry.schedule)
-      : null;
+    const parsed = entry ? parseCronSchedule(entry.schedule) : null;
 
     return {
       label: agent.label,
@@ -290,8 +330,8 @@ function getLinuxAgents(
       lastExitStatus: null,
       pid: null,
       plistExists: installed,
-      interval,
-      intervalHuman: interval ? formatInterval(interval) : null,
+      interval: parsed?.intervalSeconds ?? null,
+      intervalHuman: parsed?.human ?? null,
       runAtLoad: false,
       scriptPath: entry?.scriptPath ?? null,
       logPath: entry?.logPath ?? null,
