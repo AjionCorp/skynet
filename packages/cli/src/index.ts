@@ -5,6 +5,7 @@ import { setupAgentsCommand } from "./commands/setup-agents.js";
 import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
+import { doctorCommand } from "./commands/doctor.js";
 
 const program = new Command();
 
@@ -46,5 +47,11 @@ program
   .description("Show pipeline status summary")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(statusCommand);
+
+program
+  .command("doctor")
+  .description("Run diagnostics on the Skynet pipeline")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(doctorCommand);
 
 program.parse();
