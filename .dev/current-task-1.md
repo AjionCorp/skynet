@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add agent plugin system for LLM-agnostic workers — extract Claude Code and Codex CLI invocation from scripts/_config.sh run_agent() into separate plugins at scripts/agents/claude.sh and scripts/agents/codex.sh. Define standard interface: run_agent "prompt" "logfile" returns exit code. Add SKYNET_AGENT_PLUGIN config to skynet.config.sh. Allow custom agent scripts via file path
+## [INFRA] Lets have an ability to add more workers to different areas from the admin dynamically, say i want to increase the tester or fixer capacity or which ever i should be able to
 **Status:** completed
-**Started:** 2026-02-19 14:29
+**Started:** 2026-02-19 14:37
 **Completed:** 2026-02-19
-**Branch:** dev/add-agent-plugin-system-for-llm-agnostic
+**Branch:** dev/lets-have-an-ability-to-add-more-workers
 **Worker:** 1
 
 ### Changes
