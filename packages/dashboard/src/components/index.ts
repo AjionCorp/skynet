@@ -10,3 +10,5 @@ export { AdminLayout } from "./AdminLayout";
 export type { AdminLayoutProps, AdminLayoutPage } from "./AdminLayout";
 export { PromptsDashboard } from "./PromptsDashboard";
 export type { PromptsDashboardProps } from "./PromptsDashboard";
+export { WorkerScaling } from "./WorkerScaling";
+export type { WorkerScalingProps } from "./WorkerScaling";

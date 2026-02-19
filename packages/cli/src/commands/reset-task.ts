@@ -1,0 +1,181 @@
+import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
+import { resolve, join } from "path";
+import { execSync } from "child_process";
+import { createInterface } from "readline";
+
+interface ResetTaskOptions {
+  dir?: string;
+  force?: boolean;
+}
+
+function loadConfig(projectDir: string): Record<string, string> {
+  const configPath = join(projectDir, ".dev/skynet.config.sh");
+  if (!existsSync(configPath)) {
+    throw new Error(`skynet.config.sh not found. Run 'skynet init' first.`);
+  }
+
+  const content = readFileSync(configPath, "utf-8");
+  const vars: Record<string, string> = {};
+
+  for (const line of content.split("\n")) {
+    const match = line.match(/^export\s+(\w+)="(.*)"/);
+    if (match) {
+      let value = match[2];
+      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
+      vars[match[1]] = value;
+    }
+  }
+
+  return vars;
+}
+
+function prompt(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    rl.question(`  ${question} `, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase());
+    });
+  });
+}
+
+function atomicWrite(filePath: string, content: string) {
+  const tmpPath = filePath + ".tmp";
+  writeFileSync(tmpPath, content, "utf-8");
+  renameSync(tmpPath, filePath);
+}
+
+function branchExists(branch: string, projectDir: string): boolean {
+  try {
+    execSync(`git show-ref --verify --quiet refs/heads/${branch}`, {
+      cwd: projectDir,
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function deleteBranch(branch: string, projectDir: string) {
+  execSync(`git branch -D ${branch}`, {
+    cwd: projectDir,
+    stdio: "inherit",
+  });
+}
+
+export async function resetTaskCommand(titleSubstring: string, options: ResetTaskOptions) {
+  if (!titleSubstring || titleSubstring.trim().length === 0) {
+    console.error("Error: Task title substring is required.");
+    process.exit(1);
+  }
+
+  const projectDir = resolve(options.dir || process.cwd());
+  const vars = loadConfig(projectDir);
+  const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
+  const failedPath = join(devDir, "failed-tasks.md");
+  const backlogPath = join(devDir, "backlog.md");
+
+  if (!existsSync(failedPath)) {
+    console.error(`Error: failed-tasks.md not found at ${failedPath}. Run 'skynet init' first.`);
+    process.exit(1);
+  }
+
+  if (!existsSync(backlogPath)) {
+    console.error(`Error: backlog.md not found at ${backlogPath}. Run 'skynet init' first.`);
+    process.exit(1);
+  }
+
+  // --- Step 1: Find matching entry in failed-tasks.md ---
+  const failedContent = readFileSync(failedPath, "utf-8");
+  const failedLines = failedContent.split("\n");
+  const searchTerm = titleSubstring.trim().toLowerCase();
+
+  const matchingIndices: number[] = [];
+  for (let i = 0; i < failedLines.length; i++) {
+    const line = failedLines[i];
+    // Skip header, separator, and empty lines
+    if (!line.startsWith("|") || line.includes("| Date |") || line.includes("------")) continue;
+    const cols = line.split("|").map((c) => c.trim());
+    // cols[0]="" (before first |), cols[1]=date, cols[2]=title, cols[3]=branch, ...
+    const title = cols[2] || "";
+    if (title.toLowerCase().includes(searchTerm)) {
+      matchingIndices.push(i);
+    }
+  }
+
+  if (matchingIndices.length === 0) {
+    console.error(`\n  Error: No matching task found in failed-tasks.md for "${titleSubstring}".\n`);
+    process.exit(1);
+  }
+
+  if (matchingIndices.length > 1) {
+    console.error(`\n  Error: Multiple tasks match "${titleSubstring}":\n`);
+    for (const idx of matchingIndices) {
+      const cols = failedLines[idx].split("|").map((c) => c.trim());
+      console.error(`    - ${cols[2]}`);
+    }
+    console.error(`\n  Please use a more specific substring.\n`);
+    process.exit(1);
+  }
+
+  const matchIdx = matchingIndices[0];
+  const matchLine = failedLines[matchIdx];
+  const cols = matchLine.split("|").map((c) => c.trim());
+  // cols: ["", date, title, branch, error, attempts, status, ""]
+  const taskTitle = cols[2];
+  const branchName = cols[3];
+  const taskError = cols[4];
+  const taskDate = cols[1];
+
+  console.log(`\n  Found failed task:\n`);
+  console.log(`    Title:    ${taskTitle}`);
+  console.log(`    Branch:   ${branchName}`);
+  console.log(`    Error:    ${taskError}`);
+  console.log(`    Attempts: ${cols[5]}`);
+  console.log(`    Status:   ${cols[6]}`);
+
+  // --- Step 2: Reset status to pending and attempts to 0 ---
+  failedLines[matchIdx] = `| ${taskDate} | ${taskTitle} | ${branchName} | ${taskError} | 0 | pending |`;
+  atomicWrite(failedPath, failedLines.join("\n"));
+  console.log(`\n  Reset failed-tasks.md entry: attempts → 0, status → pending`);
+
+  // --- Step 3: Find and uncheck corresponding backlog entry ---
+  const backlogContent = readFileSync(backlogPath, "utf-8");
+  const backlogLines = backlogContent.split("\n");
+  let backlogUpdated = false;
+
+  for (let i = 0; i < backlogLines.length; i++) {
+    if (backlogLines[i].startsWith("- [x] ") && backlogLines[i].toLowerCase().includes(searchTerm)) {
+      backlogLines[i] = backlogLines[i].replace(/^- \[x\] /, "- [ ] ");
+      backlogUpdated = true;
+      console.log(`  Reset backlog.md entry: [x] → [ ]`);
+      break;
+    }
+  }
+
+  if (backlogUpdated) {
+    atomicWrite(backlogPath, backlogLines.join("\n"));
+  } else {
+    console.log(`  Warning: No matching [x] entry found in backlog.md (skipped)`);
+  }
+
+  // --- Step 4: Optionally delete the failed branch ---
+  if (branchName && branchExists(branchName, projectDir)) {
+    if (options.force) {
+      console.log(`  Deleting branch: ${branchName}`);
+      deleteBranch(branchName, projectDir);
+      console.log(`  Branch deleted.`);
+    } else {
+      const answer = await prompt(`Delete branch "${branchName}"? (y/N)`);
+      if (answer === "y" || answer === "yes") {
+        deleteBranch(branchName, projectDir);
+        console.log(`  Branch deleted.`);
+      } else {
+        console.log(`  Branch kept.`);
+      }
+    }
+  }
+
+  console.log(`\n  Task reset complete.\n`);
+}

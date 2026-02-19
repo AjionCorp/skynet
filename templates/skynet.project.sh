@@ -31,4 +31,4 @@ SKYNET_SYNC_STATIC=()
 
 # ---- Task Tags ----
 # Available tags for categorizing backlog items
-SKYNET_TASK_TAGS="FEAT FIX INFRA TEST"
+SKYNET_TASK_TAGS="FEAT FIX INFRA TEST NMI"

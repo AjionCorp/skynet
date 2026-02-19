@@ -3,6 +3,7 @@ export type {
   SkynetConfig,
   SkynetWorkerDef,
   WorkerInfo,
+  WorkerHeartbeat,
   CurrentTask,
   BacklogItem,
   CompletedTask,
@@ -18,6 +19,10 @@ export type {
   TaskBacklogData,
   TaskCreatePayload,
   SyncStatus,
+  WorkerScalePayload,
+  WorkerScaleInfo,
+  WorkerScaleResult,
+  PromptTemplate,
 } from "./types";
 
 // Config helpers
@@ -32,12 +37,15 @@ export type { ParsedBacklogItem } from "./lib/backlog-parser";
 // Handler factories
 export {
   createPipelineStatusHandler,
+  createPipelineStreamHandler,
   createPipelineTriggerHandler,
   createPipelineLogsHandler,
   createMonitoringStatusHandler,
   createMonitoringAgentsHandler,
   createMonitoringLogsHandler,
   createTasksHandlers,
+  createPromptsHandler,
+  createWorkerScalingHandler,
 } from "./handlers";
 
 // Dashboard UI components

@@ -24,35 +24,113 @@ function parseCurrentTask(raw: string) {
 }
 
 /**
- * Parse backlog.md into items with status/tag info.
+ * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
+ */
+function extractTitle(text: string): string {
+  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
+  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
+  const dashIdx = withoutTag.indexOf(" \u2014 ");
+  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+}
+
+/**
+ * Parse blockedBy metadata from raw text.
+ */
+function parseBlockedBy(text: string): string[] {
+  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
+  if (!match) return [];
+  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/**
+ * Parse a human-readable duration string (e.g., "23m", "1h 12m") into minutes.
+ * Returns null if the string cannot be parsed.
+ */
+function parseDurationMinutes(s: string): number | null {
+  const hm = s.match(/^(\d+)h\s+(\d+)m$/);
+  if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
+  const hOnly = s.match(/^(\d+)h$/);
+  if (hOnly) return Number(hOnly[1]) * 60;
+  const mOnly = s.match(/^(\d+)m$/);
+  if (mOnly) return Number(mOnly[1]);
+  return null;
+}
+
+/**
+ * Format minutes as a human-readable duration string (e.g., "23m", "1h 12m").
+ */
+function formatDuration(minutes: number): string {
+  if (minutes < 60) return `${Math.round(minutes)}m`;
+  const h = Math.floor(minutes / 60);
+  const rem = Math.round(minutes % 60);
+  return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+}
+
+/**
+ * Parse backlog.md into items with status/tag/dependency info.
  */
 function parseBacklog(raw: string) {
   const lines = raw.split("\n");
-  const items: { text: string; tag: string; status: "pending" | "claimed" | "done" }[] = [];
+  const rawItems: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[] }[] = [];
   let pendingCount = 0;
   let claimedCount = 0;
   let doneCount = 0;
 
   for (const line of lines) {
+    let status: "pending" | "claimed" | "done" | null = null;
+    let text = "";
     if (line.startsWith("- [ ] ")) {
-      const text = line.replace("- [ ] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "pending" });
+      status = "pending";
+      text = line.replace("- [ ] ", "");
       pendingCount++;
     } else if (line.startsWith("- [>] ")) {
-      const text = line.replace("- [>] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "claimed" });
+      status = "claimed";
+      text = line.replace("- [>] ", "");
       claimedCount++;
     } else if (line.startsWith("- [x] ")) {
-      const text = line.replace("- [x] ", "");
-      const tagMatch = text.match(/^\[([^\]]+)\]/);
-      items.push({ text, tag: tagMatch?.[1] ?? "", status: "done" });
+      status = "done";
+      text = line.replace("- [x] ", "");
       doneCount++;
     }
+    if (status === null) continue;
+
+    const tagMatch = text.match(/^\[([^\]]+)\]/);
+    rawItems.push({ text, tag: tagMatch?.[1] ?? "", status, blockedBy: parseBlockedBy(text) });
   }
 
+  // Resolve blocked status
+  const titleToStatus = new Map<string, string>();
+  for (const item of rawItems) {
+    titleToStatus.set(extractTitle(item.text), item.status);
+  }
+  const items = rawItems.map((item) => ({
+    ...item,
+    blocked: item.blockedBy.length > 0 && item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
+  }));
+
   return { items, pendingCount, claimedCount, doneCount };
+}
+
+/**
+ * Calculate a pipeline health score (0–100).
+ * Starts at 100 and deducts for issues:
+ *   -5 per pending failed task
+ *  -10 per active blocker
+ *   -2 per stale heartbeat
+ *   -1 per task that has been in progress >24 hours
+ */
+function calculateHealthScore(opts: {
+  failedPendingCount: number;
+  blockerCount: number;
+  staleHeartbeatCount: number;
+  staleTasks24hCount: number;
+}): number {
+  let score = 100;
+  score -= opts.failedPendingCount * 5;
+  score -= opts.blockerCount * 10;
+  score -= opts.staleHeartbeatCount * 2;
+  score -= opts.staleTasks24hCount * 1;
+  return Math.max(0, Math.min(100, score));
 }
 
 /**
@@ -96,6 +174,24 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         currentTasks["worker-1"] = currentTask;
       }
 
+      // Worker heartbeats — read .dev/worker-N.heartbeat epoch files
+      const heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
+      const staleThresholdMs = 45 * 60 * 1000; // matches SKYNET_STALE_MINUTES default
+      for (let wid = 1; wid <= 2; wid++) {
+        const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
+        if (hbRaw) {
+          const epoch = Number(hbRaw);
+          const ageMs = Date.now() - epoch * 1000;
+          heartbeats[`worker-${wid}`] = {
+            lastEpoch: epoch,
+            ageMs,
+            isStale: ageMs > staleThresholdMs,
+          };
+        } else {
+          heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+        }
+      }
+
       // Backlog
       const backlogRaw = readDevFile(devDir, "backlog.md");
       const backlog = parseBacklog(backlogRaw);
@@ -112,13 +208,28 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         );
       const completed = completedLines.map((l) => {
         const parts = l.split("|").map((p) => p.trim());
+        // New format: | Date | Task | Branch | Duration | Notes | (7 parts incl. leading/trailing empty)
+        // Old format: | Date | Task | Branch | Notes | (6 parts)
+        const hasDuration = parts.length >= 7;
         return {
           date: parts[1] ?? "",
           task: parts[2] ?? "",
           branch: parts[3] ?? "",
-          notes: parts[4] ?? "",
+          duration: hasDuration ? (parts[4] ?? "") : "",
+          notes: hasDuration ? (parts[5] ?? "") : (parts[4] ?? ""),
         };
       });
+
+      // Compute average task duration from entries that have duration data
+      const durationMinutes = completed
+        .map((c) => parseDurationMinutes(c.duration))
+        .filter((d): d is number => d !== null);
+      const averageTaskDuration =
+        durationMinutes.length > 0
+          ? formatDuration(
+              durationMinutes.reduce((a, b) => a + b, 0) / durationMinutes.length
+            )
+          : null;
 
       // Failed tasks
       const failedRaw = readDevFile(devDir, "failed-tasks.md");
@@ -142,13 +253,16 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         };
       });
 
-      // Blockers
+      // Blockers — only parse the ## Active section
       const blockersRaw = readDevFile(devDir, "blockers.md");
+      const activeMatch = blockersRaw.match(/## Active\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
+      const activeSection = activeMatch?.[1]?.trim() ?? "";
       const hasBlockers =
-        blockersRaw.length > 0 &&
-        !blockersRaw.includes("No active blockers");
+        activeSection.length > 0 &&
+        activeSection.toLowerCase() !== "none" &&
+        !activeSection.includes("No active blockers");
       const blockerLines = hasBlockers
-        ? blockersRaw.split("\n").filter((l) => l.startsWith("- "))
+        ? activeSection.split("\n").filter((l) => l.startsWith("- "))
         : [];
 
       // Sync health (from sync-health.md)
@@ -257,19 +371,42 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
+      // Health score inputs
+      const failedPendingCount = failed.filter((f) =>
+        f.status.includes("pending")
+      ).length;
+      const staleHeartbeatCount = Object.values(heartbeats).filter(
+        (hb) => hb.isStale
+      ).length;
+      const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+      const staleTasks24hCount = Object.values(currentTasks).filter((t) => {
+        if (!t.started) return false;
+        const startedDate = new Date(t.started);
+        return !isNaN(startedDate.getTime()) && Date.now() - startedDate.getTime() > twentyFourHoursMs;
+      }).length;
+
+      const healthScore = calculateHealthScore({
+        failedPendingCount,
+        blockerCount: blockerLines.length,
+        staleHeartbeatCount,
+        staleTasks24hCount,
+      });
+
       return Response.json({
         data: {
           workers,
           currentTask,
+          currentTasks,
+          heartbeats,
           backlog,
           completed,
           completedCount: completed.length,
+          averageTaskDuration,
           failed,
-          failedPendingCount: failed.filter((f) =>
-            f.status.includes("pending")
-          ).length,
+          failedPendingCount,
           hasBlockers,
           blockerLines,
+          healthScore,
           syncHealth: {
             lastRun: lastSyncMatch?.[1] ?? null,
             endpoints: syncEndpoints,

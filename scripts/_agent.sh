@@ -1,94 +1,140 @@
 #!/usr/bin/env bash
-# _agent.sh — AI agent abstraction layer
-# Tries Claude Code first, falls back to OpenAI Codex CLI if auth fails.
-# Sourced by _config.sh — available to all scripts via run_agent().
+# _agent.sh — AI agent abstraction layer (plugin-based)
+# Sourced by _config.sh — provides run_agent() to all scripts.
+#
+# Plugin interface: each agent plugin must define two functions:
+#   agent_check              — returns 0 if agent is available, 1 if not
+#   agent_run "prompt" "log" — runs the agent, returns exit code
+#
+# Set SKYNET_AGENT_PLUGIN in skynet.config.sh to:
+#   "auto"                — try Claude first, fall back to Codex (default)
+#   "claude"              — use Claude Code only
+#   "codex"               — use Codex CLI only
+#   "/path/to/plugin.sh"  — use a custom agent plugin
 
 # Codex CLI defaults (override in skynet.config.sh)
 export SKYNET_CODEX_BIN="${SKYNET_CODEX_BIN:-codex}"
 export SKYNET_CODEX_FLAGS="${SKYNET_CODEX_FLAGS:---full-auto}"
-export SKYNET_AGENT_PREFERENCE="${SKYNET_AGENT_PREFERENCE:-auto}"  # claude | codex | auto
 
-# Internal: check if Claude Code is available and authenticated
-_check_claude_available() {
-  # Quick check: is the binary installed?
-  if ! command -v "$SKYNET_CLAUDE_BIN" &>/dev/null; then
-    return 1
+# Agent plugin selection (default: auto)
+export SKYNET_AGENT_PLUGIN="${SKYNET_AGENT_PLUGIN:-auto}"
+
+# Backward compatibility: SKYNET_AGENT_PREFERENCE maps to SKYNET_AGENT_PLUGIN
+if [ "${SKYNET_AGENT_PLUGIN}" = "auto" ] && [ "${SKYNET_AGENT_PREFERENCE:-auto}" != "auto" ]; then
+  SKYNET_AGENT_PLUGIN="${SKYNET_AGENT_PREFERENCE}"
+fi
+
+# Resolve built-in plugin name to file path
+_resolve_plugin_path() {
+  local name="$1"
+  case "$name" in
+    claude|codex) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
+    auto)         echo "auto" ;;
+    *)            echo "$name" ;;  # file path (absolute or relative)
+  esac
+}
+
+# Load a plugin and rename its functions under a prefix.
+# Usage: _load_plugin_as "prefix" "/path/to/plugin.sh"
+# Creates: prefix_agent_run(), prefix_agent_check()
+_load_plugin_as() {
+  local prefix="$1"
+  local plugin_path="$2"
+
+  if [ ! -f "$plugin_path" ]; then
+    eval "${prefix}_agent_check() { return 1; }"
+    eval "${prefix}_agent_run() { echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent plugin not found: $plugin_path\" >> \"\${2:-/dev/null}\"; return 1; }"
+    return
   fi
-  # Check cached token if available
-  if [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
-    local token
-    token=$(cat "$SKYNET_AUTH_TOKEN_CACHE" 2>/dev/null)
-    if [ -n "$token" ]; then
-      # Token exists — assume valid (auth-refresh keeps it current)
-      return 0
+
+  # Source the plugin (defines agent_run + agent_check)
+  # shellcheck source=/dev/null
+  source "$plugin_path"
+
+  # Default agent_check if plugin doesn't define one
+  if ! declare -f agent_check &>/dev/null; then
+    agent_check() { return 0; }
+  fi
+
+  # Rename into prefixed functions
+  eval "$(declare -f agent_check | sed "1s/agent_check/${prefix}_agent_check/")"
+  eval "$(declare -f agent_run | sed "1s/agent_run/${prefix}_agent_run/")"
+
+  # Clean up generic names to avoid collisions with next plugin
+  unset -f agent_check agent_run 2>/dev/null || true
+}
+
+# --- Set up run_agent() based on SKYNET_AGENT_PLUGIN ---
+
+_plugin_resolved="$(_resolve_plugin_path "$SKYNET_AGENT_PLUGIN")"
+
+if [ "$_plugin_resolved" = "auto" ]; then
+  # Auto mode: try Claude first, fall back to Codex
+  _load_plugin_as "_claude" "$SKYNET_SCRIPTS_DIR/agents/claude.sh"
+  _load_plugin_as "_codex" "$SKYNET_SCRIPTS_DIR/agents/codex.sh"
+
+  # Public API: run_agent "prompt" "log_file"
+  # Returns the exit code of whichever agent ran.
+  run_agent() {
+    local prompt="$1"
+    local log_file="${2:-/dev/null}"
+
+    # Try Claude first
+    if _claude_agent_check; then
+      _claude_agent_run "$prompt" "$log_file"
+      local exit_code=$?
+      if [ "$exit_code" -eq 0 ]; then
+        return 0
+      fi
+      # Claude failed — try Codex as fallback
+      if _codex_agent_check; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code) — falling back to Codex CLI" >> "$log_file"
+        tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed — switching to Codex" 2>/dev/null || true
+        _codex_agent_run "$prompt" "$log_file"
+        return $?
+      fi
+      return $exit_code
     fi
-  fi
-  # Check auth fail flag
-  if [ -f "$SKYNET_AUTH_FAIL_FLAG" ]; then
-    return 1
-  fi
-  # No cache but no fail flag either — optimistically try
-  return 0
-}
 
-# Internal: run Claude Code with the given prompt
-_run_claude() {
-  local prompt="$1"
-  local log_file="${2:-/dev/null}"
-  unset CLAUDECODE 2>/dev/null || true
-  $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt" >> "$log_file" 2>&1
-}
-
-# Internal: run Codex CLI with the given prompt
-_run_codex() {
-  local prompt="$1"
-  local log_file="${2:-/dev/null}"
-  $SKYNET_CODEX_BIN $SKYNET_CODEX_FLAGS "$prompt" >> "$log_file" 2>&1
-}
-
-# Public API: run_agent "prompt" "log_file"
-# Returns the exit code of whichever agent ran.
-# Tries Claude first (unless preference says otherwise), falls back to Codex.
-run_agent() {
-  local prompt="$1"
-  local log_file="${2:-/dev/null}"
-
-  # Forced Codex mode
-  if [ "$SKYNET_AGENT_PREFERENCE" = "codex" ]; then
-    if command -v "$SKYNET_CODEX_BIN" &>/dev/null; then
-      _run_codex "$prompt" "$log_file"
+    # Claude unavailable — try Codex
+    if _codex_agent_check; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude unavailable — falling back to Codex CLI" >> "$log_file"
+      tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude down — switching to Codex" 2>/dev/null || true
+      _codex_agent_run "$prompt" "$log_file"
       return $?
-    else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Codex CLI not found ($SKYNET_CODEX_BIN)" >> "$log_file"
+    fi
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: No AI agent available (Claude auth failed, Codex not installed)" >> "$log_file"
+    return 1
+  }
+
+else
+  # Single plugin mode (built-in or custom file path)
+  if [ ! -f "$_plugin_resolved" ]; then
+    echo "FATAL: Agent plugin not found: $_plugin_resolved (SKYNET_AGENT_PLUGIN=$SKYNET_AGENT_PLUGIN)" >&2
+    exit 1
+  fi
+
+  # shellcheck source=/dev/null
+  source "$_plugin_resolved"
+
+  # Default agent_check if plugin doesn't define one
+  if ! declare -f agent_check &>/dev/null; then
+    agent_check() { return 0; }
+  fi
+
+  # Public API: run_agent "prompt" "log_file"
+  run_agent() {
+    local prompt="$1"
+    local log_file="${2:-/dev/null}"
+
+    if ! agent_check; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent not available (plugin: $SKYNET_AGENT_PLUGIN)" >> "$log_file"
       return 1
     fi
-  fi
 
-  # Claude-first mode (claude or auto)
-  if _check_claude_available; then
-    _run_claude "$prompt" "$log_file"
-    local exit_code=$?
-    if [ "$exit_code" -eq 0 ]; then
-      return 0
-    fi
-    # Claude failed — if auto mode, try Codex as fallback
-    if [ "$SKYNET_AGENT_PREFERENCE" = "auto" ] && command -v "$SKYNET_CODEX_BIN" &>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code) — falling back to Codex CLI" >> "$log_file"
-      type tg &>/dev/null 2>&1 && tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed — switching to Codex" 2>/dev/null || true
-      _run_codex "$prompt" "$log_file"
-      return $?
-    fi
-    return $exit_code
-  fi
+    agent_run "$prompt" "$log_file"
+  }
+fi
 
-  # Claude unavailable — try Codex if in auto mode
-  if [ "$SKYNET_AGENT_PREFERENCE" = "auto" ] && command -v "$SKYNET_CODEX_BIN" &>/dev/null; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude unavailable — falling back to Codex CLI" >> "$log_file"
-    type tg &>/dev/null 2>&1 && tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude down — switching to Codex" 2>/dev/null || true
-    _run_codex "$prompt" "$log_file"
-    return $?
-  fi
-
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: No AI agent available (Claude auth failed, Codex not installed)" >> "$log_file"
-  return 1
-}
+unset _plugin_resolved

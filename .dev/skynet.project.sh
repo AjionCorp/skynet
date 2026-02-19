@@ -43,4 +43,4 @@ Follow existing code patterns exactly:
 export SKYNET_SYNC_ENDPOINTS=()
 
 # Task tags
-export SKYNET_TASK_TAGS="FEAT FIX INFRA TEST"
+export SKYNET_TASK_TAGS="FEAT FIX INFRA TEST NMI"

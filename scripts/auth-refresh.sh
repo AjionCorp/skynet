@@ -125,11 +125,11 @@ print(expires_in)
 print(new_expires_at)
 ")
 
-  local new_access new_refresh expires_in new_expires_at
+  local new_access new_refresh _expires_in new_expires_at
   {
     read -r new_access
     read -r new_refresh
-    read -r expires_in
+    read -r _expires_in
     read -r new_expires_at
   } <<< "$resp_parsed"
 

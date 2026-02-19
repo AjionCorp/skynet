@@ -90,7 +90,7 @@ export function createConfig(
       "feature-validator",
       "health-check",
     ],
-    taskTags: ["FEAT", "FIX", "INFRA", "TEST"],
+    taskTags: ["FEAT", "FIX", "INFRA", "TEST", "NMI"],
     ...overrides,
   };
 }

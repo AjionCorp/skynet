@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dev-worker.sh — Pick next task from backlog, implement it via Claude Code
-# Flow: worktree -> implement -> typecheck -> playwright -> merge to main -> cleanup
+# Flow: worktree -> implement -> quality gates (SKYNET_GATE_*) -> merge to main -> cleanup
 # Uses git worktrees so multiple workers can run concurrently without conflicts.
 # On failure: moves task to failed-tasks.md, then tries the NEXT task
 # Supports multiple workers: pass worker ID as arg (default: 1)
@@ -12,6 +12,11 @@ set -euo pipefail
 WORKER_ID="${1:-1}"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
+
+# Per-worker port offset to prevent dev-server collisions in multi-worker mode
+WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
+export PORT="$WORKER_PORT"
+WORKER_DEV_URL="http://localhost:${WORKER_PORT}"
 
 LOG="$SCRIPTS_DIR/dev-worker-${WORKER_ID}.log"
 STALE_MINUTES="$SKYNET_STALE_MINUTES"
@@ -29,6 +34,49 @@ WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${WORKER_ID}"
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] $*" >> "$LOG"; }
+
+# Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
+format_duration() {
+  local seconds=$1
+  local minutes=$(( seconds / 60 ))
+  if [ "$minutes" -lt 60 ]; then
+    echo "${minutes}m"
+  else
+    local hours=$(( minutes / 60 ))
+    local rem=$(( minutes % 60 ))
+    if [ "$rem" -eq 0 ]; then
+      echo "${hours}h"
+    else
+      echo "${hours}h ${rem}m"
+    fi
+  fi
+}
+
+# --- Heartbeat helpers ---
+# Background loop writes epoch timestamp to .dev/worker-N.heartbeat every 60s
+# so the watchdog can detect stuck workers even if the process is alive.
+HEARTBEAT_FILE="$DEV_DIR/worker-${WORKER_ID}.heartbeat"
+_heartbeat_pid=""
+
+_start_heartbeat() {
+  (
+    while true; do
+      date +%s > "$HEARTBEAT_FILE"
+      sleep 60
+    done
+  ) &
+  _heartbeat_pid=$!
+  log "Heartbeat started (PID $_heartbeat_pid, file $HEARTBEAT_FILE)"
+}
+
+_stop_heartbeat() {
+  if [ -n "$_heartbeat_pid" ]; then
+    kill "$_heartbeat_pid" 2>/dev/null || true
+    wait "$_heartbeat_pid" 2>/dev/null || true
+    _heartbeat_pid=""
+  fi
+  rm -f "$HEARTBEAT_FILE"
+}
 
 # --- Mutex helpers using mkdir (works on macOS + Linux) ---
 acquire_lock() {
@@ -57,14 +105,46 @@ release_lock() {
   rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
 }
 
+# --- Helper: check if a task's blockedBy dependencies are all done ---
+# Usage: is_task_blocked "- [ ] [TAG] Title | blockedBy: Dep1, Dep2"
+# Returns 0 (true) if blocked, 1 (false) if unblocked.
+is_task_blocked() {
+  local task_line="$1"
+  # Extract blockedBy metadata (case-insensitive match after " | blockedBy: ")
+  local blocked_by
+  blocked_by=$(echo "$task_line" | sed -n 's/.*| *blockedBy: *\(.*\)$/\1/Ip')
+  if [ -z "$blocked_by" ]; then
+    return 1  # no dependencies — not blocked
+  fi
+  # Split on comma and check each dependency
+  local IFS=','
+  for dep in $blocked_by; do
+    dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')  # trim whitespace
+    if [ -z "$dep" ]; then continue; fi
+    # Check if this dependency is done (has [x] marker) in the backlog
+    # Match: "- [x] [TAG] <dep>" or "- [x] <dep>" anywhere in the title portion
+    if ! grep -q "^\- \[x\] .*${dep}" "$BACKLOG" 2>/dev/null; then
+      return 0  # dependency not done — task is blocked
+    fi
+  done
+  return 1  # all dependencies done — not blocked
+}
+
 # --- Helper: atomically claim the next unchecked task from backlog ---
 # Uses mkdir lock to prevent two workers from grabbing the same task.
 # Changes "- [ ]" to "- [>]" (claimed) so the other worker skips it.
+# Skips tasks whose blockedBy dependencies are not yet completed.
 # Outputs the claimed task line (original "- [ ] ..." form) or empty string.
 claim_next_task() {
   if ! acquire_lock; then echo ""; return; fi
-  local task
-  task=$(grep -m1 '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  local task=""
+  # Iterate through all pending tasks, skip blocked ones
+  while IFS= read -r candidate; do
+    if ! is_task_blocked "$candidate"; then
+      task="$candidate"
+      break
+    fi
+  done < <(grep '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   if [ -n "$task" ]; then
     if ! awk -v target="$task" 'found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
       "$BACKLOG" > "$BACKLOG.tmp" || ! mv "$BACKLOG.tmp" "$BACKLOG"; then
@@ -84,7 +164,7 @@ remove_from_backlog() {
   local line_to_remove="$1"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    grep -Fxv "$line_to_remove" "$BACKLOG" > "$BACKLOG.tmp" || true
+    grep -Fxv -- "$line_to_remove" "$BACKLOG" > "$BACKLOG.tmp" || true
     mv "$BACKLOG.tmp" "$BACKLOG"
   fi
   release_lock
@@ -166,6 +246,8 @@ echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
+  # Stop heartbeat writer
+  _stop_heartbeat 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
@@ -185,10 +267,11 @@ if ! check_claude_auth; then
 fi
 
 # --- Ensure dev server is running with log capture ---
-SERVER_LOG="$SCRIPTS_DIR/next-dev.log"
-SERVER_PID_FILE="$SCRIPTS_DIR/next-dev.pid"
-if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-  # Dev server is up — ensure we're tracking its PID
+SERVER_LOG="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.log"
+SERVER_PID_FILE="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.pid"
+log "Worker port: $WORKER_PORT (base $SKYNET_DEV_PORT + worker $WORKER_ID - 1)"
+if curl -sf "$WORKER_DEV_URL" > /dev/null 2>&1; then
+  # Dev server is up on this worker's port — ensure we're tracking its PID
   if [ ! -f "$SERVER_PID_FILE" ] || ! kill -0 "$(cat "$SERVER_PID_FILE" 2>/dev/null)" 2>/dev/null; then
     server_pid=$(pgrep -f "next-server" 2>/dev/null | head -1 || true)
     if [ -n "$server_pid" ]; then
@@ -197,9 +280,9 @@ if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
     fi
   fi
 else
-  # Dev server not running — start it with log capture
-  log "Dev server not running. Starting via start-dev.sh..."
-  bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || true
+  # Dev server not running on worker port — start it with log capture
+  log "Dev server not running on port $WORKER_PORT. Starting via start-dev.sh..."
+  PORT="$WORKER_PORT" bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || true
   sleep 5
 fi
 
@@ -229,6 +312,9 @@ tasks_attempted=0
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   tasks_attempted=$((tasks_attempted + 1))
 
+  # Rotate log if it exceeds max size (prevents unbounded growth)
+  rotate_log_if_needed "$LOG"
+
   # Atomically claim next unchecked task
   next_task=$(claim_next_task)
   if [ -z "$next_task" ]; then
@@ -253,6 +339,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
+  # shellcheck disable=SC2034
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
 
@@ -261,6 +348,7 @@ EOF
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
 
   # Write current task status for this worker
+  task_start_epoch=$(date +%s)
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
@@ -270,11 +358,15 @@ EOF
 **Worker:** $WORKER_ID
 EOF
 
+  # Start heartbeat for this task (watchdog uses this to detect stuck workers)
+  _start_heartbeat
+
   # --- Set up isolated worktree for this task ---
   if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
     # Branch exists from a prior failed attempt — reuse it
     if ! setup_worktree "$branch_name" false; then
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
+      _stop_heartbeat
       cleanup_worktree "$branch_name"
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
@@ -285,6 +377,7 @@ EOF
     # Create new feature branch from main
     if ! setup_worktree "$branch_name" true; then
       log "Failed to create worktree for $branch_name — unclaiming."
+      _stop_heartbeat
       cleanup_worktree "$branch_name"
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
@@ -304,16 +397,16 @@ Instructions:
 1. Read the codebase to understand existing patterns (check CLAUDE.md, existing sync code, API routes)
 2. Implement the task following existing conventions
 3. Run '$SKYNET_TYPECHECK_CMD' to verify no type errors -- fix any that arise (up to 3 attempts)
-4. After implementing, check the dev server log for runtime errors: cat $SCRIPTS_DIR/next-dev.log | tail -50
+4. After implementing, check the dev server log for runtime errors: cat $SERVER_LOG | tail -50
    - If you see 500 errors, missing table errors, or import failures related to YOUR changes, fix them before committing
-   - Also test your new API routes with curl (e.g. curl -s ${SKYNET_DEV_SERVER_URL}/api/your/route | head -20)
+   - Also test your new API routes with curl (e.g. curl -s ${WORKER_DEV_URL}/api/your/route | head -20)
 5. Stage and commit your changes to the current branch with a descriptive commit message
 6. Do NOT modify any files in ${DEV_DIR##*/}/ -- those are managed by the pipeline
 
 Debugging tools available to you:
-- Server log: cat $SCRIPTS_DIR/next-dev.log | tail -100 (shows Next.js runtime errors, 500s, missing tables)
-- Test an API route: curl -s ${SKYNET_DEV_SERVER_URL}/api/... | head -20
-- Check if dev server is running: curl -sf ${SKYNET_DEV_SERVER_URL}
+- Server log: cat $SERVER_LOG | tail -100 (shows Next.js runtime errors, 500s, missing tables)
+- Test an API route: curl -s ${WORKER_DEV_URL}/api/... | head -20
+- Check if dev server is running: curl -sf ${WORKER_DEV_URL}
 
 If you encounter a blocker you cannot resolve (missing API keys, unclear requirements, etc.):
 - Write it to $BLOCKERS with the date and task name
@@ -322,6 +415,7 @@ If you encounter a blocker you cannot resolve (missing API keys, unclear require
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
   (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
+  _stop_heartbeat
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
@@ -340,64 +434,47 @@ EOF
 
   log "Claude Code completed. Running checks before merge..."
 
-  # --- Gate 1: Typecheck (in worktree) ---
+  # --- Run configurable quality gates (in worktree) ---
   # Clean .dev/ changes Claude may have made in the worktree
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
-  (cd "$WORKTREE_DIR" && git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true)
+  (cd "$WORKTREE_DIR" && git clean -fd test-results/ 2>/dev/null || true)
 
-  if ! (cd "$WORKTREE_DIR" && $SKYNET_TYPECHECK_CMD) >> "$LOG" 2>&1; then
-    log "TYPECHECK FAILED. Branch NOT merged."
-    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (typecheck failed)"
+  _gate_failed=""
+  _gate_idx=1
+  while true; do
+    _gate_var="SKYNET_GATE_${_gate_idx}"
+    _gate_cmd="${!_gate_var:-}"
+    if [ -z "$_gate_cmd" ]; then break; fi
+    log "Running gate $_gate_idx: $_gate_cmd"
+    if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then
+      _gate_failed="$_gate_cmd"
+      break
+    fi
+    log "Gate $_gate_idx passed."
+    _gate_idx=$((_gate_idx + 1))
+  done
+
+  if [ -n "$_gate_failed" ]; then
+    _gate_label=$(echo "$_gate_failed" | awk '{print $NF}')
+    log "GATE FAILED: $_gate_failed. Branch NOT merged."
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
     cleanup_worktree  # Keep branch for task-fixer
-    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed | 0 | pending |" >> "$FAILED"
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed)_"
+    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
+    mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
     _CURRENT_TASK_TITLE=""
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (typecheck failed, branch kept)
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title ($_gate_label failed, branch kept)
 EOF
     log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
     continue
   fi
 
-  log "Typecheck passed."
+  log "All quality gates passed."
 
-  # --- Gate 2: Playwright smoke tests (if dev server is running) ---
-  if curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-    db_healthy=true
-    api_check=$(curl -sf "${SKYNET_DEV_SERVER_URL}/api/gov/officials?page=1&pageSize=1" 2>/dev/null || echo '{"error":"unreachable"}')
-    if echo "$api_check" | grep -qi "schema cache\|PGRST\|Could not query"; then
-      db_healthy=false
-      log "WARNING: Supabase DB is down (PGRST002). Skipping Playwright gate — not a code issue."
-      tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Supabase DB down — skipping Playwright gate for $task_title"
-    fi
-
-    if $db_healthy; then
-      log "Dev server reachable. Running Playwright smoke tests..."
-      if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
-        log "PLAYWRIGHT FAILED. Branch NOT merged."
-        tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (playwright failed)"
-        cleanup_worktree  # Keep branch for task-fixer
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright tests failed | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(playwright failed)_"
-        _CURRENT_TASK_TITLE=""
-        cat > "$WORKER_TASK_FILE" <<EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (playwright failed, branch kept)
-EOF
-        log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
-        continue
-      fi
-      log "Playwright tests passed."
-    fi
-  else
-    log "Dev server not reachable. Skipping Playwright tests."
-  fi
-
-  # --- Gate 3: Check server logs for runtime errors ---
-  if [ -f "$SCRIPTS_DIR/next-dev.log" ]; then
+  # --- Non-blocking: Check server logs for runtime errors ---
+  if [ -f "$SERVER_LOG" ]; then
     log "Checking server logs for runtime errors..."
     bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
       log "Server errors found -- written to blockers.md (non-blocking for merge)"
@@ -423,7 +500,8 @@ EOF
 
   mark_in_backlog "- [>] $task_title" "- [x] $task_title"
   _CURRENT_TASK_TITLE=""
-  echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | success |" >> "$COMPLETED"
+  task_duration=$(format_duration $(( $(date +%s) - task_start_epoch )))
+  echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
 
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task

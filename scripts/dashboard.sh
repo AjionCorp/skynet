@@ -105,14 +105,14 @@ next_fire() {
   m=$(date +%M | sed 's/^0*//' | sed 's/^$/0/')
 
   case "$pat" in
-    "*/3")   local n=$(((m/3+1)*3)); [ $n -ge 60 ] && printf "%02d:00" $(((h+1)%24)) || printf "%02d:%02d" "$h" "$n" ;;
-    "*/15")  local n=$(((m/15+1)*15)); [ $n -ge 60 ] && printf "%02d:00" $(((h+1)%24)) || printf "%02d:%02d" "$h" "$n" ;;
-    "5,35")  [ $m -lt 5 ] && printf "%02d:05" "$h" || { [ $m -lt 35 ] && printf "%02d:35" "$h" || printf "%02d:05" $(((h+1)%24)); } ;;
-    "10")    [ $m -lt 10 ] && printf "%02d:10" "$h" || printf "%02d:10" $(((h+1)%24)) ;;
-    "40e2")  [ $((h%2)) -eq 0 ] && [ $m -lt 40 ] && printf "%02d:40" "$h" || printf "%02d:40" $(((h/2+1)*2%24)) ;;
+    "*/3")   local n=$(((m/3+1)*3)); [ "$n" -ge 60 ] && printf "%02d:00" $(((h+1)%24)) || printf "%02d:%02d" "$h" "$n" ;;
+    "*/15")  local n=$(((m/15+1)*15)); [ "$n" -ge 60 ] && printf "%02d:00" $(((h+1)%24)) || printf "%02d:%02d" "$h" "$n" ;;
+    "5,35")  [ "$m" -lt 5 ] && printf "%02d:05" "$h" || { [ "$m" -lt 35 ] && printf "%02d:35" "$h" || printf "%02d:05" $(((h+1)%24)); } ;;
+    "10")    [ "$m" -lt 10 ] && printf "%02d:10" "$h" || printf "%02d:10" $(((h+1)%24)) ;;
+    "40e2")  [ $((h%2)) -eq 0 ] && [ "$m" -lt 40 ] && printf "%02d:40" "$h" || printf "%02d:40" $(((h/2+1)*2%24)) ;;
     "6h")    printf "%02d:00" $(((h/6+1)*6%24)) ;;
-    "8am")   [ $h -lt 8 ] && echo "08:00" || echo "08:00+1d" ;;
-    "8,20")  [ $h -lt 8 ] && echo "08:00" || { [ $h -lt 20 ] && echo "20:00" || echo "08:00+1d"; } ;;
+    "8am")   [ "$h" -lt 8 ] && echo "08:00" || echo "08:00+1d" ;;
+    "8,20")  [ "$h" -lt 8 ] && echo "08:00" || { [ "$h" -lt 20 ] && echo "20:00" || echo "08:00+1d"; } ;;
   esac
 }
 
@@ -186,7 +186,7 @@ render() {
   hline_split "├" "┬" "┤" "$SP"
 
   # Backlog + Sync Health side by side
-  local bl_count sh_last
+  local bl_count
   bl_count=$(safe_count '^\- \[ \]' "$BACKLOG")
 
   row2 "${BOLD}${YELLOW}BACKLOG${RESET} ${DIM}($bl_count pending)${RESET}" "${BOLD}${YELLOW}SYNC HEALTH${RESET}" "$SP"
