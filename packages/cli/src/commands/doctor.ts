@@ -49,6 +49,14 @@ function isProcessRunning(lockFile: string): { running: boolean; pid: string } {
   }
 }
 
+function readFile(filePath: string): string {
+  try {
+    return readFileSync(filePath, "utf-8");
+  } catch {
+    return "";
+  }
+}
+
 type Status = "PASS" | "WARN" | "FAIL";
 
 function label(status: Status): string {
@@ -272,6 +280,249 @@ export async function doctorCommand(options: DoctorOptions) {
   } catch {
     console.log("    Not a git repository");
     results.push({ name: "Git", status: "FAIL" });
+  }
+
+  // --- (8) Worker Count Match ---
+  console.log("\n  Worker Count Match:");
+
+  const maxWorkers = Number(vars?.SKYNET_MAX_WORKERS) || 0;
+
+  if (!maxWorkers) {
+    console.log("    Cannot check — SKYNET_MAX_WORKERS not configured");
+    results.push({ name: "Worker Count Match", status: "WARN" });
+  } else if (!lockPrefix) {
+    console.log("    Cannot check — no lock prefix (config missing)");
+    results.push({ name: "Worker Count Match", status: "WARN" });
+  } else {
+    let runningDevWorkers = 0;
+    // Scan beyond maxWorkers to detect extras
+    const scanLimit = maxWorkers + 10;
+    for (let n = 1; n <= scanLimit; n++) {
+      const lockFile = `${lockPrefix}-dev-worker-${n}.lock`;
+      if (existsSync(lockFile) && isProcessRunning(lockFile).running) {
+        runningDevWorkers++;
+      }
+    }
+
+    console.log(`    Configured max: ${maxWorkers}, Running: ${runningDevWorkers}`);
+    if (runningDevWorkers > maxWorkers) {
+      console.log("    More workers running than configured max");
+      results.push({ name: "Worker Count Match", status: "WARN" });
+    } else {
+      results.push({ name: "Worker Count Match", status: "PASS" });
+    }
+  }
+
+  // --- (9) Orphaned Worktrees ---
+  console.log("\n  Orphaned Worktrees:");
+
+  try {
+    const wtOutput = execSync("git worktree list --porcelain", {
+      cwd: projectDir,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    // Parse worktree entries
+    const worktrees: { path: string; branch: string }[] = [];
+    let currentWtPath = "";
+    for (const line of wtOutput.split("\n")) {
+      const pathMatch = line.match(/^worktree (.+)/);
+      if (pathMatch) {
+        currentWtPath = pathMatch[1];
+      }
+      const branchMatch = line.match(/^branch refs\/heads\/(.+)/);
+      if (branchMatch && currentWtPath) {
+        worktrees.push({ path: currentWtPath, branch: branchMatch[1] });
+        currentWtPath = "";
+      }
+    }
+
+    // Determine active worktree paths (main project dir + running worker worktrees)
+    const activeWorktreePaths = new Set<string>();
+    activeWorktreePaths.add(resolve(projectDir));
+
+    if (lockPrefix && projectName) {
+      const wtScanMax = (maxWorkers || 4) + 10;
+      for (let n = 1; n <= wtScanMax; n++) {
+        const lockFile = `${lockPrefix}-dev-worker-${n}.lock`;
+        if (existsSync(lockFile) && isProcessRunning(lockFile).running) {
+          activeWorktreePaths.add(`/tmp/skynet-${projectName}-worktree-w${n}`);
+        }
+      }
+    }
+
+    let orphanedCount = 0;
+    for (const wt of worktrees) {
+      if (!activeWorktreePaths.has(wt.path)) {
+        console.log(`    Orphaned: ${wt.path} (${wt.branch})`);
+        orphanedCount++;
+      }
+    }
+
+    if (orphanedCount === 0) {
+      console.log("    No orphaned worktrees");
+      results.push({ name: "Orphaned Worktrees", status: "PASS" });
+    } else {
+      console.log(`    ${orphanedCount} orphaned worktree(s) found`);
+      results.push({ name: "Orphaned Worktrees", status: "WARN" });
+    }
+  } catch {
+    console.log("    Cannot check — git worktree list failed");
+    results.push({ name: "Orphaned Worktrees", status: "WARN" });
+  }
+
+  // --- (10) Backlog Integrity ---
+  console.log("\n  Backlog Integrity:");
+
+  const backlogPath = join(devDir, "backlog.md");
+
+  if (!existsSync(backlogPath)) {
+    console.log("    Cannot check — backlog.md not found");
+    results.push({ name: "Backlog Integrity", status: "WARN" });
+  } else {
+    const backlogContent = readFile(backlogPath);
+    const backlogLines = backlogContent.split("\n");
+    let integrityIssues = 0;
+
+    // Check for duplicate pending task titles
+    const pendingTitles: string[] = [];
+    const claimedTitles: string[] = [];
+
+    for (const line of backlogLines) {
+      if (line.startsWith("- [ ] ")) {
+        const title = line.replace(/^- \[ \] /, "").split(" — ")[0].trim();
+        pendingTitles.push(title);
+      } else if (line.startsWith("- [>] ")) {
+        const title = line.replace(/^- \[>\] /, "").split(" — ")[0].trim();
+        claimedTitles.push(title);
+      }
+    }
+
+    const seen = new Set<string>();
+    const duplicates = new Set<string>();
+    for (const title of pendingTitles) {
+      if (seen.has(title)) {
+        duplicates.add(title);
+      }
+      seen.add(title);
+    }
+
+    if (duplicates.size > 0) {
+      for (const dup of duplicates) {
+        console.log(`    Duplicate pending task: ${dup}`);
+      }
+      integrityIssues += duplicates.size;
+    }
+
+    // Check claimed tasks have matching current-task-N.md in in_progress state
+    const inProgressTitles = new Set<string>();
+    try {
+      const devEntries = readdirSync(devDir);
+      for (const entry of devEntries) {
+        if (entry.match(/^current-task(-\d+)?\.md$/)) {
+          const content = readFile(join(devDir, entry));
+          const titleMatch = content.match(/^## (.+)/m);
+          const statusMatch = content.match(/\*\*Status:\*\* (\w+)/);
+          if (titleMatch && statusMatch?.[1] === "in_progress") {
+            inProgressTitles.add(titleMatch[1].trim());
+          }
+        }
+      }
+    } catch {
+      // devDir may not be readable
+    }
+
+    for (const claimed of claimedTitles) {
+      if (!inProgressTitles.has(claimed)) {
+        console.log(`    Claimed task without in_progress file: ${claimed}`);
+        integrityIssues++;
+      }
+    }
+
+    if (integrityIssues === 0) {
+      console.log("    No integrity issues found");
+      results.push({ name: "Backlog Integrity", status: "PASS" });
+    } else {
+      results.push({ name: "Backlog Integrity", status: "WARN" });
+    }
+  }
+
+  // --- (11) Stale Heartbeats ---
+  console.log("\n  Stale Heartbeats:");
+
+  const staleMinutes = Number(vars?.SKYNET_STALE_MINUTES) || 45;
+  const staleThresholdMs = staleMinutes * 60 * 1000;
+  const now = Date.now();
+
+  let staleCount = 0;
+  let heartbeatTotal = 0;
+  const heartbeatScanMax = maxWorkers || 10;
+
+  for (let n = 1; n <= heartbeatScanMax; n++) {
+    const hbPath = join(devDir, `worker-${n}.heartbeat`);
+    if (existsSync(hbPath)) {
+      heartbeatTotal++;
+      const epoch = Number(readFile(hbPath).trim());
+      if (epoch) {
+        const ageMs = now - epoch * 1000;
+        const ageMin = Math.round(ageMs / 60000);
+        if (ageMs > staleThresholdMs) {
+          console.log(`    Worker ${n}: stale (${ageMin}m old, threshold: ${staleMinutes}m)`);
+          staleCount++;
+        } else {
+          console.log(`    Worker ${n}: OK (${ageMin}m old)`);
+        }
+      } else {
+        console.log(`    Worker ${n}: invalid heartbeat file`);
+        staleCount++;
+      }
+    }
+  }
+
+  if (heartbeatTotal === 0) {
+    console.log("    No heartbeat files found (pipeline idle)");
+    results.push({ name: "Stale Heartbeats", status: "PASS" });
+  } else if (staleCount > 0) {
+    results.push({ name: "Stale Heartbeats", status: "WARN" });
+  } else {
+    results.push({ name: "Stale Heartbeats", status: "PASS" });
+  }
+
+  // --- (12) Config Completeness ---
+  console.log("\n  Config Completeness:");
+
+  const requiredVars = [
+    "SKYNET_PROJECT_NAME",
+    "SKYNET_PROJECT_DIR",
+    "SKYNET_DEV_DIR",
+    "SKYNET_LOCK_PREFIX",
+    "SKYNET_MAIN_BRANCH",
+    "SKYNET_MAX_WORKERS",
+    "SKYNET_STALE_MINUTES",
+    "SKYNET_BRANCH_PREFIX",
+  ];
+
+  if (!vars) {
+    console.log("    Cannot check — config not loaded");
+    results.push({ name: "Config Completeness", status: "FAIL" });
+  } else {
+    let missingVars = 0;
+    for (const key of requiredVars) {
+      const value = vars[key];
+      if (!value || value.trim().length === 0) {
+        console.log(`    ${key}: MISSING or empty`);
+        missingVars++;
+      } else {
+        console.log(`    ${key}: OK`);
+      }
+    }
+
+    if (missingVars === 0) {
+      results.push({ name: "Config Completeness", status: "PASS" });
+    } else {
+      results.push({ name: "Config Completeness", status: "FAIL" });
+    }
   }
 
   // --- Summary ---
