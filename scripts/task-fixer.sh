@@ -18,6 +18,8 @@ else
   LOG="$SCRIPTS_DIR/task-fixer-${FIXER_ID}.log"
 fi
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
+FIXER_STATS="$DEV_DIR/fixer-stats.log"
+FIXER_COOLDOWN="$DEV_DIR/fixer-cooldown"
 
 # Instance-specific worktree (isolated from dev-workers and other fixers)
 WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-${FIXER_ID}"
@@ -165,6 +167,24 @@ trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at ne
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then
   exit 1
+fi
+
+# --- Retry budget: check for consecutive failures before attempting a fix ---
+if [ -f "$FIXER_STATS" ]; then
+  _last5=$(tail -5 "$FIXER_STATS")
+  _fail_count=0
+  _total_count=0
+  while IFS='|' read -r _epoch _result _title; do
+    [ -z "$_epoch" ] && continue
+    _total_count=$((_total_count + 1))
+    [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
+  done <<< "$_last5"
+  if [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ]; then
+    date +%s > "$FIXER_COOLDOWN"
+    log "Fixer paused: 5 consecutive failures, cooling down 30min"
+    rm -f "$LOCKFILE"
+    exit 0
+  fi
 fi
 
 # --- Pre-flight: atomically claim next pending failed task ---
@@ -364,6 +384,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     new_attempts=$((fix_attempts + 1))
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
+    echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
   else
     # --- Graceful shutdown checkpoint (before merge) ---
     if $SHUTDOWN_REQUESTED; then
@@ -388,6 +409,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     _CURRENT_TASK_TITLE=""
     log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
     tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
+    echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
   fi
 else
   exit_code=$?
@@ -399,6 +421,7 @@ else
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
   _CURRENT_TASK_TITLE=""
+  echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
 fi
 
 log "Task-fixer finished."

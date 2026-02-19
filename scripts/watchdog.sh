@@ -420,25 +420,41 @@ if $claude_auth_ok; then
   done
 
   # Rule 2: Kick task-fixers proportional to failed task count
-  # Fixer N starts when failed_pending >= N and fixer N is idle
-  for _fid in $(seq 1 "${SKYNET_MAX_FIXERS:-3}"); do
-    if [ "$failed_pending" -ge "$_fid" ]; then
-      _fixer_lock=""
-      _fixer_log=""
-      if [ "$_fid" = "1" ]; then
-        _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
-        _fixer_log="$SCRIPTS_DIR/task-fixer.log"
-      else
-        _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
-        _fixer_log="$SCRIPTS_DIR/task-fixer-${_fid}.log"
-      fi
-      if ! is_running "$_fixer_lock"; then
-        log "Failed tasks pending ($failed_pending, >=$_fid), task-fixer $_fid idle. Kicking off."
-        tg "👁 *WATCHDOG*: Kicking off task-fixer $_fid ($failed_pending failed tasks)"
-        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/task-fixer.sh" "$_fid" >> "$_fixer_log" 2>&1 &
-      fi
+  # Check fixer cooldown first — skip all fixers if cooling down
+  _fixer_cooldown_active=false
+  if [ -f "$DEV_DIR/fixer-cooldown" ]; then
+    _cooldown_ts=$(cat "$DEV_DIR/fixer-cooldown" 2>/dev/null || echo 0)
+    _now_ts=$(date +%s)
+    if [ $((_now_ts - _cooldown_ts)) -lt 1800 ]; then
+      _fixer_cooldown_active=true
+      log "Fixer cooldown active ($(( (_now_ts - _cooldown_ts) / 60 ))m of 30m elapsed). Skipping task-fixers."
+    else
+      # Cooldown expired — remove the file
+      rm -f "$DEV_DIR/fixer-cooldown"
     fi
-  done
+  fi
+
+  # Fixer N starts when failed_pending >= N and fixer N is idle
+  if ! $_fixer_cooldown_active; then
+    for _fid in $(seq 1 "${SKYNET_MAX_FIXERS:-3}"); do
+      if [ "$failed_pending" -ge "$_fid" ]; then
+        _fixer_lock=""
+        _fixer_log=""
+        if [ "$_fid" = "1" ]; then
+          _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+          _fixer_log="$SCRIPTS_DIR/task-fixer.log"
+        else
+          _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
+          _fixer_log="$SCRIPTS_DIR/task-fixer-${_fid}.log"
+        fi
+        if ! is_running "$_fixer_lock"; then
+          log "Failed tasks pending ($failed_pending, >=$_fid), task-fixer $_fid idle. Kicking off."
+          tg "👁 *WATCHDOG*: Kicking off task-fixer $_fid ($failed_pending failed tasks)"
+          SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/task-fixer.sh" "$_fid" >> "$_fixer_log" 2>&1 &
+        fi
+      fi
+    done
+  fi
 
   # Rule 3: Kick off project-driver if needed (rate-limited)
   if ! $driver_running; then
@@ -461,5 +477,23 @@ if $claude_auth_ok; then
       tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)"
       SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
     fi
+  fi
+fi
+
+# --- Fixer rolling stats (last 24h) ---
+if [ -f "$DEV_DIR/fixer-stats.log" ]; then
+  _24h_ago=$(( $(date +%s) - 86400 ))
+  _total_24h=0
+  _success_24h=0
+  while IFS='|' read -r _epoch _result _title; do
+    [ -z "$_epoch" ] && continue
+    if [ "$_epoch" -ge "$_24h_ago" ] 2>/dev/null; then
+      _total_24h=$((_total_24h + 1))
+      [ "$_result" = "success" ] && _success_24h=$((_success_24h + 1))
+    fi
+  done < "$DEV_DIR/fixer-stats.log"
+  if [ "$_total_24h" -gt 0 ]; then
+    _rate=$(( _success_24h * 100 / _total_24h ))
+    log "Fixer stats (24h): ${_success_24h}/${_total_24h} success (${_rate}%)"
   fi
 fi
