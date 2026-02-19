@@ -5,7 +5,9 @@ import {
   AlertTriangle,
   CheckCircle2,
   Clock,
+  GitBranch,
   Loader2,
+  Lock,
   Plus,
   RefreshCw,
 } from "lucide-react";
@@ -18,6 +20,7 @@ const DEFAULT_TAG_COLORS: Record<string, string> = {
   DATA: "bg-violet-500/15 text-violet-400 border-violet-500/25",
   INFRA: "bg-zinc-500/15 text-zinc-400 border-zinc-500/25",
   TEST: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+  NMI: "bg-yellow-500/15 text-yellow-400 border-yellow-500/25",
 };
 
 export interface TasksDashboardProps {
@@ -30,7 +33,7 @@ export interface TasksDashboardProps {
 export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
-  const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST"];
+  const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST", "NMI"];
   const mergedTagColors = { ...DEFAULT_TAG_COLORS, ...tagColors };
 
   const [backlog, setBacklog] = useState<TaskBacklogData | null>(null);
@@ -40,6 +43,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const [selectedTag, setSelectedTag] = useState<string>(tags[0] ?? "FEAT");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [blockedByInput, setBlockedByInput] = useState("");
   const [position, setPosition] = useState<"top" | "bottom">("top");
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -77,7 +81,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       const res = await fetch(`${apiPrefix}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tag: selectedTag, title: title.trim(), description: description.trim() || undefined, position }),
+        body: JSON.stringify({ tag: selectedTag, title: title.trim(), description: description.trim() || undefined, blockedBy: blockedByInput.trim() || undefined, position }),
       });
       const json = await res.json();
       if (json.error) {
@@ -86,6 +90,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         setSubmitResult({ ok: true, message: `Task added at ${json.data.position} of backlog` });
         setTitle("");
         setDescription("");
+        setBlockedByInput("");
         fetchBacklog();
       }
     } catch (err) {
@@ -186,6 +191,21 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
             />
           </div>
 
+          {/* Blocked By */}
+          <div>
+            <label htmlFor="task-blocked-by" className="mb-2 block text-sm text-zinc-400">
+              Blocked By <span className="text-zinc-600">(optional, comma-separated task titles)</span>
+            </label>
+            <input
+              id="task-blocked-by"
+              type="text"
+              value={blockedByInput}
+              onChange={(e) => setBlockedByInput(e.target.value)}
+              placeholder="e.g. Add database indexes, Set up API endpoint"
+              className="w-full rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+            />
+          </div>
+
           {/* Position toggle */}
           <div>
             <label className="mb-2 block text-sm text-zinc-400">Priority Position</label>
@@ -277,7 +297,11 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
             {backlog.items.map((item, i) => (
               <div
                 key={i}
-                className="flex items-start gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3"
+                className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
+                  item.blocked
+                    ? "border-amber-500/20 bg-amber-500/5"
+                    : "border-zinc-800 bg-zinc-900"
+                }`}
               >
                 <div
                   className={`mt-0.5 rounded-full border px-2 py-0.5 text-xs font-medium ${
@@ -287,19 +311,36 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
                   {item.tag || "\u2014"}
                 </div>
                 <div className="min-w-0 flex-1">
-                  <span className="text-sm text-white">
-                    {item.text.replace(/^\[[^\]]+\]\s*/, "")}
+                  <span className={`text-sm ${item.blocked ? "text-zinc-400" : "text-white"}`}>
+                    {item.text.replace(/^\[[^\]]+\]\s*/, "").replace(/\s*\|\s*blockedBy:.*$/i, "")}
+                  </span>
+                  {item.blockedBy.length > 0 && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-amber-400/80">
+                      <GitBranch className="h-3 w-3" />
+                      <span>
+                        {item.blocked ? "Blocked by: " : "Depends on (done): "}
+                        {item.blockedBy.join(", ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  {item.blocked && (
+                    <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+                      <Lock className="h-3 w-3" />
+                      blocked
+                    </span>
+                  )}
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      item.status === "claimed"
+                        ? "bg-amber-500/15 text-amber-400"
+                        : "bg-zinc-500/15 text-zinc-400"
+                    }`}
+                  >
+                    {item.status}
                   </span>
                 </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    item.status === "claimed"
-                      ? "bg-amber-500/15 text-amber-400"
-                      : "bg-zinc-500/15 text-zinc-400"
-                  }`}
-                >
-                  {item.status}
-                </span>
               </div>
             ))}
           </div>

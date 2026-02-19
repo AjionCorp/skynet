@@ -10,6 +10,7 @@ import {
   Clock,
   Cpu,
   GitBranch,
+  HeartPulse,
   Key,
   LayoutDashboard,
   ListTodo,
@@ -27,11 +28,14 @@ import {
 } from "lucide-react";
 import type {
   WorkerInfo,
+  CurrentTask,
+  WorkerHeartbeat,
   MonitoringStatus,
   AgentInfo,
   LogData,
 } from "../types";
 import { useSkynet } from "./SkynetProvider";
+import { WorkerScaling } from "./WorkerScaling";
 
 // ===== Constants =====
 
@@ -240,11 +244,13 @@ function PipelineFlow({ workers }: { workers: WorkerInfo[] }) {
 
 function WorkerCard({
   worker,
+  heartbeat,
   onTrigger,
   onViewLogs,
   triggering,
 }: {
   worker: WorkerInfo;
+  heartbeat?: WorkerHeartbeat;
   onTrigger: () => void;
   onViewLogs: () => void;
   triggering: boolean;
@@ -252,15 +258,29 @@ function WorkerCard({
   return (
     <div
       className={`rounded-xl border p-4 transition ${
-        worker.running ? "border-emerald-500/30 bg-emerald-500/5" : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+        heartbeat?.isStale
+          ? "border-red-500/30 bg-red-500/5"
+          : worker.running
+            ? "border-emerald-500/30 bg-emerald-500/5"
+            : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
       }`}
     >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${worker.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
+          <div className={`h-2 w-2 rounded-full ${
+            heartbeat?.isStale ? "bg-red-400 animate-pulse" : worker.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"
+          }`} />
           <span className="text-sm font-semibold text-white">{worker.label}</span>
         </div>
-        {worker.running && <span className="text-xs text-emerald-400">{formatAge(worker.ageMs)}</span>}
+        <div className="flex items-center gap-2">
+          {heartbeat?.lastEpoch != null && (
+            <span className={`flex items-center gap-1 text-xs ${heartbeat.isStale ? "text-red-400" : "text-emerald-400"}`}>
+              <HeartPulse className="h-3 w-3" />
+              {heartbeat.isStale ? "Stale" : formatAge(heartbeat.ageMs)}
+            </span>
+          )}
+          {worker.running && <span className="text-xs text-emerald-400">{formatAge(worker.ageMs)}</span>}
+        </div>
       </div>
       <p className="mt-1 text-xs text-zinc-500">{worker.description}</p>
       <p className="mt-0.5 text-xs text-zinc-600">{worker.schedule}</p>
@@ -364,8 +384,9 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   const [logLines, setLogLines] = useState(200);
   const [logLoading, setLogLoading] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [connected, setConnected] = useState(false);
 
-  // Fetch status
+  // Fetch status (used as fallback and for manual refresh)
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/monitoring/status`);
@@ -411,12 +432,35 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     [apiPrefix, logLines, logSearch]
   );
 
-  // Poll status every 5s
+  // Stream status via SSE (same stream endpoint as PipelineDashboard)
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
-    return () => clearInterval(interval);
-  }, [fetchStatus]);
+    const es = new EventSource(`${apiPrefix}/pipeline/stream`);
+
+    es.onopen = () => setConnected(true);
+
+    es.onmessage = (event) => {
+      try {
+        const json = JSON.parse(event.data);
+        if (json.error) {
+          setError(json.error);
+          return;
+        }
+        setStatus(json.data);
+        setError(null);
+      } catch {
+        /* ignore malformed frames */
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    es.onerror = () => {
+      setConnected(false);
+      // EventSource auto-reconnects
+    };
+
+    return () => es.close();
+  }, [apiPrefix]);
 
   // Poll logs every 3s when on logs tab
   useEffect(() => {
@@ -435,12 +479,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   }, [activeTab, fetchAgents]);
 
   async function triggerScript(script: string) {
-    // Map worker names to script names the trigger endpoint expects
-    const scriptMap: Record<string, string> = {
-      "dev-worker-1": "dev-worker",
-      "dev-worker-2": "dev-worker",
-    };
-    const triggerName = scriptMap[script] ?? script;
+    // Map worker names to script names + optional args for the trigger endpoint
+    // e.g. "dev-worker-3" → { name: "dev-worker", args: ["3"] }
+    const match = script.match(/^(dev-worker|task-fixer)-(\d+)$/);
+    const triggerName = match ? match[1] : script;
+    const triggerArgs = match ? [match[2]] : [];
 
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));
@@ -448,7 +491,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: triggerName }),
+        body: JSON.stringify({ script: triggerName, args: triggerArgs }),
       });
       const json = await res.json();
       if (json.error) {
@@ -616,57 +659,55 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
           <PipelineFlow workers={status.workers} />
 
-          {/* Current tasks */}
+          {/* Current tasks (per-worker) */}
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-                <Zap className="h-3.5 w-3.5" />
-                Worker 1
-              </div>
-              {status.currentTask.status === "in_progress" ? (
-                <div className="mt-3">
-                  <p className="text-sm font-semibold text-emerald-400">{status.currentTask.title}</p>
-                  {status.currentTask.branch && (
-                    <p className="mt-1 text-xs text-zinc-500">
-                      <GitBranch className="mr-1 inline h-3 w-3" />
-                      {status.currentTask.branch}
-                    </p>
+            {Object.entries(status.currentTasks ?? {}).map(([key, task]) => {
+              const wid = key.replace("worker-", "");
+              const hb = status.heartbeats?.[key];
+              const isActive = task.status === "in_progress" || task.status === "working";
+              return (
+                <div
+                  key={key}
+                  className={`rounded-xl border p-5 ${
+                    hb?.isStale ? "border-red-500/30 bg-red-500/5" : "border-zinc-800 bg-zinc-900"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                      <Zap className="h-3.5 w-3.5" />
+                      Worker {wid}
+                    </div>
+                    {hb?.lastEpoch != null && (
+                      <div className={`flex items-center gap-1 text-xs ${hb.isStale ? "text-red-400" : "text-emerald-400"}`}>
+                        <HeartPulse className="h-3 w-3" />
+                        {hb.isStale ? "Stale" : formatAge(hb.ageMs)}
+                      </div>
+                    )}
+                  </div>
+                  {isActive ? (
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold text-emerald-400">{task.title}</p>
+                      {task.branch && (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          <GitBranch className="mr-1 inline h-3 w-3" />
+                          {task.branch}
+                        </p>
+                      )}
+                      {task.started && (
+                        <p className="mt-0.5 text-xs text-zinc-500">Started: {task.started}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="mt-3">
+                      <p className="text-sm text-zinc-500">{task.status === "completed" ? "Completed" : "Idle"}</p>
+                      {task.lastInfo && (
+                        <p className="mt-1 truncate text-xs text-zinc-600">{task.lastInfo}</p>
+                      )}
+                    </div>
                   )}
-                  {status.currentTask.started && (
-                    <p className="mt-0.5 text-xs text-zinc-500">Started: {status.currentTask.started}</p>
-                  )}
                 </div>
-              ) : (
-                <div className="mt-3">
-                  <p className="text-sm text-zinc-500">Idle</p>
-                  {status.currentTask.lastInfo && (
-                    <p className="mt-1 truncate text-xs text-zinc-600">{status.currentTask.lastInfo}</p>
-                  )}
-                </div>
-              )}
-            </div>
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5">
-              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
-                <Zap className="h-3.5 w-3.5" />
-                Worker 2
-              </div>
-              {status.workers.find((w) => w.name === "dev-worker-2")?.running ? (
-                <div className="mt-3">
-                  <p className="text-sm font-semibold text-emerald-400">Running</p>
-                  <p className="mt-1 text-xs text-zinc-500">
-                    PID {status.workers.find((w) => w.name === "dev-worker-2")?.pid} &middot;{" "}
-                    {formatAge(status.workers.find((w) => w.name === "dev-worker-2")?.ageMs ?? null)}
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-3">
-                  <p className="text-sm text-zinc-500">Idle</p>
-                  <p className="mt-1 text-xs text-zinc-600">
-                    Activates when backlog has 2+ tasks
-                  </p>
-                </div>
-              )}
-            </div>
+              );
+            })}
           </div>
 
           {/* Recent activity */}
@@ -702,6 +743,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       {activeTab === "workers" && (
         <div className="space-y-6">
           <SummaryCards status={status} />
+          <WorkerScaling />
 
           {(["core", "testing", "infra", "data"] as const).map((category) => {
             const categoryWorkers = status.workers.filter((w) => w.category === category);
@@ -712,10 +754,14 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                   {CATEGORY_LABELS[category]}
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {categoryWorkers.map((w) => (
+                  {categoryWorkers.map((w) => {
+                    // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
+                    const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
+                    return (
                     <div key={w.name}>
                       <WorkerCard
                         worker={w}
+                        heartbeat={hbKey ? status.heartbeats?.[hbKey] : undefined}
                         onTrigger={() => triggerScript(w.name)}
                         onViewLogs={() => switchToLogs(w.logFile)}
                         triggering={!!triggering[w.name]}
@@ -726,7 +772,8 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                         </p>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -782,7 +829,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                             {item.tag}
                           </span>
                         )}
-                        <span className="text-sm text-zinc-300">{item.text.replace(/^\[[^\]]+\]\s*/, "")}</span>
+                        <span className="text-sm text-zinc-300">{item.text.replace(/^\[[^\]]+\]\s*/, "").replace(/\s*\|\s*blockedBy:.*$/i, "")}</span>
                       </div>
                     ))
                 )}
@@ -1134,7 +1181,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
       {/* Footer */}
       <p className="text-center text-xs text-zinc-700">
-        Status: 5s &middot; Logs: 3s &middot; Agents: 30s &middot;{" "}
+        {connected ? "Live updates via SSE" : "Reconnecting\u2026"} &middot; Logs: 3s &middot; Agents: 30s &middot;{" "}
         {status.timestamp && new Date(status.timestamp).toLocaleTimeString()}
       </p>
     </div>

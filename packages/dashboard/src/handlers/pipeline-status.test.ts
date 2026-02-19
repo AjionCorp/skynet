@@ -123,7 +123,7 @@ describe("createPipelineStatusHandler", () => {
 
   it("detects blockers", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
-      if (filename === "blockers.md") return "- Missing API key\n- Waiting on approval";
+      if (filename === "blockers.md") return "## Active\n\n- Missing API key\n- Waiting on approval";
       return "";
     });
     const handler = createPipelineStatusHandler(makeConfig());
@@ -192,5 +192,130 @@ describe("createPipelineStatusHandler", () => {
     const res = await handler();
     const { data } = await res.json();
     expect(new Date(data.timestamp).toISOString()).toBe(data.timestamp);
+  });
+
+  it("parses completed.md table rows", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "completed.md")
+        return "| Date | Task | Branch | Notes |\n| --- | --- | --- | --- |\n| 2025-01-15 | Add login | feat/login | Merged |";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.completed).toHaveLength(1);
+    expect(data.completed[0].date).toBe("2025-01-15");
+    expect(data.completed[0].task).toBe("Add login");
+    expect(data.completed[0].branch).toBe("feat/login");
+    expect(data.completedCount).toBe(1);
+  });
+
+  it("parses failed-tasks.md with status and counts pending failures", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "failed-tasks.md")
+        return "| Date | Task | Branch | Error | Attempts | Status |\n| --- | --- | --- | --- | --- | --- |\n| 2025-01-10 | Fix bug | fix/bug | Timeout | 3 | pending-retry |\n| 2025-01-09 | Add auth | feat/auth | OOM | 1 | resolved |";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.failed).toHaveLength(2);
+    expect(data.failed[0].error).toBe("Timeout");
+    expect(data.failed[0].attempts).toBe("3");
+    expect(data.failedPendingCount).toBe(1);
+  });
+
+  it("parses sync-health.md for lastRun and endpoints", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "sync-health.md")
+        return "_Last run: 2025-01-15 10:00_\n\n| Endpoint | Last Run | Status | Records | Notes |\n| --- | --- | --- | --- | --- |\n| /api/users | 10:00 | ok | 150 | - |";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.syncHealth.lastRun).toBe("2025-01-15 10:00");
+    expect(data.syncHealth.endpoints).toHaveLength(1);
+    expect(data.syncHealth.endpoints[0].endpoint).toBe("/api/users");
+    expect(data.syncHealth.endpoints[0].status).toBe("ok");
+  });
+
+  it("detects backlogLocked when lock directory exists", async () => {
+    mockExistsSync.mockImplementation((p) => {
+      if (typeof p === "string" && p.includes("backlog.lock")) return true;
+      return false;
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.backlogLocked).toBe(true);
+  });
+
+  it("parses post-commit gate log for pass result", async () => {
+    mockGetLastLogLine.mockImplementation((_dir, script) => {
+      if (script === "post-commit-gate") return "[2025-01-15 12:00:00] PASS abc1234 all checks green";
+      return null;
+    });
+    mockExtractTimestamp.mockImplementation((line) => {
+      if (line?.includes("2025-01-15")) return "2025-01-15 12:00:00";
+      return null;
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.postCommitGate.lastResult).toBe("pass");
+    expect(data.postCommitGate.lastCommit).toBe("abc1234");
+    expect(data.postCommitGate.lastTime).toBe("2025-01-15 12:00:00");
+  });
+
+  it("parses post-commit gate log for fail result", async () => {
+    mockGetLastLogLine.mockImplementation((_dir, script) => {
+      if (script === "post-commit-gate") return "[2025-01-15 12:00:00] FAIL def5678 typecheck error";
+      return null;
+    });
+    mockExtractTimestamp.mockReturnValue("2025-01-15 12:00:00");
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.postCommitGate.lastResult).toBe("fail");
+    expect(data.postCommitGate.lastCommit).toBe("def5678");
+  });
+
+  it("uses worker logFile override when provided", async () => {
+    const config = makeConfig({
+      workers: [{ name: "dev-worker-1", label: "Dev Worker 1", category: "core", schedule: "On demand", description: "Implements tasks", logFile: "custom-log" }],
+    });
+    const handler = createPipelineStatusHandler(config);
+    await handler();
+    const logNameCalls = mockGetLastLogLine.mock.calls.map((c) => c[1]);
+    expect(logNameCalls).toContain("custom-log");
+  });
+
+  it("defaults worker category to 'core' when not specified", async () => {
+    const config = makeConfig({
+      workers: [{ name: "basic-worker", label: "Basic", schedule: "Hourly", description: "Basic worker" }],
+    });
+    const handler = createPipelineStatusHandler(config);
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.workers[0].category).toBe("core");
+  });
+
+  it("returns empty completed and failed arrays when files are empty", async () => {
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.completed).toEqual([]);
+    expect(data.completedCount).toBe(0);
+    expect(data.failed).toEqual([]);
+    expect(data.failedPendingCount).toBe(0);
+  });
+
+  it("returns null syncHealth.lastRun when no match", async () => {
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.syncHealth.lastRun).toBeNull();
+    expect(data.syncHealth.endpoints).toEqual([]);
   });
 });

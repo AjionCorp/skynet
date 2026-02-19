@@ -1,14 +1,27 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { createInterface } from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKYNET_ROOT = resolve(__dirname, "../../../..");
-const TEMPLATES_DIR = resolve(SKYNET_ROOT, "templates");
-const SCRIPTS_DIR = resolve(SKYNET_ROOT, "scripts");
+
+// When installed from npm, scripts/ and templates/ are at the package root
+// (two levels up from dist/commands/init.js). In monorepo development, fall
+// back to the monorepo root (four levels up).
+function resolveAssetDir(name: string): string {
+  const pkgPath = fileURLToPath(new URL(`../../${name}`, import.meta.url));
+  if (existsSync(pkgPath)) return pkgPath;
+  return resolve(__dirname, "../../../..", name);
+}
+
+const TEMPLATES_DIR = resolveAssetDir("templates");
+const SCRIPTS_DIR = resolveAssetDir("scripts");
 
 function prompt(question: string, defaultValue?: string): Promise<string> {
+  // Non-interactive: use defaults when stdin is not a TTY (piped or redirected)
+  if (!process.stdin.isTTY) {
+    return Promise.resolve(defaultValue || "");
+  }
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const suffix = defaultValue ? ` (${defaultValue})` : "";
   return new Promise((resolve) => {
@@ -128,14 +141,25 @@ export async function initCommand(options: InitOptions) {
     }
   }
 
-  // Install scripts: symlink or copy
+  // Install scripts: symlink or copy (includes subdirectories like agents/)
   const scriptFiles = readdirSync(SCRIPTS_DIR).filter((f) => f.endsWith(".sh"));
+  const scriptDirs = readdirSync(SCRIPTS_DIR).filter((f) => {
+    try { return statSync(join(SCRIPTS_DIR, f)).isDirectory(); } catch { return false; }
+  });
 
   if (options.copyScripts) {
     for (const file of scriptFiles) {
       const src = join(SCRIPTS_DIR, file);
       const dest = join(scriptsTarget, file);
       writeFileSync(dest, readFileSync(src, "utf-8"), { mode: 0o755 });
+    }
+    for (const dir of scriptDirs) {
+      const srcDir = join(SCRIPTS_DIR, dir);
+      const destDir = join(scriptsTarget, dir);
+      mkdirSync(destDir, { recursive: true });
+      for (const file of readdirSync(srcDir).filter((f) => f.endsWith(".sh"))) {
+        writeFileSync(join(destDir, file), readFileSync(join(srcDir, file), "utf-8"), { mode: 0o755 });
+      }
     }
     console.log(`    .dev/scripts/ (${scriptFiles.length} scripts copied)`);
   } else {
@@ -151,7 +175,22 @@ export async function initCommand(options: InitOptions) {
         writeFileSync(dest, readFileSync(src, "utf-8"), { mode: 0o755 });
       }
     }
-    console.log(`    .dev/scripts/ (${scriptFiles.length} scripts symlinked)`);
+    // Symlink subdirectories (e.g. agents/)
+    for (const dir of scriptDirs) {
+      const src = join(SCRIPTS_DIR, dir);
+      const dest = join(scriptsTarget, dir);
+      if (existsSync(dest)) continue;
+      try {
+        symlinkSync(src, dest);
+      } catch {
+        // Fallback: create dir and copy files
+        mkdirSync(dest, { recursive: true });
+        for (const file of readdirSync(src).filter((f) => f.endsWith(".sh"))) {
+          writeFileSync(join(dest, file), readFileSync(join(src, file), "utf-8"), { mode: 0o755 });
+        }
+      }
+    }
+    console.log(`    .dev/scripts/ (${scriptFiles.length} scripts + ${scriptDirs.length} dirs symlinked)`);
   }
 
   // Update .gitignore

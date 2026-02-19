@@ -1,189 +1,42 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-  AlertTriangle,
+  Target,
   CheckCircle2,
   Circle,
   Loader2,
-  Target,
+  AlertTriangle,
+  RefreshCw,
+  Crosshair,
 } from "lucide-react";
-import type { MissionData, MissionSection } from "../types";
+import type { MissionStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
-// ===== Helpers =====
-
-/** Render inline markdown: **bold** and `code` */
-function renderInline(text: string): React.ReactNode[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return (
-        <span key={i} className="font-semibold text-white">
-          {part.slice(2, -2)}
-        </span>
-      );
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return (
-        <code
-          key={i}
-          className="rounded bg-zinc-800 px-1.5 py-0.5 text-xs font-mono text-cyan-400"
-        >
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-    return part;
-  });
+export interface MissionDashboardProps {
+  /** Poll interval in milliseconds. Defaults to 30000 (30s). */
+  pollInterval?: number;
 }
 
-/** Render a section's content lines with basic markdown highlighting */
-function SectionContent({ content }: { content: string }) {
-  const lines = content.split("\n");
-
-  return (
-    <div className="space-y-1">
-      {lines.map((line, i) => {
-        if (!line.trim()) return null;
-
-        // Numbered list
-        const numMatch = line.match(/^(\s*)\d+\.\s+(.+)/);
-        if (numMatch) {
-          return (
-            <p key={i} className="text-sm text-zinc-300 pl-4">
-              <span className="text-zinc-500 mr-2">{line.match(/\d+/)![0]}.</span>
-              {renderInline(numMatch[2])}
-            </p>
-          );
-        }
-
-        // Bullet list
-        const bulletMatch = line.match(/^(\s*)[-*]\s+(.+)/);
-        if (bulletMatch) {
-          return (
-            <p key={i} className="text-sm text-zinc-300 pl-4">
-              <span className="text-zinc-500 mr-2">&bull;</span>
-              {renderInline(bulletMatch[2])}
-            </p>
-          );
-        }
-
-        // Regular text (skip HTML comments)
-        if (line.trim().startsWith("<!--")) return null;
-
-        return (
-          <p key={i} className="text-sm text-zinc-300">
-            {renderInline(line)}
-          </p>
-        );
-      })}
-    </div>
-  );
-}
-
-function CriteriaPanel({
-  criteria,
-}: {
-  criteria: MissionData["criteria"];
-}) {
-  const doneCount = criteria.filter((c) => c.status === "done").length;
-
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-5 py-4">
-        <div className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-cyan-400" />
-          <h3 className="font-medium text-white">Success Criteria</h3>
-        </div>
-        <span className="rounded-full bg-zinc-800 px-2.5 py-0.5 text-xs font-medium text-zinc-400">
-          {doneCount}/{criteria.length} complete
-        </span>
-      </div>
-      <div className="divide-y divide-zinc-800/50">
-        {criteria.map((c, i) => (
-          <div key={i} className="flex items-start gap-3 px-5 py-3">
-            {c.status === "done" ? (
-              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
-            ) : (
-              <Circle className="mt-0.5 h-4 w-4 shrink-0 text-zinc-600" />
-            )}
-            <span
-              className={`text-sm ${
-                c.status === "done"
-                  ? "text-zinc-500 line-through"
-                  : "text-zinc-300"
-              }`}
-            >
-              {renderInline(c.text)}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Progress bar */}
-      <div className="border-t border-zinc-800 px-5 py-3">
-        <div className="flex items-center gap-3">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-zinc-800">
-            <div
-              className="h-full rounded-full bg-cyan-500 transition-all duration-500"
-              style={{
-                width: criteria.length > 0
-                  ? `${(doneCount / criteria.length) * 100}%`
-                  : "0%",
-              }}
-            />
-          </div>
-          <span className="text-xs font-medium text-zinc-500">
-            {criteria.length > 0
-              ? `${Math.round((doneCount / criteria.length) * 100)}%`
-              : "0%"}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function MissionSectionCard({ section }: { section: MissionSection }) {
-  // Skip the success criteria section since we render it separately
-  if (section.heading.toLowerCase().includes("success criteria")) return null;
-
-  return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/50">
-      <div className="border-b border-zinc-800 px-5 py-3">
-        <h3 className="font-medium text-white">{section.heading}</h3>
-      </div>
-      <div className="px-5 py-4">
-        <SectionContent content={section.content} />
-      </div>
-    </div>
-  );
-}
-
-// ===== Main Component =====
-
-export interface MissionDashboardProps {}
-
-export function MissionDashboard(_props: MissionDashboardProps) {
+export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
-  const [mission, setMission] = useState<MissionData | null>(null);
+  const [mission, setMission] = useState<MissionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchMission = useCallback(async () => {
     try {
-      const res = await fetch(`${apiPrefix}/mission`);
+      const res = await fetch(`${apiPrefix}/mission/status`);
       const json = await res.json();
       if (json.error) {
         setError(json.error);
-        return;
+      } else {
+        setMission(json.data);
+        setError(null);
       }
-      setMission(json.data);
-      setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to fetch mission");
+      setError(err instanceof Error ? err.message : "Failed to fetch mission status");
     } finally {
       setLoading(false);
     }
@@ -191,62 +44,223 @@ export function MissionDashboard(_props: MissionDashboardProps) {
 
   useEffect(() => {
     fetchMission();
-  }, [fetchMission]);
+    const interval = setInterval(fetchMission, pollInterval);
+    return () => clearInterval(interval);
+  }, [fetchMission, pollInterval]);
 
-  if (loading) {
+  if (loading && !mission) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-6 w-6 animate-spin text-zinc-500" />
-        <span className="ml-3 text-sm text-zinc-500">Loading mission...</span>
+        <span className="ml-3 text-sm text-zinc-500">Loading mission status...</span>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-6 py-4">
-        <AlertTriangle className="h-5 w-5 text-red-400" />
-        <p className="text-sm text-red-400">{error}</p>
-      </div>
-    );
-  }
-
-  if (!mission || !mission.raw) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <Target className="h-10 w-10 text-zinc-600 mb-3" />
-        <p className="text-sm text-zinc-500">
-          No mission.md found. Create one in your .dev/ directory to drive
-          autonomous development.
-        </p>
-      </div>
-    );
-  }
-
-  // Separate level-1 heading sections from sub-sections
-  const topSections = mission.sections.filter((s) => s.level <= 2);
+  const completedCriteria = mission?.successCriteria.filter((c) => c.completed).length ?? 0;
+  const totalCriteria = mission?.successCriteria.length ?? 0;
+  const completedGoals = mission?.goals.filter((g) => g.completed).length ?? 0;
+  const totalGoals = mission?.goals.length ?? 0;
+  const percentage = mission?.completionPercentage ?? 0;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold text-white">{mission.title}</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          {mission.sections.length} section{mission.sections.length !== 1 ? "s" : ""}{" "}
-          &middot; {mission.criteria.length} success criteri{mission.criteria.length !== 1 ? "a" : "on"}
-        </p>
+      {/* Progress overview cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Completion percentage */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Mission Progress
+          </p>
+          <p className="mt-1 text-2xl font-bold text-white">{percentage}%</p>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-zinc-800">
+            <div
+              className={`h-full rounded-full transition-all duration-500 ${
+                percentage === 100
+                  ? "bg-emerald-500"
+                  : percentage >= 50
+                    ? "bg-cyan-500"
+                    : "bg-amber-500"
+              }`}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Success criteria count */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Success Criteria
+          </p>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {completedCriteria}
+            <span className="text-sm font-normal text-zinc-500"> / {totalCriteria}</span>
+          </p>
+        </div>
+
+        {/* Goals count */}
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Goals
+          </p>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {completedGoals}
+            <span className="text-sm font-normal text-zinc-500"> / {totalGoals}</span>
+          </p>
+        </div>
+
+        {/* Status */}
+        <div
+          className={`rounded-xl border p-4 ${
+            percentage === 100
+              ? "border-emerald-500/20 bg-emerald-500/5"
+              : "border-zinc-800 bg-zinc-900/50"
+          }`}
+        >
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Status
+          </p>
+          <p
+            className={`mt-1 text-2xl font-bold ${
+              percentage === 100 ? "text-emerald-400" : "text-white"
+            }`}
+          >
+            {percentage === 100 ? "Complete" : "In Progress"}
+          </p>
+        </div>
       </div>
 
-      {/* Success Criteria panel — always at the top */}
-      {mission.criteria.length > 0 && (
-        <CriteriaPanel criteria={mission.criteria} />
+      {/* Error banner */}
+      {error && (
+        <div className="flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-6 py-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-red-400" />
+          <p className="text-sm text-red-400">{error}</p>
+        </div>
       )}
 
-      {/* Mission sections */}
-      <div className="space-y-4">
-        {topSections.map((section, i) => (
-          <MissionSectionCard key={i} section={section} />
-        ))}
+      {/* Refresh button */}
+      <div className="flex justify-end">
+        <button
+          onClick={fetchMission}
+          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </button>
       </div>
+
+      {/* Empty state */}
+      {!mission?.raw && (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 py-16">
+          <Target className="h-8 w-8 text-zinc-600" />
+          <p className="mt-3 text-sm font-medium text-zinc-400">No mission defined</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Create .dev/mission.md with Purpose, Goals, and Success Criteria sections
+          </p>
+        </div>
+      )}
+
+      {mission?.raw && (
+        <>
+          {/* Purpose */}
+          {mission.purpose && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+              <div className="mb-3 flex items-center gap-2">
+                <Target className="h-4 w-4 text-cyan-400" />
+                <h2 className="text-lg font-semibold text-white">Purpose</h2>
+              </div>
+              <p className="text-sm leading-relaxed text-zinc-300">{mission.purpose}</p>
+            </div>
+          )}
+
+          {/* Success Criteria */}
+          {mission.successCriteria.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                <h2 className="text-lg font-semibold text-white">Success Criteria</h2>
+                <span className="ml-auto text-xs text-zinc-500">
+                  {completedCriteria} of {totalCriteria} met
+                </span>
+              </div>
+              <div className="space-y-2">
+                {mission.successCriteria.map((criterion, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
+                      criterion.completed
+                        ? "border-emerald-500/20 bg-emerald-500/5"
+                        : "border-zinc-800 bg-zinc-900"
+                    }`}
+                  >
+                    {criterion.completed ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <Circle className="mt-0.5 h-4 w-4 shrink-0 text-zinc-600" />
+                    )}
+                    <span
+                      className={`text-sm ${
+                        criterion.completed ? "text-emerald-300" : "text-zinc-300"
+                      }`}
+                    >
+                      {criterion.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Goals */}
+          {mission.goals.length > 0 && (
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+              <div className="mb-4 flex items-center gap-2">
+                <Target className="h-4 w-4 text-cyan-400" />
+                <h2 className="text-lg font-semibold text-white">Goals</h2>
+                <span className="ml-auto text-xs text-zinc-500">
+                  {completedGoals} of {totalGoals} achieved
+                </span>
+              </div>
+              <div className="space-y-2">
+                {mission.goals.map((goal, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-3 rounded-lg border px-4 py-3 ${
+                      goal.completed
+                        ? "border-emerald-500/20 bg-emerald-500/5"
+                        : "border-zinc-800 bg-zinc-900"
+                    }`}
+                  >
+                    {goal.completed ? (
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                    ) : (
+                      <Circle className="mt-0.5 h-4 w-4 shrink-0 text-zinc-600" />
+                    )}
+                    <span
+                      className={`text-sm ${
+                        goal.completed ? "text-emerald-300" : "text-zinc-300"
+                      }`}
+                    >
+                      {goal.text}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Current Focus */}
+          {mission.currentFocus && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-6">
+              <div className="mb-3 flex items-center gap-2">
+                <Crosshair className="h-4 w-4 text-amber-400" />
+                <h2 className="text-lg font-semibold text-white">Current Focus</h2>
+              </div>
+              <p className="text-sm leading-relaxed text-amber-200/80">{mission.currentFocus}</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

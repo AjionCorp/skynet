@@ -43,6 +43,32 @@ check_claude_auth() {
     return 0
   fi
 
+  # Auth failed — try auto-refresh before giving up
+  if [ -f "$SCRIPTS_DIR/auth-refresh.sh" ]; then
+    log "Auth failed — triggering auth-refresh.sh to attempt token refresh..."
+    if bash "$SCRIPTS_DIR/auth-refresh.sh" 2>>"${LOG:-/dev/stderr}"; then
+      # Re-read refreshed token and retry
+      _access_token=""
+      [ -f "$SKYNET_AUTH_TOKEN_CACHE" ] && _access_token=$(cat "$SKYNET_AUTH_TOKEN_CACHE" 2>/dev/null)
+      if [ -n "$_access_token" ] \
+        && curl -sf -o /dev/null --max-time 10 \
+             https://api.anthropic.com/api/oauth/claude_cli/roles \
+             -H "Authorization: Bearer $_access_token" \
+             -H "Content-Type: application/json"; then
+        log "Auth restored after auto-refresh."
+        rm -f "$SKYNET_AUTH_FAIL_FLAG"
+        if [ -f "$BLOCKERS" ]; then
+          grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" || true
+          mv "$BLOCKERS.tmp" "$BLOCKERS"
+        fi
+        return 0
+      fi
+      log "Auth still failing after refresh attempt."
+    else
+      log "auth-refresh.sh failed (exit $?)."
+    fi
+  fi
+
   # Auth failed — throttle notifications
   local now
   now=$(date +%s)

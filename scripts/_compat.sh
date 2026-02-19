@@ -37,7 +37,7 @@ date_24h_ago() {
 date_minutes_ago() {
   local mins="${1:-0}"
   if $SKYNET_IS_MACOS; then
-    date -v-${mins}M +%s 2>/dev/null
+    date -v-"${mins}"M +%s 2>/dev/null
   else
     date -d "${mins} minutes ago" +%s 2>/dev/null
   fi

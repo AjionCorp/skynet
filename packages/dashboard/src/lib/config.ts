@@ -18,11 +18,43 @@ export const DEFAULT_WORKERS: SkynetWorkerDef[] = [
     logFile: "dev-worker-2",
   },
   {
+    name: "dev-worker-3",
+    label: "Dev Worker 3",
+    category: "core",
+    schedule: "On demand",
+    description: "Implements tasks via Claude Code",
+    logFile: "dev-worker-3",
+  },
+  {
+    name: "dev-worker-4",
+    label: "Dev Worker 4",
+    category: "core",
+    schedule: "On demand",
+    description: "Implements tasks via Claude Code",
+    logFile: "dev-worker-4",
+  },
+  {
     name: "task-fixer",
-    label: "Task Fixer",
+    label: "Task Fixer 1",
     category: "core",
     schedule: "Every 30m",
     description: "Diagnoses and fixes failed tasks",
+  },
+  {
+    name: "task-fixer-2",
+    label: "Task Fixer 2",
+    category: "core",
+    schedule: "On demand",
+    description: "Diagnoses and fixes failed tasks",
+    logFile: "task-fixer-2",
+  },
+  {
+    name: "task-fixer-3",
+    label: "Task Fixer 3",
+    category: "core",
+    schedule: "On demand",
+    description: "Diagnoses and fixes failed tasks",
+    logFile: "task-fixer-3",
   },
   {
     name: "project-driver",
@@ -90,7 +122,7 @@ export function createConfig(
       "feature-validator",
       "health-check",
     ],
-    taskTags: ["FEAT", "FIX", "INFRA", "TEST"],
+    taskTags: ["FEAT", "FIX", "INFRA", "TEST", "NMI"],
     ...overrides,
   };
 }

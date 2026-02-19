@@ -1,4 +1,4 @@
 # Completed Tasks
 
-| Date | Task | Branch | Notes |
-|------|------|--------|-------|
+| Date | Task | Branch | Duration | Notes |
+|------|------|--------|----------|-------|

@@ -11,6 +11,40 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
+# --- PID lock (prevent concurrent health-check runs) ---
+LOCK_FILE="$SCRIPTS_DIR/health-check.lock"
+
+acquire_lock() {
+  if mkdir "$LOCK_FILE" 2>/dev/null; then
+    echo $$ > "$LOCK_FILE/pid"
+    return 0
+  fi
+  # Lock exists — check for stale lock (owner PID no longer running)
+  if [ -d "$LOCK_FILE" ] && [ -f "$LOCK_FILE/pid" ]; then
+    local lock_pid
+    lock_pid=$(cat "$LOCK_FILE/pid" 2>/dev/null || echo "")
+    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+      log "Removing stale lock (PID $lock_pid no longer running)."
+      rm -rf "$LOCK_FILE" 2>/dev/null || true
+      if mkdir "$LOCK_FILE" 2>/dev/null; then
+        echo $$ > "$LOCK_FILE/pid"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+release_lock() {
+  rm -rf "$LOCK_FILE" 2>/dev/null || true
+}
+
+if ! acquire_lock; then
+  log "Already running (PID $(cat "$LOCK_FILE/pid" 2>/dev/null || echo '?')). Exiting."
+  exit 0
+fi
+trap 'release_lock' EXIT
+
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_claude_auth; then
@@ -25,7 +59,7 @@ log "Running typecheck..."
 attempt=0
 typecheck_ok=false
 
-while [ $attempt -lt $MAX_FIX_ATTEMPTS ]; do
+while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
   attempt=$((attempt + 1))
 
   if $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
@@ -35,7 +69,7 @@ while [ $attempt -lt $MAX_FIX_ATTEMPTS ]; do
   else
     log "Typecheck failed (attempt $attempt/$MAX_FIX_ATTEMPTS)."
 
-    if [ $attempt -lt $MAX_FIX_ATTEMPTS ]; then
+    if [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; then
       log "Asking Claude Code to fix type errors..."
       errors=$($SKYNET_TYPECHECK_CMD 2>&1 | tail -50)
       PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.

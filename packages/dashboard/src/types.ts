@@ -20,6 +20,7 @@ export interface SkynetConfig {
   taskTags: string[];
   scriptsDir?: string; // defaults to devDir + "/scripts"
   agentPrefix?: string; // for LaunchAgent labels
+  maxWorkers?: number; // max dev-worker instances (default 4)
 }
 
 // ===== Worker / Pipeline Types =====
@@ -51,12 +52,15 @@ export interface BacklogItem {
   text: string;
   tag: string;
   status: "pending" | "claimed" | "done";
+  blockedBy: string[];
+  blocked: boolean;
 }
 
 export interface CompletedTask {
   date: string;
   task: string;
   branch: string;
+  duration: string;
   notes: string;
 }
 
@@ -77,11 +81,24 @@ export interface SyncEndpoint {
   notes: string;
 }
 
+// ===== Worker Heartbeat =====
+
+export interface WorkerHeartbeat {
+  /** Epoch timestamp of the last heartbeat, or null if no heartbeat file */
+  lastEpoch: number | null;
+  /** Age of the heartbeat in milliseconds, or null if no heartbeat */
+  ageMs: number | null;
+  /** True if the heartbeat is older than the stale threshold */
+  isStale: boolean;
+}
+
 // ===== Pipeline Status (matches pipeline-status handler response) =====
 
 export interface PipelineStatus {
   workers: WorkerInfo[];
   currentTask: CurrentTask;
+  currentTasks: Record<string, CurrentTask>;
+  heartbeats: Record<string, WorkerHeartbeat>;
   backlog: {
     items: BacklogItem[];
     pendingCount: number;
@@ -90,10 +107,12 @@ export interface PipelineStatus {
   };
   completed: CompletedTask[];
   completedCount: number;
+  averageTaskDuration: string | null;
   failed: FailedTask[];
   failedPendingCount: number;
   hasBlockers: boolean;
   blockerLines: string[];
+  healthScore: number;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];
@@ -102,6 +121,7 @@ export interface PipelineStatus {
   backlogLocked: boolean;
   git: GitStatus;
   postCommitGate: PostCommitGate;
+  missionProgress: MissionProgress[];
   timestamp: string;
 }
 
@@ -132,6 +152,8 @@ export interface AuthStatus {
 export interface MonitoringStatus {
   workers: WorkerInfo[];
   currentTask: CurrentTask;
+  currentTasks: Record<string, CurrentTask>;
+  heartbeats: Record<string, WorkerHeartbeat>;
   backlog: {
     items: BacklogItem[];
     pendingCount: number;
@@ -140,10 +162,12 @@ export interface MonitoringStatus {
   };
   completed: CompletedTask[];
   completedCount: number;
+  averageTaskDuration: string | null;
   failed: FailedTask[];
   failedPendingCount: number;
   hasBlockers: boolean;
   blockerLines: string[];
+  healthScore: number;
   syncHealth: {
     lastRun: string | null;
     endpoints: SyncEndpoint[];
@@ -152,6 +176,7 @@ export interface MonitoringStatus {
   backlogLocked: boolean;
   git: GitStatus;
   postCommitGate: PostCommitGate;
+  missionProgress: MissionProgress[];
   timestamp: string;
 }
 
@@ -195,6 +220,7 @@ export interface TaskCreatePayload {
   title: string;
   description?: string;
   position?: "top" | "bottom";
+  blockedBy?: string;
 }
 
 // ===== Sync Status =====
@@ -211,20 +237,16 @@ export interface SyncStatus {
 
 export interface MissionCriterion {
   text: string;
-  status: "pending" | "done";
+  completed: boolean;
 }
 
-export interface MissionSection {
-  heading: string;
-  level: number;
-  content: string;
-}
-
-export interface MissionData {
+export interface MissionStatus {
+  purpose: string | null;
+  goals: MissionCriterion[];
+  successCriteria: MissionCriterion[];
+  currentFocus: string | null;
+  completionPercentage: number;
   raw: string;
-  title: string;
-  sections: MissionSection[];
-  criteria: MissionCriterion[];
 }
 
 // ===== Prompt Types =====
@@ -235,4 +257,35 @@ export interface PromptTemplate {
   description: string;
   category: "core" | "testing" | "infra" | "data";
   prompt: string;
+}
+
+// ===== Mission Progress Types =====
+
+export interface MissionProgress {
+  id: number;
+  criterion: string;
+  status: "met" | "partial" | "not-met";
+  evidence: string;
+}
+
+// ===== Worker Scaling Types =====
+
+export interface WorkerScalePayload {
+  workerType: string;
+  count: number;
+}
+
+export interface WorkerScaleInfo {
+  type: string;
+  label: string;
+  count: number;
+  maxCount: number;
+  pids: number[];
+}
+
+export interface WorkerScaleResult {
+  workerType: string;
+  previousCount: number;
+  currentCount: number;
+  maxCount: number;
 }

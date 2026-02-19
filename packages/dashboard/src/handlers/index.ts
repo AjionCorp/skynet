@@ -1,4 +1,5 @@
 export { createPipelineStatusHandler } from "./pipeline-status";
+export { createPipelineStreamHandler } from "./pipeline-stream";
 export { createPipelineTriggerHandler } from "./pipeline-trigger";
 export { createPipelineLogsHandler } from "./pipeline-logs";
 export { createMonitoringStatusHandler } from "./monitoring-status";
@@ -6,4 +7,5 @@ export { createMonitoringAgentsHandler } from "./monitoring-agents";
 export { createMonitoringLogsHandler } from "./monitoring-logs";
 export { createTasksHandlers } from "./tasks";
 export { createPromptsHandler } from "./prompts";
-export { createMissionHandler } from "./mission";
+export { createWorkerScalingHandler } from "./worker-scaling";
+export { createMissionStatusHandler } from "./mission-status";

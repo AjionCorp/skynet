@@ -5,7 +5,10 @@
   "scripts": {
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "lint:sh": "shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh",
     "dev:admin": "pnpm --filter admin dev",
-    "test:e2e": "pnpm --filter admin test:e2e"
+    "test": "pnpm -r --filter '@ajioncorp/*' test",
+    "test:e2e": "pnpm --filter admin test:e2e",
+    "test:e2e:cli": "bash tests/e2e/init-smoke.test.sh"
   }
 }
