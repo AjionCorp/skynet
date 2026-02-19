@@ -57,6 +57,10 @@ export SKYNET_MAX_FIX_ATTEMPTS="${SKYNET_MAX_FIX_ATTEMPTS:-3}"
 export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-permissions}"
 export SKYNET_DEV_SERVER_URL="${SKYNET_DEV_SERVER_URL:-http://localhost:3000}"
+export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
+
+# Quality gates defaults (just typecheck by default)
+export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"
 
 # Convenience aliases used by all scripts
 PROJECT_DIR="$SKYNET_PROJECT_DIR"

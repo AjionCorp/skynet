@@ -156,67 +156,56 @@ If this task is genuinely impossible right now (missing API key, external depend
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
 if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
-  log "Task-fixer succeeded. Verifying typecheck before merge..."
+  log "Task-fixer succeeded. Running quality gates before merge..."
 
-  # Clean .dev/ in worktree before typecheck
+  # Clean .dev/ in worktree before gates
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
-  (cd "$WORKTREE_DIR" && git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true)
+  (cd "$WORKTREE_DIR" && git clean -fd test-results/ 2>/dev/null || true)
 
-  # Gate 1: Typecheck (in worktree)
-  if ! (cd "$WORKTREE_DIR" && $SKYNET_TYPECHECK_CMD) >> "$LOG" 2>&1; then
-    log "Typecheck still failing after fix. Branch NOT merged."
+  # Run configurable quality gates
+  _gate_failed=""
+  _gate_idx=1
+  while true; do
+    _gate_var="SKYNET_GATE_${_gate_idx}"
+    _gate_cmd="${!_gate_var:-}"
+    if [ -z "$_gate_cmd" ]; then break; fi
+    log "Running gate $_gate_idx: $_gate_cmd"
+    if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then
+      _gate_failed="$_gate_cmd"
+      break
+    fi
+    log "Gate $_gate_idx passed."
+    _gate_idx=$((_gate_idx + 1))
+  done
+
+  if [ -n "$_gate_failed" ]; then
+    _gate_label=$(echo "$_gate_failed" | awk '{print $NF}')
+    log "GATE FAILED: $_gate_failed. Branch NOT merged."
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
-    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed after fix attempt $new_attempts | $new_attempts | pending |"
+    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     cat > "$CURRENT_TASK" <<EOF
 # Current Task
 **Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX ATTEMPT $new_attempts] $task_title (typecheck failed)
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX ATTEMPT $new_attempts] $task_title ($_gate_label failed)
 EOF
   else
-    log "Typecheck passed."
+    log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
+    cleanup_worktree  # Remove worktree, keep branch for merge
+    cd "$PROJECT_DIR"
+    git merge "$branch_name" --no-edit
+    git branch -d "$branch_name"
 
-    # Gate 2: Playwright (if configured and dev server running)
-    playwright_ok=true
-    if [ -n "$SKYNET_PLAYWRIGHT_DIR" ] && [ -n "$SKYNET_SMOKE_TEST" ] && curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-      log "Running Playwright smoke tests..."
-      if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test --reporter=list >> "$LOG" 2>&1); then
-        log "Playwright FAILED. Branch NOT merged."
-        playwright_ok=false
-      else
-        log "Playwright tests passed."
-      fi
-    else
-      log "Skipping Playwright (not configured or dev server unreachable)."
-    fi
+    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
+    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
 
-    if $playwright_ok; then
-      log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
-      cleanup_worktree  # Remove worktree, keep branch for merge
-      cd "$PROJECT_DIR"
-      git merge "$branch_name" --no-edit
-      git branch -d "$branch_name"
-
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
-      echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
-
-      cat > "$CURRENT_TASK" <<EOF
+    cat > "$CURRENT_TASK" <<EOF
 # Current Task
 **Status:** idle
 **Last completed:** $(date '+%Y-%m-%d %H:%M') -- [FIXED] $task_title (merged to $SKYNET_MAIN_BRANCH)
 EOF
-      log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-      tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
-    else
-      cleanup_worktree  # Keep branch for next attempt
-      new_attempts=$((fix_attempts + 1))
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright failed after fix attempt $new_attempts | $new_attempts | pending |"
-      cat > "$CURRENT_TASK" <<EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- [FIX ATTEMPT $new_attempts] $task_title (playwright failed)
-EOF
-    fi
+    log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
+    tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
   fi
 else
   exit_code=$?

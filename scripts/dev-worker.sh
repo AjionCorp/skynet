@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # dev-worker.sh — Pick next task from backlog, implement it via Claude Code
-# Flow: worktree -> implement -> typecheck -> playwright -> merge to main -> cleanup
+# Flow: worktree -> implement -> quality gates (SKYNET_GATE_*) -> merge to main -> cleanup
 # Uses git worktrees so multiple workers can run concurrently without conflicts.
 # On failure: moves task to failed-tasks.md, then tries the NEXT task
 # Supports multiple workers: pass worker ID as arg (default: 1)
@@ -372,53 +372,46 @@ EOF
 
   log "Claude Code completed. Running checks before merge..."
 
-  # --- Gate 1: Typecheck (in worktree) ---
+  # --- Run configurable quality gates (in worktree) ---
   # Clean .dev/ changes Claude may have made in the worktree
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
-  (cd "$WORKTREE_DIR" && git clean -fd test-results/ "${SKYNET_PLAYWRIGHT_DIR:+${SKYNET_PLAYWRIGHT_DIR}/test-results/}" 2>/dev/null || true)
+  (cd "$WORKTREE_DIR" && git clean -fd test-results/ 2>/dev/null || true)
 
-  if ! (cd "$WORKTREE_DIR" && $SKYNET_TYPECHECK_CMD) >> "$LOG" 2>&1; then
-    log "TYPECHECK FAILED. Branch NOT merged."
-    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (typecheck failed)"
+  _gate_failed=""
+  _gate_idx=1
+  while true; do
+    _gate_var="SKYNET_GATE_${_gate_idx}"
+    _gate_cmd="${!_gate_var:-}"
+    if [ -z "$_gate_cmd" ]; then break; fi
+    log "Running gate $_gate_idx: $_gate_cmd"
+    if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then
+      _gate_failed="$_gate_cmd"
+      break
+    fi
+    log "Gate $_gate_idx passed."
+    _gate_idx=$((_gate_idx + 1))
+  done
+
+  if [ -n "$_gate_failed" ]; then
+    _gate_label=$(echo "$_gate_failed" | awk '{print $NF}')
+    log "GATE FAILED: $_gate_failed. Branch NOT merged."
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
     cleanup_worktree  # Keep branch for task-fixer
-    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed | 0 | pending |" >> "$FAILED"
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed)_"
+    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
+    mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
     _CURRENT_TASK_TITLE=""
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (typecheck failed, branch kept)
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title ($_gate_label failed, branch kept)
 EOF
     log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
     continue
   fi
 
-  log "Typecheck passed."
+  log "All quality gates passed."
 
-  # --- Gate 2: Playwright smoke tests (if configured and dev server running) ---
-  if [ -n "$SKYNET_PLAYWRIGHT_DIR" ] && [ -n "$SKYNET_SMOKE_TEST" ] && curl -sf "$SKYNET_DEV_SERVER_URL" > /dev/null 2>&1; then
-      log "Dev server reachable. Running Playwright smoke tests..."
-      if ! (cd "$WORKTREE_DIR/$SKYNET_PLAYWRIGHT_DIR" && npx playwright test "$SKYNET_SMOKE_TEST" --reporter=list >> "$LOG" 2>&1); then
-        log "PLAYWRIGHT FAILED. Branch NOT merged."
-        tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (playwright failed)"
-        cleanup_worktree  # Keep branch for task-fixer
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | playwright tests failed | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(playwright failed)_"
-        _CURRENT_TASK_TITLE=""
-        cat > "$WORKER_TASK_FILE" <<EOF
-# Current Task
-**Status:** idle
-**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (playwright failed, branch kept)
-EOF
-        log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
-        continue
-      fi
-      log "Playwright tests passed."
-  else
-    log "Skipping Playwright (not configured or dev server unreachable)."
-  fi
-
-  # --- Gate 3: Check server logs for runtime errors ---
+  # --- Non-blocking: Check server logs for runtime errors ---
   if [ -f "$SCRIPTS_DIR/next-dev.log" ]; then
     log "Checking server logs for runtime errors..."
     bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
