@@ -195,6 +195,9 @@ crash_recovery() {
 # --- Run crash recovery before dispatching ---
 crash_recovery
 
+# --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
+validate_backlog
+
 # --- Auth pre-check: don't kick off Claude workers if auth is down ---
 # Read token from cache file (written by auth-refresh LaunchAgent)
 claude_auth_ok=false
