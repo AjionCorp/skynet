@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix CLI scripts path resolution for npm package distribution — packages/cli/src/commands/init.ts line 7 resolves SKYNET_ROOT via `resolve(__dirname, "../../../..")` which only works inside the monorepo. When installed from npm, scripts/ won't be at that path. Fix: add `"files": ["dist", "scripts"]` to packages/cli/package.json so scripts ship with the tarball, then change SKYNET_ROOT resolution to use `fileURLToPath(new URL('../../scripts', import.meta.url))` pattern (relative to the compiled dist/commands/init.js). Verify `npm pack` includes scripts/ and that init.ts can locate them. Also add `"prepublishOnly": "tsc"` to packages/cli/package.json
+## [FEAT] Add `skynet doctor` CLI diagnostics command — create packages/cli/src/commands/doctor.ts. Check: (1) required tools exist: git, node, pnpm, shellcheck — show version or MISSING, (2) skynet.config.sh exists and is parseable, (3) scripts/ directory is accessible and contains expected files (dev-worker.sh, watchdog.sh, etc.), (4) agent availability: run `claude --version` and `codex --version`, report which are available, (5) .dev/ state files exist (backlog.md, completed.md, etc.), (6) worker PID lock files — show active/stale status, (7) git repo status — clean/dirty, current branch. Output a summary with PASS/WARN/FAIL per check. Register in packages/cli/src/index.ts
 **Status:** completed
-**Started:** 2026-02-19 15:09
+**Started:** 2026-02-19 15:12
 **Completed:** 2026-02-19
-**Branch:** dev/fix-cli-scripts-path-resolution-for-npm-
+**Branch:** dev/add-skynet-doctor-cli-diagnostics-comman
 **Worker:** 1
 
 ### Changes
