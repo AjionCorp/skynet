@@ -23,6 +23,7 @@ export type {
   WorkerScaleInfo,
   WorkerScaleResult,
   PromptTemplate,
+  MissionProgress,
 } from "./types";
 
 // Config helpers
