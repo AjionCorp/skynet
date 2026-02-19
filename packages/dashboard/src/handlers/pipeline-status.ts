@@ -145,7 +145,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
     try {
       // Worker statuses
       const workers = workerDefs.map((w) => {
-        const lockFile = `${lockPrefix}${w.name}.lock`;
+        const lockFile = `${lockPrefix}-${w.name}.lock`;
         const status = getWorkerStatus(lockFile);
         const logName = w.logFile ?? w.name;
         const lastLog = getLastLogLine(devDir, logName);
@@ -161,9 +161,10 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       });
 
       // Current tasks (per-worker files)
+      const maxW = config.maxWorkers ?? 4;
       const currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
       // Try per-worker files first, fall back to legacy single file
-      for (let wid = 1; wid <= 2; wid++) {
+      for (let wid = 1; wid <= maxW; wid++) {
         const raw = readDevFile(devDir, `current-task-${wid}.md`);
         if (raw) currentTasks[`worker-${wid}`] = parseCurrentTask(raw);
       }
@@ -177,7 +178,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // Worker heartbeats — read .dev/worker-N.heartbeat epoch files
       const heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
       const staleThresholdMs = 45 * 60 * 1000; // matches SKYNET_STALE_MINUTES default
-      for (let wid = 1; wid <= 2; wid++) {
+      for (let wid = 1; wid <= maxW; wid++) {
         const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
         if (hbRaw) {
           const epoch = Number(hbRaw);

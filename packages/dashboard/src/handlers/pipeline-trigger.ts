@@ -15,6 +15,7 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
     try {
       const body = await request.json();
       const script = body.script as string;
+      const args = (body.args as string[] | undefined) ?? [];
 
       if (!script || !triggerableScripts.includes(script)) {
         return Response.json(
@@ -34,14 +35,28 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         );
       }
 
+      // Validate args are safe (alphanumeric + hyphens only)
+      for (const arg of args) {
+        if (!/^[a-z0-9-]+$/.test(arg)) {
+          return Response.json(
+            { data: null, error: "Invalid argument" },
+            { status: 400 }
+          );
+        }
+      }
+
       const scriptPath = resolve(scriptsDir, `${script}.sh`);
-      const logPath = resolve(scriptsDir, `${script}.log`);
+      // Logs go to devDir/scripts/ (e.g. .dev/scripts/), not the source scriptsDir
+      const logDir = resolve(devDir, "scripts");
+      const logSuffix = args.length > 0 ? `${script}-${args[0]}` : script;
+      const logPath = resolve(logDir, `${logSuffix}.log`);
 
       // Fire and forget using spawn with explicit argv (no shell injection)
       const logFd = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
-      const child = spawn("bash", [scriptPath], {
+      const child = spawn("bash", [scriptPath, ...args], {
         detached: true,
         stdio: ["ignore", logFd, logFd],
+        env: { ...process.env, SKYNET_DEV_DIR: devDir },
       });
       child.unref();
 

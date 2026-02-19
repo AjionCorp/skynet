@@ -479,12 +479,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   }, [activeTab, fetchAgents]);
 
   async function triggerScript(script: string) {
-    // Map worker names to script names the trigger endpoint expects
-    const scriptMap: Record<string, string> = {
-      "dev-worker-1": "dev-worker",
-      "dev-worker-2": "dev-worker",
-    };
-    const triggerName = scriptMap[script] ?? script;
+    // Map worker names to script names + optional args for the trigger endpoint
+    // e.g. "dev-worker-3" → { name: "dev-worker", args: ["3"] }
+    const match = script.match(/^(dev-worker|task-fixer)-(\d+)$/);
+    const triggerName = match ? match[1] : script;
+    const triggerArgs = match ? [match[2]] : [];
 
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));
@@ -492,7 +491,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: triggerName }),
+        body: JSON.stringify({ script: triggerName, args: triggerArgs }),
       });
       const json = await res.json();
       if (json.error) {
