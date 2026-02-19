@@ -96,6 +96,9 @@ SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
 # Source notification helpers
 source "$SKYNET_SCRIPTS_DIR/_notify.sh"
 
+# Source structured event logging
+source "$SKYNET_SCRIPTS_DIR/_events.sh"
+
 # Source AI agent abstraction (plugin-based — see scripts/agents/)
 source "$SKYNET_SCRIPTS_DIR/_agent.sh"
 
