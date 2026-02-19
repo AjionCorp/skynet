@@ -13,12 +13,19 @@ const TYPE_LABELS: Record<ScalableType, string> = {
   "project-driver": "Project Driver",
 };
 
+const TYPE_MAX: Record<ScalableType, number> = {
+  "dev-worker": 4,
+  "task-fixer": 3,
+  "project-driver": 2,
+};
+
 function isScalable(t: string): t is ScalableType {
   return (SCALABLE_TYPES as readonly string[]).includes(t);
 }
 
 function maxForType(t: ScalableType, maxWorkers: number): number {
-  return t === "dev-worker" ? maxWorkers : 1;
+  if (t === "dev-worker") return maxWorkers;
+  return TYPE_MAX[t];
 }
 
 function isProcessAlive(pid: number): boolean {
@@ -45,20 +52,19 @@ function getRunning(
   maxWorkers: number
 ): { id: number; pid: number; lockFile: string }[] {
   const out: { id: number; pid: number; lockFile: string }[] = [];
+  const max = maxForType(type, maxWorkers);
 
-  if (type === "dev-worker") {
-    for (let i = 1; i <= maxWorkers; i++) {
-      const lockFile = `${lockPrefix}-dev-worker-${i}.lock`;
-      const pid = readPidFile(lockFile);
-      if (pid !== null && isProcessAlive(pid)) {
-        out.push({ id: i, pid, lockFile });
-      }
-    }
-  } else {
-    const lockFile = `${lockPrefix}-${type}.lock`;
+  for (let i = 1; i <= max; i++) {
+    // dev-worker uses numbered lock files; others check both unnumbered (id=1) and numbered
+    const lockFile =
+      type === "dev-worker"
+        ? `${lockPrefix}-dev-worker-${i}.lock`
+        : i === 1
+          ? `${lockPrefix}-${type}.lock`
+          : `${lockPrefix}-${type}-${i}.lock`;
     const pid = readPidFile(lockFile);
     if (pid !== null && isProcessAlive(pid)) {
-      out.push({ id: 1, pid, lockFile });
+      out.push({ id: i, pid, lockFile });
     }
   }
 
@@ -151,35 +157,36 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         const usedIds = new Set(running.map((r) => r.id));
 
         for (let i = 0; i < delta; i++) {
-          if (workerType === "dev-worker") {
-            let newId = 1;
-            while (usedIds.has(newId)) newId++;
-            usedIds.add(newId);
+          let newId = 1;
+          while (usedIds.has(newId)) newId++;
+          usedIds.add(newId);
 
-            const scriptPath = resolve(scriptsDir, "dev-worker.sh");
-            const logPath = resolve(scriptsDir, `dev-worker-${newId}.log`);
-            const logFd = openSync(
-              logPath,
-              constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
-            );
-            const child = spawn("bash", [scriptPath, String(newId)], {
-              detached: true,
-              stdio: ["ignore", logFd, logFd],
-            });
-            child.unref();
-          } else {
-            const scriptPath = resolve(scriptsDir, `${workerType}.sh`);
-            const logPath = resolve(scriptsDir, `${workerType}.log`);
-            const logFd = openSync(
-              logPath,
-              constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
-            );
-            const child = spawn("bash", [scriptPath], {
-              detached: true,
-              stdio: ["ignore", logFd, logFd],
-            });
-            child.unref();
-          }
+          const scriptPath = resolve(scriptsDir, `${workerType}.sh`);
+          // First instance of non-dev-worker uses unnumbered log; extras get numbered
+          const logSuffix =
+            workerType === "dev-worker"
+              ? `dev-worker-${newId}`
+              : newId === 1
+                ? workerType
+                : `${workerType}-${newId}`;
+          const logPath = resolve(scriptsDir, `${logSuffix}.log`);
+          const logFd = openSync(
+            logPath,
+            constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
+          );
+          // dev-worker expects worker ID as arg; others get it via WORKER_ID env
+          const args = workerType === "dev-worker"
+            ? [scriptPath, String(newId)]
+            : [scriptPath];
+          const env = workerType !== "dev-worker" && newId > 1
+            ? { ...process.env, WORKER_ID: String(newId) }
+            : undefined;
+          const child = spawn("bash", args, {
+            detached: true,
+            stdio: ["ignore", logFd, logFd],
+            ...(env ? { env } : {}),
+          });
+          child.unref();
         }
       } else if (delta < 0) {
         // Scale down — kill highest-numbered workers first, clean up PID + heartbeat files
