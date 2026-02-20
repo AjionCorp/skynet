@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add stale-claimed backlog recovery sweep tied to live lock/worktree state — in `scripts/watchdog.sh`, detect `[>]` rows with no corresponding active lock/heartbeat/worktree and atomically demote them back to `[ ]` to prevent permanent claimed starvation. Mission: Criterion #3 no-task-loss guarantees and Criterion #2 throughput.
+## [INFRA] Add duplicate-active-root pressure alerting in watchdog with throttle guard — when `duplicate_active_rows > 0` across consecutive cycles, emit a single throttled high-severity event/notification with current root counts and cooldown handling. Mission: Criterion #2 self-correction closure and Criterion #4 operational awareness.
 **Status:** completed
-**Started:** 2026-02-20 16:49
+**Started:** 2026-02-20 17:00
 **Completed:** 2026-02-20
-**Branch:** dev/add-stale-claimed-backlog-recovery-sweep
+**Branch:** dev/add-duplicate-active-root-pressure-alert
 **Worker:** 1
 
 ### Changes
