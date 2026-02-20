@@ -52,6 +52,7 @@ jobs:
       - run: pnpm lint:ts
 
   build:
+    needs: [typecheck]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -64,6 +65,7 @@ jobs:
       - run: pnpm build
 
   e2e-cli:
+    needs: [typecheck, unit-test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,6 +80,7 @@ jobs:
       - run: bash tests/e2e/cli-commands.test.sh
 
   e2e-admin:
+    needs: [typecheck, build]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
