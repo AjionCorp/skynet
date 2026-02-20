@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add events.log rotation to _events.sh to prevent unbounded growth — in `scripts/_events.sh`, modify `emit_event()` to check file size before appending. Add before the `echo >> "$events_log"` line: `local max_kb="${SKYNET_MAX_EVENTS_LOG_KB:-1024}"; if [ -f "$events_log" ]; then local sz; sz=$(wc -c < "$events_log" 2>/dev/null || echo 0); if [ "$sz" -gt $((max_kb * 1024)) ]; then mv "$events_log" "${events_log}.1"; fi; fi`. This mirrors the `rotate_log_if_needed()` pattern in `_config.sh`. Add `SKYNET_MAX_EVENTS_LOG_KB="1024"` to `templates/skynet.config.sh` with comment. events.log is the only log file without rotation. Criterion #3 (no unbounded resource consumption)
+## [FEAT] Add `skynet watch` command for real-time terminal monitoring — create `packages/cli/src/commands/watch.ts`. Uses a 3-second `setInterval` loop that clears screen and renders a compact dashboard: (1) Header with project name + health score (colored via ANSI), (2) Workers table with ID, status (idle/active), current task (truncated 60 chars), heartbeat age, (3) Task summary line (pending/claimed/completed/failed), (4) Self-correction rate, (5) Last 5 events from `.dev/events.log` with timestamps. Use ANSI codes (`\x1b[32m` green, `\x1b[33m` yellow, `\x1b[31m` red, `\x1b[0m` reset). Read state from `.dev/` files (same pattern as `status.ts`). Exit cleanly on SIGINT. Register in `packages/cli/src/index.ts`. Criterion #1 (monitor pipeline without browser)
 **Status:** completed
-**Started:** 2026-02-19 23:15
+**Started:** 2026-02-19 23:17
 **Completed:** 2026-02-19
-**Branch:** dev/add-eventslog-rotation-to-eventssh-to-pr
+**Branch:** dev/add-skynet-watch-command-for-real-time-t
 **Worker:** 1
 
 ### Changes
