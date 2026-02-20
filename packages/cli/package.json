@@ -5,7 +5,8 @@
   "files": [
     "dist",
     "scripts",
-    "templates"
+    "templates",
+    "README.md"
   ],
   "bin": {
     "skynet": "dist/index.js"
