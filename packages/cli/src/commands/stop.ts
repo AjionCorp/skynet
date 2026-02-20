@@ -95,11 +95,16 @@ export async function stopCommand(options: StopOptions) {
   }
 
   // Step 2: Kill running workers via PID lock files
-  const workers = [
-    "dev-worker-1", "dev-worker-2", "task-fixer", "project-driver",
-    "sync-runner", "ui-tester", "feature-validator", "health-check",
-    "auth-refresh", "watchdog",
-  ];
+  const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
+  const maxFixers = Number(vars.SKYNET_MAX_FIXERS) || 1;
+
+  const workers: string[] = [];
+  for (let i = 1; i <= maxWorkers; i++) workers.push(`dev-worker-${i}`);
+  for (let i = 1; i <= maxFixers; i++) workers.push(`task-fixer-${i}`);
+  workers.push(
+    "project-driver", "sync-runner", "ui-tester",
+    "feature-validator", "health-check", "auth-refresh", "watchdog",
+  );
 
   let stopped = 0;
   let cleaned = 0;
