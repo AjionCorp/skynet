@@ -10,6 +10,7 @@
 #   "auto"                — try Claude first, fall back to Codex (default)
 #   "claude"              — use Claude Code only
 #   "codex"               — use Codex CLI only
+#   "echo"                — dry-run (no LLM, creates placeholder commit)
 #   "/path/to/plugin.sh"  — use a custom agent plugin
 
 # Codex CLI defaults (override in skynet.config.sh)
@@ -59,7 +60,7 @@ fi
 _resolve_plugin_path() {
   local name="$1"
   case "$name" in
-    claude|codex) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
+    claude|codex|echo) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
     auto)         echo "auto" ;;
     *)            echo "$name" ;;  # file path (absolute or relative)
   esac
