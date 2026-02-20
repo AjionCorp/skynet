@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Replace `&>/dev/null` bashism with portable `>/dev/null 2>&1` in 8 script locations — `&>` is a bashism that redirects both stdout and stderr. While bash 3.2 supports it, the project's shell rules mandate bash 3.2 compatibility and the rest of the codebase uses `>/dev/null 2>&1` exclusively. The 8 locations: `scripts/auth-check.sh` lines 14 and 106, `scripts/agents/claude.sh` line 14, `scripts/agents/codex.sh` line 14, `scripts/_agent.sh` lines 37, 94, and 161, `scripts/_compat.sh` line 62. Also in `scripts/_compat.sh` line 7, replace `[[ "$(uname -s)" == "Darwin" ]]` with `[ "$(uname -s)" = "Darwin" ]` for POSIX consistency (this is the only `[[` in the codebase outside the already-fixed `watchdog.sh`). Fix: global find-and-replace `&>/dev/null` with `>/dev/null 2>&1` in these files. Run `bash -n` on all modified files and `pnpm typecheck`. Criterion #1 (portability — consistent bash 3.2 style)
+## [FIX] Add `worker` field to `EventEntry` interface and display in dashboard — in `packages/dashboard/src/types.ts` line 257, `EventEntry` only has `ts`, `event`, `detail`. But `scripts/_events.sh` emits `{"ts":"ISO","event":"type","worker":N,"detail":"text"}` — the `worker` field is silently dropped during deserialization. Fix: (1) add `worker?: number;` to `EventEntry` interface. (2) In `packages/dashboard/src/handlers/events.ts`, include `worker` when parsing event JSON lines. (3) In `packages/dashboard/src/components/ActivityFeed.tsx`, show "W{N}" badge next to each event when worker is present. (4) In `packages/dashboard/src/components/EventsDashboard.tsx`, add Worker column to the events table. Run `pnpm typecheck`. Criterion #4 (complete event visibility — know which worker performed each action)
 **Status:** completed
-**Started:** 2026-02-20 02:49
+**Started:** 2026-02-20 03:04
 **Completed:** 2026-02-20
-**Branch:** dev/replace-devnull-bashism-with-portable-de
+**Branch:** dev/add-worker-field-to-evententry-interface
 **Worker:** 2
 
 ### Changes
