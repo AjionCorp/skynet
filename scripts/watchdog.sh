@@ -526,7 +526,7 @@ _cleanup_stale_branches() {
     esac
 
     # Skip entries without a real branch (e.g. "merged to main")
-    [[ "$branch" == dev/* ]] || continue
+    case "$branch" in dev/*) ;; *) continue ;; esac
 
     # Never delete the branch we're currently on
     [ "$branch" = "$current_branch" ] && continue
