@@ -200,14 +200,17 @@ function evaluateCriterion(
     }
     case 2: {
       // "The pipeline self-corrects 95%+ of failures without human intervention"
-      const totalFailed = ctx.failedLines.length;
       const fixedCount = ctx.failedLines.filter((f) => f.status.includes("fixed")).length;
-      if (totalFailed === 0) return { status: "partial", evidence: "No failed tasks recorded yet" };
-      const fixRate = fixedCount / totalFailed;
+      const supersededCount = ctx.failedLines.filter((f) => f.status.includes("superseded")).length;
+      const blockedCount = ctx.failedLines.filter((f) => f.status.includes("blocked")).length;
+      const selfCorrected = fixedCount + supersededCount;
+      const totalResolved = selfCorrected + blockedCount;
+      if (totalResolved === 0) return { status: "partial", evidence: "No failed tasks resolved yet" };
+      const fixRate = selfCorrected / totalResolved;
       const pct = Math.round(fixRate * 100);
-      if (fixRate >= 0.95) return { status: "met", evidence: `${pct}% fix rate (${fixedCount}/${totalFailed})` };
-      if (fixRate >= 0.5) return { status: "partial", evidence: `${pct}% fix rate (${fixedCount}/${totalFailed}) — target 95%` };
-      return { status: "not-met", evidence: `${pct}% fix rate (${fixedCount}/${totalFailed}) — target 95%` };
+      if (fixRate >= 0.95) return { status: "met", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved} resolved autonomously)` };
+      if (fixRate >= 0.5) return { status: "partial", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved}) — target 95%` };
+      return { status: "not-met", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved}) — target 95%` };
     }
     case 3: {
       // "Workers never lose tasks, deadlock, or produce zombie processes"

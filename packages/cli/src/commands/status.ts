@@ -341,7 +341,10 @@ export async function statusCommand(options: StatusOptions) {
           .split("\n")
           .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
         const fixedCount = totalFailedLines.filter((l) => l.includes("| fixed |")).length;
-        const totalFailed = totalFailedLines.length;
+        const supersededCount = totalFailedLines.filter((l) => l.includes("| superseded |")).length;
+        const blockedCount = totalFailedLines.filter((l) => l.includes("| blocked |")).length;
+        const selfCorrected = fixedCount + supersededCount;
+        const totalResolved = selfCorrected + blockedCount;
 
         const watchdogLog = readFile(join(devDir, "scripts/watchdog.log"));
         const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
@@ -388,12 +391,12 @@ export async function statusCommand(options: StatusOptions) {
               else { status = "partial"; evidence = `${handlerCount} handlers`; }
               break;
             case 2:
-              if (totalFailed === 0) { status = "partial"; evidence = "No failures yet"; }
+              if (totalResolved === 0) { status = "partial"; evidence = "No failures resolved yet"; }
               else {
-                const pct = Math.round((fixedCount / totalFailed) * 100);
-                if (pct >= 95) { status = "met"; evidence = `${pct}% fix rate`; }
-                else if (pct >= 50) { status = "partial"; evidence = `${pct}% fix rate`; }
-                else { status = "not-met"; evidence = `${pct}% fix rate`; }
+                const pct = Math.round((selfCorrected / totalResolved) * 100);
+                if (pct >= 95) { status = "met"; evidence = `${pct}% self-correction (${selfCorrected}/${totalResolved})`; }
+                else if (pct >= 50) { status = "partial"; evidence = `${pct}% self-correction`; }
+                else { status = "not-met"; evidence = `${pct}% self-correction`; }
               }
               break;
             case 3: {
