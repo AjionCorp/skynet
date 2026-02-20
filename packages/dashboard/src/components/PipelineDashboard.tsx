@@ -232,18 +232,23 @@ export function PipelineDashboard() {
   }
 
   const runningCount = status.workers.filter((w) => w.running).length;
-  const healthColor =
+  const healthLevel =
     status.healthScore > 80
-      ? "emerald"
+      ? "high"
       : status.healthScore > 50
-        ? "amber"
-        : "red";
-  const scrColor =
+        ? "medium"
+        : "low";
+  const scrLevel =
     status.selfCorrectionRate >= 90
-      ? "emerald"
+      ? "high"
       : status.selfCorrectionRate >= 70
-        ? "amber"
-        : "red";
+        ? "medium"
+        : "low";
+  const levelClasses = {
+    high: { card: 'border-emerald-500/20 bg-emerald-500/5', label: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-400' },
+    medium: { card: 'border-amber-500/20 bg-amber-500/5', label: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-400' },
+    low: { card: 'border-red-500/20 bg-red-500/5', label: 'text-red-400', badge: 'bg-red-500/20 text-red-400' },
+  } as const;
 
   return (
     <div className="space-y-6">
@@ -270,20 +275,20 @@ export function PipelineDashboard() {
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
-        <div className={`rounded-xl border border-${healthColor}-500/20 bg-${healthColor}-500/5 p-4`}>
-          <p className={`text-xs font-medium uppercase tracking-wider text-${healthColor}-400`}>Health</p>
+        <div className={`rounded-xl border p-4 ${levelClasses[healthLevel].card}`}>
+          <p className={`text-xs font-medium uppercase tracking-wider ${levelClasses[healthLevel].label}`}>Health</p>
           <div className="mt-1 flex items-center gap-2">
             <p className="text-2xl font-bold text-white">{status.healthScore}</p>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${healthColor}-500/20 text-${healthColor}-400`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${levelClasses[healthLevel].badge}`}>
               {status.healthScore > 80 ? "Good" : status.healthScore > 50 ? "Degraded" : "Critical"}
             </span>
           </div>
         </div>
-        <div className={`rounded-xl border border-${scrColor}-500/20 bg-${scrColor}-500/5 p-4`}>
-          <p className={`text-xs font-medium uppercase tracking-wider text-${scrColor}-400`}>Self-Correction</p>
+        <div className={`rounded-xl border p-4 ${levelClasses[scrLevel].card}`}>
+          <p className={`text-xs font-medium uppercase tracking-wider ${levelClasses[scrLevel].label}`}>Self-Correction</p>
           <div className="mt-1 flex items-center gap-2">
             <p className="text-2xl font-bold text-white">{status.selfCorrectionRate}%</p>
-            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${scrColor}-500/20 text-${scrColor}-400`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${levelClasses[scrLevel].badge}`}>
               {status.selfCorrectionStats.fixed} fixed + {status.selfCorrectionStats.superseded} routed around
             </span>
           </div>
