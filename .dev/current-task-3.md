@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add vitest component tests for SettingsDashboard, WorkerScaling, and LogViewer — create `packages/dashboard/src/components/SettingsDashboard.test.tsx`, `WorkerScaling.test.tsx`, and `LogViewer.test.tsx` using vitest + @testing-library/react. For SettingsDashboard: test renders config key-value rows from mock API response, test save button sends POST with updated values, test displays validation error on invalid input. For WorkerScaling: test renders worker type rows with current counts, test increment/decrement buttons trigger scale API call, test disables + button at max limit. For LogViewer: test renders log type dropdown, test displays log content in monospace pre block, test auto-refresh toggle works. These are the only 3 interactive components with zero test coverage. Follow handler test mocking patterns. Criterion #2 (complete test coverage for dashboard components)
+## [FEAT] Add `skynet run` CLI command for one-shot task execution — create `packages/cli/src/commands/run.ts`. Usage: `skynet run "Implement feature X" --agent claude --gate typecheck`. Spawns a single worker that claims a temporary task (not from backlog), runs the agent, executes the quality gate, and merges to main if passed. Useful for quick one-off tasks without adding to the backlog. Create a temp `current-task-run.md`, run through the same `dev-worker.sh` pipeline but with `SKYNET_ONE_SHOT=true` env var that skips the claim loop. Register in `packages/cli/src/index.ts`. Criterion #1 (developer experience — quick task execution without backlog ceremony)
 **Status:** completed
-**Started:** 2026-02-19 22:03
+**Started:** 2026-02-19 22:10
 **Completed:** 2026-02-19
-**Branch:** dev/add-vitest-component-tests-for-settingsd
+**Branch:** dev/add-skynet-run-cli-command-for-one-shot-
 **Worker:** 3
 
 ### Changes
