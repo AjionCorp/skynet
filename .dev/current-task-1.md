@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close blocked config parity root for watchdog/one-shot knobs — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` so `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` defaults/descriptions stay synchronized and verified by tests. Mission: Criterion #1 discoverability and Criterion #3 deterministic config behavior.
+## [INFRA] Canonicalize active failed roots to one row per normalized root in watchdog — extend reconciliation in `scripts/watchdog.sh` to keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicate variants, and emit deterministic per-root reconciliation metrics/events. Mission: Criterion #2 throughput and Criterion #3 deterministic state.
 **Status:** completed
-**Started:** 2026-02-20 17:24
+**Started:** 2026-02-20 17:27
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-config-parity-root-for-wat
+**Branch:** dev/canonicalize-active-failed-roots-to-one-
 **Worker:** 1
 
 ### Changes
