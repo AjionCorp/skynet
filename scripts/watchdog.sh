@@ -512,7 +512,7 @@ _archive_old_completions() {
     entry_date=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
 
     # If date is older than cutoff, mark for archival
-    if [ -n "$entry_date" ] && [ "$entry_date" < "$cutoff_date" ]; then
+    if [ -n "$entry_date" ] && [ "$entry_date" \< "$cutoff_date" ]; then
       archive_lines="${archive_lines}${line}
 "
       archived_count=$((archived_count + 1))
