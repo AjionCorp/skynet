@@ -21,6 +21,7 @@ const COMMANDS: Record<string, string[]> = {
   import: ["--dir", "--dry-run", "--merge", "--force"],
   config: ["--dir"],
   completions: [],
+  "test-notify": ["--channel", "--dir"],
 };
 
 const COMMAND_NAMES = Object.keys(COMMANDS).join(" ");
@@ -109,6 +110,7 @@ _skynet() {
     'import:Restore pipeline state from a JSON snapshot'
     'config:View and edit pipeline configuration'
     'completions:Generate shell completions'
+    'test-notify:Test notification channels'
   )
 
   _arguments -C \\

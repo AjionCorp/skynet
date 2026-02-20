@@ -22,6 +22,7 @@ import { metricsCommand } from "./commands/metrics.js";
 import { exportCommand } from "./commands/export.js";
 import { importCommand } from "./commands/import.js";
 import { completionsCommand } from "./commands/completions.js";
+import { testNotifyCommand } from "./commands/test-notify.js";
 
 const program = new Command();
 
@@ -183,6 +184,13 @@ program
   .description("Generate shell completions")
   .argument("<shell>", "Shell type: bash or zsh")
   .action(completionsCommand);
+
+program
+  .command("test-notify")
+  .description("Test notification channels by sending a test message")
+  .option("--channel <name>", "Test a single channel (e.g. telegram, slack, discord)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(testNotifyCommand);
 
 const configCmd = program
   .command("config")
