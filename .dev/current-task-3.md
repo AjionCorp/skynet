@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add project-driver regression for active blocked-root suppression — in `scripts/project-driver.sh` tests, verify generation skips unchecked tasks whose normalized title matches any active `status=blocked` root from `.dev/failed-tasks.md`, with one skip log per root per cycle. Mission: Criterion #2 quality gates and Criterion #3 convergent planning.
+## [DATA] Execute one canonical failed-task cleanup pass and commit resulting state files — run the reconciler so `.dev/failed-tasks.md` no longer lists stale blocked roots already fixed (Codex stdin path, config parity, CLI E2E smoke, pipeline-logs optimization, backlog-parser DRY, CLI helper DRY), keeping only true active roots. Mission: Criterion #2 retry-loop closure and Criterion #3 state convergence.
 **Status:** completed
-**Started:** 2026-02-20 16:25
+**Started:** 2026-02-20 16:32
 **Completed:** 2026-02-20
-**Branch:** dev/add-project-driver-regression-for-active
+**Branch:** dev/execute-one-canonical-failed-task-cleanu
 **Worker:** 3
 
 ### Changes
