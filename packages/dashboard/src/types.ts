@@ -257,6 +257,7 @@ export interface SelfCorrectionStats {
 export interface EventEntry {
   ts: string;
   event: string;
+  worker?: number;
   detail: string;
 }
 

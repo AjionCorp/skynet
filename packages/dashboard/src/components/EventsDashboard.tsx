@@ -149,6 +149,7 @@ export function EventsDashboard({ pollInterval = 10000 }: EventsDashboardProps) 
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-900/80 text-zinc-500">
                 <th className="px-5 py-2 font-medium">Timestamp</th>
+                <th className="px-5 py-2 font-medium">Worker</th>
                 <th className="px-5 py-2 font-medium">Event Type</th>
                 <th className="px-5 py-2 font-medium">Detail</th>
               </tr>
@@ -156,7 +157,7 @@ export function EventsDashboard({ pollInterval = 10000 }: EventsDashboardProps) 
             <tbody className="divide-y divide-zinc-800/50">
               {filtered.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={3} className="px-5 py-8 text-center text-sm text-zinc-500">
+                  <td colSpan={4} className="px-5 py-8 text-center text-sm text-zinc-500">
                     No events found
                   </td>
                 </tr>
@@ -167,6 +168,13 @@ export function EventsDashboard({ pollInterval = 10000 }: EventsDashboardProps) 
                     <tr key={i} className="bg-zinc-900/50 hover:bg-zinc-800/50 transition-colors">
                       <td className="whitespace-nowrap px-5 py-2 text-zinc-400">
                         {formatTimestamp(entry.ts)}
+                      </td>
+                      <td className="px-5 py-2 text-zinc-400">
+                        {entry.worker != null && (
+                          <span className="rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-purple-300">
+                            W{entry.worker}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-2">
                         <span

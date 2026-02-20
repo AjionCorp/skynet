@@ -24,10 +24,15 @@ export function createEventsHandler(config: SkynetConfig) {
         const epoch = Number(parts[0]);
         if (Number.isNaN(epoch)) continue;
 
+        const detail = parts.slice(2).join("|");
+        const workerMatch = detail.match(/^(?:Worker|Fixer)\s+(\d+):/);
+        const worker = workerMatch ? Number(workerMatch[1]) : undefined;
+
         entries.push({
           ts: new Date(epoch * 1000).toISOString(),
           event: parts[1],
-          detail: parts.slice(2).join("|"),
+          worker,
+          detail,
         });
       }
 
