@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Canonicalize active failed roots to one row per normalized root in watchdog — extend reconciliation in `scripts/watchdog.sh` to keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicate variants, and emit deterministic per-root reconciliation metrics/events. Mission: Criterion #2 throughput and Criterion #3 deterministic state.
+## [DATA] Surface failed-root convergence metrics in CLI `status --json` — in `packages/cli/src/commands/status.ts`, add `activeRoots`, `duplicateActiveRows`, and `blockedRoots` using the same normalized-root parser semantics as dashboard/watchdog. Mission: Criterion #4 full visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 17:28
+**Started:** 2026-02-20 17:29
 **Completed:** 2026-02-20
-**Branch:** dev/canonicalize-active-failed-roots-to-one-
+**Branch:** dev/surface-failed-root-convergence-metrics-
 **Worker:** 4
 
 ### Changes
