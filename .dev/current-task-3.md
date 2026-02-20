@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Emit canonical `failed_root_snapshot` parity payload after each reconciliation cycle — in `scripts/watchdog.sh`, emit active-root hash and counters from canonical normalized roots and include a deterministic `hash_match` comparison against `.dev/blockers.md` Active root hash. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [DATA] Run one canonical failed-root reconciliation sweep and refresh blocker parity snapshot — execute watchdog reconcile-only twice on unchanged inputs, confirm idempotence counters/hashes, and refresh `.dev/blockers.md` Active metadata from canonical normalized roots without touching Resolved/Celebration sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 17:42
+**Started:** 2026-02-20 17:44
 **Completed:** 2026-02-20
-**Branch:** dev/emit-canonical-failedrootsnapshot-parity
+**Branch:** dev/run-one-canonical-failed-root-reconcilia
 **Worker:** 3
 
 ### Changes
