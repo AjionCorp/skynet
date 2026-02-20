@@ -202,7 +202,7 @@ validate_backlog() {
         _vb_log "BACKLOG HEALTH: Orphaned claim, resetting to pending: $title"
         # Auto-fix: reset [>] to [ ] with backlog mutex
         if mkdir "$_lock_dir" 2>/dev/null; then
-          awk -v target="$line" '{
+          __AWK_TARGET="$line" awk 'BEGIN{target=ENVIRON["__AWK_TARGET"]} {
             if ($0 == target) sub(/\[>\]/, "[ ]")
             print
           }' "$BACKLOG" > "$BACKLOG.tmp" && mv "$BACKLOG.tmp" "$BACKLOG"

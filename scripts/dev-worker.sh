@@ -156,7 +156,7 @@ claim_next_task() {
     fi
   done < <(grep '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   if [ -n "$task" ]; then
-    if ! awk -v target="$task" 'found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
+    if ! __AWK_TARGET="$task" awk 'BEGIN{target=ENVIRON["__AWK_TARGET"]} found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
       "$BACKLOG" > "$BACKLOG.tmp" || ! mv "$BACKLOG.tmp" "$BACKLOG"; then
       release_lock
       echo ""
@@ -187,7 +187,7 @@ mark_in_backlog() {
   local title="${old_line#- \[>\] }"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    awk -v title="$title" -v new="$new_line" '{
+    __AWK_TITLE="$title" __AWK_NEW="$new_line" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]; new=ENVIRON["__AWK_NEW"]} {
       if ($0 == "- [>] " title || $0 == "- [ ] " title) print new
       else print
     }' "$BACKLOG" > "$BACKLOG.tmp"
@@ -201,7 +201,7 @@ unclaim_task() {
   local task_title="$1"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    awk -v title="$task_title" '{
+    __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
       if ($0 == "- [>] " title) print "- [ ] " title
       else print
     }' "$BACKLOG" > "$BACKLOG.tmp"

@@ -82,7 +82,7 @@ unclaim_task() {
   local task_title="$1"
   acquire_lock || return
   if [ -f "$BACKLOG" ]; then
-    awk -v title="$task_title" '{
+    __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
       if ($0 == "- [>] " title) print "- [ ] " title
       else print
     }' "$BACKLOG" > "$BACKLOG.tmp"
@@ -326,7 +326,7 @@ _handle_stale_worker() {
       local backlog_lock="${SKYNET_LOCK_PREFIX}-backlog.lock"
       if mkdir "$backlog_lock" 2>/dev/null; then
         if [ -f "$BACKLOG" ]; then
-          awk -v title="$task_title" '{
+          __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
             if ($0 == "- [>] " title) print "- [ ] " title
             else print
           }' "$BACKLOG" > "$BACKLOG.tmp"

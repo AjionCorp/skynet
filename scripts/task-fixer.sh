@@ -82,8 +82,8 @@ update_failed_line() {
   local new_line="$2"
   if [ -f "$FAILED" ]; then
     # Match pending OR fixing-N status (fixer claims change pending → fixing-N)
-    awk -v title="$match_title" -v replacement="$new_line" \
-      'index($0, title) > 0 && (/\| pending \|/ || /\| fixing-[0-9]+ \|/) {print replacement; next} {print}' \
+    __AWK_TITLE="$match_title" __AWK_REPL="$new_line" awk \
+      'BEGIN{title=ENVIRON["__AWK_TITLE"]; replacement=ENVIRON["__AWK_REPL"]} index($0, title) > 0 && (/\| pending \|/ || /\| fixing-[0-9]+ \|/) {print replacement; next} {print}' \
       "$FAILED" > "$FAILED.tmp"
     mv "$FAILED.tmp" "$FAILED"
   fi
@@ -208,8 +208,8 @@ if _acquire_failed_lock; then
     # Mark as claimed by this fixer instance (pending → fixing-N)
     # Use awk for exact line match to avoid sed escaping issues
     task_match_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
-    awk -v title="$task_match_title" -v fid="$FIXER_ID" \
-      'index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
+    __AWK_TITLE="$task_match_title" __AWK_FID="$FIXER_ID" awk \
+      'BEGIN{title=ENVIRON["__AWK_TITLE"]; fid=ENVIRON["__AWK_FID"]} index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
       "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
   fi
   _release_failed_lock
