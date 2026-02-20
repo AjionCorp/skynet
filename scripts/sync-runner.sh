@@ -136,10 +136,12 @@ _Last run: ${now}_
 |----------|----------|--------|---------|-------|
 EOF
 
-for i in "${!_sync_names[@]}"; do
-  val="${_sync_results[$i]:-pending|0|unknown}"
+_i=0
+while [ $_i -lt ${#_sync_names[@]} ]; do
+  val="${_sync_results[$_i]:-pending|0|unknown}"
   IFS='|' read -r status records notes <<< "$val"
-  echo "| ${_sync_names[$i]} | $now | $status | $records | $notes |" >> "$SYNC_HEALTH"
+  echo "| ${_sync_names[$_i]} | $now | $status | $records | $notes |" >> "$SYNC_HEALTH"
+  _i=$((_i + 1))
 done
 
 # Add static entries
@@ -151,12 +153,13 @@ fi
 
 # --- Check for errors and add to blockers if needed ---
 has_errors=false
-for i in "${!_sync_names[@]}"; do
-  val="${_sync_results[$i]:-ok|0|}"
+_i=0
+while [ $_i -lt ${#_sync_names[@]} ]; do
+  val="${_sync_results[$_i]:-ok|0|}"
   IFS='|' read -r status records notes <<< "$val"
   if [ "$status" = "error" ]; then
     has_errors=true
-    ep="${_sync_names[$i]}"
+    ep="${_sync_names[$_i]}"
     # Only add to blockers if not already there
     if ! grep -q "$ep sync error" "$BLOCKERS" 2>/dev/null; then
       mkdir -p "$(dirname "$BLOCKERS")"
@@ -164,6 +167,7 @@ for i in "${!_sync_names[@]}"; do
       echo "- **$(date '+%Y-%m-%d')**: $ep sync error — $notes" >> "$BLOCKERS"
     fi
   fi
+  _i=$((_i + 1))
 done
 
 if $has_errors; then
