@@ -361,7 +361,17 @@ EOF
 }
 
 # Check each worker for stale heartbeats
+_stale_heartbeat_count=0
 for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+  # Count stale heartbeats (for health score) before handle kills them
+  _hb_file="$DEV_DIR/worker-${_wid}.heartbeat"
+  if [ -f "$_hb_file" ]; then
+    _hb_epoch=$(cat "$_hb_file" 2>/dev/null || echo 0)
+    _hb_age=$(( $(date +%s) - _hb_epoch ))
+    if [ "$_hb_age" -gt $(( ${SKYNET_STALE_MINUTES:-45} * 60 )) ]; then
+      _stale_heartbeat_count=$((_stale_heartbeat_count + 1))
+    fi
+  fi
   _handle_stale_worker "$_wid"
 done
 
@@ -558,6 +568,60 @@ _cleanup_stale_branches() {
 
 cd "$PROJECT_DIR"
 _cleanup_stale_branches
+
+# --- Health score alert ---
+# Mirrors the pipeline-status handler logic:
+#   Start at 100, -5 per pending failed task, -10 per active blocker, -2 per stale heartbeat.
+# Alerts once when score drops below threshold; clears sentinel when score recovers.
+_health_score_alert() {
+  local score=100
+  local threshold="${SKYNET_HEALTH_ALERT_THRESHOLD:-50}"
+  local sentinel="$DEV_DIR/health-alert-sent"
+
+  # -5 per pending failed task
+  local pending_failed=0
+  if [ -f "$FAILED" ]; then
+    pending_failed=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
+    pending_failed=${pending_failed:-0}
+  fi
+  score=$((score - pending_failed * 5))
+
+  # -10 per active blocker (non-empty lines under ## Active in blockers.md)
+  local active_blockers=0
+  if [ -f "$BLOCKERS" ]; then
+    local active_section
+    active_section=$(awk '/^## Active/{found=1; next} /^## /{found=0} found{print}' "$BLOCKERS" 2>/dev/null || true)
+    if [ -n "$active_section" ]; then
+      active_blockers=$(echo "$active_section" | grep -c '^- ' 2>/dev/null || true)
+      active_blockers=${active_blockers:-0}
+    fi
+  fi
+  score=$((score - active_blockers * 10))
+
+  # -2 per stale heartbeat (counted earlier in the cycle)
+  score=$((score - _stale_heartbeat_count * 2))
+
+  # Clamp to 0-100
+  [ "$score" -lt 0 ] && score=0
+  [ "$score" -gt 100 ] && score=100
+
+  if [ "$score" -lt "$threshold" ]; then
+    # Only alert once per drop (sentinel prevents repeated alerts)
+    if [ ! -f "$sentinel" ]; then
+      emit_event "health_alert" "Health score: $score"
+      tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Pipeline health alert: score $score/100 (threshold: $threshold)"
+      date +%s > "$sentinel"
+      log "Health alert: score $score/100 (pending_failed=$pending_failed, blockers=$active_blockers, stale_hb=$_stale_heartbeat_count)"
+    fi
+  else
+    # Score recovered — clear sentinel so future drops will alert again
+    if [ -f "$sentinel" ]; then
+      rm -f "$sentinel"
+      log "Health score recovered: $score/100 (threshold: $threshold). Alert cleared."
+    fi
+  fi
+}
+_health_score_alert
 
 # --- Pipeline pause check (skip dispatch but still run health checks above) ---
 pipeline_paused=false
