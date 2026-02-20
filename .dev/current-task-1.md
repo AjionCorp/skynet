@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix CI `lint-sh` job missing pnpm setup causing every shell lint run to fail — in `.github/workflows/ci.yml` lines 36-43, the `lint-sh` job installs shellcheck but does NOT install pnpm via `pnpm/action-setup@v4` or set up Node. The final step `pnpm lint:sh` fails with "pnpm: command not found" on every CI run. Every other job in the workflow correctly includes the pnpm/action-setup and actions/setup-node steps. Fix: add `- uses: pnpm/action-setup@v4` and `- uses: actions/setup-node@v4` with `node-version: 20` and `cache: pnpm` steps, plus `- run: pnpm install --frozen-lockfile` before the `pnpm lint:sh` step, matching the pattern in the `typecheck` job (lines 14-20). Alternatively, since `lint:sh` just runs shellcheck directly, replace `pnpm lint:sh` with the raw shellcheck command: `shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh`. Run `pnpm typecheck`. Criterion #2 (CI must actually work — broken lint job means shell script quality is ungated)
+## [FIX] Fix health-check.sh lock path using `$SCRIPTS_DIR` instead of `$SKYNET_LOCK_PREFIX` — in `scripts/health-check.sh` line 15, `LOCK_FILE="$SCRIPTS_DIR/health-check.lock"` places the lock inside `.dev/scripts/` instead of `/tmp/skynet-{project}-*`. Every other script uses `${SKYNET_LOCK_PREFIX}-{name}.lock` (resolving to `/tmp/`). This causes three problems: (a) `skynet doctor` scans `${lockPrefix}-health-check.lock` at the temp path, never finding it — health-check always shows as "not running", (b) `skynet stop` cannot stop health-check for the same reason, (c) the lock directory pollutes the project's `.dev/scripts/` directory. Fix: change line 15 from `LOCK_FILE="$SCRIPTS_DIR/health-check.lock"` to `LOCK_FILE="${SKYNET_LOCK_PREFIX}-health-check.lock"`. Run `bash -n scripts/health-check.sh` and `pnpm typecheck`. Criterion #3 (consistent lock paths — all CLI tools can discover and manage all running processes)
 **Status:** completed
 **Started:** 2026-02-20 02:47
 **Completed:** 2026-02-20
-**Branch:** dev/fix-ci-lint-sh-job-missing-pnpm-setup-ca
+**Branch:** dev/fix-health-checksh-lock-path-using-scrip
 **Worker:** 1
 
 ### Changes
