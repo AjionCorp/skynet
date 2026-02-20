@@ -15,13 +15,15 @@
     "typecheck": "tsc --noEmit",
     "prepack": "cp -r ../../scripts ./scripts && cp -r ../../templates ./templates",
     "postpack": "rm -rf ./scripts ./templates",
-    "prepublishOnly": "tsc"
+    "prepublishOnly": "tsc",
+    "test": "vitest run"
   },
   "dependencies": {
     "commander": "^13.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   }
 }
