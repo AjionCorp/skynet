@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Restore config template parity for watchdog and one-shot knobs — ensure `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` `KNOWN_VARS` stay aligned for `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` with no ghost vars. Mission: Criterion #1 adoption clarity and Criterion #3 deterministic config behavior.
+## [INFRA] Enforce canonical failed-task convergence before fixer dispatch — in `scripts/watchdog.sh`, add a pre-dispatch invariant pass that keeps exactly one active row per normalized root (`pending|fixing-*|blocked`) in `.dev/failed-tasks.md`, supersedes duplicates, and emits per-root reconciliation counts. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 10:02
+**Started:** 2026-02-20 10:04
 **Completed:** 2026-02-20
-**Branch:** dev/restore-config-template-parity-for-watch
+**Branch:** dev/enforce-canonical-failed-task-convergenc
 **Worker:** 2
 
 ### Changes
