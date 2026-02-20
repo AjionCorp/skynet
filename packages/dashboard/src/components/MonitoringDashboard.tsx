@@ -140,7 +140,10 @@ function SummaryCards({ status }: { status: MonitoringStatus }) {
         <p className={`text-xs font-medium uppercase tracking-wider ${status.failedPendingCount > 0 ? "text-red-400" : "text-zinc-500"}`}>
           Failed
         </p>
-        <p className="mt-1 text-2xl font-bold text-white">{status.failed.length}</p>
+        <p className="mt-1 text-2xl font-bold text-white">{status.failedPendingCount}</p>
+        {status.failed.length > status.failedPendingCount && (
+          <p className="mt-0.5 text-xs text-zinc-500">{status.failed.length} total ({status.failed.length - status.failedPendingCount} resolved)</p>
+        )}
       </div>
     </div>
   );

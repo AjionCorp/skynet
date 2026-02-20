@@ -21,7 +21,8 @@ function sanitizeSearch(input: string): string {
  */
 export function createPipelineLogsHandler(config: SkynetConfig) {
   const { devDir, workers } = config;
-  const scriptsDir = config.scriptsDir ?? `${devDir}/scripts`;
+  // Log files live in .dev/scripts/, not the source scripts/ dir
+  const logsDir = `${devDir}/scripts`;
 
   const allowedScripts = new Set<string>();
   for (const w of workers) {
@@ -58,7 +59,7 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
       );
     }
 
-    const logPath = resolve(scriptsDir, `${script}.log`);
+    const logPath = resolve(logsDir, `${script}.log`);
 
     try {
       let output: string;
