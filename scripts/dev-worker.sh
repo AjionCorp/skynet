@@ -459,6 +459,10 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
 
   (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
   _stop_heartbeat
+  if [ "$exit_code" -eq 124 ]; then
+    log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"
+    tg "⏰ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m — $task_title"
+  fi
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"

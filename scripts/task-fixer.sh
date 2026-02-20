@@ -437,6 +437,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   fi
 else
   exit_code=$?
+  if [ "$exit_code" -eq 124 ]; then
+    log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"
+    tg "⏰ *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}*: Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m — $task_title"
+  fi
   log "Task-fixer failed again (exit $exit_code): $task_title"
   tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
   emit_event "fix_failed" "Fixer $FIXER_ID: $task_title"

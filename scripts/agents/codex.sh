@@ -38,5 +38,5 @@ agent_run() {
     model_flag="--model $SKYNET_CODEX_MODEL"
   fi
   # shellcheck disable=SC2086
-  $SKYNET_CODEX_BIN $SKYNET_CODEX_FLAGS $model_flag "$prompt" >> "$log_file" 2>&1
+  _agent_exec $SKYNET_CODEX_BIN $SKYNET_CODEX_FLAGS $model_flag "$prompt" >> "$log_file" 2>&1
 }

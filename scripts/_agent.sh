@@ -16,6 +16,37 @@
 export SKYNET_CODEX_BIN="${SKYNET_CODEX_BIN:-codex}"
 export SKYNET_CODEX_FLAGS="${SKYNET_CODEX_FLAGS:---full-auto}"
 
+# Agent timeout (default: 45 minutes, 0 = disabled)
+export SKYNET_AGENT_TIMEOUT_MINUTES="${SKYNET_AGENT_TIMEOUT_MINUTES:-45}"
+
+# Portable timeout wrapper for agent binary invocations.
+# Usage: _agent_exec command [args...]
+# On Linux, uses GNU coreutils `timeout` (returns 124 on timeout).
+# On macOS, uses `perl -e 'alarm shift; exec @ARGV'` (bash 3.2 compatible,
+# no GNU coreutils dependency). SIGALRM exit code (142) is normalized to 124.
+# Set SKYNET_AGENT_TIMEOUT_MINUTES=0 to disable.
+_agent_exec() {
+  local timeout_secs=$(( SKYNET_AGENT_TIMEOUT_MINUTES * 60 ))
+
+  if [ "$timeout_secs" -le 0 ]; then
+    "$@"
+    return $?
+  fi
+
+  if command -v timeout &>/dev/null; then
+    # Linux: GNU coreutils timeout (returns 124 on timeout)
+    timeout "$timeout_secs" "$@"
+    return $?
+  fi
+
+  # macOS: perl alarm (bash 3.2 compatible, no GNU coreutils dependency)
+  perl -e 'alarm shift; exec @ARGV' "$timeout_secs" "$@"
+  local rc=$?
+  # SIGALRM (signal 14) → exit 142 (128+14). Normalize to 124.
+  [ "$rc" -eq 142 ] && return 124
+  return "$rc"
+}
+
 # Agent plugin selection (default: auto)
 export SKYNET_AGENT_PLUGIN="${SKYNET_AGENT_PLUGIN:-auto}"
 
