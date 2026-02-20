@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Publish canonical blocked-root repro matrix from current logs — regenerate `.dev/blockers.md` Active from `.dev/failed-tasks.md` blocked roots using latest `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log` `pnpm typecheck` diagnostics, keeping exactly one root-cause row per canonical title with explicit pass conditions. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
+## [NMI] Resolve blocked-root state drift between `.dev/backlog.md` and `.dev/failed-tasks.md` — add a watchdog reconciliation pass that supersedes stale blocked/pending duplicates for already-fixed roots and emits before/after root counts, without touching active `fixing-*` rows. Mission: Criterion #2 retry-loop stability and Criterion #3 state convergence.
 **Status:** completed
-**Started:** 2026-02-20 10:57
+**Started:** 2026-02-20 11:00
 **Completed:** 2026-02-20
-**Branch:** dev/publish-canonical-blocked-root-repro-mat
+**Branch:** dev/resolve-blocked-root-state-drift-between
 **Worker:** 2
 
 ### Changes
