@@ -25,7 +25,7 @@ echo $$ > "$LOCKFILE"
 trap 'rm -f "$LOCKFILE"' EXIT
 
 # --- Pre-flight: check if dev server is reachable ---
-if ! curl -sf "$BASE_URL/api/admin/sync-status" > /dev/null 2>&1; then
+if ! curl -sf "$BASE_URL/api/admin/pipeline/status" > /dev/null 2>&1; then
   log "Dev server not reachable at $BASE_URL. SKIPPED."
 
   # Write SKIPPED to sync-health
