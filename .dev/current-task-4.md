@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add pipeline completion detection and mission-complete notification — in `scripts/project-driver.sh`, after analyzing pipeline state, check if all 6 mission success criteria evaluate to "met" (read the `missionProgress` array from pipeline-status handler output or directly evaluate: completed tasks >50, self-correction rate >95%, no zombie/deadlock evidence, dashboard handler count >=10, mission tracking exists, agent plugins exist). If all criteria are met AND pending backlog count is 0, emit a `mission_complete` event via `emit_event()`, send notification via all configured channels ("Mission complete! All 6 success criteria met."), and write a celebration entry to `.dev/blockers.md`. Set a `.dev/mission-complete` sentinel file to prevent repeated notifications. This is the capstone feature — criterion #5 (mission progress is measurable and actionable)
+## [TEST] Add vitest component tests for PipelineDashboard, TasksDashboard, and MissionDashboard — create `packages/dashboard/src/components/PipelineDashboard.test.tsx`, `TasksDashboard.test.tsx`, and `MissionDashboard.test.tsx` using vitest + @testing-library/react. For PipelineDashboard: test renders health score badge with correct color, test self-correction rate display, test ActivityFeed section renders, test SSE connection is attempted. For TasksDashboard: test renders pending/claimed/completed/failed counts from mock data, test task list renders with correct status badges, test filter/search functionality. For MissionDashboard: test renders mission content, test progress table shows met/partial/not-met badges, test fetches from correct API endpoints. Mock `fetch` globally. Follow existing handler test mocking patterns. Criterion #2 (dashboard component test coverage — currently 0 of 12 components have tests)
 **Status:** completed
-**Started:** 2026-02-19 18:17
+**Started:** 2026-02-19 22:04
 **Completed:** 2026-02-19
-**Branch:** dev/add-pipeline-completion-detection-and-mi
+**Branch:** dev/add-vitest-component-tests-for-pipelined
 **Worker:** 4
 
 ### Changes
