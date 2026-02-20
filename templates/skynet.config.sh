@@ -84,6 +84,10 @@ export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"  # CLI flags
 # Custom plugins must define: agent_run "prompt" "logfile" and agent_check
 export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | /path/to/plugin.sh (default: auto)
 
+# ---- Worker Prompt Injection ----
+# export SKYNET_WORKER_CONTEXT=""       # Path to file with project-specific context injected into agent prompts
+# export SKYNET_WORKER_CONVENTIONS=""   # Path to file with coding conventions injected into agent prompts
+
 # ---- Codex CLI (OpenAI fallback) ----
 export SKYNET_CODEX_BIN="codex"
 export SKYNET_CODEX_FLAGS="--full-auto"
