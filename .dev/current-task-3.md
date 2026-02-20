@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close blocked pipeline-logs line-count optimization root with response-shape parity — in `packages/dashboard/src/handlers/pipeline-logs.ts` and tests, keep buffer newline counting while preserving exact empty/no-trailing-newline behavior and strict typecheck. Mission: Criterion #3 runtime efficiency and Criterion #2 reliable gates.
+## [INFRA] Reconcile blocked/pending drift between failed-task and backlog state after fixer cycles — add a watchdog post-cycle reconciliation report (`active_roots`, `duplicate_active_rows`, `superseded_rows`) and emit events for every superseded duplicate. Mission: Criterion #2 retry-loop stability and Criterion #4 visibility.
 **Status:** completed
-**Started:** 2026-02-20 11:04
+**Started:** 2026-02-20 11:07
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-pipeline-logs-line-count-o
+**Branch:** dev/reconcile-blockedpending-drift-between-f
 **Worker:** 3
 
 ### Changes
