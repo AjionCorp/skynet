@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet run` CLI command for one-shot task execution — create `packages/cli/src/commands/run.ts`. Usage: `skynet run "Implement feature X" --agent claude --gate typecheck`. Spawns a single worker that claims a temporary task (not from backlog), runs the agent, executes the quality gate, and merges to main if passed. Useful for quick one-off tasks without adding to the backlog. Create a temp `current-task-run.md`, run through the same `dev-worker.sh` pipeline but with `SKYNET_ONE_SHOT=true` env var that skips the claim loop. Register in `packages/cli/src/index.ts`. Criterion #1 (developer experience — quick task execution without backlog ceremony)
+## [TEST] Add vitest unit tests for core CLI commands — create `packages/cli/vitest.config.ts` with TypeScript support and `packages/cli/src/commands/__tests__/` directory. Test 4 key commands: (a) `init.test.ts` — mock `fs` and `child_process`, test `runInit()` creates `.dev/` directory with expected files, test `--name` flag sets project name, test `--non-interactive` skips prompts. (b) `doctor.test.ts` — mock `execSync` and `fs`, test healthy config outputs PASS, test missing `.dev/` outputs FAIL, test stale heartbeat outputs WARN. (c) `add-task.test.ts` — test appends task in `- [ ] [TAG] Title — desc` format, test `--position top` places before first `[x]`, test atomic write via .tmp-then-rename. (d) `config.test.ts` — test `list` parses SKYNET_* variables, test `set` validates SKYNET_MAX_WORKERS as positive integer, test rejects SKYNET_STALE_MINUTES < 5. Add `"test": "vitest run"` to `packages/cli/package.json`. CLI package currently has ZERO test coverage. Criterion #2 (catching CLI regressions)
 **Status:** completed
-**Started:** 2026-02-19 22:10
+**Started:** 2026-02-19 23:18
 **Completed:** 2026-02-19
-**Branch:** dev/add-skynet-run-cli-command-for-one-shot-
+**Branch:** dev/title--desc-format-test---position-top-p
 **Worker:** 3
 
 ### Changes
