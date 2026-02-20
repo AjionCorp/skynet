@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Read CLI version from package.json instead of hardcoding "0.1.0" — in `packages/cli/src/index.ts` line 34, `.version("0.1.0")` is hardcoded. When `package.json` version is bumped for a release, `skynet --version` (Commander's built-in flag) will show the stale "0.1.0" instead of the actual version. The separate `version.ts` command reads from package.json correctly, but the Commander `.version()` registration does not. Fix: at the top of `index.ts`, import `createRequire` from `"module"`, then `const require = createRequire(import.meta.url); const pkg = require("../package.json");` and change `.version("0.1.0")` to `.version(pkg.version)`. This is the same pattern used by the `version.ts` command. Run `pnpm typecheck`. Criterion #1 (accurate CLI — version must match published package)
+## [DOCS] Update README.md with missing CLI commands, dashboard components, and config vars — the main `README.md` CLI Reference table is missing 3 commands: add rows for `validate` ("Run pre-flight project validation checks"), `changelog` ("Generate changelog from completed tasks"), and `test-notify` ("Test notification channel configuration"). The Dashboard Components table is missing 5 newer components: add `ActivityFeed`, `EventsDashboard`, `LogViewer`, `SettingsDashboard`, `MissionDashboard`. The Configuration table is missing 4 config vars: add `SKYNET_WATCHDOG_INTERVAL` (180), `SKYNET_MAX_FIXERS` (3), `SKYNET_DRIVER_BACKLOG_THRESHOLD` (5), `SKYNET_AGENT_TIMEOUT_MINUTES` (45). Run `pnpm typecheck`. Criterion #1 (accurate documentation for adopters)
 **Status:** completed
-**Started:** 2026-02-20 02:47
+**Started:** 2026-02-20 03:03
 **Completed:** 2026-02-20
-**Branch:** dev/read-cli-version-from-packagejson-instea
+**Branch:** dev/update-readmemd-with-missing-cli-command
 **Worker:** 4
 
 ### Changes
