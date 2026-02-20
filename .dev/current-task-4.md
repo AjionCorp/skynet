@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface watchdog canonicalization-precedence counters in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include `canonicalizationPrecedenceApplied` alongside existing reconciliation counters so operators can verify one-root-one-active-row convergence from a single status call. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [TEST] Add cross-surface parity regression for blocked compaction counters — extend `scripts/tests/watchdog.sh`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and CLI status JSON tests to prove `blockedRowsBefore/After` and `blockedDuplicatesCompacted` semantics stay aligned across watchdog logs and both status surfaces across two identical reconciliation passes. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
 **Status:** completed
-**Started:** 2026-02-20 18:55
+**Started:** 2026-02-20 18:56
 **Completed:** 2026-02-20
-**Branch:** dev/surface-watchdog-canonicalization-preced
+**Branch:** dev/add-cross-surface-parity-regression-for-
 **Worker:** 4
 
 ### Changes
