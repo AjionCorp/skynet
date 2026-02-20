@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Emit canonical project-driver telemetry snapshot per cycle — in `scripts/project-driver.sh`, write `.dev/project-driver-telemetry.json` atomically with deterministic fields (`ts`, `pendingBacklog`, `claimedBacklog`, `pendingRetries`, `fixRate`, `duplicateSkipped`, `maxNewTasks`, `driver_low_fix_rate_mode`) so downstream status surfaces can read one stable source of truth. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [TEST] Add watchdog regression for fixing-root supersede behavior — in `scripts/tests/watchdog.sh`, add fixtures where the same normalized root appears as `fixing-*` plus `blocked|pending` rows and assert only the `fixing-*` row remains active, superseded rows preserve table validity/order, and second identical run is a no-op. Mission: Criterion #2 quality gates and Criterion #3 deterministic reconciliation.
 **Status:** completed
-**Started:** 2026-02-20 18:29
+**Started:** 2026-02-20 18:46
 **Completed:** 2026-02-20
-**Branch:** dev/emit-canonical-project-driver-telemetry-
+**Branch:** dev/add-watchdog-regression-for-fixing-root-
 **Worker:** 2
 
 ### Changes
