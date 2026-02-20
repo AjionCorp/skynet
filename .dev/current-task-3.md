@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
+## [INFRA] Enforce active-root canonical row precedence (`fixing-*` > `blocked` > `pending`) in watchdog reconciliation — in `scripts/watchdog.sh`, when multiple active rows share a normalized root, deterministically keep the highest-priority status row (then latest row index tie-break), supersede lower-priority variants, and emit `canonicalization_precedence_applied` counters. Mission: Criterion #2 self-correction throughput and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 18:15
+**Started:** 2026-02-20 18:17
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-active-root-
+**Branch:** dev/enforce-active-root-canonical-row-preced
 **Worker:** 3
 
 ### Changes
