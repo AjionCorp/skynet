@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Remove ghost `SKYNET_START_DEV_CMD` from config.ts KNOWN_VARS — in `packages/cli/src/commands/config.ts` line 58, `SKYNET_START_DEV_CMD: "Command to start the dev server (optional)"` is listed in `KNOWN_VARS` but this variable does NOT exist in `templates/skynet.config.sh` and is not referenced in any shell script. The actual dev server command variable is `SKYNET_DEV_SERVER_CMD` which is already correctly documented at line 16. `skynet config list` shows a row for a non-existent variable, confusing users who try to set it. Fix: delete line 58 containing `SKYNET_START_DEV_CMD`. Run `pnpm typecheck`. Criterion #1 (accurate developer tooling — no phantom config variables)
+## [INFRA] Add publish workflow for `@ajioncorp/skynet` dashboard package — currently only `.github/workflows/publish-cli.yml` exists for the CLI package. The dashboard package `@ajioncorp/skynet` has `publishConfig` in `packages/dashboard/package.json` with dist paths but no GitHub Actions publish workflow. Create `.github/workflows/publish-dashboard.yml` triggered on `dashboard-v*` tags. Steps: checkout, setup Node 20, setup pnpm 10, `pnpm install`, `pnpm typecheck`, `pnpm --filter @ajioncorp/skynet test`, `pnpm --filter @ajioncorp/skynet build`, verify `packages/dashboard/dist/index.js` exists, `npm publish --provenance --access public` from `packages/dashboard/`. Follow the same pattern as `publish-cli.yml`. Run `pnpm typecheck`. Criterion #1 (dashboard package actually publishable to npm) and Criterion #2 (CI gates on every publish)
 **Status:** completed
-**Started:** 2026-02-20 02:31
+**Started:** 2026-02-20 02:32
 **Completed:** 2026-02-20
-**Branch:** dev/remove-ghost-skynetstartdevcmd-from-conf
+**Branch:** dev/add-publish-workflow-for-ajioncorpskynet
 **Worker:** 1
 
 ### Changes
