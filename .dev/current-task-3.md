@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Centralize failed-task markdown escaping/unescaping into shared helpers and migrate all writers/parsers — add shared shell helpers in `scripts/_config.sh` (or sourced helper) so `task-fixer.sh` and `watchdog.sh` use one canonical encode/decode path for `|`, backticks, and newlines in table fields. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
+## [TEST] Add regression fixture for backlog ordering recovery with misplaced checked rows — in `scripts/tests/project-driver.sh`, feed a backlog where `[x]` rows precede claimed rows and assert output ordering is exactly `[>]` then `[ ]` then `[x]` with claimed lines unchanged. Mission: Criterion #2 quality gates and Criterion #3 deterministic behavior.
 **Status:** completed
-**Started:** 2026-02-20 16:44
+**Started:** 2026-02-20 16:50
 **Completed:** 2026-02-20
-**Branch:** dev/centralize-failed-task-markdown-escaping
+**Branch:** dev/add-regression-fixture-for-backlog-order
 **Worker:** 3
 
 ### Changes
