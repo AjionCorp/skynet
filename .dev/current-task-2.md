@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical stale-active root supersede sweep for current blocked/pending drift — in `scripts/watchdog.sh`, reconcile `.dev/failed-tasks.md` so stale `status=blocked|pending` rows that map to `.dev/completed.md` are superseded in one pass (without touching `fixing-*` rows), and emit deterministic before/after root counters. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
+## [TEST] Add project-driver regression to suppress task generation for stale-active completed roots — in `scripts/tests/project-driver.sh`, verify unchecked generation skips roots detected as stale-active (present as `blocked|pending` in failed-tasks but already completed) until watchdog supersedes them. Mission: Criterion #2 quality gates and Criterion #3 convergent planning.
 **Status:** completed
-**Started:** 2026-02-20 17:10
+**Started:** 2026-02-20 17:20
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-stale-active-root-supe
+**Branch:** dev/add-project-driver-regression-to-suppres
 **Worker:** 2
 
 ### Changes
