@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add cross-surface parity regression for blocked compaction counters — extend `scripts/tests/watchdog.sh`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and CLI status JSON tests to prove `blockedRowsBefore/After` and `blockedDuplicatesCompacted` semantics stay aligned across watchdog logs and both status surfaces across two identical reconciliation passes. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
+## [INFRA] Emit canonical watchdog reconciliation telemetry snapshot per cycle — in `scripts/watchdog.sh`, write `.dev/watchdog-telemetry.json` atomically after reconciliation with deterministic fields (`ts`, `activeRowsBefore`, `activeRowsAfter`, `parseGuardRows`, `staleActiveCompletedRows`, `supersededActiveRows`, `supersededByFixingRoot`, `blockedRowsBefore`, `blockedRowsAfter`, `blockedDuplicatesCompacted`, `canonicalizationPrecedenceApplied`) and skip rewrite when payload hash is unchanged. Mission: Criterion #4 trustworthy visibility and Criterion #3 deterministic state.
 **Status:** completed
-**Started:** 2026-02-20 18:56
+**Started:** 2026-02-20 18:57
 **Completed:** 2026-02-20
-**Branch:** dev/add-cross-surface-parity-regression-for-
+**Branch:** dev/emit-canonical-watchdog-reconciliation-t
 **Worker:** 4
 
 ### Changes
