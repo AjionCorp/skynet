@@ -26,6 +26,8 @@ export type {
   MissionStatus,
   PromptTemplate,
   MissionProgress,
+  SelfCorrectionStats,
+  EventEntry,
 } from "./types";
 
 // Config helpers
@@ -50,7 +52,9 @@ export {
   createPromptsHandler,
   createWorkerScalingHandler,
   createMissionStatusHandler,
+  createMissionRawHandler,
   createConfigHandler,
+  createEventsHandler,
 } from "./handlers";
 
 // Dashboard UI components
