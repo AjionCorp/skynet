@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `changelog.test.ts` CLI unit test — `changelog.ts` is the only CLI command (1 of 25) with zero test coverage. Create `packages/cli/src/commands/__tests__/changelog.test.ts`. Mock `fs.readFileSync` to return sample completed.md with pipe-delimited entries across multiple dates and tags. Test: (a) groups entries by date with `## YYYY-MM-DD` headers, (b) organizes tasks under correct tag headings ([FEAT] → "Features", [FIX] → "Bug Fixes", [INFRA] → "Infrastructure", [TEST] → "Tests", [DOCS] → "Documentation"), (c) `--since` flag filters entries after given date, (d) `--output` flag writes to file path instead of stdout, (e) handles empty completed.md gracefully, (f) strips pipe delimiters and extra whitespace from task descriptions. Follow existing CLI test patterns in `init.test.ts`. Criterion #2 (complete CLI test coverage — 25/25 commands)
+## [FIX] Fix stale lock recovery using wrong backlog marker causing 0m re-executions — in `scripts/dev-worker.sh` line 336, when stale lock detection triggers, the code calls `remove_from_backlog "- [ ] $task_title"` but by that point the task is marked `[>]` (claimed), not `[ ]` (pending). Since `remove_from_backlog` does an exact match via `grep -Fxv`, the remove silently fails. The `[>]` entry persists, watchdog later unclaims it back to `[ ]`, and the task re-executes with "0m" duration because the implementation already exists. Fix: change line 336 from `remove_from_backlog "- [ ] $task_title"` to `remove_from_backlog "- [>] $task_title"`. Also add a fallback: if the `[>]` match fails, try `[x]` in case it was already marked done by another code path. Run `pnpm typecheck`. Criterion #3 (no duplicate executions — directly explains the 0m duration entries in completed.md)
 **Status:** completed
-**Started:** 2026-02-20 01:26
+**Started:** 2026-02-20 01:40
 **Completed:** 2026-02-20
-**Branch:** dev/-documentation-c---since-flag-filters-en
+**Branch:** dev/tasktitle-also-add-a-fallback-if-the--ma
 **Worker:** 2
 
 ### Changes
