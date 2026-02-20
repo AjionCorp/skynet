@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add agent-auth preflight gate before watchdog dispatch to avoid dead cycles when credentials expire — in `scripts/watchdog.sh` plus shared auth helpers (`scripts/auth-check.sh`/`scripts/_agent.sh`), detect unauthenticated Claude/Codex sessions before dispatch, emit one throttled `agent_auth_required` event, and skip new claims until auth is restored. Mission: Criterion #2 self-correction continuity and Criterion #3 no-task-loss reliability.
+## [DATA] Surface auth-gate dispatch state in status APIs and CLI JSON — when watchdog suppresses dispatch due to expired agent auth, expose `authGateActive`, `authGateSince`, and last `agent_auth_required` timestamp in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts --json` for operator visibility. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 17:12
+**Started:** 2026-02-20 17:17
 **Completed:** 2026-02-20
-**Branch:** dev/add-agent-auth-preflight-gate-before-wat
+**Branch:** dev/surface-auth-gate-dispatch-state-in-stat
 **Worker:** 4
 
 ### Changes
