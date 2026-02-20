@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { execSync } from "child_process";
 import { createInterface } from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -91,6 +92,23 @@ interface InitOptions {
 
 export async function initCommand(options: InitOptions) {
   nonInteractiveMode = !!options.nonInteractive;
+
+  // Validate we're inside a git repository
+  try {
+    execSync("git rev-parse --is-inside-work-tree", { stdio: "pipe" });
+  } catch {
+    console.error("  Error: skynet init must be run from within a git repository. Run 'git init' first.");
+    process.exit(1);
+  }
+
+  // Validate the repo has at least one commit (git worktree requires it)
+  try {
+    execSync("git rev-parse HEAD", { stdio: "pipe" });
+  } catch {
+    console.error("  Error: git repository must have at least one commit. Run 'git add -A && git commit -m initial' first.");
+    process.exit(1);
+  }
+
   console.log("\n  Skynet Pipeline Setup\n");
 
   const projectDir = resolve(options.dir || process.cwd());
