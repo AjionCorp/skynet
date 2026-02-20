@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical failed-task reconciliation sweep and supersede variants — add/verify idempotent dedupe in `scripts/watchdog.sh` for `.dev/failed-tasks.md` by normalized title+branch, supersede completed/redundant pending rows, and emit `task_superseded` transitions for each change. Mission: Criterion #2 self-correction throughput and Criterion #3 state convergence.
+## [NMI] Produce diagnostics bundle for blocked roots before requeue — for each blocked root cause, capture exact failing file/line/typecheck diagnostics from worker/fixer logs, record minimal repro scope in `.dev/blockers.md` Active, and supersede stale duplicate failed rows for that root. Mission: Criterion #2 self-correction closure.
 **Status:** completed
 **Started:** 2026-02-20 10:00
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-task-reconcilia
+**Branch:** dev/produce-diagnostics-bundle-for-blocked-r
 **Worker:** 2
 
 ### Changes
