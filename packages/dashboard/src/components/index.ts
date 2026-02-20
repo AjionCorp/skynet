@@ -19,3 +19,5 @@ export type { LogViewerProps } from "./LogViewer";
 export { SettingsDashboard } from "./SettingsDashboard";
 export type { SettingsDashboardProps } from "./SettingsDashboard";
 export { ActivityFeed } from "./ActivityFeed";
+export { EventsDashboard } from "./EventsDashboard";
+export type { EventsDashboardProps } from "./EventsDashboard";
