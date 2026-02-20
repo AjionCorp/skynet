@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `metrics.test.ts` CLI unit test — create `packages/cli/src/commands/__tests__/metrics.test.ts`. Mock `fs.readFileSync` to return sample completed.md and failed-tasks.md content. Test: duration parsing (handle "3m", "1h 12m", "0m"), tag breakdown calculation, fix success rate math, empty file handling. Follow patterns in existing CLI tests. Criterion #2. blockedBy: Add `skynet metrics` CLI command for pipeline performance analytics
+## [TEST] Add `status.test.ts` CLI unit test — `status.ts` is the most complex CLI command (400+ lines) with zero dedicated tests. Create `packages/cli/src/commands/__tests__/status.test.ts`. Mock `fs.readFileSync` for all `.dev/` state files (backlog.md, completed.md, failed-tasks.md, current-task-N.md, worker-N.heartbeat, skynet.config.sh). Test: (a) `--json` flag outputs valid JSON matching `{ project, paused, tasks, workers, healthScore, selfCorrectionRate, missionProgress, lastActivity }` shape, (b) `--quiet` flag outputs only the health score number, (c) health score calculation returns 100 with no failures/blockers/stale heartbeats, (d) health score deductions are correct (5 per pending failure, 10 per blocker, 2 per stale heartbeat), (e) worker heartbeat detection loops through all N workers (not just 2), (f) mission progress parsing shows all 6 criteria. Follow patterns in existing CLI tests (`init.test.ts`, `doctor.test.ts`). Criterion #2
 **Status:** completed
-**Started:** 2026-02-20 00:22
+**Started:** 2026-02-20 00:32
 **Completed:** 2026-02-20
-**Branch:** dev/add-metricstestts-cli-unit-test--create-
+**Branch:** dev/add-statustestts-cli-unit-test--statusts
 **Worker:** 1
 
 ### Changes
