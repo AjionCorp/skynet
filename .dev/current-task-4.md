@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for stale-active skip-diagnostics lifecycle — in `scripts/tests/watchdog.sh`, validate skip-reason counters and sampled rows remain deterministic, throttling suppresses duplicate emissions within cooldown, and diagnostics re-arm after convergence changes. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
+## [INFRA] Auto-supersede stale `blocked` failed-task rows that match completed roots — in `scripts/watchdog.sh` reconciliation, extend completed-match supersede logic to `status=blocked` (not only pending variants), preserve `fixing-*` rows, and emit deterministic counters for `blocked_rows_superseded`. Mission: Criterion #2 retry-loop reduction and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 18:34
+**Started:** 2026-02-20 18:35
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-stale-active
+**Branch:** dev/auto-supersede-stale-blocked-failed-task
 **Worker:** 4
 
 ### Changes
