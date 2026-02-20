@@ -12,6 +12,7 @@ import { addTaskCommand } from "./commands/add-task.js";
 import { dashboardCommand } from "./commands/dashboard.js";
 import { resetTaskCommand } from "./commands/reset-task.js";
 import { cleanupCommand } from "./commands/cleanup.js";
+import { runCommand } from "./commands/run.js";
 import { pauseCommand } from "./commands/pause.js";
 import { resumeCommand } from "./commands/resume.js";
 import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
@@ -90,6 +91,16 @@ program
   .option("--position <position>", "Insert position: top or bottom", "top")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(addTaskCommand);
+
+program
+  .command("run")
+  .description("Run a single task one-shot (without adding to backlog)")
+  .argument("<task>", "Task description (e.g. \"Implement feature X\")")
+  .option("--agent <agent>", "Agent plugin to use (claude, codex, or path)")
+  .option("--gate <gate>", "Quality gate to run (e.g. typecheck, or a raw command)")
+  .option("--worker <n>", "Worker ID to use (default: 99)", "99")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(runCommand);
 
 program
   .command("dashboard")

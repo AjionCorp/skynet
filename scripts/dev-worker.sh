@@ -22,11 +22,21 @@ LOG="$SCRIPTS_DIR/dev-worker-${WORKER_ID}.log"
 STALE_MINUTES="$SKYNET_STALE_MINUTES"
 MAX_TASKS_PER_RUN="$SKYNET_MAX_TASKS_PER_RUN"
 
+# One-shot mode: run a single provided task, skip backlog
+if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
+  MAX_TASKS_PER_RUN=1
+fi
+
 # Shared lock dir for atomic backlog access (mkdir is atomic on all Unix)
 BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 # Per-worker task file (worker 1 → current-task-1.md, worker 2 → current-task-2.md)
 WORKER_TASK_FILE="$DEV_DIR/current-task-${WORKER_ID}.md"
+
+# One-shot mode uses a dedicated task file
+if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
+  WORKER_TASK_FILE="$DEV_DIR/current-task-run.md"
+fi
 
 # Per-worker worktree directory (isolated from other workers)
 WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${WORKER_ID}"
@@ -252,7 +262,9 @@ cleanup_on_exit() {
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
-    unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
+    fi
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   rm -f "$LOCKFILE"
@@ -299,11 +311,16 @@ else
   sleep 5
 fi
 
-remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
-tg "🚀 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting — $remaining_count tasks in backlog"
+if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
+  log "One-shot mode: task = ${SKYNET_ONE_SHOT_TASK:-}"
+  tg "🚀 *$SKYNET_PROJECT_NAME_UPPER* one-shot run: ${SKYNET_ONE_SHOT_TASK:-}"
+else
+  remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  tg "🚀 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting — $remaining_count tasks in backlog"
+fi
 
 # --- Pre-flight checks: detect stale in-progress task for this worker ---
-if grep -q "in_progress" "$WORKER_TASK_FILE" 2>/dev/null; then
+if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_FILE" 2>/dev/null; then
   last_modified=$(file_mtime "$WORKER_TASK_FILE")
   now=$(date +%s)
   age_minutes=$(( (now - last_modified) / 60 ))
@@ -321,6 +338,7 @@ fi
 
 # --- Task loop ---
 tasks_attempted=0
+_one_shot_exit=0
 
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   tasks_attempted=$((tasks_attempted + 1))
@@ -334,8 +352,12 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
     break
   fi
 
-  # Atomically claim next unchecked task
-  next_task=$(claim_next_task)
+  # Atomically claim next unchecked task (or use provided task in one-shot mode)
+  if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
+    next_task="- [ ] ${SKYNET_ONE_SHOT_TASK}"
+  else
+    next_task=$(claim_next_task)
+  fi
   if [ -z "$next_task" ]; then
     log "Backlog empty. Kicking off project-driver to refill."
     cat > "$WORKER_TASK_FILE" <<EOF
@@ -439,9 +461,12 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
     cleanup_worktree "$branch_name"
-    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
+      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
+    fi
     _CURRENT_TASK_TITLE=""
+    _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
@@ -478,9 +503,12 @@ EOF
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
     cleanup_worktree  # Keep branch for task-fixer
-    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
+      mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
+    fi
     _CURRENT_TASK_TITLE=""
+    _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
@@ -518,18 +546,23 @@ EOF
   if ! git merge "$branch_name" --no-edit 2>>"$LOG"; then
     log "MERGE FAILED for $branch_name — aborting and moving to failed."
     git merge --abort 2>/dev/null || true
-    echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
+      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
+    fi
     _CURRENT_TASK_TITLE=""
+    _one_shot_exit=1
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
     continue
   fi
   git branch -d "$branch_name" 2>/dev/null || true
 
-  mark_in_backlog "- [>] $task_title" "- [x] $task_title"
   _CURRENT_TASK_TITLE=""
   task_duration=$(format_duration $(( $(date +%s) - task_start_epoch )))
-  echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
+  if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+    mark_in_backlog "- [>] $task_title" "- [x] $task_title"
+    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
+  fi
 
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -544,9 +577,11 @@ EOF
 -- See git log for details
 EOF
 
-  # Commit pipeline status updates
-  git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
-  git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
+  # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
+  if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+    git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
+    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
+  fi
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
@@ -554,3 +589,8 @@ EOF
 done
 
 log "Dev worker $WORKER_ID finished. Attempted $tasks_attempted task(s)."
+
+# In one-shot mode, propagate task failure as non-zero exit
+if [ "${SKYNET_ONE_SHOT:-}" = "true" ] && [ "$_one_shot_exit" -ne 0 ]; then
+  exit "$_one_shot_exit"
+fi
