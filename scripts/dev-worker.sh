@@ -329,7 +329,7 @@ if curl -sf "$WORKER_DEV_URL" > /dev/null 2>&1; then
 else
   # Dev server not running on worker port — start it with log capture
   log "Dev server not running on port $WORKER_PORT. Starting via start-dev.sh..."
-  PORT="$WORKER_PORT" bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || true
+  PORT="$WORKER_PORT" bash "$SCRIPTS_DIR/start-dev.sh" "$WORKER_ID" >> "$LOG" 2>&1 || true
   sleep 5
 fi
 

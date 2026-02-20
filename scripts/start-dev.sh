@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # start-dev.sh — Start dev server with log capture
-# Usage: bash scripts/start-dev.sh
-# Logs go to scripts/next-dev.log (last 5000 lines kept)
+# Usage: bash scripts/start-dev.sh [worker_id]
+# When worker_id is provided, logs go to scripts/next-dev-w<id>.log
+# When omitted, logs go to scripts/next-dev.log (backward compatible)
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/next-dev.log"
-PIDFILE="$SCRIPTS_DIR/next-dev.pid"
+if [ -n "${1:-}" ]; then
+  LOG="$SCRIPTS_DIR/next-dev-w${1}.log"
+  PIDFILE="$SCRIPTS_DIR/next-dev-w${1}.pid"
+else
+  LOG="$SCRIPTS_DIR/next-dev.log"
+  PIDFILE="$SCRIPTS_DIR/next-dev.pid"
+fi
 
 cd "$PROJECT_DIR"
 
