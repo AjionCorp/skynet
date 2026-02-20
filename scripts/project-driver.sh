@@ -56,7 +56,7 @@ fi
 
 # --- Gather all state (guard against missing files on fresh projects) ---
 if [ -f "$BACKLOG" ]; then backlog_content=$(cat "$BACKLOG"); else backlog_content="(file not found)"; fi
-if [ -f "$COMPLETED" ]; then completed_content=$(cat "$COMPLETED"); else completed_content="(file not found)"; fi
+if [ -f "$COMPLETED" ]; then completed_content=$(head -2 "$COMPLETED"; tail -30 "$COMPLETED"); else completed_content="(file not found)"; fi
 if [ -f "$FAILED" ]; then failed_content=$(cat "$FAILED"); else failed_content="(file not found)"; fi
 if [ -f "$CURRENT_TASK" ]; then current_task_content=$(cat "$CURRENT_TASK"); else current_task_content="(file not found)"; fi
 if [ -f "$BLOCKERS" ]; then blockers_content=$(cat "$BLOCKERS"); else blockers_content="(file not found)"; fi
@@ -126,7 +126,7 @@ $backlog_content
 ### Current Task (.dev/current-task.md)
 $current_task_content
 
-### Completed Tasks (.dev/completed.md)
+### Recent Completed Tasks (last 30 of $(wc -l < "$COMPLETED") entries)
 $completed_content
 
 ### Failed Tasks (.dev/failed-tasks.md)
