@@ -56,6 +56,9 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_MAX_FIXERS: "Maximum concurrent task-fixer instances (default: 3)",
   SKYNET_DRIVER_BACKLOG_THRESHOLD: "Pending task count before project-driver generates more (default: 5)",
   SKYNET_START_DEV_CMD: "Command to start the dev server (optional)",
+  SKYNET_WORKER_CONTEXT: "Path to file with project-specific context injected into worker prompts",
+  SKYNET_WORKER_CONVENTIONS: "Path to file with coding conventions injected into worker prompts",
+  SKYNET_WATCHDOG_INTERVAL: "Seconds between watchdog monitoring cycles (default: 180)",
 };
 
 interface ParsedVar {
