@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add agent execution timeout to prevent zombie agent processes — in `scripts/_agent.sh`, wrap the agent invocation with a configurable timeout. Add `SKYNET_AGENT_TIMEOUT_MINUTES="45"` to `templates/skynet.config.sh`. In the `run_agent()` function (currently in each plugin's `agent_run()`), prefix the agent command with a portable timeout: on Linux use `timeout ${timeout_secs}`, on macOS use `perl -e 'alarm shift; exec @ARGV' ${timeout_secs}` (bash 3.2 compatible, no GNU coreutils dependency). If the agent times out, return exit code 124 (standard timeout convention). In `scripts/dev-worker.sh`, after the agent call (~line 440), detect exit code 124 and log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m" before marking as failed. In `scripts/task-fixer.sh`, apply the same timeout wrapper. This prevents a single hung agent (network issue, infinite loop, LLM API outage) from blocking a worker slot indefinitely. Criterion #3 (no zombie processes)
+## [INFRA] Add SSE auto-reconnection with backoff to PipelineDashboard — in `packages/dashboard/src/components/PipelineDashboard.tsx`, the `EventSource` SSE connection has no reconnection handling — if the server restarts or network blips, the dashboard silently stops updating. Add: (a) `onerror` handler that closes the failed connection and schedules a reconnect with exponential backoff (1s → 2s → 4s → 8s, max 30s), (b) reset backoff timer on successful `onmessage`, (c) add a `connectionStatus` state variable ('connected' | 'reconnecting' | 'disconnected') displayed as a small colored indicator (green/yellow/red dot) next to the page title, (d) handle `document.visibilitychange` — close SSE when tab is hidden, reopen when visible to save server resources. Keep the existing polling fallback intact for browsers that don't support SSE. Criterion #4 (reliable real-time dashboard visibility)
 **Status:** completed
-**Started:** 2026-02-20 00:48
+**Started:** 2026-02-20 01:02
 **Completed:** 2026-02-20
-**Branch:** dev/add-agent-execution-timeout-to-prevent-z
+**Branch:** dev/add-sse-auto-reconnection-with-backoff-t
 **Worker:** 2
 
 ### Changes
