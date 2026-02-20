@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Truncate completed.md to last 30 entries in project-driver.sh prompt context — in `scripts/project-driver.sh` line 59, `completed_content=$(cat "$COMPLETED")` loads the ENTIRE 132KB (35K tokens) completed.md into the LLM prompt. With 164+ entries and growing, this wastes API credits and context window on every project-driver invocation. The LLM only needs recent completions for deduplication context (which is now handled separately by the dedup check). Fix: change line 59 from `completed_content=$(cat "$COMPLETED")` to `completed_content=$(head -2 "$COMPLETED"; tail -30 "$COMPLETED")` — keeps the markdown table header (2 lines) plus only the last 30 entries. This cuts prompt size by ~80% (~28K tokens saved per run). Also change the prompt text at line 129 from `### Completed Tasks (.dev/completed.md)` to `### Recent Completed Tasks (last 30 of $(wc -l < "$COMPLETED") entries)`. Run `pnpm typecheck`. Criterion #3 (efficient resource usage — saves ~$0.50+ per project-driver run)
+## [FIX] Add merge retry with rebase to task-fixer.sh — `scripts/task-fixer.sh` line 427 does a bare `git merge "$branch_name" --no-edit` with NO recovery on failure. Unlike `dev-worker.sh` (lines 555-576) which has full merge-abort → git-pull → rebase → retry logic, the task-fixer immediately gives up on merge conflicts. Since fixers run on branches that have already diverged from main (the original worker failed, main has moved), merge conflicts are very common for fixer attempts. Fix: after line 427, add the same recovery block as `dev-worker.sh:555-576`: `git merge --abort`, `git pull origin main`, `git checkout "$branch_name"`, `git rebase main`, if rebase succeeds retry merge once. If rebase has conflicts, `git rebase --abort` and proceed to fail. Log "Merge conflict — attempting rebase recovery..." for visibility. Run `pnpm typecheck`. Criterion #2 (self-correction rate improvement — fixer merge failures are the #1 remaining failure mode)
 **Status:** completed
-**Started:** 2026-02-20 01:40
+**Started:** 2026-02-20 01:42
 **Completed:** 2026-02-20
-**Branch:** dev/truncate-completedmd-to-last-30-entries-
+**Branch:** dev/add-merge-retry-with-rebase-to-task-fixe
 **Worker:** 4
 
 ### Changes
