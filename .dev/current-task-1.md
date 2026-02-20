@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix project-driver deduplication to include completed.md and `[x]` backlog entries — in `scripts/project-driver.sh`, the deduplication logic at lines 215-219 only snapshots pending `[ ]` and claimed `[>]` backlog entries via `grep '^\- \[[ >]\]'`. It NEVER reads `completed.md`. When the backlog empties, the LLM regenerates already-completed tasks because the dedup guard allows them through. This caused `completions` to be executed 15+ times and `watch` 8+ times. Fix: (1) At line 216, also include `[x]` entries: change `grep '^\- \[[ >]\]'` to `grep '^\- \[[ >x]\]'`. (2) After line 219, add: `if [ -f "$COMPLETED" ]; then awk -F'|' 'NR>2 {t=$3; gsub(/^ +| +$/,"",t); if(t!="") print "- [ ] " t}' "$COMPLETED" >> "$_dedup_snapshot"; while IFS= read -r _line; do _normalize_task_line "$_line"; done < <(tail -n +3 "$_dedup_snapshot") >> "$_dedup_normalized"; fi`. This ensures tasks already in completed.md are never regenerated. Run `pnpm typecheck`. Criterion #3 (no wasted cycles — this single bug wasted ~30% of all API credits)
+## [FIX] Fix dynamic Tailwind class names getting purged in production PipelineDashboard — in `packages/dashboard/src/components/PipelineDashboard.tsx` lines 273-306, health score and self-correction rate colors are constructed via template literals: `border-${healthColor}-500/20`, `bg-${healthColor}-500/5`, `text-${healthColor}-400`, etc. where `healthColor` is computed at runtime (`"emerald"`, `"amber"`, or `"red"`). Tailwind's content scanner cannot detect dynamically-constructed class names and will purge them in production builds, leaving unstyled elements. Fix: replace the dynamic `healthColor` pattern with a lookup object that returns complete class strings: `const colorClasses = { high: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-400', medium: 'border-amber-500/20 bg-amber-500/5 text-amber-400', low: 'border-red-500/20 bg-red-500/5 text-red-400' }`. Apply the same fix to the self-correction rate badge. Run `pnpm typecheck` and `pnpm build` to verify. Criterion #4 (dashboard actually works in production)
 **Status:** completed
-**Started:** 2026-02-20 01:40
+**Started:** 2026-02-20 01:42
 **Completed:** 2026-02-20
-**Branch:** dev/-t-completed--dedupsnapshot-while-ifs-re
+**Branch:** dev/fix-dynamic-tailwind-class-names-getting
 **Worker:** 1
 
 ### Changes
