@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add watchdog guardrail to suppress no-op blockers rewrites when active-root hash is unchanged — skip `.dev/blockers.md` Active rewrites and emit a deterministic `blockers_sync_skipped` event when canonical active-root hash has not changed, reducing state churn between cycles. Mission: Criterion #3 deterministic state and Criterion #4 operational clarity.
+## [DATA] Refresh `.dev/blockers.md` Active from post-reconciliation canonical failed roots — rebuild Active entries from current `.dev/failed-tasks.md` so exactly one bullet remains per true open root and stale duplicate-root bullets are removed while preserving Celebration/Resolved sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 17:07
+**Started:** 2026-02-20 17:10
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-guardrail-to-suppress-no-op
+**Branch:** dev/refresh-devblockersmd-active-from-post-r
 **Worker:** 3
 
 ### Changes
