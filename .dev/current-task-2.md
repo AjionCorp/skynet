@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add project-driver regression to suppress task generation for stale-active completed roots — in `scripts/tests/project-driver.sh`, verify unchecked generation skips roots detected as stale-active (present as `blocked|pending` in failed-tasks but already completed) until watchdog supersedes them. Mission: Criterion #2 quality gates and Criterion #3 convergent planning.
+## [TEST] Add watchdog regression for blocked-row supersede guardrails — in `scripts/tests/watchdog.sh`, assert completed-root supersede touches only stale `blocked|pending` rows, never rewrites `fixing-*` rows, and preserves unaffected active-row ordering. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 17:20
+**Started:** 2026-02-20 17:21
 **Completed:** 2026-02-20
-**Branch:** dev/add-project-driver-regression-to-suppres
+**Branch:** dev/add-watchdog-regression-for-blocked-row-
 **Worker:** 2
 
 ### Changes
