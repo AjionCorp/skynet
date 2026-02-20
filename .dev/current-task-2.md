@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Adjust self-correction rate formula to count superseded tasks as pipeline self-correction — in `packages/dashboard/src/handlers/pipeline-status.ts`, the current `selfCorrectionRate` formula is `fixedCount / (fixed + blocked + superseded) * 100`. This underreports because `status=superseded` entries represent the pipeline autonomously routing around failures — the project-driver detected the problem, generated a fresh task, and a worker completed it. This IS pipeline-level self-correction. Change: `selfCorrected = fixedCount + supersededCount`, `rate = selfCorrected / (selfCorrected + blockedCount) * 100` (pending excluded as in-progress). Update `SelfCorrectionStats` in `packages/dashboard/src/types.ts` to add `selfCorrected: number`. Update display in `PipelineDashboard.tsx` badge text to show "Self-correction: X% (N fixed + M routed around)". Update `packages/cli/src/commands/status.ts` to match. This makes criterion #2 (95%+ self-correction rate) achievable and accurate
+## [TEST] Add events handler unit tests and ActivityFeed component tests — FRESH implementation (previous branch `dev/add-events-handler-unit-tests-and-activi` has merge conflict — delete it). Create `packages/dashboard/src/handlers/events.test.ts`: test `createEventsHandler` reads pipe-delimited events.log and returns proper `EventEntry[]` shape, test empty/missing events.log returns empty array, test malformed lines are skipped gracefully, test limit to last 100 entries when file has more, test epoch-to-ISO conversion accuracy. Create `packages/dashboard/src/components/ActivityFeed.test.tsx` using vitest + @testing-library/react: test renders event list from mock fetch data, test color-codes dots by event type (green for completed, red for failed), test empty state shows appropriate message, test 10s auto-refresh interval is set. Follow existing test patterns in `packages/dashboard/src/handlers/*.test.ts`. Criterion #2 (test coverage for event system)
 **Status:** completed
-**Started:** 2026-02-19 20:54
+**Started:** 2026-02-19 22:00
 **Completed:** 2026-02-19
-**Branch:** dev/adjust-self-correction-rate-formula-to-c
+**Branch:** dev/add-events-handler-unit-tests-and-activi
 **Worker:** 2
 
 ### Changes
