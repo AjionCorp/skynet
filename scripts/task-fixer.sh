@@ -440,6 +440,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"
+    git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
 
     _merge_succeeded=false
     if git merge "$branch_name" --no-edit 2>>"$LOG"; then

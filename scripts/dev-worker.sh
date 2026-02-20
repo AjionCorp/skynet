@@ -586,6 +586,7 @@ EOF
   # Remove worktree first (branch stays), then merge from main repo
   cleanup_worktree
   cd "$PROJECT_DIR"
+  git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
 
   _merge_succeeded=false
   if git merge "$branch_name" --no-edit 2>>"$LOG"; then
