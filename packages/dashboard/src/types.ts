@@ -279,6 +279,7 @@ export interface SelfCorrectionStats {
   blocked: number;
   superseded: number;
   pending: number;
+  selfCorrected: number;
 }
 
 // ===== Event Types =====

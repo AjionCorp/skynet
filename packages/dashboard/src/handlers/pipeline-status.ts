@@ -520,15 +520,22 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       });
 
       // Self-correction stats
+      // Superseded tasks count as pipeline self-correction: the project-driver
+      // detected a failure, generated a fresh task, and a worker completed it.
+      const fixedCount = failed.filter((f) => f.status.includes("fixed")).length;
+      const supersededCount = failed.filter((f) => f.status.includes("superseded")).length;
+      const blockedCount = failed.filter((f) => f.status.includes("blocked")).length;
+      const selfCorrectedCount = fixedCount + supersededCount;
       const selfCorrectionStats = {
-        fixed: failed.filter((f) => f.status.includes("fixed")).length,
-        blocked: failed.filter((f) => f.status.includes("blocked")).length,
-        superseded: failed.filter((f) => f.status.includes("superseded")).length,
+        fixed: fixedCount,
+        blocked: blockedCount,
+        superseded: supersededCount,
         pending: failedPendingCount,
+        selfCorrected: selfCorrectedCount,
       };
-      const totalAttempted = selfCorrectionStats.fixed + selfCorrectionStats.blocked + selfCorrectionStats.superseded;
-      const selfCorrectionRate = totalAttempted > 0
-        ? Math.round((selfCorrectionStats.fixed / totalAttempted) * 100)
+      const totalResolved = selfCorrectedCount + blockedCount;
+      const selfCorrectionRate = totalResolved > 0
+        ? Math.round((selfCorrectedCount / totalResolved) * 100)
         : 0;
 
       // Mission progress — count handlers from this package
