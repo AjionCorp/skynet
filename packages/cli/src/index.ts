@@ -21,6 +21,7 @@ import { watchCommand } from "./commands/watch.js";
 import { metricsCommand } from "./commands/metrics.js";
 import { exportCommand } from "./commands/export.js";
 import { importCommand } from "./commands/import.js";
+import { completionsCommand } from "./commands/completions.js";
 
 const program = new Command();
 
@@ -176,6 +177,12 @@ program
   .description("Upgrade skynet-cli to the latest version")
   .option("--check", "Only check if an update is available (dry-run)")
   .action(upgradeCommand);
+
+program
+  .command("completions")
+  .description("Generate shell completions")
+  .argument("<shell>", "Shell type: bash or zsh")
+  .action(completionsCommand);
 
 const configCmd = program
   .command("config")
