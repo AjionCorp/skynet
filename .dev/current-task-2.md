@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Make failed-task markdown row writes pipe-safe across writers — in `scripts/task-fixer.sh` and any shared failed-task write helpers, escape or encode literal `|` in task/error/branch fields so `.dev/failed-tasks.md` remains parse-stable and row corruption cannot create phantom duplicates. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop reliability.
+## [TEST] Add shell regression for stale-claimed demotion safety rules — assert only truly orphaned claimed rows are demoted, active claimed rows are preserved byte-for-byte, and post-sweep backlog ordering remains `[>]` then `[ ]` then `[x]`. Mission: Criterion #2 quality gates and Criterion #3 deterministic planning.
 **Status:** completed
-**Started:** 2026-02-20 16:40
+**Started:** 2026-02-20 16:47
 **Completed:** 2026-02-20
-**Branch:** dev/make-failed-task-markdown-row-writes-pip
+**Branch:** dev/add-shell-regression-for-stale-claimed-d
 **Worker:** 2
 
 ### Changes
