@@ -13,7 +13,7 @@
 
 type log &>/dev/null || log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 
-AUTH_NOTIFY_INTERVAL=3600  # seconds between repeat Telegram alerts
+AUTH_NOTIFY_INTERVAL="${SKYNET_AUTH_NOTIFY_INTERVAL:-3600}"  # seconds between repeat Telegram alerts
 
 check_claude_auth() {
   unset CLAUDECODE 2>/dev/null || true
@@ -99,7 +99,7 @@ check_claude_auth() {
   return 1
 }
 
-CODEX_NOTIFY_INTERVAL=3600  # seconds between repeat Telegram alerts
+CODEX_NOTIFY_INTERVAL="${SKYNET_CODEX_NOTIFY_INTERVAL:-3600}"  # seconds between repeat Telegram alerts
 
 check_codex_auth() {
   # Check if codex binary is installed
