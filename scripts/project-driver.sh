@@ -11,6 +11,16 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
+# --- Task normalization for deduplication ---
+# Strip checkbox, strip tag prefix, lowercase, collapse whitespace, first 60 chars
+_normalize_task_line() {
+  echo "$1" \
+    | sed 's/^- \[.\] //;s/^\[[^]]*\] //' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/  */ /g;s/^ *//;s/ *$//' \
+    | cut -c1-60
+}
+
 # --- PID lock ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver.lock"
 if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
@@ -190,7 +200,48 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 - Every task must be actionable by Claude Code in one session
 - If the mission is achieved (all success criteria met), write that to $BLOCKERS as a celebration, not a blocker"
 
+# --- Snapshot existing backlog for post-agent deduplication ---
+_dedup_snapshot=$(mktemp)
+_dedup_normalized=$(mktemp)
+trap 'rm -f "$LOCKFILE" "$_dedup_snapshot" "$_dedup_normalized"' EXIT
+if [ -f "$BACKLOG" ]; then
+  grep '^\- \[[ >]\]' "$BACKLOG" > "$_dedup_snapshot" 2>/dev/null || true
+  while IFS= read -r _line; do
+    _normalize_task_line "$_line"
+  done < "$_dedup_snapshot" > "$_dedup_normalized"
+fi
+
 if run_agent "$PROMPT" "$LOG"; then
+  # --- Deduplicate newly added tasks against pre-existing entries ---
+  if [ -f "$BACKLOG" ] && [ -s "$_dedup_normalized" ]; then
+    _dedup_cleaned=$(mktemp)
+    _dedup_count=0
+    while IFS= read -r _line; do
+      if echo "$_line" | grep -q '^\- \[ \]'; then
+        # Exact match with old backlog — not a new task, keep it
+        if grep -qxF "$_line" "$_dedup_snapshot" 2>/dev/null; then
+          echo "$_line" >> "$_dedup_cleaned"
+          continue
+        fi
+        # New pending task — check normalized form against existing entries
+        _norm=$(_normalize_task_line "$_line")
+        if grep -qxF "$_norm" "$_dedup_normalized" 2>/dev/null; then
+          _title=$(echo "$_line" | sed 's/^- \[ \] //')
+          log "Skipped duplicate: $_title"
+          _dedup_count=$((_dedup_count + 1))
+          continue
+        fi
+      fi
+      echo "$_line" >> "$_dedup_cleaned"
+    done < "$BACKLOG"
+    if [ "$_dedup_count" -gt 0 ]; then
+      mv "$_dedup_cleaned" "$BACKLOG"
+      log "Deduplication: removed $_dedup_count duplicate task(s)"
+    else
+      rm -f "$_dedup_cleaned"
+    fi
+  fi
+
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   new_remaining=${new_remaining:-0}
   log "Project driver completed successfully."
