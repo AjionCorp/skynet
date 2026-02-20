@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface failed-root convergence metrics in CLI `status --json` — in `packages/cli/src/commands/status.ts`, add `activeRoots`, `duplicateActiveRows`, and `blockedRoots` using the same normalized-root parser semantics as dashboard/watchdog. Mission: Criterion #4 full visibility and Criterion #5 measurable progress.
+## [INFRA] Run one canonical stale-active root supersede sweep for true-open convergence — in `scripts/watchdog.sh` reconciliation, supersede `status=blocked|pending` rows in `.dev/failed-tasks.md` whose normalized root is already present in `.dev/completed.md`, preserve `fixing-*` rows byte-for-byte, and emit deterministic before/after root counters. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 17:29
+**Started:** 2026-02-20 17:37
 **Completed:** 2026-02-20
-**Branch:** dev/surface-failed-root-convergence-metrics-
+**Branch:** dev/run-one-canonical-stale-active-root-supe
 **Worker:** 4
 
 ### Changes
