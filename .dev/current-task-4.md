@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Restore config template parity for one-shot/watchdog vars from canonical repro — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` for `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK`, then prove parity via typecheck and config command coverage. Mission: Criterion #1 adoption clarity and Criterion #3 deterministic config behavior.
+## [FIX] Land canonical backlog-parser DRY extraction without behavior drift — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts`, and add parity tests for blocked dependency parsing. Mission: Criterion #3 maintainability and Criterion #2 retry-loop reduction.
 **Status:** completed
-**Started:** 2026-02-20 10:34
+**Started:** 2026-02-20 10:37
 **Completed:** 2026-02-20
-**Branch:** dev/restore-config-template-parity-for-one-s
+**Branch:** dev/land-canonical-backlog-parser-dry-extrac
 **Worker:** 4
 
 ### Changes
