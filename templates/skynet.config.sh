@@ -88,7 +88,7 @@ export SKYNET_CODEX_FLAGS="--full-auto"
 export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
 
 # ---- Environment ----
-export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup (default: /opt/homebrew/bin:/usr/local/bin)
+export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup; add pnpm/node paths if not in /opt/homebrew/bin
 
 # ---- Server Error Scanning ----
 # Space-separated list of env vars to check in server logs

@@ -155,6 +155,12 @@ crash_recovery() {
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
       fi
+      # Reset current-task file to idle so the worker doesn't see stale in_progress
+      cat > "$task_file" <<IDLE_EOF
+# Current Task
+**Status:** idle
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- ${stuck_title:-unknown} (dead worker recovered by watchdog)
+IDLE_EOF
     fi
   done
 
