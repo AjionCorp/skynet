@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add pipeline velocity metrics to project-driver.sh prompt context — FRESH implementation (delete stale branch `dev/add-pipeline-performance-summary-to-proj` first). In `scripts/project-driver.sh`, before the Claude prompt (around line 100), compute: `today_completed=$(grep -c "$(date '+%Y-%m-%d')" "$COMPLETED" 2>/dev/null || echo 0)`, `total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo 0)`, `total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || echo 0)`, `fixed_count=$(grep -c 'fixed' "$FAILED" 2>/dev/null || echo 0)`, `fix_rate=$((fixed_count * 100 / (total_failed > 0 ? total_failed : 1)))`. Add a "## Pipeline Velocity" section to the prompt including these numbers. Log the summary to the project-driver log. This helps the LLM make smarter task generation decisions. Criterion #3 and #5
+## [TEST] Add CLI unit tests for watch, run, upgrade, and cleanup commands — FRESH implementation (delete stale branch `dev/add-cli-unit-tests-for-watch-run-upgrade` first). Create 4 test files in `packages/cli/src/commands/__tests__/`: (a) `watch.test.ts` — mock fs.readFileSync and setInterval, verify it reads state files and formats output. (b) `run.test.ts` — mock child_process.spawn, verify it constructs the correct dev-worker.sh command with SKYNET_ONE_SHOT=true. (c) `upgrade.test.ts` — mock execSync for `npm view`, test version comparison logic. (d) `cleanup.test.ts` — mock execSync for git commands, test --dry-run vs --force behavior. Follow existing patterns in `packages/cli/src/commands/__tests__/init.test.ts`. Currently 4 of 20 CLI commands have unit tests. Criterion #2
 **Status:** completed
-**Started:** 2026-02-20 00:19
+**Started:** 2026-02-20 00:24
 **Completed:** 2026-02-20
-**Branch:** dev/add-pipeline-velocity-metrics-to-project
+**Branch:** dev/add-cli-unit-tests-for-watch-run-upgrade
 **Worker:** 3
 
 ### Changes
