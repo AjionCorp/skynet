@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet test-notify` CLI command for notification channel verification — create `packages/cli/src/commands/test-notify.ts`. Read `SKYNET_NOTIFY_CHANNELS` from `.dev/skynet.config.sh` (parse same way as config.ts). For each enabled channel (telegram, slack, discord), execute the corresponding notify script (`scripts/notify/<channel>.sh`) with a test message: "Skynet test notification from <project_name> at <ISO timestamp>". Capture stdout/stderr and report per-channel: "telegram: OK" or "slack: FAILED (connection refused)". Add `--channel <name>` flag to test a single channel. If no channels are configured, print "No notification channels configured. Set SKYNET_NOTIFY_CHANNELS in skynet.config.sh". Register in `packages/cli/src/index.ts`. Criterion #1 (verify notification setup before going live)
+## [FIX] Remove duplicate `_cleanup_stale_branches` function in watchdog.sh — `scripts/watchdog.sh` defines `_cleanup_stale_branches()` twice: first at line ~435 (handles fixed|superseded|blocked statuses, deletes local+remote branches for all resolved failed tasks) and again at line ~503 (only handles blocked entries with 24h+ age check against blockers.md). The first definition runs at line ~487 and already comprehensively handles ALL resolved statuses including blocked. The second definition at ~503 silently redefines the function, then runs at ~570 doing redundant work (blocked branches were already deleted by the first call). Fix: delete the second function definition — remove the comment block starting with `# --- Stale branch cleanup for permanently failed tasks ---` (line ~500) through the closing brace (line ~567), and delete its invocation `_cleanup_stale_branches` at line ~570. Also remove the `cd "$PROJECT_DIR"` line just before it (line ~569) since it's only needed by the second call. The first, comprehensive version already covers all cases. This is a real bug from two separate tasks being merged independently. Run `pnpm typecheck` to verify no breakage. Criterion #3 (clean code, no redundant logic)
 **Status:** completed
-**Started:** 2026-02-20 01:07
+**Started:** 2026-02-20 01:10
 **Completed:** 2026-02-20
-**Branch:** dev/add-skynet-test-notify-cli-command-for-n
+**Branch:** dev/remove-duplicate-cleanupstalebranches-fu
 **Worker:** 1
 
 ### Changes
