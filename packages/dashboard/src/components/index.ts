@@ -18,3 +18,4 @@ export { LogViewer } from "./LogViewer";
 export type { LogViewerProps } from "./LogViewer";
 export { SettingsDashboard } from "./SettingsDashboard";
 export type { SettingsDashboardProps } from "./SettingsDashboard";
+export { ActivityFeed } from "./ActivityFeed";

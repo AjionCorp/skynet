@@ -11,3 +11,4 @@ export { createWorkerScalingHandler } from "./worker-scaling";
 export { createMissionStatusHandler } from "./mission-status";
 export { createMissionRawHandler } from "./mission-raw";
 export { createConfigHandler } from "./config";
+export { createEventsHandler } from "./events";

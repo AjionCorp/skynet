@@ -281,6 +281,14 @@ export interface SelfCorrectionStats {
   pending: number;
 }
 
+// ===== Event Types =====
+
+export interface EventEntry {
+  ts: string;
+  event: string;
+  detail: string;
+}
+
 // ===== Worker Scaling Types =====
 
 export interface WorkerScalePayload {
