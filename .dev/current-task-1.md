@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `status.test.ts` CLI unit test — `status.ts` is the most complex CLI command (400+ lines) with zero dedicated tests. Create `packages/cli/src/commands/__tests__/status.test.ts`. Mock `fs.readFileSync` for all `.dev/` state files (backlog.md, completed.md, failed-tasks.md, current-task-N.md, worker-N.heartbeat, skynet.config.sh). Test: (a) `--json` flag outputs valid JSON matching `{ project, paused, tasks, workers, healthScore, selfCorrectionRate, missionProgress, lastActivity }` shape, (b) `--quiet` flag outputs only the health score number, (c) health score calculation returns 100 with no failures/blockers/stale heartbeats, (d) health score deductions are correct (5 per pending failure, 10 per blocker, 2 per stale heartbeat), (e) worker heartbeat detection loops through all N workers (not just 2), (f) mission progress parsing shows all 6 criteria. Follow patterns in existing CLI tests (`init.test.ts`, `doctor.test.ts`). Criterion #2
+## [INFRA] Add project-driver backlog deduplication check — in `scripts/project-driver.sh`, after the LLM generates new tasks (the `claude` command output) but before appending them to backlog.md, check each new task line against existing pending `[ ]` and claimed `[>]` entries in the current backlog. Normalize comparison: strip tags (`[FEAT]`, `[FIX]`, etc.), lowercase, remove extra whitespace, take first 60 characters. Skip any new task whose normalized prefix matches an existing entry. Log "Skipped duplicate: <title>" for each skipped task. This prevents the project-driver from regenerating tasks that are already in the backlog or in progress, which wastes worker cycles. Criterion #3 (clean state, no wasted effort)
 **Status:** completed
-**Started:** 2026-02-20 00:32
+**Started:** 2026-02-20 00:36
 **Completed:** 2026-02-20
-**Branch:** dev/add-statustestts-cli-unit-test--statusts
+**Branch:** dev/add-project-driver-backlog-deduplication
 **Worker:** 1
 
 ### Changes
