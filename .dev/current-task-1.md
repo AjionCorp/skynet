@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Land canonical CLI helper DRY extraction for `readFile`/`isProcessRunning` — finalize shared utilities in `packages/cli/src/utils/`, migrate `doctor.ts`/`status.ts`/`watch.ts`/`start.ts`/`metrics.ts`/`cleanup.ts`, and add dir-lock plus file-lock compatibility tests. Mission: Criterion #3 maintainability and Criterion #1 reliability.
+## [TEST] Close blocked CLI operational E2E root in one canonical test update — in `tests/e2e/cli-commands.test.sh`, stabilize assertions for `stop`, `pause/resume`, `completions bash`, and `validate` against current CLI output, then verify with `pnpm typecheck`. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
 **Status:** completed
-**Started:** 2026-02-20 10:42
+**Started:** 2026-02-20 10:43
 **Completed:** 2026-02-20
-**Branch:** dev/land-canonical-cli-helper-dry-extraction
+**Branch:** dev/close-blocked-cli-operational-e2e-root-i
 **Worker:** 1
 
 ### Changes
