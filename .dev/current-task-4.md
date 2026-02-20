@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Update README.md with missing CLI commands, dashboard components, and config vars — the main `README.md` CLI Reference table is missing 3 commands: add rows for `validate` ("Run pre-flight project validation checks"), `changelog` ("Generate changelog from completed tasks"), and `test-notify` ("Test notification channel configuration"). The Dashboard Components table is missing 5 newer components: add `ActivityFeed`, `EventsDashboard`, `LogViewer`, `SettingsDashboard`, `MissionDashboard`. The Configuration table is missing 4 config vars: add `SKYNET_WATCHDOG_INTERVAL` (180), `SKYNET_MAX_FIXERS` (3), `SKYNET_DRIVER_BACKLOG_THRESHOLD` (5), `SKYNET_AGENT_TIMEOUT_MINUTES` (45). Run `pnpm typecheck`. Criterion #1 (accurate documentation for adopters)
+## [INFRA] Add `pnpm install --frozen-lockfile` to worker flow before typecheck — in `scripts/dev-worker.sh`, the quality gate section runs `pnpm typecheck` but does NOT run `pnpm install` first. When the pnpm lockfile has been updated (e.g., new dependency added) but the worktree's `node_modules` is stale, typecheck fails with "Cannot find module" errors. This caused 5 recent task failures (all "typecheck failed" with TS2307 for vitest). Fix: in `dev-worker.sh`, before the first quality gate evaluation, add `pnpm install --frozen-lockfile >> "$LOG" 2>&1` to ensure dependencies are fresh. Only run if `pnpm-lock.yaml` has changed since last install (check mtime of `node_modules/.modules.yaml` vs `pnpm-lock.yaml`). Run `pnpm typecheck`. Criterion #3 (reliable quality gates — dependencies must be installed before typecheck)
 **Status:** completed
-**Started:** 2026-02-20 03:03
+**Started:** 2026-02-20 03:04
 **Completed:** 2026-02-20
-**Branch:** dev/update-readmemd-with-missing-cli-command
+**Branch:** dev/add-pnpm-install---frozen-lockfile-to-wo
 **Worker:** 4
 
 ### Changes
