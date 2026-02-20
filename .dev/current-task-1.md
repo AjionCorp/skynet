@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical failed-task reconciliation sweep and supersede variants — add/verify idempotent dedupe in `scripts/watchdog.sh` for `.dev/failed-tasks.md` by normalized title+branch, supersede completed/redundant pending rows, and emit `task_superseded` transitions for each change. Mission: Criterion #2 self-correction throughput and Criterion #3 state convergence.
+## [INFRA] Reconcile stale `fixing-*` failed-task rows by fixer lock liveness — before fixer dispatch, detect `status=fixing-*` rows whose fixer lock/PID is absent and atomically return them to canonical `pending` (or supersede if resolved) to prevent retry starvation. Mission: Criterion #2 self-correction continuity and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 09:57
+**Started:** 2026-02-20 10:11
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-task-reconcilia
+**Branch:** dev/reconcile-stale-fixing--failed-task-rows
 **Worker:** 1
 
 ### Changes
