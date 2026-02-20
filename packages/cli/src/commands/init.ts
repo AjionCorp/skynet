@@ -88,6 +88,7 @@ interface InitOptions {
   copyScripts?: boolean;
   nonInteractive?: boolean;
   fromSnapshot?: string;
+  force?: boolean;
 }
 
 export async function initCommand(options: InitOptions) {
@@ -176,13 +177,23 @@ export async function initCommand(options: InitOptions) {
     .replace('export SKYNET_TG_BOT_TOKEN=""', `export SKYNET_TG_BOT_TOKEN="${shellEscape(tgToken)}"`)
     .replace('export SKYNET_TG_CHAT_ID=""', `export SKYNET_TG_CHAT_ID="${shellEscape(tgChatId)}"`)
 
-  writeFileSync(join(devDir, "skynet.config.sh"), configContent);
-  console.log("    .dev/skynet.config.sh");
+  const configPath = join(devDir, "skynet.config.sh");
+  if (existsSync(configPath) && !options.force) {
+    console.log("    Existing skynet.config.sh found — skipping (use --force to overwrite)");
+  } else {
+    writeFileSync(configPath, configContent);
+    console.log("    .dev/skynet.config.sh");
+  }
 
   // Copy skynet.project.sh template
-  const projectTemplate = readFileSync(join(TEMPLATES_DIR, "skynet.project.sh"), "utf-8");
-  writeFileSync(join(devDir, "skynet.project.sh"), projectTemplate);
-  console.log("    .dev/skynet.project.sh");
+  const projectShPath = join(devDir, "skynet.project.sh");
+  if (existsSync(projectShPath) && !options.force) {
+    console.log("    Existing skynet.project.sh found — skipping (use --force to overwrite)");
+  } else {
+    const projectTemplate = readFileSync(join(TEMPLATES_DIR, "skynet.project.sh"), "utf-8");
+    writeFileSync(projectShPath, projectTemplate);
+    console.log("    .dev/skynet.project.sh");
+  }
 
   // Copy markdown state files
   const stateFiles = [
