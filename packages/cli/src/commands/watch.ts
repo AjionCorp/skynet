@@ -25,7 +25,13 @@ function readFile(path: string): string {
 
 function isProcessRunning(lockFile: string): { running: boolean; pid: string } {
   try {
-    const pid = readFileSync(lockFile, "utf-8").trim();
+    // Support dir-based locks (lockFile/pid) and legacy file-based locks
+    let pid: string;
+    try {
+      pid = readFileSync(join(lockFile, "pid"), "utf-8").trim();
+    } catch {
+      pid = readFileSync(lockFile, "utf-8").trim();
+    }
     if (!/^\d+$/.test(pid)) return { running: false, pid: "" };
     execSync(`kill -0 ${pid}`, { stdio: "ignore" });
     return { running: true, pid };

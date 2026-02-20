@@ -88,7 +88,13 @@ reltime() {
 
 is_running() {
   local lf="$1"
-  [ -f "$lf" ] && kill -0 "$(cat "$lf" 2>/dev/null)" 2>/dev/null
+  local pid=""
+  if [ -d "$lf" ] && [ -f "$lf/pid" ]; then
+    pid=$(cat "$lf/pid" 2>/dev/null || echo "")
+  elif [ -f "$lf" ]; then
+    pid=$(cat "$lf" 2>/dev/null || echo "")
+  fi
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
 safe_count() {
@@ -140,7 +146,11 @@ render() {
     local lock="${SKYNET_LOCK_PREFIX}-${w}.lock"
     if is_running "$lock"; then
       local pid age age_s
-      pid=$(cat "$lock" 2>/dev/null)
+      if [ -d "$lock" ] && [ -f "$lock/pid" ]; then
+        pid=$(cat "$lock/pid" 2>/dev/null)
+      else
+        pid=$(cat "$lock" 2>/dev/null)
+      fi
       age=$((now_epoch - $(file_mtime "$lock")))
       age_s=$(reltime "$age")
       row "  ${GREEN}●${RESET} ${BOLD}$(printf '%-17s' "$lbl")${RESET} ${GREEN}RUNNING${RESET}  PID ${DIM}$pid${RESET}  ${DIM}(${age_s})${RESET}"

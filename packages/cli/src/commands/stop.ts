@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync, unlinkSync } from "fs";
+import { readFileSync, existsSync, readdirSync, rmSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
@@ -12,12 +12,23 @@ function stopProcess(lockFile: string, name: string): boolean {
     return false;
   }
 
-  const pid = readFileSync(lockFile, "utf-8").trim();
+  // Support dir-based locks (lockFile/pid) and legacy file-based locks
+  let pid: string;
+  try {
+    pid = readFileSync(join(lockFile, "pid"), "utf-8").trim();
+  } catch {
+    try {
+      pid = readFileSync(lockFile, "utf-8").trim();
+    } catch {
+      rmSync(lockFile, { recursive: true, force: true });
+      return false;
+    }
+  }
 
   // Validate PID is numeric to prevent injection
   if (!/^\d+$/.test(pid)) {
     console.log(`    Warning: Invalid PID in ${lockFile}, removing stale lock.`);
-    unlinkSync(lockFile);
+    rmSync(lockFile, { recursive: true, force: true });
     return false;
   }
 
@@ -28,12 +39,12 @@ function stopProcess(lockFile: string, name: string): boolean {
     // Send SIGTERM for graceful shutdown
     process.kill(Number(pid), "SIGTERM");
     console.log(`    Stopped: ${name} (PID ${pid})`);
-    unlinkSync(lockFile);
+    rmSync(lockFile, { recursive: true, force: true });
     return true;
   } catch {
     // Process not running — clean up stale lock
     console.log(`    Cleaned: ${name} (stale lock, PID ${pid})`);
-    unlinkSync(lockFile);
+    rmSync(lockFile, { recursive: true, force: true });
     return false;
   }
 }

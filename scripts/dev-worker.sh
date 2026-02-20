@@ -250,13 +250,31 @@ cleanup_worktree() {
   fi
 }
 
-# --- PID lock to prevent duplicate runs (per worker ID) ---
+# --- PID lock to prevent duplicate runs (per worker ID, mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-dev-worker-${WORKER_ID}.lock"
-if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
-  exit 0
+if mkdir "$LOCKFILE" 2>/dev/null; then
+  echo $$ > "$LOCKFILE/pid"
+else
+  # Lock dir exists — check for stale lock (owner PID no longer running)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Already running (PID $_existing_pid). Exiting." >> "$LOG"
+      exit 0
+    fi
+    # Stale lock — reclaim atomically
+    rm -rf "$LOCKFILE" 2>/dev/null || true
+    if mkdir "$LOCKFILE" 2>/dev/null; then
+      echo $$ > "$LOCKFILE/pid"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Lock contention. Exiting." >> "$LOG"
+      exit 0
+    fi
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Lock contention. Exiting." >> "$LOG"
+    exit 0
+  fi
 fi
-echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
@@ -271,7 +289,7 @@ cleanup_on_exit() {
     fi
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
-  rm -f "$LOCKFILE"
+  rm -rf "$LOCKFILE"
 }
 trap cleanup_on_exit EXIT
 trap 'log "ERR on line $LINENO"; exit 1' ERR
