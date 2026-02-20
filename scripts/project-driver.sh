@@ -218,9 +218,13 @@ You are the strategic brain of this pipeline. Every action you take must advance
 - Keep one canonical task per root cause; supersede retries/variants instead of adding parallel duplicates
 - If a root already has any active \`fixing-*\` row in \`.dev/failed-tasks.md\`, do not generate a parallel pending variant for that same root
 - If pending retry failures exceed 20, bias generation toward reliability/security/reconciliation work and avoid net-new feature tasks unless they directly unblock the loop
+- In hardening mode (all mission criteria met), default generation toward \`[FIX]\`, \`[INFRA]\`, \`[TEST]\`, and \`[DATA]\`; add \`[FEAT]\` only when it directly improves autonomous reliability or recovery throughput
 - Prefer one durable root-cause task title over repeated \"re-open\" variants; merge retries into the same canonical task description
+- Treat backlog history rows marked with notes like \"typecheck failed\" as prior attempts, not as proof of closure; use canonical active roots in \`.dev/failed-tasks.md\` plus merged entries in \`.dev/completed.md\` for closure decisions
 - Preserve any currently claimed \'[>]\' tasks exactly as-is at the top of backlog updates; do not rewrite or demote in-progress claims
 - Keep at most 15 unchecked tasks total (\'[ ]\' + \'[>]\'); prioritize and trim lower-impact pending items when above limit
+- Enforce canonical backlog ordering on every rewrite: all claimed \`[>]\` first, then pending \`[ ]\`, and checked history \`[x]\` only at the bottom
+- Treat backlog section headers as non-authoritative formatting: compute ordering from task markers and regenerate the checked-history section after sorting so misplaced headers cannot keep \`[x]\` rows above active work
 
 ### 4. Self-Improvement Awareness
 - If you notice the pipeline itself has gaps (missing scripts, broken flows, missing tests), generate tasks to fix them
