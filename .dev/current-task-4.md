@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add regression coverage for canonicalization invariants across watchdog/task-fixer/project-driver — prove duplicate pending rows are superseded, blocked roots are not re-expanded into variants, and project-driver filters canonical roots against backlog+failed/completed snapshots. Mission: Criterion #2 quality gates and Criterion #3 deterministic planning.
+## [INFRA] Harden project-driver prompt/task postfilter for durable root-cause titles — in `scripts/project-driver.sh`, enforce canonical title reuse for retries, reject “re-open” variant generation when a canonical root exists, and cap unchecked backlog growth under overloaded retry conditions. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop reduction.
 **Status:** completed
-**Started:** 2026-02-20 10:21
+**Started:** 2026-02-20 10:23
 **Completed:** 2026-02-20
-**Branch:** dev/add-regression-coverage-for-canonicaliza
+**Branch:** dev/harden-project-driver-prompttask-postfil
 **Worker:** 4
 
 ### Changes
