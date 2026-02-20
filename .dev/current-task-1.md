@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Canonicalize active failed roots to one row per normalized root in watchdog — extend reconciliation in `scripts/watchdog.sh` to keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicate variants, and emit deterministic per-root reconciliation metrics/events. Mission: Criterion #2 throughput and Criterion #3 deterministic state.
+## [FIX] Unblock Codex large-prompt reliability root with stdin-first invariants — in `scripts/agents/codex.sh` and shell tests, enforce prompt-via-stdin path, preserve child exit codes, and keep >300KB prompt regression coverage passing. Mission: Criterion #6 multi-agent compatibility and Criterion #2 self-correction closure.
 **Status:** completed
 **Started:** 2026-02-20 17:27
 **Completed:** 2026-02-20
-**Branch:** dev/canonicalize-active-failed-roots-to-one-
+**Branch:** dev/unblock-codex-large-prompt-reliability-r
 **Worker:** 1
 
 ### Changes
