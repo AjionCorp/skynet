@@ -62,7 +62,14 @@ _resolve_plugin_path() {
   case "$name" in
     claude|codex|echo) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
     auto)         echo "auto" ;;
-    *)            echo "$name" ;;  # file path (absolute or relative)
+    *)            # file path — resolve relative paths against $PROJECT_DIR
+                  if [ -f "$PROJECT_DIR/$name" ]; then
+                    echo "$PROJECT_DIR/$name"
+                  elif [ -f "$name" ]; then
+                    echo "$name"
+                  else
+                    echo "$name"
+                  fi ;;
   esac
 }
 
