@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Prevent project-driver from generating retry variants for active failed roots — in `scripts/project-driver.sh`, normalize unchecked candidate titles against active `pending|blocked|fixing-*` roots in `.dev/failed-tasks.md`, skip generation when a canonical root is already active, and log deterministic `driver_duplicate_root_skipped` counters. Mission: Criterion #2 retry-loop reduction and Criterion #3 durable root-cause planning.
+## [TEST] Add project-driver regression for active-root duplicate suppression counters — in `scripts/tests/project-driver.sh`, assert generation skips unchecked candidates when normalized roots are already active in `.dev/failed-tasks.md`, never skips unrelated roots, and emits deterministic `driver_duplicate_root_skipped` totals. Mission: Criterion #2 quality gates and Criterion #3 convergent planning.
 **Status:** completed
-**Started:** 2026-02-20 18:11
+**Started:** 2026-02-20 18:13
 **Completed:** 2026-02-20
-**Branch:** dev/prevent-project-driver-from-generating-r
+**Branch:** dev/add-project-driver-regression-for-active
 **Worker:** 2
 
 ### Changes
