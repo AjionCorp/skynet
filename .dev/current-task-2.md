@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close blocked config parity root for one-shot/watchdog knobs — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` so `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` defaults/descriptions match exactly, add/update config command coverage, and keep `pnpm typecheck` green. Mission: Criterion #1 adoption safety and Criterion #3 deterministic config behavior.
+## [DATA] Surface failed-root convergence metrics in pipeline status API — in `packages/dashboard/src/handlers/pipeline-status.ts`, add counts for `activeRoots`, `duplicateActiveRows`, and `blockedRoots` (derived from `.dev/failed-tasks.md`) so dashboard/operator views can track reconciliation progress over time. Mission: Criterion #4 visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 10:44
+**Started:** 2026-02-20 10:53
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-config-parity-root-for-one
+**Branch:** dev/surface-failed-root-convergence-metrics-
 **Worker:** 2
 
 ### Changes
