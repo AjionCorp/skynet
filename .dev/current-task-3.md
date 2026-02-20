@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Update README CLI reference with run, watch, upgrade, and metrics commands — FRESH implementation (delete stale branch `dev/update-readme-cli-reference-with-upgrade` first). In `README.md`, add 4 rows to the CLI Reference table: `run` ("Execute a one-shot task without adding to backlog"), `watch` ("Real-time terminal dashboard with 3s refresh"), `upgrade` ("Check for and install latest CLI version"), `metrics` ("Display pipeline performance analytics"). Update the "How It Works" section reference from "up to 2" dev-workers to "up to 4" (matching SKYNET_MAX_WORKERS=4). No other files need changes. Criterion #1
+## [INFRA] Add pipeline velocity metrics to project-driver.sh prompt context — FRESH implementation (delete stale branch `dev/add-pipeline-performance-summary-to-proj` first). In `scripts/project-driver.sh`, before the Claude prompt (around line 100), compute: `today_completed=$(grep -c "$(date '+%Y-%m-%d')" "$COMPLETED" 2>/dev/null || echo 0)`, `total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo 0)`, `total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || echo 0)`, `fixed_count=$(grep -c 'fixed' "$FAILED" 2>/dev/null || echo 0)`, `fix_rate=$((fixed_count * 100 / (total_failed > 0 ? total_failed : 1)))`. Add a "## Pipeline Velocity" section to the prompt including these numbers. Log the summary to the project-driver log. This helps the LLM make smarter task generation decisions. Criterion #3 and #5
 **Status:** completed
-**Started:** 2026-02-20 00:18
+**Started:** 2026-02-20 00:19
 **Completed:** 2026-02-20
-**Branch:** dev/update-readme-cli-reference-with-run-wat
+**Branch:** dev/add-pipeline-velocity-metrics-to-project
 **Worker:** 3
 
 ### Changes
