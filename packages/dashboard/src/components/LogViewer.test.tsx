@@ -22,8 +22,8 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockLogsGet(data: LogData | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ data, error }))
+  global.fetch = vi.fn().mockImplementation(() =>
+    Promise.resolve(new Response(JSON.stringify({ data, error })))
   );
 }
 
@@ -127,6 +127,10 @@ describe("LogViewer", () => {
 
   it("changes source and fetches new logs", async () => {
     global.fetch = vi.fn()
+      // Config fetch on mount
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { entries: [] }, error: null }))
+      )
       // Initial fetch for dev-worker-1
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: MOCK_LOG_DATA, error: null }))
