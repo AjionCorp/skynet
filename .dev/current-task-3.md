@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Publish canonical diagnostics only for truly remaining active roots after cleanup — if any `status=blocked|pending` roots remain, capture latest exact `pnpm typecheck` diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, then keep one canonical follow-up per unresolved root. Mission: Criterion #2 self-correction closure and Criterion #4 operator trust.
+## [INFRA] Run one canonical stale-active supersede sweep for blocked/pending rows already fixed — in `scripts/watchdog.sh` reconciliation, supersede any `status=blocked|pending` rows in `.dev/failed-tasks.md` whose normalized root maps to `.dev/completed.md`, preserving all `fixing-*` rows byte-for-byte and emitting before/after root counters. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 17:23
+**Started:** 2026-02-20 17:26
 **Completed:** 2026-02-20
-**Branch:** dev/publish-canonical-diagnostics-only-for-t
+**Branch:** dev/run-one-canonical-stale-active-supersede
 **Worker:** 3
 
 ### Changes
