@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
-import { resolve, join, dirname } from "path";
+import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
+import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
 
 interface AddTaskOptions {
   dir?: string;
@@ -43,50 +44,64 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     taskLine += ` — ${options.description.trim()}`;
   }
 
-  const content = readFileSync(backlogPath, "utf-8");
-  const lines = content.split("\n");
+  // Derive lock path from config (same as shell: ${SKYNET_LOCK_PREFIX}-backlog.lock)
+  const projectName = vars.SKYNET_PROJECT_NAME || "unknown";
+  const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
+  const lockPath = `${lockPrefix}-backlog.lock`;
 
-  // Find insertion point:
-  //   - After header comments (lines starting with # or <!-- or blank lines at top)
-  //   - position=top: insert before the first task entry (pending, claimed, or done)
-  //   - position=bottom: insert before the first [x] (done) block
-  let insertIndex = -1;
-
-  if (position === "top") {
-    // Insert before the first task line (any checkbox entry)
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].match(/^- \[[ >x]\] /)) {
-        insertIndex = i;
-        break;
-      }
-    }
-  } else {
-    // position=bottom: insert before the first [x] entry
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].startsWith("- [x] ")) {
-        insertIndex = i;
-        break;
-      }
-    }
+  if (!acquireBacklogLock(lockPath)) {
+    console.error("Error: Could not acquire backlog lock. Another process may be modifying backlog.md.");
+    process.exit(1);
   }
 
-  if (insertIndex === -1) {
-    // No existing entries found — append at end
-    // Ensure there's a trailing newline before appending
-    if (lines.length > 0 && lines[lines.length - 1] !== "") {
-      lines.push("");
+  try {
+    const content = readFileSync(backlogPath, "utf-8");
+    const lines = content.split("\n");
+
+    // Find insertion point:
+    //   - After header comments (lines starting with # or <!-- or blank lines at top)
+    //   - position=top: insert before the first task entry (pending, claimed, or done)
+    //   - position=bottom: insert before the first [x] (done) block
+    let insertIndex = -1;
+
+    if (position === "top") {
+      // Insert before the first task line (any checkbox entry)
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].match(/^- \[[ >x]\] /)) {
+          insertIndex = i;
+          break;
+        }
+      }
+    } else {
+      // position=bottom: insert before the first [x] entry
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith("- [x] ")) {
+          insertIndex = i;
+          break;
+        }
+      }
     }
-    lines.push(taskLine);
-  } else {
-    lines.splice(insertIndex, 0, taskLine);
+
+    if (insertIndex === -1) {
+      // No existing entries found — append at end
+      // Ensure there's a trailing newline before appending
+      if (lines.length > 0 && lines[lines.length - 1] !== "") {
+        lines.push("");
+      }
+      lines.push(taskLine);
+    } else {
+      lines.splice(insertIndex, 0, taskLine);
+    }
+
+    const newContent = lines.join("\n");
+
+    // Atomic write: write to .tmp then rename
+    const tmpPath = backlogPath + ".tmp";
+    writeFileSync(tmpPath, newContent, "utf-8");
+    renameSync(tmpPath, backlogPath);
+  } finally {
+    releaseBacklogLock(lockPath);
   }
-
-  const newContent = lines.join("\n");
-
-  // Atomic write: write to .tmp then rename
-  const tmpPath = backlogPath + ".tmp";
-  writeFileSync(tmpPath, newContent, "utf-8");
-  renameSync(tmpPath, backlogPath);
 
   console.log(`\n  Added task to backlog (position: ${position}):\n`);
   console.log(`    ${taskLine}\n`);
