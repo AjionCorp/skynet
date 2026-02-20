@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Publish canonical blocked-root repro matrix from latest logs — regenerate `.dev/blockers.md` Active from `status=blocked` rows in `.dev/failed-tasks.md` using current `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log` `pnpm typecheck` diagnostics, with exactly one canonical row per root and explicit pass conditions. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
+## [FIX] Close blocked pipeline-logs line-count optimization root with response-shape parity — in `packages/dashboard/src/handlers/pipeline-logs.ts` and tests, keep buffer newline counting while preserving exact empty/no-trailing-newline behavior and strict typecheck. Mission: Criterion #3 runtime efficiency and Criterion #2 reliable gates.
 **Status:** completed
-**Started:** 2026-02-20 11:03
+**Started:** 2026-02-20 11:04
 **Completed:** 2026-02-20
-**Branch:** dev/publish-canonical-blocked-root-repro-mat
+**Branch:** dev/close-blocked-pipeline-logs-line-count-o
 **Worker:** 3
 
 ### Changes
