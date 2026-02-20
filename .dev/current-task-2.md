@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface failed-root hash parity in CLI `status --json` from canonical files — extend `packages/cli/src/commands/status.ts` to include `activeRootHash`, `blockersActiveHash`, and `hashMatch` using the same normalized-root hashing as watchdog parity checks. Mission: Criterion #4 full visibility and Criterion #5 measurable progress.
+## [TEST] Add watchdog regression for duplicate-root pressure alert throttling — verify repeated duplicate-active conditions emit at most one high-severity alert per cooldown window and clear correctly after convergence. Mission: Criterion #2 quality gates and Criterion #3 deterministic monitoring.
 **Status:** completed
-**Started:** 2026-02-20 16:54
+**Started:** 2026-02-20 16:57
 **Completed:** 2026-02-20
-**Branch:** dev/surface-failed-root-hash-parity-in-cli-s
+**Branch:** dev/add-watchdog-regression-for-duplicate-ro
 **Worker:** 2
 
 ### Changes
