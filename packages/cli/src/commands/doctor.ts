@@ -1,9 +1,10 @@
-import { readFileSync, existsSync, readdirSync } from "fs";
+import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 
 interface DoctorOptions {
   dir?: string;
+  fix?: boolean;
 }
 
 function loadConfig(projectDir: string): Record<string, string> | null {
@@ -70,8 +71,10 @@ function label(status: Status): string {
 export async function doctorCommand(options: DoctorOptions) {
   const projectDir = resolve(options.dir || process.cwd());
   const results: { name: string; status: Status }[] = [];
+  const fixing = options.fix === true;
+  let fixCount = 0;
 
-  console.log(`\n  Skynet Doctor — ${projectDir}\n`);
+  console.log(`\n  Skynet Doctor — ${projectDir}${fixing ? " (auto-fix enabled)" : ""}\n`);
 
   // --- (1) Required Tools ---
   console.log("  Required Tools:");
@@ -365,6 +368,15 @@ export async function doctorCommand(options: DoctorOptions) {
       results.push({ name: "Orphaned Worktrees", status: "PASS" });
     } else {
       console.log(`    ${orphanedCount} orphaned worktree(s) found`);
+      if (fixing) {
+        try {
+          execSync("git worktree prune", { cwd: projectDir, stdio: "ignore" });
+          console.log("    Fixed: ran git worktree prune");
+          fixCount += orphanedCount;
+        } catch {
+          console.log("    Could not run git worktree prune");
+        }
+      }
       results.push({ name: "Orphaned Worktrees", status: "WARN" });
     }
   } catch {
@@ -433,9 +445,11 @@ export async function doctorCommand(options: DoctorOptions) {
       // devDir may not be readable
     }
 
+    const orphanedClaimed: string[] = [];
     for (const claimed of claimedTitles) {
       if (!inProgressTitles.has(claimed)) {
         console.log(`    Claimed task without in_progress file: ${claimed}`);
+        orphanedClaimed.push(claimed);
         integrityIssues++;
       }
     }
@@ -444,6 +458,22 @@ export async function doctorCommand(options: DoctorOptions) {
       console.log("    No integrity issues found");
       results.push({ name: "Backlog Integrity", status: "PASS" });
     } else {
+      if (fixing && orphanedClaimed.length > 0) {
+        let updatedBacklog = backlogContent;
+        for (const title of orphanedClaimed) {
+          // Replace [>] with [ ] for lines matching this claimed title
+          const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const re = new RegExp(`^(- )\\[>\\]( ${escaped})`, "m");
+          updatedBacklog = updatedBacklog.replace(re, "$1[ ]$2");
+        }
+        try {
+          writeFileSync(backlogPath, updatedBacklog, "utf-8");
+          console.log(`    Fixed: reset ${orphanedClaimed.length} orphaned claimed task(s) to pending`);
+          fixCount += orphanedClaimed.length;
+        } catch {
+          console.log("    Could not write backlog.md");
+        }
+      }
       results.push({ name: "Backlog Integrity", status: "WARN" });
     }
   }
@@ -458,6 +488,7 @@ export async function doctorCommand(options: DoctorOptions) {
   let staleCount = 0;
   let heartbeatTotal = 0;
   const heartbeatScanMax = maxWorkers || 10;
+  const staleHeartbeatPaths: string[] = [];
 
   for (let n = 1; n <= heartbeatScanMax; n++) {
     const hbPath = join(devDir, `worker-${n}.heartbeat`);
@@ -469,12 +500,14 @@ export async function doctorCommand(options: DoctorOptions) {
         const ageMin = Math.round(ageMs / 60000);
         if (ageMs > staleThresholdMs) {
           console.log(`    Worker ${n}: stale (${ageMin}m old, threshold: ${staleMinutes}m)`);
+          staleHeartbeatPaths.push(hbPath);
           staleCount++;
         } else {
           console.log(`    Worker ${n}: OK (${ageMin}m old)`);
         }
       } else {
         console.log(`    Worker ${n}: invalid heartbeat file`);
+        staleHeartbeatPaths.push(hbPath);
         staleCount++;
       }
     }
@@ -484,6 +517,17 @@ export async function doctorCommand(options: DoctorOptions) {
     console.log("    No heartbeat files found (pipeline idle)");
     results.push({ name: "Stale Heartbeats", status: "PASS" });
   } else if (staleCount > 0) {
+    if (fixing) {
+      for (const hbPath of staleHeartbeatPaths) {
+        try {
+          unlinkSync(hbPath);
+          console.log(`    Fixed: deleted ${hbPath}`);
+          fixCount++;
+        } catch {
+          console.log(`    Could not delete ${hbPath}`);
+        }
+      }
+    }
     results.push({ name: "Stale Heartbeats", status: "WARN" });
   } else {
     results.push({ name: "Stale Heartbeats", status: "PASS" });
@@ -507,12 +551,25 @@ export async function doctorCommand(options: DoctorOptions) {
     console.log("    Cannot check — config not loaded");
     results.push({ name: "Config Completeness", status: "FAIL" });
   } else {
+    const configDefaults: Record<string, string> = {
+      SKYNET_PROJECT_NAME: "my-project",
+      SKYNET_PROJECT_DIR: projectDir,
+      SKYNET_DEV_DIR: "$SKYNET_PROJECT_DIR/.dev",
+      SKYNET_LOCK_PREFIX: "/tmp/skynet-${SKYNET_PROJECT_NAME}",
+      SKYNET_MAIN_BRANCH: "main",
+      SKYNET_MAX_WORKERS: "4",
+      SKYNET_STALE_MINUTES: "45",
+      SKYNET_BRANCH_PREFIX: "dev/",
+    };
+
     let missingVars = 0;
+    const missingKeys: string[] = [];
     for (const key of requiredVars) {
       const value = vars[key];
       if (!value || value.trim().length === 0) {
         console.log(`    ${key}: MISSING or empty`);
         missingVars++;
+        missingKeys.push(key);
       } else {
         console.log(`    ${key}: OK`);
       }
@@ -521,6 +578,21 @@ export async function doctorCommand(options: DoctorOptions) {
     if (missingVars === 0) {
       results.push({ name: "Config Completeness", status: "PASS" });
     } else {
+      if (fixing && missingKeys.length > 0) {
+        const lines: string[] = [];
+        for (const key of missingKeys) {
+          const def = configDefaults[key] || "";
+          lines.push(`export ${key}="${def}"`);
+        }
+        try {
+          const existing = readFileSync(configPath, "utf-8");
+          writeFileSync(configPath, existing.trimEnd() + "\n" + lines.join("\n") + "\n", "utf-8");
+          console.log(`    Fixed: appended ${missingKeys.length} default config var(s)`);
+          fixCount += missingKeys.length;
+        } catch {
+          console.log("    Could not write to config file");
+        }
+      }
       results.push({ name: "Config Completeness", status: "FAIL" });
     }
   }
@@ -530,6 +602,10 @@ export async function doctorCommand(options: DoctorOptions) {
 
   for (const r of results) {
     console.log(`    ${label(r.status)} ${r.name}`);
+  }
+
+  if (fixing && fixCount > 0) {
+    console.log(`\n  Auto-fixed ${fixCount} issue${fixCount === 1 ? "" : "s"}`);
   }
 
   const fails = results.filter((r) => r.status === "FAIL").length;
