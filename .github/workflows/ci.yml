@@ -40,7 +40,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
-      - run: pnpm lint:sh
+      - run: shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh
 
   lint-ts:
     runs-on: ubuntu-latest
