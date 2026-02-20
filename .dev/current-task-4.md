@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Add missing handler and type exports to `packages/dashboard/src/index.ts` — the root `index.ts` handler export block (lines 41-54) is missing `createEventsHandler` and `createMissionRawHandler` which were added after the initial block was written. The type export block (lines 2-29) is missing `SelfCorrectionStats` and `EventEntry`. Fix: add `createEventsHandler` and `createMissionRawHandler` to the handler re-export block. Add `SelfCorrectionStats` and `EventEntry` to the type re-export block. These are needed by external consumers importing from `@ajioncorp/skynet` root path (the admin app uses sub-path imports so it works, but any external Next.js app embedding the dashboard would get undefined). Run `pnpm typecheck`. Criterion #1 (correct npm package API surface)
+## [INFRA] Add CI job dependency chain to save GitHub Actions minutes — in `.github/workflows/ci.yml`, add `needs:` to expensive jobs so they skip when fast checks fail. Add: `build` → `needs: [typecheck]`, `e2e-cli` → `needs: [typecheck, unit-test]`, `e2e-admin` → `needs: [typecheck, build]`. Currently all 7 jobs run in parallel — if `typecheck` fails (the most common failure mode), 6 other jobs still run for ~15 minutes before also failing. Keep `lint-sh` and `lint-ts` independent (fast, no deps). This saves CI minutes on failures while keeping the parallel-on-success benefit for lint jobs. Criterion #2 (efficient CI pipeline)
 **Status:** completed
-**Started:** 2026-02-20 01:25
+**Started:** 2026-02-20 01:26
 **Completed:** 2026-02-20
-**Branch:** dev/add-missing-handler-and-type-exports-to-
+**Branch:** dev/add-ci-job-dependency-chain-to-save-gith
 **Worker:** 4
 
 ### Changes
