@@ -31,6 +31,12 @@ jobs:
           test -f dist/index.js
           head -1 dist/index.js | grep -q "#!/usr/bin/env node"
 
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test CLI
+        run: pnpm --filter @ajioncorp/skynet-cli test
+
       - name: Publish to npm
         working-directory: packages/cli
         run: npm publish --provenance --access public
