@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add typecheck and test steps to publish-cli.yml before npm publish — in `.github/workflows/publish-cli.yml`, the publish job runs `pnpm build` and checks that `dist/index.js` exists, but does NOT run `pnpm typecheck` or `pnpm test` before publishing. A developer can push a `cli-v*` tag on a commit with failing tests and the broken version ships to npm. Fix: add two steps before the publish step: (1) `pnpm typecheck` to catch type errors, (2) `pnpm --filter @ajioncorp/skynet-cli test` to run CLI unit tests. If either fails, the publish is blocked. This prevents broken CLI releases from reaching users via `npx skynet init`. Run `pnpm typecheck`. Criterion #2 (CI quality gates prevent broken releases)
+## [FIX] Remove ghost `SKYNET_START_DEV_CMD` from config.ts KNOWN_VARS — in `packages/cli/src/commands/config.ts` line 58, `SKYNET_START_DEV_CMD: "Command to start the dev server (optional)"` is listed in `KNOWN_VARS` but this variable does NOT exist in `templates/skynet.config.sh` and is not referenced in any shell script. The actual dev server command variable is `SKYNET_DEV_SERVER_CMD` which is already correctly documented at line 16. `skynet config list` shows a row for a non-existent variable, confusing users who try to set it. Fix: delete line 58 containing `SKYNET_START_DEV_CMD`. Run `pnpm typecheck`. Criterion #1 (accurate developer tooling — no phantom config variables)
 **Status:** completed
-**Started:** 2026-02-20 02:20
+**Started:** 2026-02-20 02:31
 **Completed:** 2026-02-20
-**Branch:** dev/add-typecheck-and-test-steps-to-publish-
+**Branch:** dev/remove-ghost-skynetstartdevcmd-from-conf
 **Worker:** 1
 
 ### Changes
