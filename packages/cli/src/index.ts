@@ -71,6 +71,7 @@ program
   .command("doctor")
   .description("Run diagnostics on the Skynet pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--fix", "Auto-fix issues where possible")
   .action(doctorCommand);
 
 program
