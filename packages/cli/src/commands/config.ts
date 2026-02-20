@@ -50,6 +50,12 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_CODEX_FLAGS: "Codex CLI flags",
   SKYNET_EXTRA_PATH: "Additional PATH entries",
   SKYNET_ERROR_ENV_KEYS: "Env vars to scan in server logs",
+  SKYNET_AGENT_TIMEOUT_MINUTES: "Max minutes before agent process is killed (default: 45)",
+  SKYNET_HEALTH_ALERT_THRESHOLD: "Health score threshold for watchdog alerts (default: 50)",
+  SKYNET_MAX_EVENTS_LOG_KB: "Max events.log size in KB before rotation (default: 1024)",
+  SKYNET_MAX_FIXERS: "Maximum concurrent task-fixer instances (default: 3)",
+  SKYNET_DRIVER_BACKLOG_THRESHOLD: "Pending task count before project-driver generates more (default: 5)",
+  SKYNET_START_DEV_CMD: "Command to start the dev server (optional)",
 };
 
 interface ParsedVar {
