@@ -577,7 +577,7 @@ done
 _health_score_alert() {
   local score=100
   local threshold="${SKYNET_HEALTH_ALERT_THRESHOLD:-50}"
-  local sentinel="$DEV_DIR/health-alert-sent"
+  local sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-health-alert-sent"
 
   # -5 per pending failed task
   local pending_failed=0
