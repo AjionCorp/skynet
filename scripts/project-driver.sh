@@ -83,6 +83,21 @@ fi
 
 log "State: $remaining pending, $claimed claimed, $completed_count completed, $failed_count failed"
 
+# --- Pipeline velocity metrics ---
+today_completed=$(grep -c "$(date '+%Y-%m-%d')" "$COMPLETED" 2>/dev/null || true)
+today_completed=${today_completed:-0}
+total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+total_completed=${total_completed:-0}
+total_completed=$((total_completed > 1 ? total_completed - 1 : 0))
+total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || true)
+total_failed=${total_failed:-0}
+total_failed=$((total_failed > 1 ? total_failed - 1 : 0))
+fixed_count=$(grep -c 'fixed' "$FAILED" 2>/dev/null || true)
+fixed_count=${fixed_count:-0}
+fix_rate=$((fixed_count * 100 / (total_failed > 0 ? total_failed : 1)))
+
+log "Velocity: today=$today_completed, total_completed=$total_completed, total_failed=$total_failed, fixed=$fixed_count, fix_rate=${fix_rate}%"
+
 # --- Build the prompt ---
 PROMPT="You are the Project Driver for ${SKYNET_PROJECT_NAME}. Your sole purpose is to drive this project toward its mission by generating, prioritizing, and managing the task backlog.
 
@@ -112,6 +127,15 @@ $blockers_content
 
 ### Sync Health (.dev/sync-health.md)
 $sync_health_content
+
+## Pipeline Velocity
+- Tasks completed today: $today_completed
+- Total tasks completed: $total_completed
+- Total tasks failed: $total_failed
+- Tasks fixed after failure: $fixed_count
+- Fix rate: ${fix_rate}%
+
+Use these metrics to calibrate task generation: if fix rate is low, prioritize simpler/smaller tasks; if velocity is high, consider more ambitious tasks.
 
 ## CODEBASE STRUCTURE
 
