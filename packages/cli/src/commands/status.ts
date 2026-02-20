@@ -336,16 +336,6 @@ export async function statusCommand(options: StatusOptions) {
 
       if (criteriaLines.length > 0) {
         // Gather evaluation inputs
-        const failedContent = readFile(join(devDir, "failed-tasks.md"));
-        const totalFailedLines = failedContent
-          .split("\n")
-          .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
-        const fixedCount = totalFailedLines.filter((l) => l.includes("| fixed |")).length;
-        const supersededCount = totalFailedLines.filter((l) => l.includes("| superseded |")).length;
-        const blockedCount = totalFailedLines.filter((l) => l.includes("| blocked |")).length;
-        const selfCorrected = fixedCount + supersededCount;
-        const totalResolved = selfCorrected + blockedCount;
-
         const watchdogLog = readFile(join(devDir, "scripts/watchdog.log"));
         const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
         const deadlockRefs = (watchdogLog.match(/deadlock/gi) || []).length;
@@ -391,10 +381,10 @@ export async function statusCommand(options: StatusOptions) {
               else { status = "partial"; evidence = `${handlerCount} handlers`; }
               break;
             case 2:
-              if (totalResolved === 0) { status = "partial"; evidence = "No failures resolved yet"; }
+              if (scrResolved === 0) { status = "partial"; evidence = "No failures resolved yet"; }
               else {
-                const pct = Math.round((selfCorrected / totalResolved) * 100);
-                if (pct >= 95) { status = "met"; evidence = `${pct}% self-correction (${selfCorrected}/${totalResolved})`; }
+                const pct = Math.round((scrSelfCorrected / scrResolved) * 100);
+                if (pct >= 95) { status = "met"; evidence = `${pct}% self-correction (${scrSelfCorrected}/${scrResolved})`; }
                 else if (pct >= 50) { status = "partial"; evidence = `${pct}% self-correction`; }
                 else { status = "not-met"; evidence = `${pct}% self-correction`; }
               }
