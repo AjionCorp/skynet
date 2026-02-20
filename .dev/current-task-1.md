@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add retry-pressure mode in `scripts/project-driver.sh` when pending retries exceed threshold — if `failed-tasks.md` pending count is `> 20`, generate at most 3 new tasks per cycle, restrict output to reliability/reconciliation tags (`[FIX]`, `[INFRA]`, `[TEST]`, `[NMI]`), and emit `driver_retry_pressure_mode` metrics. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent planning.
+## [TEST] Close blocked CLI operational E2E smoke root in one canonical update — stabilize `tests/e2e/cli-commands.test.sh` assertions for `stop`, `pause/resume`, `completions bash`, and `validate`, and keep `pnpm typecheck` passing. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
 **Status:** completed
-**Started:** 2026-02-20 10:53
+**Started:** 2026-02-20 11:08
 **Completed:** 2026-02-20
-**Branch:** dev/add-retry-pressure-mode-in-scriptsprojec
+**Branch:** dev/close-blocked-cli-operational-e2e-smoke-
 **Worker:** 1
 
 ### Changes
