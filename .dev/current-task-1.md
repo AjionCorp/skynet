@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `timeout-minutes` to all CI workflow jobs to prevent runaway builds — in `.github/workflows/ci.yml`, the `e2e-admin` Playwright job has no `timeout-minutes`, defaulting to GitHub's 6-hour maximum. If Playwright hangs, the job wastes CI minutes. Fix: add `timeout-minutes: 10` to `e2e-admin` and `e2e-cli` jobs, `timeout-minutes: 5` to `typecheck`, `build`, `lint-sh`, and `lint-ts` jobs, `timeout-minutes: 10` to `unit-test`. These generous limits prevent hangs without interrupting legitimate runs. Criterion #2 (efficient CI — no wasted GitHub Actions minutes)
+## [FEAT] Add `echo` agent plugin for pipeline dry-run testing — create `scripts/agents/echo.sh` as a minimal agent plugin that echoes the task description back without calling any LLM. On `agent_run()`, create a single commit with a placeholder file containing the task description and "TODO: implement". On `agent_check()`, return success. This lets users run `SKYNET_AGENT_PLUGIN=echo skynet start` to test the full pipeline lifecycle (claim, branch, gate, merge) without burning LLM API tokens. Register in the agent selection logic in `scripts/_agent.sh`. Run `pnpm typecheck` and `bash -n scripts/agents/echo.sh`. Criterion #1 (faster pipeline verification during setup) and #6 (extensible to any agent)
 **Status:** completed
-**Started:** 2026-02-20 02:05
+**Started:** 2026-02-20 02:07
 **Completed:** 2026-02-20
-**Branch:** dev/add-timeout-minutes-to-all-ci-workflow-j
+**Branch:** dev/add-echo-agent-plugin-for-pipeline-dry-r
 **Worker:** 1
 
 ### Changes
