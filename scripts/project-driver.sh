@@ -213,10 +213,20 @@ _dedup_snapshot=$(mktemp)
 _dedup_normalized=$(mktemp)
 trap 'rm -f "$LOCKFILE" "$_dedup_snapshot" "$_dedup_normalized"' EXIT
 if [ -f "$BACKLOG" ]; then
-  grep '^\- \[[ >]\]' "$BACKLOG" > "$_dedup_snapshot" 2>/dev/null || true
+  grep '^\- \[[ >x]\]' "$BACKLOG" > "$_dedup_snapshot" 2>/dev/null || true
   while IFS= read -r _line; do
     _normalize_task_line "$_line"
   done < "$_dedup_snapshot" > "$_dedup_normalized"
+fi
+# Also include completed.md tasks so the LLM never regenerates already-done work
+if [ -f "$COMPLETED" ]; then
+  _completed_tasks=$(awk -F'|' 'NR>2 {t=$3; gsub(/^ +| +$/,"",t); if(t!="") print "- [ ] " t}' "$COMPLETED")
+  if [ -n "$_completed_tasks" ]; then
+    echo "$_completed_tasks" >> "$_dedup_snapshot"
+    while IFS= read -r _line; do
+      _normalize_task_line "$_line"
+    done <<< "$_completed_tasks" >> "$_dedup_normalized"
+  fi
 fi
 
 if run_agent "$PROMPT" "$LOG"; then
