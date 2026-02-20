@@ -1,5 +1,5 @@
 const COMMANDS: Record<string, string[]> = {
-  init: ["--name", "--dir", "--copy-scripts", "--non-interactive"],
+  init: ["--name", "--dir", "--copy-scripts", "--non-interactive", "--from-snapshot"],
   "setup-agents": ["--dir", "--dry-run", "--cron", "--uninstall"],
   start: ["--dir"],
   stop: ["--dir"],
@@ -22,6 +22,8 @@ const COMMANDS: Record<string, string[]> = {
   config: ["--dir"],
   completions: [],
   "test-notify": ["--channel", "--dir"],
+  validate: ["--dir", "--help"],
+  changelog: ["--since", "--output", "--dir", "--help"],
 };
 
 const COMMAND_NAMES = Object.keys(COMMANDS).join(" ");
@@ -111,6 +113,8 @@ _skynet() {
     'config:View and edit pipeline configuration'
     'completions:Generate shell completions'
     'test-notify:Test notification channels'
+    'validate:Run pre-flight project validation checks'
+    'changelog:Generate changelog from completed tasks'
   )
 
   _arguments -C \\
