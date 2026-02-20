@@ -1,7 +1,23 @@
 {
   "name": "@ajioncorp/skynet",
   "version": "0.1.0",
+  "description": "Embeddable dashboard components and API handlers for Skynet pipeline monitoring",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AjionCorp/skynet"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "skynet",
+    "ai",
+    "pipeline",
+    "claude",
+    "autonomous"
+  ],
   "main": "src/index.ts",
   "types": "src/index.ts",
   "exports": {

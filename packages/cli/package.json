@@ -1,7 +1,23 @@
 {
   "name": "@ajioncorp/skynet-cli",
   "version": "0.1.0",
+  "description": "CLI for Skynet — autonomous AI development pipeline",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AjionCorp/skynet"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "skynet",
+    "ai",
+    "pipeline",
+    "claude",
+    "autonomous"
+  ],
   "files": [
     "dist",
     "scripts",

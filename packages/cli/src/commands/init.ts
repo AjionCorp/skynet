@@ -174,7 +174,7 @@ export async function initCommand(options: InitOptions) {
     .replace('export SKYNET_MAIN_BRANCH="main"', `export SKYNET_MAIN_BRANCH="${shellEscape(mainBranch)}"`)
     .replace("export SKYNET_TG_ENABLED=false", `export SKYNET_TG_ENABLED=${tgToken ? "true" : "false"}`)
     .replace('export SKYNET_TG_BOT_TOKEN=""', `export SKYNET_TG_BOT_TOKEN="${shellEscape(tgToken)}"`)
-    .replace('export SKYNET_TG_CHAT_ID=""', `export SKYNET_TG_CHAT_ID="${shellEscape(tgChatId)}"`);;
+    .replace('export SKYNET_TG_CHAT_ID=""', `export SKYNET_TG_CHAT_ID="${shellEscape(tgChatId)}"`)
 
   writeFileSync(join(devDir, "skynet.config.sh"), configContent);
   console.log("    .dev/skynet.config.sh");
