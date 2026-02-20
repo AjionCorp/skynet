@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `pnpm install --frozen-lockfile` to worker flow before typecheck — in `scripts/dev-worker.sh`, the quality gate section runs `pnpm typecheck` but does NOT run `pnpm install` first. When the pnpm lockfile has been updated (e.g., new dependency added) but the worktree's `node_modules` is stale, typecheck fails with "Cannot find module" errors. This caused 5 recent task failures (all "typecheck failed" with TS2307 for vitest). Fix: in `dev-worker.sh`, before the first quality gate evaluation, add `pnpm install --frozen-lockfile >> "$LOG" 2>&1` to ensure dependencies are fresh. Only run if `pnpm-lock.yaml` has changed since last install (check mtime of `node_modules/.modules.yaml` vs `pnpm-lock.yaml`). Run `pnpm typecheck`. Criterion #3 (reliable quality gates — dependencies must be installed before typecheck)
+## [FIX] Add backlog mutex lock to CLI `add-task` and `reset-task` commands to prevent data corruption — in `packages/cli/src/commands/add-task.ts` lines 46-89, `backlog.md` is read, modified, and written using atomic rename but WITHOUT acquiring the backlog mutex lock (`${SKYNET_LOCK_PREFIX}-backlog.lock`). Shell workers hold this lock during all backlog modifications. Concurrent `skynet add-task` and a worker claiming a task can corrupt `backlog.md` (lost writes). Same issue in `packages/cli/src/commands/reset-task.ts` which writes both `backlog.md` and `failed-tasks.md` without any lock at lines 124 and 140. Fix: (1) Create a shared `acquireBacklogLock(lockPath: string, retries?: number, intervalMs?: number): boolean` utility in `packages/cli/src/utils/backlogLock.ts`. (2) In `add-task.ts`, before reading backlog.md, acquire lock; release in a try/finally with `rmSync(lockPath, { recursive: true })`. (3) Apply same pattern to `reset-task.ts`. Derive lock path as `${lockPrefix}-backlog.lock` where lockPrefix comes from config. Run `pnpm typecheck`. Criterion #3 (data integrity — no backlog corruption under concurrent access)
 **Status:** completed
-**Started:** 2026-02-20 03:04
+**Started:** 2026-02-20 03:20
 **Completed:** 2026-02-20
-**Branch:** dev/add-pnpm-install---frozen-lockfile-to-wo
+**Branch:** dev/add-backlog-mutex-lock-to-cli-add-task-a
 **Worker:** 4
 
 ### Changes
