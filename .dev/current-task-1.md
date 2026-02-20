@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add duplicate-active-root pressure alerting in watchdog with throttle guard — when `duplicate_active_rows > 0` across consecutive cycles, emit a single throttled high-severity event/notification with current root counts and cooldown handling. Mission: Criterion #2 self-correction closure and Criterion #4 operational awareness.
+## [INFRA] Centralize failed-root active-hash computation in one shell helper and reuse it across snapshot + drift alert paths — extract a canonical helper in `scripts/_config.sh` (or sourced helper) and consume it from `scripts/watchdog.sh` so parity and alert logic cannot diverge. Mission: Criterion #3 deterministic behavior and Criterion #4 telemetry consistency.
 **Status:** completed
-**Started:** 2026-02-20 17:00
+**Started:** 2026-02-20 17:04
 **Completed:** 2026-02-20
-**Branch:** dev/add-duplicate-active-root-pressure-alert
+**Branch:** dev/centralize-failed-root-active-hash-compu
 **Worker:** 1
 
 ### Changes
