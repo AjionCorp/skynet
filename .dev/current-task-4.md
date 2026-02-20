@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Auto-supersede stale `blocked` failed-task rows that match completed roots — in `scripts/watchdog.sh` reconciliation, extend completed-match supersede logic to `status=blocked` (not only pending variants), preserve `fixing-*` rows, and emit deterministic counters for `blocked_rows_superseded`. Mission: Criterion #2 retry-loop reduction and Criterion #3 convergent state.
+## [INFRA] Centralize failed-task markdown field codec into shared shell helpers — in `scripts/_config.sh`, add canonical encode/decode helpers for failed-task table fields (embedded pipes/backticks/newlines) and migrate `scripts/task-fixer.sh` plus `scripts/watchdog.sh` writers/parsers to one codec path. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 18:35
+**Started:** 2026-02-20 18:37
 **Completed:** 2026-02-20
-**Branch:** dev/auto-supersede-stale-blocked-failed-task
+**Branch:** dev/centralize-failed-task-markdown-field-co
 **Worker:** 4
 
 ### Changes
