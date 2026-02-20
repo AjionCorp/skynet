@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce active-root canonical row precedence (`fixing-*` > `blocked` > `pending`) in watchdog reconciliation — in `scripts/watchdog.sh`, when multiple active rows share a normalized root, deterministically keep the highest-priority status row (then latest row index tie-break), supersede lower-priority variants, and emit `canonicalization_precedence_applied` counters. Mission: Criterion #2 self-correction throughput and Criterion #3 deterministic recovery.
+## [DATA] Surface canonical active-root diagnostics in status JSON surfaces — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include a bounded `activeRootDiagnostics` payload (`root`, `status`, `attempts`, `latestRow`) sourced from watchdog semantics so operators can verify one-row-per-root convergence quickly. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:17
+**Started:** 2026-02-20 18:18
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-active-root-canonical-row-preced
+**Branch:** dev/surface-canonical-active-root-diagnostic
 **Worker:** 3
 
 ### Changes
