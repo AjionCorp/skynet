@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet setup-agents --uninstall` for clean agent removal — in `packages/cli/src/commands/setup-agents.ts`, add `--uninstall` boolean option. On macOS: for each skynet plist file in `~/Library/LaunchAgents/` (matching `com.skynet.*.plist` pattern), run `launchctl unload <path>` then `fs.unlinkSync(path)`. On Linux: read `crontab -l`, remove lines between `# BEGIN skynet` and `# END skynet` markers (inclusive), write back via `crontab -`. Print summary: "Removed N agents (watchdog, health-check, ...)". If no agents found, print "No skynet agents installed". Criterion #1 (complete lifecycle — currently no way to cleanly uninstall agents)
+## [DOCS] Add CONTRIBUTING.md with agent plugin and extension guide — create `CONTRIBUTING.md` at repo root. Sections: (1) **Development Setup** — clone, `pnpm install`, `pnpm dev:admin`. (2) **Creating Custom Agent Plugins** — explain `scripts/agents/` interface: create `my-agent.sh` exporting `run_agent()` that takes prompt + logfile, set `SKYNET_AGENT_PLUGIN="my-agent"` in config. Show the contract from `scripts/agents/claude.sh`. (3) **Adding Notification Channels** — explain `scripts/notify/` plugin structure, show how to add e.g. `email.sh` matching telegram.sh pattern, add to `SKYNET_NOTIFY_CHANNELS`. (4) **Custom Quality Gates** — explain `SKYNET_GATE_N` pattern in config. (5) **Dashboard Development** — handler pattern (`createXxxHandler(config)`), component pattern (fetch from API, display), adding admin pages. (6) **Shell Script Rules** — bash 3.2 compat, mkdir locks, source _config.sh, race conditions. Keep under 150 lines. Criterion #1 (developer experience for adopters)
 **Status:** completed
-**Started:** 2026-02-19 22:02
+**Started:** 2026-02-19 22:03
 **Completed:** 2026-02-19
-**Branch:** dev/add-skynet-setup-agents---uninstall-for-
+**Branch:** dev/add-contributingmd-with-agent-plugin-and
 **Worker:** 1
 
 ### Changes
