@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Rebuild canonical blocked-root diagnostics from latest logs — regenerate `.dev/blockers.md` Active from `status=blocked` rows in `.dev/failed-tasks.md` using current `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log` typecheck traces, keep one root-cause row per canonical title, and include explicit pass conditions. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
+## [INFRA] Add a dedicated failed-task mutex for all writers — introduce `${SKYNET_LOCK_PREFIX}-failed-tasks.lock` helpers in `scripts/_config.sh` and require lock acquisition for every `failed-tasks.md` mutation path in `scripts/task-fixer.sh`, `scripts/watchdog.sh`, and CLI reset flows to prevent interleaved duplicate rows. Mission: Criterion #3 reliability and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 10:48
+**Started:** 2026-02-20 10:49
 **Completed:** 2026-02-20
-**Branch:** dev/rebuild-canonical-blocked-root-diagnosti
+**Branch:** dev/add-a-dedicated-failed-task-mutex-for-al
 **Worker:** 3
 
 ### Changes
