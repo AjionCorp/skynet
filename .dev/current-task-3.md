@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add CLI unit tests for watch, run, upgrade, and cleanup commands — FRESH implementation (delete stale branch `dev/add-cli-unit-tests-for-watch-run-upgrade` first). Create 4 test files in `packages/cli/src/commands/__tests__/`: (a) `watch.test.ts` — mock fs.readFileSync and setInterval, verify it reads state files and formats output. (b) `run.test.ts` — mock child_process.spawn, verify it constructs the correct dev-worker.sh command with SKYNET_ONE_SHOT=true. (c) `upgrade.test.ts` — mock execSync for `npm view`, test version comparison logic. (d) `cleanup.test.ts` — mock execSync for git commands, test --dry-run vs --force behavior. Follow existing patterns in `packages/cli/src/commands/__tests__/init.test.ts`. Currently 4 of 20 CLI commands have unit tests. Criterion #2
+## [TEST] Add `logs.test.ts`, `start.test.ts`, `stop.test.ts`, and `version.test.ts` CLI unit tests — create 4 test files in `packages/cli/src/commands/__tests__/`. For `logs.test.ts`: mock `fs.readdirSync` and `fs.readFileSync` for log file listing, test `--tail N` reads last N lines, test `--follow` sets up `fs.watch`, test missing log directory returns helpful message, test `--id` flag selects correct worker log. For `start.test.ts`: mock `child_process.spawn`, test launches watchdog.sh, test detects already-running via PID lock file. For `stop.test.ts`: mock `fs.readFileSync` for PID files, test sends SIGTERM to workers, test handles missing PID files gracefully. For `version.test.ts`: mock package.json read, test outputs version string, mock `execSync` for npm update check, test outdated version suggests upgrade command. Follow existing CLI test patterns in `init.test.ts`. Criterion #2
 **Status:** completed
-**Started:** 2026-02-20 00:24
+**Started:** 2026-02-20 00:33
 **Completed:** 2026-02-20
-**Branch:** dev/add-cli-unit-tests-for-watch-run-upgrade
+**Branch:** dev/add-logstestts-starttestts-stoptestts-an
 **Worker:** 3
 
 ### Changes
