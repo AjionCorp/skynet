@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
@@ -21,6 +21,7 @@ interface SetupAgentsOptions {
   dir?: string;
   dryRun?: boolean;
   cron?: boolean;
+  uninstall?: boolean;
 }
 
 // Cron schedule for each agent, keyed by the agent name extracted from plist filenames
@@ -207,7 +208,95 @@ function setupCron(
   console.log(`\n  All cron entries installed. Run 'crontab -l | grep skynet' to verify.\n`);
 }
 
+function uninstallLaunchd(): void {
+  const launchAgentsDir = join(process.env.HOME || "~", "Library/LaunchAgents");
+  if (!existsSync(launchAgentsDir)) {
+    console.log("No skynet agents installed.");
+    return;
+  }
+
+  const plistFiles = readdirSync(launchAgentsDir).filter((f) =>
+    /^com\.skynet\..*\.plist$/.test(f),
+  );
+
+  if (plistFiles.length === 0) {
+    console.log("No skynet agents installed.");
+    return;
+  }
+
+  const removed: string[] = [];
+
+  for (const file of plistFiles) {
+    const plistPath = join(launchAgentsDir, file);
+    // Extract agent name: com.skynet.<project>.<name>.plist -> <name>
+    const parts = file.replace(/\.plist$/, "").split(".");
+    const agentName = parts.length >= 4 ? parts.slice(3).join(".") : file;
+
+    try {
+      execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
+    } catch {
+      // Not loaded, that's fine
+    }
+
+    unlinkSync(plistPath);
+    removed.push(agentName);
+  }
+
+  console.log(`Removed ${removed.length} agent${removed.length === 1 ? "" : "s"} (${removed.join(", ")}).`);
+}
+
+function uninstallCron(): void {
+  let existingCrontab = "";
+  try {
+    existingCrontab = execSync("crontab -l 2>/dev/null", { encoding: "utf-8" });
+  } catch {
+    console.log("No skynet agents installed.");
+    return;
+  }
+
+  // Find all skynet marker blocks: # BEGIN skynet ... # END skynet
+  const blockRegex = /# BEGIN skynet[^\n]*\n[\s\S]*?# END skynet[^\n]*\n?/g;
+  const matches = existingCrontab.match(blockRegex);
+
+  if (!matches || matches.length === 0) {
+    console.log("No skynet agents installed.");
+    return;
+  }
+
+  // Count individual agent entries across all blocks
+  const agentNames: string[] = [];
+  for (const block of matches) {
+    const lines = block.split("\n");
+    for (const line of lines) {
+      // Lines starting with "# " (but not markers) are agent description comments
+      const descMatch = line.match(/^# (.+?) \(/);
+      if (descMatch && !line.startsWith("# BEGIN") && !line.startsWith("# END")) {
+        agentNames.push(descMatch[1].toLowerCase().replace(/\s+/g, "-"));
+      }
+    }
+  }
+
+  const newCrontab = existingCrontab.replace(blockRegex, "");
+  execSync("crontab -", { input: newCrontab, stdio: ["pipe", "ignore", "ignore"] });
+
+  if (agentNames.length > 0) {
+    console.log(`Removed ${agentNames.length} agent${agentNames.length === 1 ? "" : "s"} (${agentNames.join(", ")}).`);
+  } else {
+    console.log(`Removed ${matches.length} skynet cron block${matches.length === 1 ? "" : "s"}.`);
+  }
+}
+
 export async function setupAgentsCommand(options: SetupAgentsOptions) {
+  if (options.uninstall) {
+    const scheduler = detectScheduler(options.cron ?? false);
+    if (scheduler === "launchd") {
+      uninstallLaunchd();
+    } else {
+      uninstallCron();
+    }
+    return;
+  }
+
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
 

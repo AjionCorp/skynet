@@ -38,6 +38,7 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--dry-run", "Print config without installing")
   .option("--cron", "Force cron mode (default on Linux, optional on macOS)")
+  .option("--uninstall", "Remove all installed skynet agents")
   .action(setupAgentsCommand);
 
 program
