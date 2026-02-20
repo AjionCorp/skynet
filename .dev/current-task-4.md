@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Pass agent prompt via stdin instead of CLI argument to avoid ARG_MAX — in `scripts/agents/claude.sh` line 39, the prompt is passed as a direct CLI argument: `_agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt"`. On macOS, `ARG_MAX` is ~1MB. With large `SKYNET_WORKER_CONTEXT` and `SKYNET_WORKER_CONVENTIONS` config values, the prompt can exceed this limit. Fix: change the invocation to pipe the prompt via stdin: `echo "$prompt" | _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS --print -` or write to a temp file and pass via `cat`. Check the `_agent_exec` function in `scripts/_agent.sh` to ensure stdin piping is compatible. If using a temp file, ensure it's cleaned up in the trap handler. Test with a large prompt string (>500KB) to verify. Run `pnpm typecheck`. Criterion #3 (reliability — prevents silent failures on large projects with extensive conventions)
+## [FIX] Replace `[[` with `case` in watchdog.sh for bash 3.2 style consistency — in `scripts/watchdog.sh` line 529, inside `_cleanup_stale_branches()`: `[[ "$branch" == dev/* ]] || continue`. While `[[` technically works in bash 3.2, the project's shell rules state bash 3.2 compatibility and the rest of the codebase uses `[ ... ]` exclusively. This is the only `[[` usage in the pipeline scripts (except `_compat.sh` for platform detection). Fix: replace with a `case` statement: `case "$branch" in dev/*) ;; *) continue ;; esac`. Run `bash -n scripts/watchdog.sh` and `pnpm typecheck` to verify. Criterion #1 (portability — consistent bash 3.2 style across all scripts)
 **Status:** completed
 **Started:** 2026-02-20 01:51
 **Completed:** 2026-02-20
-**Branch:** dev/pass-agent-prompt-via-stdin-instead-of-c
+**Branch:** dev/-continue-while--technically-works-in-ba
 **Worker:** 4
 
 ### Changes
