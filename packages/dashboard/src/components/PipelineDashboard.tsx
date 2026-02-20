@@ -75,7 +75,10 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
-  const [connected, setConnected] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'connected' | 'reconnecting' | 'disconnected'>('disconnected');
+  const esRef = useRef<EventSource | null>(null);
+  const backoffRef = useRef(1000);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchLogs = useCallback(async (script: string) => {
     setLogLoading(true);
@@ -90,34 +93,83 @@ export function PipelineDashboard() {
     }
   }, [apiPrefix]);
 
-  // Stream status via SSE, fall back to polling on error
+  // Stream status via SSE with exponential backoff reconnection
   useEffect(() => {
-    const es = new EventSource(`${apiPrefix}/pipeline/stream`);
+    const BACKOFF_MAX = 30000;
 
-    es.onopen = () => setConnected(true);
+    function connect() {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
 
-    es.onmessage = (event) => {
-      try {
-        const json = JSON.parse(event.data);
-        if (json.error) {
-          setError(json.error);
-          return;
+      const es = new EventSource(`${apiPrefix}/pipeline/stream`);
+      esRef.current = es;
+
+      es.onopen = () => {
+        setConnectionStatus('connected');
+        backoffRef.current = 1000;
+      };
+
+      es.onmessage = (event) => {
+        try {
+          const json = JSON.parse(event.data);
+          if (json.error) {
+            setError(json.error);
+            return;
+          }
+          setStatus(json.data);
+          setError(null);
+          setConnectionStatus('connected');
+        } catch {
+          /* ignore malformed frames */
+        } finally {
+          setLoading(false);
         }
-        setStatus(json.data);
-        setError(null);
-      } catch {
-        /* ignore malformed frames */
-      } finally {
-        setLoading(false);
+        backoffRef.current = 1000;
+      };
+
+      es.onerror = () => {
+        es.close();
+        esRef.current = null;
+        setConnectionStatus('reconnecting');
+        const delay = backoffRef.current;
+        backoffRef.current = Math.min(delay * 2, BACKOFF_MAX);
+        reconnectTimerRef.current = setTimeout(connect, delay);
+      };
+    }
+
+    connect();
+
+    // Close SSE when tab is hidden, reopen when visible
+    function handleVisibility() {
+      if (document.hidden) {
+        if (reconnectTimerRef.current) {
+          clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = null;
+        }
+        if (esRef.current) {
+          esRef.current.close();
+          esRef.current = null;
+        }
+        setConnectionStatus('disconnected');
+      } else {
+        backoffRef.current = 1000;
+        connect();
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+      }
+      if (esRef.current) {
+        esRef.current.close();
       }
     };
-
-    es.onerror = () => {
-      setConnected(false);
-      // EventSource auto-reconnects; no manual fallback needed
-    };
-
-    return () => es.close();
   }, [apiPrefix]);
 
   // Poll logs every 3s when viewer is open
@@ -195,6 +247,27 @@ export function PipelineDashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Connection status indicator */}
+      <div className="flex items-center gap-2">
+        <h1 className="text-lg font-semibold text-white">Pipeline Dashboard</h1>
+        <div className="flex items-center gap-1.5" title={
+          connectionStatus === 'connected' ? 'Live — receiving updates' :
+          connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Disconnected'
+        }>
+          <div className={`h-2 w-2 rounded-full ${
+            connectionStatus === 'connected' ? 'bg-emerald-400' :
+            connectionStatus === 'reconnecting' ? 'bg-amber-400 animate-pulse' : 'bg-red-400'
+          }`} />
+          {connectionStatus !== 'connected' && (
+            <span className={`text-xs ${
+              connectionStatus === 'reconnecting' ? 'text-amber-400' : 'text-red-400'
+            }`}>
+              {connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Disconnected'}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <div className={`rounded-xl border border-${healthColor}-500/20 bg-${healthColor}-500/5 p-4`}>
@@ -579,7 +652,8 @@ export function PipelineDashboard() {
 
       {/* Footer */}
       <p className="text-center text-xs text-zinc-700">
-        {connected ? "Live updates via SSE" : "Reconnecting\u2026"} &middot; Logs refresh every 3s when open
+        {connectionStatus === 'connected' ? 'Live updates via SSE' :
+         connectionStatus === 'reconnecting' ? 'Reconnecting to SSE\u2026' : 'SSE disconnected'} &middot; Logs refresh every 3s when open
       </p>
     </div>
   );
