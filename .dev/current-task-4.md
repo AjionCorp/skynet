@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one deterministic failed-task compaction pass after active claims settle — add a one-shot helper in `scripts/watchdog.sh` (or sourced helper) to collapse duplicate `pending|superseded` rows by normalized root+branch in `.dev/failed-tasks.md`, keep one canonical active row, and emit before/after counters via `emit_event`. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [INFRA] Prevent future duplicate retry variants at source in project-driver output filtering — hard-fail generation of new unchecked tasks whose normalized title matches any active/blocked canonical root in `.dev/failed-tasks.md`, log skipped roots, and keep unchecked backlog capped under 15 in `scripts/project-driver.sh`. Mission: Criterion #3 convergent planning and Criterion #2 self-correction stability.
 **Status:** completed
-**Started:** 2026-02-20 10:43
+**Started:** 2026-02-20 10:48
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-deterministic-failed-task-compac
+**Branch:** dev/prevent-future-duplicate-retry-variants-
 **Worker:** 4
 
 ### Changes
