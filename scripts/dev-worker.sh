@@ -547,9 +547,32 @@ EOF
   cleanup_worktree
   cd "$PROJECT_DIR"
 
-  if ! git merge "$branch_name" --no-edit 2>>"$LOG"; then
-    log "MERGE FAILED for $branch_name — aborting and moving to failed."
+  _merge_succeeded=false
+  if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+    _merge_succeeded=true
+  else
+    # Merge failed — attempt rebase recovery (max 1 attempt)
+    log "Merge conflict — attempting rebase recovery..."
     git merge --abort 2>/dev/null || true
+    git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+    git checkout "$branch_name" 2>>"$LOG"
+    if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
+      log "Rebase succeeded — retrying merge."
+      git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+      if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+        _merge_succeeded=true
+      else
+        git merge --abort 2>/dev/null || true
+      fi
+    else
+      log "Rebase has conflicts — aborting rebase recovery."
+      git rebase --abort 2>/dev/null || true
+      git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+    fi
+  fi
+
+  if ! $_merge_succeeded; then
+    log "MERGE FAILED for $branch_name — moving to failed."
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
       mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
