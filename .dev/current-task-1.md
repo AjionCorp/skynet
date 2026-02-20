@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Canonicalize blocked retry roots from `.dev/failed-tasks.md` — parse all `status=blocked` and `attempts>=3` rows, capture exact `pnpm typecheck` diagnostics from corresponding worker/fixer logs, and emit exactly one canonical follow-up task per root cause (Codex prompt path, config parity, CLI E2E, pipeline-logs, parser DRY). Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
+## [INFRA] Run one canonical failed-task reconciliation sweep and supersede variants — add/verify idempotent dedupe in `scripts/watchdog.sh` for `.dev/failed-tasks.md` by normalized title+branch, supersede completed/redundant pending rows, and emit `task_superseded` transitions for each change. Mission: Criterion #2 self-correction throughput and Criterion #3 state convergence.
 **Status:** completed
-**Started:** 2026-02-20 09:55
+**Started:** 2026-02-20 09:57
 **Completed:** 2026-02-20
-**Branch:** dev/canonicalize-blocked-retry-roots-from-de
+**Branch:** dev/run-one-canonical-failed-task-reconcilia
 **Worker:** 1
 
 ### Changes
