@@ -95,11 +95,29 @@ if [ "$FIXER_ID" = "1" ]; then
 else
   LOCKFILE="${SKYNET_LOCK_PREFIX}-task-fixer-${FIXER_ID}.lock"
 fi
-if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
-  exit 0
+if mkdir "$LOCKFILE" 2>/dev/null; then
+  echo $$ > "$LOCKFILE/pid"
+else
+  # Lock dir exists — check for stale lock (owner PID no longer running)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Already running (PID $_existing_pid). Exiting." >> "$LOG"
+      exit 0
+    fi
+    # Stale lock — reclaim atomically
+    rm -rf "$LOCKFILE" 2>/dev/null || true
+    if mkdir "$LOCKFILE" 2>/dev/null; then
+      echo $$ > "$LOCKFILE/pid"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
+      exit 0
+    fi
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
+    exit 0
+  fi
 fi
-echo $$ > "$LOCKFILE"
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 # Mutex for atomic claiming of failed tasks (shared with other fixers)
@@ -152,7 +170,7 @@ cleanup_on_exit() {
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   # Release PID lock
-  rm -f "$LOCKFILE"
+  rm -rf "$LOCKFILE"
   # Log crash event (only on abnormal exit)
   if [ "$exit_code" -ne 0 ]; then
     log "task-fixer crashed (exit $exit_code). Cleanup complete."
@@ -193,7 +211,7 @@ if [ -f "$FIXER_STATS" ]; then
   if [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ]; then
     date +%s > "$FIXER_COOLDOWN"
     log "Fixer paused: 5 consecutive failures, cooling down 30min"
-    rm -f "$LOCKFILE"
+    rm -rf "$LOCKFILE"
     exit 0
   fi
 fi

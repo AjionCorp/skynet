@@ -23,12 +23,30 @@ _normalize_task_line() {
 
 # --- PID lock ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver.lock"
-if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
-  exit 0
+if mkdir "$LOCKFILE" 2>/dev/null; then
+  echo $$ > "$LOCKFILE/pid"
+else
+  # Lock dir exists — check for stale lock (owner PID no longer running)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $_existing_pid). Exiting." >> "$LOG"
+      exit 0
+    fi
+    # Stale lock — reclaim atomically
+    rm -rf "$LOCKFILE" 2>/dev/null || true
+    if mkdir "$LOCKFILE" 2>/dev/null; then
+      echo $$ > "$LOCKFILE/pid"
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Lock contention. Exiting." >> "$LOG"
+      exit 0
+    fi
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Lock contention. Exiting." >> "$LOG"
+    exit 0
+  fi
 fi
-echo $$ > "$LOCKFILE"
-trap 'rm -f "$LOCKFILE"' EXIT
+trap 'rm -rf "$LOCKFILE"' EXIT
 
 # --- Pipeline pause check ---
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
@@ -211,7 +229,7 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 # --- Snapshot existing backlog for post-agent deduplication ---
 _dedup_snapshot=$(mktemp)
 _dedup_normalized=$(mktemp)
-trap 'rm -f "$LOCKFILE" "$_dedup_snapshot" "$_dedup_normalized"' EXIT
+trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized"' EXIT
 if [ -f "$BACKLOG" ]; then
   grep '^\- \[[ >x]\]' "$BACKLOG" > "$_dedup_snapshot" 2>/dev/null || true
   while IFS= read -r _line; do
