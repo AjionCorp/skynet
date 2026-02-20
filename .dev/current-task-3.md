@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Validate git repository during `skynet init` — in `packages/cli/src/commands/init.ts`, the `initCommand()` function creates `.dev/` and copies scripts without checking if the current directory is inside a git repository. If a user runs `npx skynet init` in a non-git directory, the pipeline will fail on first task claim when `git worktree add` is called with a confusing low-level error. Fix: at the start of `initCommand()`, before any file operations, run `execSync("git rev-parse --is-inside-work-tree", { stdio: "pipe" })` in a try/catch. If it fails, print a clear error: "Error: skynet init must be run from within a git repository. Run 'git init' first." and `process.exit(1)`. Also verify the repo has at least one commit via `execSync("git rev-parse HEAD", { stdio: "pipe" })` since `git worktree` requires it — if no commits exist, print "Error: git repository must have at least one commit. Run 'git add -A && git commit -m initial' first." Run `pnpm typecheck`. Criterion #1 (clear errors during setup — catches misconfiguration before pipeline starts)
+## [FIX] Fix `skynet logs` column header using unsupported printf format specifiers — in `packages/cli/src/commands/logs.ts` line 50, `console.log("    %-30s  %8s  %s", "File", "Size", "Modified")` uses C-style printf format specifiers that Node.js `console.log` does NOT interpret. The actual output is the raw format string followed by the arguments: `    %-30s  %8s  %s File Size Modified`. The data rows below use manual `.padEnd(30)` and `.padStart(8)` (lines 59-60), making the header misaligned with the data. Fix: replace line 50 with explicit padding matching the data rows: `console.log(\`    ${"File".padEnd(30)}  ${"Size".padStart(8)}  Modified\`)`. Run `pnpm typecheck`. Criterion #1 (CLI output must be correct — users see this every time they run `skynet logs`)
 **Status:** completed
-**Started:** 2026-02-20 02:32
+**Started:** 2026-02-20 02:47
 **Completed:** 2026-02-20
-**Branch:** dev/validate-git-repository-during-skynet-in
+**Branch:** dev/fix-skynet-logs-column-header-using-unsu
 **Worker:** 3
 
 ### Changes
