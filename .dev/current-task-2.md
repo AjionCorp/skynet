@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Supersede legacy duplicate pending failed roots after canonicalization pass — run a one-time scripted sweep marking redundant pending rows for already-fixed/completed roots as `superseded` and emit `task_superseded` transitions. Mission: Criterion #2 self-correction efficiency and Criterion #3 clean state.
+## [TEST] Unblock CLI operational E2E smoke root in one canonical task — stabilize `tests/e2e/cli-commands.test.sh` assertions for `stop`, `pause/resume`, `completions bash`, and `validate`, keeping `pnpm typecheck` green. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
 **Status:** completed
-**Started:** 2026-02-20 10:30
+**Started:** 2026-02-20 10:31
 **Completed:** 2026-02-20
-**Branch:** dev/supersede-legacy-duplicate-pending-faile
+**Branch:** dev/unblock-cli-operational-e2e-smoke-root-i
 **Worker:** 2
 
 ### Changes
