@@ -392,7 +392,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
 **Note:** Backlog empty — project-driver kicked off to replenish
 EOF
     # Kick off project-driver if not already running
-    if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver.lock" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver.lock")" 2>/dev/null); then
+    if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid")" 2>/dev/null); then
       nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
       log "Project-driver launched (PID $!)."
       tg "📋 *WATCHDOG*: Backlog empty — project-driver kicked off to replenish"
