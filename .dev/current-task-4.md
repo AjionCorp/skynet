@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Collapse canonical duplicate `pending` retry rows for the CLI helper DRY root — in `scripts/watchdog.sh` reconciliation, when multiple `pending` rows normalize to `close blocked cli helper dry root for readfile isprocessrunning`, keep one canonical active row, mark the rest `superseded`, and emit per-row `task_superseded` events without modifying active `fixing-*` rows. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [TEST] Add project-driver regression for `fixing-*` retry-root suppression — in `scripts/project-driver.sh` tests, assert new tasks are skipped when normalized titles match active roots in `pending|fixing-*|blocked`, and that skipped roots are logged once per cycle. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 15:58
+**Started:** 2026-02-20 16:07
 **Completed:** 2026-02-20
-**Branch:** dev/collapse-canonical-duplicate-pending-ret
+**Branch:** dev/add-project-driver-regression-for-fixing
 **Worker:** 4
 
 ### Changes
