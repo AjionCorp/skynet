@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface auth-gate dispatch state in status APIs and CLI JSON — when watchdog suppresses dispatch due to expired agent auth, expose `authGateActive`, `authGateSince`, and last `agent_auth_required` timestamp in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts --json` for operator visibility. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [INFRA] Canonicalize active failed roots to one row per normalized root in watchdog — extend reconciliation in `scripts/watchdog.sh` to keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicate variants, and emit deterministic per-root reconciliation metrics/events. Mission: Criterion #2 throughput and Criterion #3 deterministic state.
 **Status:** completed
-**Started:** 2026-02-20 17:17
+**Started:** 2026-02-20 17:28
 **Completed:** 2026-02-20
-**Branch:** dev/surface-auth-gate-dispatch-state-in-stat
+**Branch:** dev/canonicalize-active-failed-roots-to-one-
 **Worker:** 4
 
 ### Changes
