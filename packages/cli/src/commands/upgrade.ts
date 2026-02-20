@@ -1,7 +1,8 @@
 import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { configMigrateCommand } from "./config.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -65,5 +66,17 @@ export async function upgradeCommand(options: UpgradeOptions): Promise<void> {
   } catch {
     console.error(`\n  Upgrade failed. Try manually: npm install -g @ajioncorp/skynet-cli@latest`);
     process.exitCode = 1;
+    return;
+  }
+
+  // Auto-migrate config if a .dev/skynet.config.sh exists in cwd
+  const projectDir = process.cwd();
+  if (existsSync(join(projectDir, ".dev/skynet.config.sh"))) {
+    console.log(`\n  Migrating config...`);
+    try {
+      await configMigrateCommand({ dir: projectDir });
+    } catch {
+      console.error(`  Config migration failed — run 'skynet config migrate' manually.`);
+    }
   }
 }

@@ -15,7 +15,7 @@ import { cleanupCommand } from "./commands/cleanup.js";
 import { runCommand } from "./commands/run.js";
 import { pauseCommand } from "./commands/pause.js";
 import { resumeCommand } from "./commands/resume.js";
-import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
+import { configListCommand, configGetCommand, configSetCommand, configMigrateCommand } from "./commands/config.js";
 import { upgradeCommand } from "./commands/upgrade.js";
 import { watchCommand } from "./commands/watch.js";
 import { metricsCommand } from "./commands/metrics.js";
@@ -211,6 +211,13 @@ configCmd
   .argument("<value>", "New value")
   .action(async (key: string, value: string) => {
     await configSetCommand(key, value, configCmd.opts());
+  });
+
+configCmd
+  .command("migrate")
+  .description("Add new config variables from the latest template")
+  .action(async () => {
+    await configMigrateCommand(configCmd.opts());
   });
 
 program.parse();

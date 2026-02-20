@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
+import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 
 interface ConfigOptions {
@@ -258,4 +259,100 @@ export async function configSetCommand(key: string, value: string, options: Conf
   renameSync(tmpPath, configPath);
 
   console.log(`\n  Updated ${key}="${value}"\n`);
+}
+
+/**
+ * Resolve the template directory — same strategy as init.ts.
+ * When installed from npm, templates/ is two levels up from dist/commands/.
+ * In monorepo dev, fall back to the repo root (four levels up).
+ */
+function resolveTemplateDir(): string {
+  const pkgPath = fileURLToPath(new URL("../../templates", import.meta.url));
+  if (existsSync(pkgPath)) return pkgPath;
+  return resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../..", "templates");
+}
+
+/**
+ * Extract variable names defined in a config file (lines matching `export VAR=` or `VAR=`).
+ */
+function extractVarNames(content: string): Set<string> {
+  const names = new Set<string>();
+  for (const line of content.split("\n")) {
+    const m = line.match(/^(?:export\s+)?(\w+)=/);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+
+/**
+ * Parse the template into blocks — each block is the comment lines preceding
+ * a variable definition plus the definition line itself.
+ */
+function parseTemplateBlocks(content: string): Array<{ varName: string; block: string }> {
+  const lines = content.split("\n");
+  const blocks: Array<{ varName: string; block: string }> = [];
+  let commentBuffer: string[] = [];
+
+  for (const line of lines) {
+    const varMatch = line.match(/^(?:export\s+)?(\w+)=/);
+    if (varMatch) {
+      blocks.push({
+        varName: varMatch[1],
+        block: [...commentBuffer, line].join("\n"),
+      });
+      commentBuffer = [];
+    } else if (line.startsWith("#")) {
+      commentBuffer.push(line);
+    } else {
+      // Blank line or non-comment/non-var — reset comment buffer
+      commentBuffer = [];
+    }
+  }
+
+  return blocks;
+}
+
+/**
+ * `skynet config migrate` — Add new config variables from the template.
+ * Returns the list of added variable names (useful for programmatic callers).
+ */
+export async function configMigrateCommand(options: ConfigOptions): Promise<string[]> {
+  const projectDir = resolve(options.dir || process.cwd());
+  const configPath = getConfigPath(projectDir);
+
+  if (!existsSync(configPath)) {
+    console.error("  Error: skynet.config.sh not found. Run 'skynet init' first.");
+    process.exit(1);
+  }
+
+  const templatePath = join(resolveTemplateDir(), "skynet.config.sh");
+  if (!existsSync(templatePath)) {
+    console.error("  Error: Template skynet.config.sh not found. Reinstall skynet-cli.");
+    process.exit(1);
+  }
+
+  const userContent = readFileSync(configPath, "utf-8");
+  const templateContent = readFileSync(templatePath, "utf-8");
+
+  const userVars = extractVarNames(userContent);
+  const templateBlocks = parseTemplateBlocks(templateContent);
+
+  // Find SKYNET_* variables in the template that are missing from the user's config
+  const missing = templateBlocks.filter(
+    (b) => b.varName.startsWith("SKYNET_") && !userVars.has(b.varName)
+  );
+
+  if (missing.length === 0) {
+    console.log("  Config is up to date");
+    return [];
+  }
+
+  // Append missing variables to the user's config
+  const additions = missing.map((m) => m.block).join("\n\n");
+  const separator = userContent.endsWith("\n") ? "\n" : "\n\n";
+  appendFileSync(configPath, separator + additions + "\n", "utf-8");
+
+  const names = missing.map((m) => m.varName);
+  console.log(`  Added ${names.length} new config variable${names.length > 1 ? "s" : ""}: ${names.join(", ")}`);
+  return names;
 }
