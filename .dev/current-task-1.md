@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Centralize failed-task markdown field codec into one shared shell path — in `scripts/_config.sh`, expose canonical encode/decode helpers for failed-task table fields (pipes, backticks, escaped newlines) and migrate `scripts/task-fixer.sh` plus `scripts/watchdog.sh` to exclusively use those helpers for all reads/writes. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
+## [FIX] Harden failed-task table parsing for legacy unescaped pipe rows — in `scripts/_config.sh` parsing helpers and watchdog reconciliation reads, treat malformed pipe-expanded rows as recoverable (skip or normalize with explicit guard) instead of misclassifying status/attempt columns; emit deterministic skip logs with row index and preserve valid rows byte-for-byte. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 17:59
+**Started:** 2026-02-20 18:03
 **Completed:** 2026-02-20
-**Branch:** dev/centralize-failed-task-markdown-field-co
+**Branch:** dev/harden-failed-task-table-parsing-for-leg
 **Worker:** 1
 
 ### Changes
