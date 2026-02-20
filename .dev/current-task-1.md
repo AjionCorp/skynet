@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one deterministic failed-task compaction pass after active claims settle — add a one-shot helper in `scripts/watchdog.sh` (or sourced helper) to collapse duplicate `pending|superseded` rows by normalized root+branch in `.dev/failed-tasks.md`, keep one canonical active row, and emit before/after counters via `emit_event`. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [NMI] Reconcile blockers Active with current canonical roots after claimed sweeps complete — regenerate `.dev/blockers.md` Active from `.dev/failed-tasks.md` (`status=blocked`, `attempts>=3`), attach latest exact `pnpm typecheck` diagnostics, and remove stale root entries that are already fixed/superseded. Mission: Criterion #2 self-correction closure.
 **Status:** completed
-**Started:** 2026-02-20 10:41
+**Started:** 2026-02-20 10:42
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-deterministic-failed-task-compac
+**Branch:** dev/reconcile-blockers-active-with-current-c
 **Worker:** 1
 
 ### Changes
