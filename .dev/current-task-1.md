@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock config template parity root for one-shot/watchdog vars — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` for `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` defaults/descriptions with green `pnpm typecheck`. Mission: Criterion #1 adoption clarity and Criterion #3 deterministic config behavior.
+## [FIX] Unblock CLI shared helper DRY root for `readFile`/`isProcessRunning` — finalize shared utilities in `packages/cli/src/utils/`, update all command imports, and add dir-lock/file-lock compatibility tests so `pnpm typecheck` passes. Mission: Criterion #3 maintainability and Criterion #1 reliability.
 **Status:** completed
-**Started:** 2026-02-20 10:27
+**Started:** 2026-02-20 10:29
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-config-template-parity-root-for-
+**Branch:** dev/unblock-cli-shared-helper-dry-root-for-r
 **Worker:** 1
 
 ### Changes
