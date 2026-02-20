@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Close blocked CLI operational E2E root in one canonical test update — in `tests/e2e/cli-commands.test.sh`, stabilize assertions for `stop`, `pause/resume`, `completions bash`, and `validate` against current CLI output, then verify with `pnpm typecheck`. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
+## [FIX] Close blocked Codex prompt root with exact repro+guard test — use `.dev/blockers.md` repro to patch `scripts/agents/codex.sh` so stdin-first prompt delivery and child exit-code propagation are both preserved through `_agent_exec`, then add/update shell regression for >300KB prompt payloads and run `pnpm typecheck`. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
 **Status:** completed
 **Started:** 2026-02-20 10:43
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-cli-operational-e2e-root-i
+**Branch:** dev/close-blocked-codex-prompt-root-with-exa
 **Worker:** 1
 
 ### Changes
