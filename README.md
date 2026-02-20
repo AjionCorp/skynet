@@ -39,6 +39,8 @@ All state lives in `.dev/` as markdown: `backlog.md`, `completed.md`, `failed-ta
 | `skynet setup-agents` | Installs macOS LaunchAgents or Linux crontab entries for all workers |
 | `skynet start` | Loads LaunchAgents or spawns watchdog as a background process |
 | `skynet stop` | Unloads agents and kills all running worker processes |
+| `skynet pause` | Pauses the pipeline — workers exit gracefully at their next checkpoint, watchdog continues health checks |
+| `skynet resume` | Resumes a paused pipeline — removes sentinel file, workers restart on next watchdog dispatch cycle |
 | `skynet status` | Shows task counts, worker states, health score (0–100), auth state, and blockers |
 | `skynet doctor` | Diagnostics — checks required tools, config, scripts, agent availability, git state |
 | `skynet logs [type]` | Lists log files, or tails a specific log (`worker`, `fixer`, `watchdog`, `health-check`) |
@@ -47,6 +49,7 @@ All state lives in `.dev/` as markdown: `backlog.md`, `completed.md`, `failed-ta
 | `skynet reset-task <title>` | Resets a failed task back to pending (clears attempts, optionally deletes branch) |
 | `skynet dashboard` | Launches the admin dashboard (Next.js app) and opens browser |
 | `skynet cleanup` | Removes stale worktrees, lock files, and rotates logs |
+| `skynet config <sub>` | View or edit `skynet.config.sh` — `config list`, `config get KEY`, `config set KEY VALUE` with validation |
 
 ## Dashboard
 
