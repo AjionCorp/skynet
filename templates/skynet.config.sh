@@ -14,7 +14,6 @@ export SKYNET_LOCK_PREFIX="/tmp/skynet-${SKYNET_PROJECT_NAME}"  # Prefix for all
 # ---- Dev Server ----
 export SKYNET_DEV_SERVER_CMD="pnpm dev"                          # Command to start the dev server
 export SKYNET_DEV_SERVER_URL="http://localhost:3000"              # Dev server URL for health checks (default: http://localhost:3000)
-export SKYNET_DEV_SERVER_PORT=3000                                # Dev server port (used by start-dev.sh)
 export SKYNET_DEV_PORT=3000                                      # Base port for dev server; workers offset from this (default: 3000)
 
 # ---- Build & Test Commands ----
