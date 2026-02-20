@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add backlog checked-history rotation guardrail to keep project-driver context bounded — in `scripts/project-driver.sh`, move older `[x]` backlog rows beyond a fixed cap to `.dev/backlog-archive.md` while preserving all unchecked/claimed rows order. Mission: Criterion #2 planning throughput and Criterion #3 deterministic state management.
+## [TEST] Add project-driver regression for backlog history rotation invariants — in shell tests for `scripts/project-driver.sh`, verify rotation never reorders or rewrites leading claimed `[>]` rows and never removes unchecked `[ ]` tasks while archiving only older `[x]` history entries. Mission: Criterion #2 quality gates and Criterion #3 deterministic planning behavior.
 **Status:** completed
-**Started:** 2026-02-20 16:16
+**Started:** 2026-02-20 16:18
 **Completed:** 2026-02-20
-**Branch:** dev/add-backlog-checked-history-rotation-gua
+**Branch:** dev/add-project-driver-regression-for-backlo
 **Worker:** 2
 
 ### Changes
