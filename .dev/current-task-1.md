@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Re-open CLI operational E2E smoke coverage as one canonical root — in `tests/e2e/cli-commands.test.sh`, add deterministic checks for `skynet stop`, `pause/resume`, `completions bash`, and `validate`, ensuring no worker-count hardcoding regressions and `pnpm typecheck` stays green. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
+## [INFRA] Add failed-task history rotation guardrail to bound fixer context size — in `scripts/watchdog.sh`, archive older `fixed|superseded` rows from `.dev/failed-tasks.md` into `.dev/failed-tasks-archive.md` after a configurable cap while preserving active row ordering. Mission: Criterion #2 retry-loop throughput and Criterion #3 deterministic state management.
 **Status:** completed
-**Started:** 2026-02-20 17:30
+**Started:** 2026-02-20 17:31
 **Completed:** 2026-02-20
-**Branch:** dev/re-open-cli-operational-e2e-smoke-covera
+**Branch:** dev/add-failed-task-history-rotation-guardra
 **Worker:** 1
 
 ### Changes
