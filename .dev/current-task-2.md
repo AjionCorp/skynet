@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Reconcile blockers Active with current canonical roots after claimed sweeps complete — regenerate `.dev/blockers.md` Active from `.dev/failed-tasks.md` (`status=blocked`, `attempts>=3`), attach latest exact `pnpm typecheck` diagnostics, and remove stale root entries that are already fixed/superseded. Mission: Criterion #2 self-correction closure.
+## [TEST] Add regression coverage for failed-task convergence across `pending|fixing-*|blocked` states — extend shell tests for `scripts/watchdog.sh` and `scripts/task-fixer.sh` to prove duplicate active variants collapse to one canonical root and stale `fixing-*` rows return to `pending` when fixer lock is absent. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 10:41
+**Started:** 2026-02-20 10:43
 **Completed:** 2026-02-20
-**Branch:** dev/reconcile-blockers-active-with-current-c
+**Branch:** dev/add-regression-coverage-for-failed-task-
 **Worker:** 2
 
 ### Changes
