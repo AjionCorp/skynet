@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix TypeScript backlog mutex path missing dash separator — in `packages/dashboard/src/handlers/tasks.ts` line 85, `backlogLockPath` is constructed as `${lockPrefix}backlog.lock` (no dash), producing `/tmp/skynet-skynetbacklog.lock`. But bash scripts use `${SKYNET_LOCK_PREFIX}-backlog.lock` (with dash), producing `/tmp/skynet-skynet-backlog.lock`. The dashboard and workers can NEVER contend on the same mutex — concurrent writes from the dashboard POST `/api/admin/tasks` and a shell worker can corrupt `backlog.md`. Same missing-dash issue in `pipeline-status.ts` lines 422-423 (`${lockPrefix}claude-token` and `${lockPrefix}auth-failed` — both missing the dash). Fix: in `tasks.ts:85`, change to `${lockPrefix}-backlog.lock`. In `pipeline-status.ts:422-423`, change to `${lockPrefix}-claude-token` and `${lockPrefix}-auth-failed`. In `pipeline-status.ts:447`, change to `${lockPrefix}-backlog.lock`. Run `pnpm typecheck`. Criterion #3 (data integrity — backlog.md corruption prevention)
+## [FIX] Fix pipeline-status.ts `handlerCount` always returning 0 in production builds — in `packages/dashboard/src/handlers/pipeline-status.ts` lines 546-553, handler counting uses `readdir(handlersDir).filter((f) => f.endsWith(".ts") && !f.includes(".test."))`. In production Next.js builds, `__dirname` points to compiled output containing `.js` files, not `.ts`. The filter matches zero files, so `handlerCount` is always 0, breaking mission criterion #1 and #4 evaluation. Fix: change the filter to check for both extensions: `f.endsWith(".ts") || f.endsWith(".js")` and exclude both `.test.ts` and `.test.js`. Alternatively, hardcode the handler count as a known constant (currently 10 handlers) since it changes rarely and counting compiled files is inherently fragile. Run `pnpm typecheck` and `pnpm build` to verify. Criterion #4 (dashboard shows correct mission progress in production)
 **Status:** completed
-**Started:** 2026-02-20 02:19
+**Started:** 2026-02-20 02:20
 **Completed:** 2026-02-20
-**Branch:** dev/fix-typescript-backlog-mutex-path-missin
+**Branch:** dev/fix-pipeline-statusts-handlercount-alway
 **Worker:** 1
 
 ### Changes
