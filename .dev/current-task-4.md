@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Publish watchdog stale-active supersede skip diagnostics with throttle guards — in `scripts/watchdog.sh` reconciliation, emit deterministic reason codes/counts for rows not superseded (`status_fixing`, `no_completed_match`, `parse_guard`, `already_canonical`) plus bounded row samples so active-state drift can be triaged without log spam. Mission: Criterion #2 self-correction closure and Criterion #4 operational awareness.
+## [TEST] Add watchdog regression for stale-active skip-diagnostics lifecycle — in `scripts/tests/watchdog.sh`, validate skip-reason counters and sampled rows remain deterministic, throttling suppresses duplicate emissions within cooldown, and diagnostics re-arm after convergence changes. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
 **Status:** completed
-**Started:** 2026-02-20 18:29
+**Started:** 2026-02-20 18:34
 **Completed:** 2026-02-20
-**Branch:** dev/publish-watchdog-stale-active-supersede-
+**Branch:** dev/add-watchdog-regression-for-stale-active
 **Worker:** 4
 
 ### Changes
