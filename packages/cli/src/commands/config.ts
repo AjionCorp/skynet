@@ -58,6 +58,8 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_WORKER_CONTEXT: "Path to file with project-specific context injected into worker prompts",
   SKYNET_WORKER_CONVENTIONS: "Path to file with coding conventions injected into worker prompts",
   SKYNET_WATCHDOG_INTERVAL: "Seconds between watchdog monitoring cycles (default: 180)",
+  SKYNET_ONE_SHOT: "Set to 1 for single-task mode — worker exits after completing one task",
+  SKYNET_ONE_SHOT_TASK: "Task description for single-task mode (set automatically by skynet run)",
 };
 
 interface ParsedVar {
