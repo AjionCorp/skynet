@@ -3,6 +3,7 @@ import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
+import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
 
 interface ResetTaskOptions {
   dir?: string;
@@ -70,78 +71,93 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
     process.exit(1);
   }
 
-  // --- Step 1: Find matching entry in failed-tasks.md ---
-  const failedContent = readFileSync(failedPath, "utf-8");
-  const failedLines = failedContent.split("\n");
-  const searchTerm = titleSubstring.trim().toLowerCase();
+  // Derive lock path from config (same as shell: ${SKYNET_LOCK_PREFIX}-backlog.lock)
+  const projectName = vars.SKYNET_PROJECT_NAME || "unknown";
+  const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
+  const lockPath = `${lockPrefix}-backlog.lock`;
 
-  const matchingIndices: number[] = [];
-  for (let i = 0; i < failedLines.length; i++) {
-    const line = failedLines[i];
-    // Skip header, separator, and empty lines
-    if (!line.startsWith("|") || line.includes("| Date |") || line.includes("------")) continue;
-    const cols = line.split("|").map((c) => c.trim());
-    // cols[0]="" (before first |), cols[1]=date, cols[2]=title, cols[3]=branch, ...
-    const title = cols[2] || "";
-    if (title.toLowerCase().includes(searchTerm)) {
-      matchingIndices.push(i);
-    }
-  }
-
-  if (matchingIndices.length === 0) {
-    console.error(`\n  Error: No matching task found in failed-tasks.md for "${titleSubstring}".\n`);
+  if (!acquireBacklogLock(lockPath)) {
+    console.error("Error: Could not acquire backlog lock. Another process may be modifying backlog.md.");
     process.exit(1);
   }
 
-  if (matchingIndices.length > 1) {
-    console.error(`\n  Error: Multiple tasks match "${titleSubstring}":\n`);
-    for (const idx of matchingIndices) {
-      const cols = failedLines[idx].split("|").map((c) => c.trim());
-      console.error(`    - ${cols[2]}`);
+  let branchName = "";
+  try {
+    // --- Step 1: Find matching entry in failed-tasks.md ---
+    const failedContent = readFileSync(failedPath, "utf-8");
+    const failedLines = failedContent.split("\n");
+    const searchTerm = titleSubstring.trim().toLowerCase();
+
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < failedLines.length; i++) {
+      const line = failedLines[i];
+      // Skip header, separator, and empty lines
+      if (!line.startsWith("|") || line.includes("| Date |") || line.includes("------")) continue;
+      const cols = line.split("|").map((c) => c.trim());
+      // cols[0]="" (before first |), cols[1]=date, cols[2]=title, cols[3]=branch, ...
+      const title = cols[2] || "";
+      if (title.toLowerCase().includes(searchTerm)) {
+        matchingIndices.push(i);
+      }
     }
-    console.error(`\n  Please use a more specific substring.\n`);
-    process.exit(1);
-  }
 
-  const matchIdx = matchingIndices[0];
-  const matchLine = failedLines[matchIdx];
-  const cols = matchLine.split("|").map((c) => c.trim());
-  // cols: ["", date, title, branch, error, attempts, status, ""]
-  const taskTitle = cols[2];
-  const branchName = cols[3];
-  const taskError = cols[4];
-  const taskDate = cols[1];
-
-  console.log(`\n  Found failed task:\n`);
-  console.log(`    Title:    ${taskTitle}`);
-  console.log(`    Branch:   ${branchName}`);
-  console.log(`    Error:    ${taskError}`);
-  console.log(`    Attempts: ${cols[5]}`);
-  console.log(`    Status:   ${cols[6]}`);
-
-  // --- Step 2: Reset status to pending and attempts to 0 ---
-  failedLines[matchIdx] = `| ${taskDate} | ${taskTitle} | ${branchName} | ${taskError} | 0 | pending |`;
-  atomicWrite(failedPath, failedLines.join("\n"));
-  console.log(`\n  Reset failed-tasks.md entry: attempts → 0, status → pending`);
-
-  // --- Step 3: Find and uncheck corresponding backlog entry ---
-  const backlogContent = readFileSync(backlogPath, "utf-8");
-  const backlogLines = backlogContent.split("\n");
-  let backlogUpdated = false;
-
-  for (let i = 0; i < backlogLines.length; i++) {
-    if (backlogLines[i].startsWith("- [x] ") && backlogLines[i].toLowerCase().includes(searchTerm)) {
-      backlogLines[i] = backlogLines[i].replace(/^- \[x\] /, "- [ ] ");
-      backlogUpdated = true;
-      console.log(`  Reset backlog.md entry: [x] → [ ]`);
-      break;
+    if (matchingIndices.length === 0) {
+      console.error(`\n  Error: No matching task found in failed-tasks.md for "${titleSubstring}".\n`);
+      process.exit(1);
     }
-  }
 
-  if (backlogUpdated) {
-    atomicWrite(backlogPath, backlogLines.join("\n"));
-  } else {
-    console.log(`  Warning: No matching [x] entry found in backlog.md (skipped)`);
+    if (matchingIndices.length > 1) {
+      console.error(`\n  Error: Multiple tasks match "${titleSubstring}":\n`);
+      for (const idx of matchingIndices) {
+        const cols = failedLines[idx].split("|").map((c) => c.trim());
+        console.error(`    - ${cols[2]}`);
+      }
+      console.error(`\n  Please use a more specific substring.\n`);
+      process.exit(1);
+    }
+
+    const matchIdx = matchingIndices[0];
+    const matchLine = failedLines[matchIdx];
+    const cols = matchLine.split("|").map((c) => c.trim());
+    // cols: ["", date, title, branch, error, attempts, status, ""]
+    const taskTitle = cols[2];
+    branchName = cols[3];
+    const taskError = cols[4];
+    const taskDate = cols[1];
+
+    console.log(`\n  Found failed task:\n`);
+    console.log(`    Title:    ${taskTitle}`);
+    console.log(`    Branch:   ${branchName}`);
+    console.log(`    Error:    ${taskError}`);
+    console.log(`    Attempts: ${cols[5]}`);
+    console.log(`    Status:   ${cols[6]}`);
+
+    // --- Step 2: Reset status to pending and attempts to 0 ---
+    failedLines[matchIdx] = `| ${taskDate} | ${taskTitle} | ${branchName} | ${taskError} | 0 | pending |`;
+    atomicWrite(failedPath, failedLines.join("\n"));
+    console.log(`\n  Reset failed-tasks.md entry: attempts → 0, status → pending`);
+
+    // --- Step 3: Find and uncheck corresponding backlog entry ---
+    const backlogContent = readFileSync(backlogPath, "utf-8");
+    const backlogLines = backlogContent.split("\n");
+    let backlogUpdated = false;
+
+    for (let i = 0; i < backlogLines.length; i++) {
+      if (backlogLines[i].startsWith("- [x] ") && backlogLines[i].toLowerCase().includes(searchTerm)) {
+        backlogLines[i] = backlogLines[i].replace(/^- \[x\] /, "- [ ] ");
+        backlogUpdated = true;
+        console.log(`  Reset backlog.md entry: [x] → [ ]`);
+        break;
+      }
+    }
+
+    if (backlogUpdated) {
+      atomicWrite(backlogPath, backlogLines.join("\n"));
+    } else {
+      console.log(`  Warning: No matching [x] entry found in backlog.md (skipped)`);
+    }
+  } finally {
+    releaseBacklogLock(lockPath);
   }
 
   // --- Step 4: Optionally delete the failed branch ---
