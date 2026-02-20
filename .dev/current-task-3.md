@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Migrate sync-runner.sh, feature-validator.sh, and ui-tester.sh to mkdir-based atomic PID locks — three scripts still use legacy file-based PID locks with a TOCTOU race window. (1) `scripts/sync-runner.sh` lines 19-25: `if [ -f "$LOCKFILE" ] && kill -0 ... echo $$ > "$LOCKFILE"`. (2) `scripts/feature-validator.sh` lines 19-25: identical pattern. (3) `scripts/ui-tester.sh` lines 18-24: identical pattern. All other main scripts (`watchdog.sh`, `dev-worker.sh`, `task-fixer.sh`, `project-driver.sh`) were already migrated to mkdir-based atomic locks. Fix: in each of the 3 files, replace the `if [ -f ] ... echo $$ >` block with `mkdir "$LOCKFILE" 2>/dev/null || { ... check stale ... exit 0; }; echo $$ > "$LOCKFILE/pid"`. Update each cleanup trap from `rm -f "$LOCKFILE"` to `rm -rf "$LOCKFILE"`. Follow the exact pattern in `scripts/health-check.sh` lines 17-32 (which already uses mkdir). Run `bash -n scripts/sync-runner.sh scripts/feature-validator.sh scripts/ui-tester.sh` and `pnpm typecheck`. Criterion #3 (no race conditions — consistent locking across all scripts)
+## [INFRA] Add `permissions: contents: read` to CI workflow and npm metadata to published packages — (1) In `.github/workflows/ci.yml`, add top-level `permissions: contents: read` to enforce least-privilege access for the GITHUB_TOKEN. Both publish workflows already have explicit permissions — CI should too. (2) In `packages/cli/package.json`, add: `"description": "CLI for Skynet — autonomous AI development pipeline"`, `"repository": { "type": "git", "url": "https://github.com/AjionCorp/skynet" }`, `"license": "MIT"`, `"engines": { "node": ">=20" }`, `"keywords": ["skynet", "ai", "pipeline", "claude", "autonomous"]`. (3) In `packages/dashboard/package.json`, add the same fields with `"description": "Embeddable dashboard components and API handlers for Skynet pipeline monitoring"`. (4) Fix `packages/cli/src/commands/init.ts` line 177 which ends with `;;` (double semicolons — TypeScript treats the second as an empty statement, but it's a typo). Run `pnpm typecheck`. Criterion #1 (professional npm packages) and #2 (CI security best practice)
 **Status:** completed
-**Started:** 2026-02-20 02:48
+**Started:** 2026-02-20 02:49
 **Completed:** 2026-02-20
-**Branch:** dev/-echo---block-with-mkdir-lockfile-2devnu
+**Branch:** dev/add-permissions-contents-read-to-ci-work
 **Worker:** 3
 
 ### Changes
