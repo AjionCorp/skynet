@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add project-driver regression to suppress generation for stale-active completed roots — in `scripts/tests/project-driver.sh`, verify unchecked generation skips roots present as active `blocked|pending` in `.dev/failed-tasks.md` when that normalized root is already completed, until watchdog supersedes the stale rows. Mission: Criterion #2 quality gates and Criterion #3 convergent planning.
+## [DATA] Refresh `.dev/blockers.md` Active from post-sweep canonical failed roots — rebuild Active entries from current `.dev/failed-tasks.md` so exactly one bullet remains per true open normalized root and stale duplicate bullets are removed while preserving Celebration/Resolved sections byte-for-byte. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 17:47
+**Started:** 2026-02-20 17:49
 **Completed:** 2026-02-20
-**Branch:** dev/add-project-driver-regression-to-suppres
+**Branch:** dev/refresh-devblockersmd-active-from-post-s
 **Worker:** 4
 
 ### Changes
