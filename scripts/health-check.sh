@@ -62,7 +62,7 @@ typecheck_ok=false
 while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
   attempt=$((attempt + 1))
 
-  if $SKYNET_TYPECHECK_CMD >> "$LOG" 2>&1; then
+  if eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
     log "Typecheck passed (attempt $attempt)."
     typecheck_ok=true
     break
@@ -71,7 +71,7 @@ while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
 
     if [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; then
       log "Asking Claude Code to fix type errors..."
-      errors=$($SKYNET_TYPECHECK_CMD 2>&1 | tail -50)
+      errors=$(eval "$SKYNET_TYPECHECK_CMD" 2>&1 | tail -50)
       PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.
 
 The TypeScript typecheck is failing. Here are the errors:
@@ -99,7 +99,7 @@ fi
 
 # --- Lint (informational, don't block on it) ---
 log "Running lint..."
-if $SKYNET_LINT_CMD >> "$LOG" 2>&1; then
+if eval "$SKYNET_LINT_CMD" >> "$LOG" 2>&1; then
   log "Lint passed."
 else
   log "Lint has warnings/errors (non-blocking)."
