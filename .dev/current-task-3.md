@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `logs.test.ts`, `start.test.ts`, `stop.test.ts`, and `version.test.ts` CLI unit tests — create 4 test files in `packages/cli/src/commands/__tests__/`. For `logs.test.ts`: mock `fs.readdirSync` and `fs.readFileSync` for log file listing, test `--tail N` reads last N lines, test `--follow` sets up `fs.watch`, test missing log directory returns helpful message, test `--id` flag selects correct worker log. For `start.test.ts`: mock `child_process.spawn`, test launches watchdog.sh, test detects already-running via PID lock file. For `stop.test.ts`: mock `fs.readFileSync` for PID files, test sends SIGTERM to workers, test handles missing PID files gracefully. For `version.test.ts`: mock package.json read, test outputs version string, mock `execSync` for npm update check, test outdated version suggests upgrade command. Follow existing CLI test patterns in `init.test.ts`. Criterion #2
+## [FEAT] Add `skynet import` CLI command for restoring pipeline state from snapshot — create `packages/cli/src/commands/import.ts`. Reads a JSON snapshot file (produced by `skynet export`), validates it has expected keys (backlog.md, completed.md, failed-tasks.md, blockers.md, mission.md, skynet.config.sh), then writes each key's string value back to the corresponding `.dev/` file. Add `--dry-run` flag that shows which files would be overwritten and their size changes without writing. Add `--merge` flag that appends rather than overwrites for .md files. Prompt for confirmation before overwriting (unless `--force` flag). Register in `packages/cli/src/index.ts`. Criterion #1 (complete state management lifecycle — export + import)
 **Status:** completed
-**Started:** 2026-02-20 00:33
+**Started:** 2026-02-20 00:36
 **Completed:** 2026-02-20
-**Branch:** dev/add-logstestts-starttestts-stoptestts-an
+**Branch:** dev/add-skynet-import-cli-command-for-restor
 **Worker:** 3
 
 ### Changes
