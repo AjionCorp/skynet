@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Refresh `.dev/blockers.md` Active from post-sweep canonical failed roots — rebuild Active entries from current `.dev/failed-tasks.md` so exactly one bullet remains per true open normalized root and stale duplicate bullets are removed while preserving Celebration/Resolved sections byte-for-byte. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [INFRA] Centralize failed-task markdown field codec into one shared shell path — in `scripts/_config.sh`, expose canonical encode/decode helpers for failed-task table fields (pipes, backticks, escaped newlines) and migrate `scripts/task-fixer.sh` plus `scripts/watchdog.sh` to exclusively use those helpers for all reads/writes. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 17:54
+**Started:** 2026-02-20 17:59
 **Completed:** 2026-02-20
-**Branch:** dev/refresh-devblockersmd-active-from-post-s
+**Branch:** dev/centralize-failed-task-markdown-field-co
 **Worker:** 1
 
 ### Changes
