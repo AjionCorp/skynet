@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add duplicate-active-root pressure alerting in watchdog with throttle guard — when `duplicate_active_rows > 0` across consecutive cycles, emit a single throttled high-severity event/notification with current root counts and cooldown handling. Mission: Criterion #2 self-correction closure and Criterion #4 operational awareness.
+## [DATA] Run one canonical reconcile-only convergence sweep and refresh state files — execute watchdog reconcile-only mode to collapse stale active duplicates, then rebuild `.dev/blockers.md` Active from canonical failed roots so parity converges; commit only state-file updates. Mission: Criterion #2 self-correction closure and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 16:57
+**Started:** 2026-02-20 16:58
 **Completed:** 2026-02-20
-**Branch:** dev/add-duplicate-active-root-pressure-alert
+**Branch:** dev/run-one-canonical-reconcile-only-converg
 **Worker:** 4
 
 ### Changes
