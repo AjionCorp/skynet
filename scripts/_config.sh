@@ -228,7 +228,7 @@ validate_backlog() {
   # (3) blockedBy references must point to existing tasks in backlog or completed
   while IFS= read -r line; do
     local deps
-    deps=$(echo "$line" | sed -n 's/.*| *blockedBy: *\(.*\)$/\1/Ip')
+    deps=$(echo "$line" | sed -n 's/.*| *[bB]locked[bB]y: *\(.*\)$/\1/p')
     [ -z "$deps" ] && continue
     local _old_ifs="$IFS"
     IFS=','

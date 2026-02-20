@@ -122,7 +122,7 @@ is_task_blocked() {
   local task_line="$1"
   # Extract blockedBy metadata (case-insensitive match after " | blockedBy: ")
   local blocked_by
-  blocked_by=$(echo "$task_line" | sed -n 's/.*| *blockedBy: *\(.*\)$/\1/Ip')
+  blocked_by=$(echo "$task_line" | sed -n 's/.*| *[bB]locked[bB]y: *\(.*\)$/\1/p')
   if [ -z "$blocked_by" ]; then
     return 1  # no dependencies — not blocked
   fi
