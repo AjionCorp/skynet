@@ -207,9 +207,10 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Heartbeat staleness + task age for health score ---
+  const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
   const staleThresholdMs = 45 * 60 * 1000;
   const twentyFourHoursMs = 24 * 60 * 60 * 1000;
-  for (let wid = 1; wid <= 2; wid++) {
+  for (let wid = 1; wid <= maxWorkers; wid++) {
     const hbPath = join(devDir, `worker-${wid}.heartbeat`);
     if (existsSync(hbPath)) {
       const epoch = Number(readFile(hbPath).trim());
@@ -231,8 +232,9 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Workers ---
+  const workerNames = Array.from({ length: maxWorkers }, (_, i) => `dev-worker-${i + 1}`);
   const workers = [
-    "dev-worker-1", "dev-worker-2", "task-fixer", "project-driver",
+    ...workerNames, "task-fixer", "project-driver",
     "sync-runner", "ui-tester", "feature-validator", "health-check",
     "auth-refresh", "watchdog",
   ];
