@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Refresh blockers Active from canonical failed roots after stale-active supersede — in `scripts/watchdog.sh` blockers sync path, rebuild `.dev/blockers.md` Active from normalized active failed roots only after the convergence pass and skip file rewrite when active-root hash is unchanged. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 18:14
+**Started:** 2026-02-20 18:15
 **Completed:** 2026-02-20
-**Branch:** dev/refresh-blockers-active-from-canonical-f
+**Branch:** dev/add-watchdog-regression-for-active-root-
 **Worker:** 3
 
 ### Changes
