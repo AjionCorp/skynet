@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add config auto-migration to detect and add new variables on upgrade — in `packages/cli/src/commands/config.ts`, add a `migrate` subcommand: `skynet config migrate`. Reads the installed template (`templates/skynet.config.sh` relative to CLI package) and the user's `.dev/skynet.config.sh`. For each `SKYNET_*` variable defined in the template that is absent from the user's config, append it with its default value and preceding comment (copy the template's comment block). Print "Added N new config variables: VAR1, VAR2, ...". If all variables exist, print "Config is up to date". Also wire this into `packages/cli/src/commands/upgrade.ts` — after a successful npm upgrade, automatically run config migration and report results. This solves the "silent missing config" problem when users upgrade and new config variables (like `SKYNET_HEALTH_ALERT_THRESHOLD`, `SKYNET_AGENT_TIMEOUT_MINUTES`) were added in the newer version. Criterion #1 (smooth upgrade path)
+## [DOCS] Update README.md and packages/cli/README.md CLI reference tables with missing commands — the main `README.md` CLI Reference table (lines 36-56) lists 19 commands but is missing `export` ("Export pipeline state as a JSON snapshot"), `import` ("Restore pipeline state from an exported snapshot"), and `completions` ("Generate bash or zsh shell completions"). Add rows for all 3 after the `config` row. Also fix `SKYNET_MAX_WORKERS` default from `2` to `4` in the Configuration table (line 91) — this was fixed in `templates/skynet.config.sh` but the README was never updated. In `packages/cli/README.md`, add `import` ("Restore pipeline state from snapshot") and `completions` ("Generate shell completions for bash/zsh") to the Commands table after the `config` row. Update the total command count in any prose that mentions a specific number. Criterion #1 (accurate documentation)
 **Status:** completed
-**Started:** 2026-02-20 01:02
+**Started:** 2026-02-20 01:10
 **Completed:** 2026-02-20
-**Branch:** dev/add-config-auto-migration-to-detect-and-
+**Branch:** dev/update-readmemd-and-packagesclireadmemd-
 **Worker:** 3
 
 ### Changes
