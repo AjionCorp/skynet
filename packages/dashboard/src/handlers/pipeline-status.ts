@@ -547,7 +547,11 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       try {
         const handlersDir = __dirname;
         handlerCount = readdir(handlersDir).filter(
-          (f: string) => f.endsWith(".ts") && !f.includes(".test.") && f !== "index.ts"
+          (f: string) =>
+            (f.endsWith(".ts") || f.endsWith(".js")) &&
+            !f.includes(".test.") &&
+            f !== "index.ts" &&
+            f !== "index.js"
         ).length;
       } catch {
         /* ignore */
