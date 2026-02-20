@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce canonical backlog ordering in project-driver post-generation sanitizer — in `scripts/project-driver.sh`, normalize output so all `[>]` rows stay first, followed by `[ ]` rows, with all `[x]` rows strictly in bottom history; preserve claimed lines byte-for-byte. Mission: Criterion #2 planning reliability and Criterion #3 convergent state.
+## [INFRA] Auto-supersede stale `blocked` failed-task rows already closed by canonical completed roots — in `scripts/watchdog.sh`, extend `_auto_supersede_completed_tasks()` to evaluate `status=blocked` alongside `pending`, preserve active `fixing-*` rows, and emit `task_superseded` per transitioned row. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 16:19
+**Started:** 2026-02-20 16:24
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-canonical-backlog-ordering-in-pr
+**Branch:** dev/auto-supersede-stale-blocked-failed-task
 **Worker:** 1
 
 ### Changes
