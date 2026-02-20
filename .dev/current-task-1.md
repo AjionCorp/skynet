@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add publish workflow for `@ajioncorp/skynet` dashboard package — currently only `.github/workflows/publish-cli.yml` exists for the CLI package. The dashboard package `@ajioncorp/skynet` has `publishConfig` in `packages/dashboard/package.json` with dist paths but no GitHub Actions publish workflow. Create `.github/workflows/publish-dashboard.yml` triggered on `dashboard-v*` tags. Steps: checkout, setup Node 20, setup pnpm 10, `pnpm install`, `pnpm typecheck`, `pnpm --filter @ajioncorp/skynet test`, `pnpm --filter @ajioncorp/skynet build`, verify `packages/dashboard/dist/index.js` exists, `npm publish --provenance --access public` from `packages/dashboard/`. Follow the same pattern as `publish-cli.yml`. Run `pnpm typecheck`. Criterion #1 (dashboard package actually publishable to npm) and Criterion #2 (CI gates on every publish)
+## [FIX] Fix CI `lint-sh` job missing pnpm setup causing every shell lint run to fail — in `.github/workflows/ci.yml` lines 36-43, the `lint-sh` job installs shellcheck but does NOT install pnpm via `pnpm/action-setup@v4` or set up Node. The final step `pnpm lint:sh` fails with "pnpm: command not found" on every CI run. Every other job in the workflow correctly includes the pnpm/action-setup and actions/setup-node steps. Fix: add `- uses: pnpm/action-setup@v4` and `- uses: actions/setup-node@v4` with `node-version: 20` and `cache: pnpm` steps, plus `- run: pnpm install --frozen-lockfile` before the `pnpm lint:sh` step, matching the pattern in the `typecheck` job (lines 14-20). Alternatively, since `lint:sh` just runs shellcheck directly, replace `pnpm lint:sh` with the raw shellcheck command: `shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh`. Run `pnpm typecheck`. Criterion #2 (CI must actually work — broken lint job means shell script quality is ungated)
 **Status:** completed
-**Started:** 2026-02-20 02:32
+**Started:** 2026-02-20 02:47
 **Completed:** 2026-02-20
-**Branch:** dev/add-publish-workflow-for-ajioncorpskynet
+**Branch:** dev/fix-ci-lint-sh-job-missing-pnpm-setup-ca
 **Worker:** 1
 
 ### Changes
