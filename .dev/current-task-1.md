@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet watch` command for real-time terminal monitoring — create `packages/cli/src/commands/watch.ts`. Uses a 3-second `setInterval` loop that clears screen and renders a compact dashboard: (1) Header with project name + health score (colored via ANSI), (2) Workers table with ID, status (idle/active), current task (truncated 60 chars), heartbeat age, (3) Task summary line (pending/claimed/completed/failed), (4) Self-correction rate, (5) Last 5 events from `.dev/events.log` with timestamps. Use ANSI codes (`\x1b[32m` green, `\x1b[33m` yellow, `\x1b[31m` red, `\x1b[0m` reset). Read state from `.dev/` files (same pattern as `status.ts`). Exit cleanly on SIGINT. Register in `packages/cli/src/index.ts`. Criterion #1 (monitor pipeline without browser)
+## [FEAT] Wire emit_event() calls into dev-worker.sh, task-fixer.sh, and watchdog.sh — THIRD attempt (delete stale branch `dev/wire-emitevent-calls-into-dev-workersh-t` first via `git branch -D`). The `emit_event` function is in `scripts/_events.sh` (already sourced via `_config.sh`), format: `emit_event "event_name" "description"`. Add exactly these 9 one-liner calls: **dev-worker.sh**: (1) After line 390 (`tg "🔨 *$SKYNET_PROJECT_NAME_UPPER..."`): `emit_event "task_claimed" "Worker $WORKER_ID: $task_title"`. (2) At line 463 (`tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*..."`): add `emit_event "task_failed" "Worker $WORKER_ID: $task_title"`. (3) At line 505 (gate failed `tg "❌..."`): add `emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"`. (4) At line 590 (`tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*..."`): add `emit_event "task_completed" "Worker $WORKER_ID: $task_title"`. **task-fixer.sh**: (5) Before the fix agent runs, add `emit_event "fix_started" "Fixer $FIXER_ID: $TASK_TITLE"`. (6) After successful fix merge, add `emit_event "fix_succeeded" "Fixer $FIXER_ID: $TASK_TITLE"`. (7) On fix failure, add `emit_event "fix_failed" "Fixer $FIXER_ID: $TASK_TITLE"`. **watchdog.sh**: (8) When killing a stale worker, add `emit_event "worker_killed" "Killed stale worker $wid"`. (9) When cleaning a branch, add `emit_event "branch_cleaned" "Cleaned $branch"`. No new files, no TypeScript changes. Just add these one-liner bash calls. Run `pnpm typecheck` to verify nothing broke. Criterion #4
 **Status:** completed
-**Started:** 2026-02-19 23:23
-**Completed:** 2026-02-19
-**Branch:** dev/add-skynet-watch-command-for-real-time-t
+**Started:** 2026-02-20 00:19
+**Completed:** 2026-02-20
+**Branch:** dev/wire-emitevent-calls-into-dev-workersh-t
 **Worker:** 1
 
 ### Changes
