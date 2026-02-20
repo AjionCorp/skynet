@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Add README.md for `@ajioncorp/skynet` dashboard package — the npm package for embedding Skynet's dashboard into external Next.js apps has no README (`packages/dashboard/README.md` does not exist). The npmjs.com page would be blank. Create `packages/dashboard/README.md` with sections: (1) One-line description: "Embeddable dashboard components and API handlers for Skynet pipeline monitoring", (2) Installation: `npm install @ajioncorp/skynet` with peer deps (next >=14, react >=18), (3) Quick Start showing `SkynetProvider` setup and component import pattern, (4) Handler factories table mapping each `createXxxHandler(config)` to its API route, (5) Available components list (PipelineDashboard, TasksDashboard, MonitoringDashboard, etc.), (6) TypeScript types reference linking to `types.ts`. Add `"README.md"` to the `files` array in `packages/dashboard/package.json` if a `files` field exists. Keep under 100 lines. Run `pnpm typecheck`. Criterion #1 (usable npm package surface for external consumers)
+## [FIX] Read CLI version from package.json instead of hardcoding "0.1.0" — in `packages/cli/src/index.ts` line 34, `.version("0.1.0")` is hardcoded. When `package.json` version is bumped for a release, `skynet --version` (Commander's built-in flag) will show the stale "0.1.0" instead of the actual version. The separate `version.ts` command reads from package.json correctly, but the Commander `.version()` registration does not. Fix: at the top of `index.ts`, import `createRequire` from `"module"`, then `const require = createRequire(import.meta.url); const pkg = require("../package.json");` and change `.version("0.1.0")` to `.version(pkg.version)`. This is the same pattern used by the `version.ts` command. Run `pnpm typecheck`. Criterion #1 (accurate CLI — version must match published package)
 **Status:** completed
-**Started:** 2026-02-20 02:33
+**Started:** 2026-02-20 02:47
 **Completed:** 2026-02-20
-**Branch:** dev/add-readmemd-for-ajioncorpskynet-dashboa
+**Branch:** dev/read-cli-version-from-packagejson-instea
 **Worker:** 4
 
 ### Changes
