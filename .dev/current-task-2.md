@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for duplicate-root pressure alert throttling — verify repeated duplicate-active conditions emit at most one high-severity alert per cooldown window and clear correctly after convergence. Mission: Criterion #2 quality gates and Criterion #3 deterministic monitoring.
+## [INFRA] Run one canonical stale-active root supersede sweep for current blocked/pending drift — in `scripts/watchdog.sh`, reconcile `.dev/failed-tasks.md` so stale `status=blocked|pending` rows that map to `.dev/completed.md` are superseded in one pass (without touching `fixing-*` rows), and emit deterministic before/after root counters. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 16:57
+**Started:** 2026-02-20 17:10
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-duplicate-ro
+**Branch:** dev/run-one-canonical-stale-active-root-supe
 **Worker:** 2
 
 ### Changes
