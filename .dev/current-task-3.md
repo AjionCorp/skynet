@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Centralize failed-root normalization helpers in shared shell config — move duplicated root/title normalization logic from `scripts/project-driver.sh` and `scripts/watchdog.sh` into `scripts/_config.sh` helpers, then migrate callers to one canonical implementation to prevent drift in dedupe/supersede semantics. Mission: Criterion #3 convergent state and Criterion #2 retry-loop reduction.
+## [DATA] Refresh blockers Active from post-reconcile canonical roots only — in `scripts/watchdog.sh` blockers sync flow, rebuild `.dev/blockers.md` Active strictly from canonical active roots after convergence and skip file rewrite when active-root hash is unchanged. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:33
+**Started:** 2026-02-20 18:43
 **Completed:** 2026-02-20
-**Branch:** dev/centralize-failed-root-normalization-hel
+**Branch:** dev/refresh-blockers-active-from-post-reconc
 **Worker:** 3
 
 ### Changes
