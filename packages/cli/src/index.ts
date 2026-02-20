@@ -23,6 +23,7 @@ import { exportCommand } from "./commands/export.js";
 import { importCommand } from "./commands/import.js";
 import { completionsCommand } from "./commands/completions.js";
 import { testNotifyCommand } from "./commands/test-notify.js";
+import { changelogCommand } from "./commands/changelog.js";
 
 const program = new Command();
 
@@ -184,6 +185,14 @@ program
   .description("Generate shell completions")
   .argument("<shell>", "Shell type: bash or zsh")
   .action(completionsCommand);
+
+program
+  .command("changelog")
+  .description("Generate changelog from completed tasks")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--output <path>", "Write changelog to a file instead of stdout")
+  .option("--since <date>", "Only include entries after this date (YYYY-MM-DD)")
+  .action(changelogCommand);
 
 program
   .command("test-notify")
