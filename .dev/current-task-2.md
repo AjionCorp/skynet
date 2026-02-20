@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add standalone `build` verification job to CI workflow — in `.github/workflows/ci.yml`, add a `build` job that runs `pnpm build` to compile all TypeScript packages (admin, dashboard, CLI). Currently `pnpm build` is only run implicitly as part of the `e2e-admin` job, meaning build failures can be masked by earlier job failures. The new job should run after `install` (same pnpm store cache pattern as other jobs). Steps: checkout, setup Node 20, setup pnpm, `pnpm install`, `pnpm build`. This catches TypeScript compilation errors that `pnpm typecheck` might miss (since typecheck doesn't emit files). Criterion #2 (catching build errors before merge)
+## [INFRA] Add health score alert notification to watchdog — in `scripts/watchdog.sh`, after the crash recovery and stale detection phases, compute a simple health score using the same logic as the pipeline-status handler: start at 100, subtract 5 per pending failed task (grep `status=pending` in failed-tasks.md), subtract 10 per active blocker (count non-empty lines under `## Active` in blockers.md), subtract 2 per stale heartbeat. If score drops below `${SKYNET_HEALTH_ALERT_THRESHOLD:-50}`, call `emit_event "health_alert" "Health score: $score"` and `notify_all "Pipeline health alert: score $score/100"`. Use a sentinel file `.dev/health-alert-sent` to prevent repeated alerts — only alert once per drop, delete sentinel when score recovers above threshold. Add `SKYNET_HEALTH_ALERT_THRESHOLD="50"` to `templates/skynet.config.sh` with comment. Criterion #3 (proactive failure detection)
 **Status:** completed
-**Started:** 2026-02-20 00:32
+**Started:** 2026-02-20 00:35
 **Completed:** 2026-02-20
-**Branch:** dev/add-standalone-build-verification-job-to
+**Branch:** dev/add-health-score-alert-notification-to-w
 **Worker:** 2
 
 ### Changes
