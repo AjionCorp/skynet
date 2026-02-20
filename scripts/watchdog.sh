@@ -8,6 +8,9 @@ set -uo pipefail  # no -e: loop must survive individual cycle failures
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
+# _config.sh re-enables set -e; disable it again so the loop survives failures
+set +e
+
 LOG="$SCRIPTS_DIR/watchdog.log"
 WATCHDOG_LOCK="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
