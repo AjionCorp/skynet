@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet upgrade` CLI command for self-update — create `packages/cli/src/commands/upgrade.ts`. Check current installed version vs npm registry latest via `npm view @ajioncorp/skynet-cli version`. If outdated, run `npm install -g @ajioncorp/skynet-cli@latest` via `child_process.execSync`. If up-to-date, print "Already on latest version (X.Y.Z)". Add `--check` flag for dry-run that only reports whether an update is available without installing. Register in `packages/cli/src/index.ts`. Criterion #1 (developer experience — smooth upgrade path)
+## [FEAT] Add JSON output mode to `skynet status` for programmatic access — FRESH implementation (previous branch `dev/add-json-output-mode-to-skynet-status-fo` has merge conflict — delete it). In `packages/cli/src/commands/status.ts`, add `--json` boolean option via `.option('--json', 'Output as JSON')`. When set, collect all already-computed data into `{ project, paused, tasks: { pending, claimed, completed, failed }, workers: [...], healthScore, selfCorrectionRate, missionProgress: [...], lastActivity }` and output via `console.log(JSON.stringify(data, null, 2))` then `process.exit(0)`. Also add `--quiet` flag that outputs only the health score number. All data variables already exist — just collect them before the formatted output section. Criterion #1 (developer experience) and #5 (mission progress measurable from any context)
 **Status:** completed
-**Started:** 2026-02-19 22:04
+**Started:** 2026-02-19 23:16
 **Completed:** 2026-02-19
-**Branch:** dev/add-skynet-upgrade-cli-command-for-self-
+**Branch:** dev/add-json-output-mode-to-skynet-status-fo
 **Worker:** 2
 
 ### Changes
