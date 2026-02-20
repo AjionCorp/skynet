@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet metrics` CLI command for pipeline performance analytics — FRESH implementation (delete stale branch `dev/counts-and-percentages-read-devfailed-ta` first). Create `packages/cli/src/commands/metrics.ts`. Read `.dev/completed.md` (pipe-delimited markdown table with `| Date | Task | Branch | Duration | Notes |`): count total completed, parse Duration column ("Nm" or "Nh Mm" format) to compute average, compute tasks-per-hour, group by tag ([FEAT]/[FIX]/[TEST]/[INFRA]/[DOCS]). Read `.dev/failed-tasks.md`: count by status (fixed/blocked/superseded/pending), compute fix success rate. Output as a formatted console table. Register as `program.command('metrics').description('Show pipeline performance analytics').action(runMetrics)` in `packages/cli/src/index.ts`. Criterion #5
+## [TEST] Add `pause.test.ts`, `resume.test.ts`, `reset-task.test.ts`, and `setup-agents.test.ts` CLI unit tests — create 4 test files in `packages/cli/src/commands/__tests__/`. For `pause.test.ts`: test creates `.dev/pipeline-paused` sentinel file with correct JSON shape `{ pausedAt, pausedBy }`, test no-op when already paused with appropriate message. For `resume.test.ts`: test removes sentinel file, test no-op when not paused. For `reset-task.test.ts`: test fuzzy-matches task title substring in failed-tasks.md, test resets status to pending and attempts to 0, test updates backlog.md entry from `[x]` to `[ ]`, test `--force` flag deletes stale branch. For `setup-agents.test.ts`: test generates launchd plist files on darwin (mock `process.platform`), test generates crontab entries on linux, test `--uninstall` removes agents, test `--dry-run` shows what would be installed. Mock `fs`, `child_process`, and `process.platform`. Criterion #2
 **Status:** completed
-**Started:** 2026-02-20 00:20
+**Started:** 2026-02-20 00:33
 **Completed:** 2026-02-20
-**Branch:** dev/add-skynet-metrics-cli-command-for-pipel
+**Branch:** dev/add-pausetestts-resumetestts-reset-taskt
 **Worker:** 4
 
 ### Changes
