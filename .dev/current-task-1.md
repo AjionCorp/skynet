@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock Codex large-prompt reliability root with stdin-first invariants — in `scripts/agents/codex.sh` and shell tests, enforce prompt-via-stdin path, preserve child exit codes, and keep >300KB prompt regression coverage passing. Mission: Criterion #6 multi-agent compatibility and Criterion #2 self-correction closure.
+## [TEST] Re-open CLI operational E2E smoke coverage as one canonical root — in `tests/e2e/cli-commands.test.sh`, add deterministic checks for `skynet stop`, `pause/resume`, `completions bash`, and `validate`, ensuring no worker-count hardcoding regressions and `pnpm typecheck` stays green. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
 **Status:** completed
-**Started:** 2026-02-20 17:27
+**Started:** 2026-02-20 17:30
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-codex-large-prompt-reliability-r
+**Branch:** dev/re-open-cli-operational-e2e-smoke-covera
 **Worker:** 1
 
 ### Changes
