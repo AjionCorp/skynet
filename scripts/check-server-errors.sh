@@ -70,7 +70,8 @@ if echo "$recent" | grep -qi "rate.limit\|429\|too many requests\|quota.*exceede
 fi
 
 # Unhandled server errors (500s)
-error_500=$(echo "$recent" | grep -c "500\|Internal Server Error\|INTERNAL_SERVER_ERROR" 2>/dev/null || echo "0")
+error_500=$(echo "$recent" | grep -c "500\|Internal Server Error\|INTERNAL_SERVER_ERROR" 2>/dev/null || true)
+error_500=${error_500:-0}
 if [ "$error_500" -gt 2 ]; then
   errors_found=1
   error_messages="$error_messages\n- Multiple 500 errors detected ($error_500 occurrences in recent logs)"

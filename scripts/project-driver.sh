@@ -53,13 +53,18 @@ if [ -f "$BLOCKERS" ]; then blockers_content=$(cat "$BLOCKERS"); else blockers_c
 if [ -f "$SYNC_HEALTH" ]; then sync_health_content=$(cat "$SYNC_HEALTH"); else sync_health_content="(file not found)"; fi
 
 # Count task metrics
-remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
-claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+remaining=${remaining:-0}
+claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || true)
+claimed=${claimed:-0}
 # shellcheck disable=SC2034
-done_count=$(grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || echo "0")
-completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
+done_count=$(grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || true)
+done_count=${done_count:-0}
+completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+completed_count=${completed_count:-0}
 completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
-failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || echo "0")
+failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
+failed_count=${failed_count:-0}
 
 # Get codebase structure summary (guard directories that may not exist yet)
 if [ -d "$PROJECT_DIR" ]; then
@@ -162,7 +167,8 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 - If the mission is achieved (all success criteria met), write that to $BLOCKERS as a celebration, not a blocker"
 
 if run_agent "$PROMPT" "$LOG"; then
-  new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  new_remaining=${new_remaining:-0}
   log "Project driver completed successfully."
   tg "📋 *$SKYNET_PROJECT_NAME_UPPER BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
 else
@@ -178,7 +184,8 @@ MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete"
 
 if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
   # Re-read pending count (may have changed after run_agent)
-  mc_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  mc_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  mc_pending=${mc_pending:-0}
 
   if [ "$mc_pending" -eq 0 ]; then
     log "Zero pending tasks — evaluating mission success criteria."
@@ -186,7 +193,8 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     mc_all_met=true
 
     # Criterion 1: Completed tasks > 50
-    mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || echo "0")
+    mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+    mc_completed=${mc_completed:-0}
     mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
     if [ "$mc_completed" -gt 50 ]; then
       log "  Criterion 1 (completed tasks >50): MET ($mc_completed)"
@@ -196,9 +204,12 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     fi
 
     # Criterion 2: Self-correction rate > 95%
-    mc_fixed=$(grep -c '| fixed |' "$FAILED" 2>/dev/null || echo "0")
-    mc_blocked=$(grep -c '| blocked |' "$FAILED" 2>/dev/null || echo "0")
-    mc_superseded=$(grep -c '| superseded |' "$FAILED" 2>/dev/null || echo "0")
+    mc_fixed=$(grep -c '| fixed |' "$FAILED" 2>/dev/null || true)
+    mc_fixed=${mc_fixed:-0}
+    mc_blocked=$(grep -c '| blocked |' "$FAILED" 2>/dev/null || true)
+    mc_blocked=${mc_blocked:-0}
+    mc_superseded=$(grep -c '| superseded |' "$FAILED" 2>/dev/null || true)
+    mc_superseded=${mc_superseded:-0}
     mc_total_attempted=$((mc_fixed + mc_blocked + mc_superseded))
     if [ "$mc_total_attempted" -gt 0 ]; then
       mc_fix_rate=$((mc_fixed * 100 / mc_total_attempted))
@@ -217,8 +228,10 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     mc_zombie_refs=0
     mc_deadlock_refs=0
     if [ -f "$mc_watchdog_log" ]; then
-      mc_zombie_refs=$(grep -ci 'zombie' "$mc_watchdog_log" 2>/dev/null || echo "0")
-      mc_deadlock_refs=$(grep -ci 'deadlock' "$mc_watchdog_log" 2>/dev/null || echo "0")
+      mc_zombie_refs=$(grep -ci 'zombie' "$mc_watchdog_log" 2>/dev/null || true)
+      mc_zombie_refs=${mc_zombie_refs:-0}
+      mc_deadlock_refs=$(grep -ci 'deadlock' "$mc_watchdog_log" 2>/dev/null || true)
+      mc_deadlock_refs=${mc_deadlock_refs:-0}
     fi
     mc_issue_refs=$((mc_zombie_refs + mc_deadlock_refs))
     if [ "$mc_issue_refs" -eq 0 ]; then

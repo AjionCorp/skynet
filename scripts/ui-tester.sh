@@ -68,7 +68,8 @@ log "Some tests failed. Asking AI agent to analyze and create tasks."
 tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER TESTS*: Some Playwright tests failed — analyzing"
 
 # Count existing unchecked tasks to avoid overfilling backlog
-remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+remaining=${remaining:-0}
 if [ "$remaining" -ge 15 ]; then
   log "Backlog already has $remaining pending tasks. Skipping task creation, just logging failures."
   exit 0

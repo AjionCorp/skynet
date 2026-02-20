@@ -315,7 +315,8 @@ if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
   log "One-shot mode: task = ${SKYNET_ONE_SHOT_TASK:-}"
   tg "🚀 *$SKYNET_PROJECT_NAME_UPPER* one-shot run: ${SKYNET_ONE_SHOT_TASK:-}"
 else
-  remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  remaining_count=${remaining_count:-0}
   tg "🚀 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting — $remaining_count tasks in backlog"
 fi
 
@@ -584,7 +585,8 @@ EOF
   fi
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-  remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  remaining=${remaining:-0}
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
 done
 

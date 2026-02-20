@@ -46,8 +46,10 @@ log "Feature tests exited with code $test_exit"
 log "$test_output"
 
 # Count passed/failed
-passed=$(echo "$test_output" | grep -c '✓' || echo "0")
-failed=$(echo "$test_output" | grep -c '✘\|✗\|FAILED\|failed' || echo "0")
+passed=$(echo "$test_output" | grep -c '✓' || true)
+passed=${passed:-0}
+failed=$(echo "$test_output" | grep -c '✘\|✗\|FAILED\|failed' || true)
+failed=${failed:-0}
 total=$((passed + failed))
 
 if [ "$test_exit" -eq 0 ]; then
@@ -68,7 +70,8 @@ log "Feature tests: $passed passed, $failed failed out of $total."
 tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER FEATURES*: $failed/$total tests failed — analyzing"
 
 # Count existing unchecked tasks to avoid overfilling backlog
-remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+remaining=${remaining:-0}
 if [ "$remaining" -ge 15 ]; then
   log "Backlog already has $remaining pending tasks. Skipping task creation, just logging failures."
   exit 0
@@ -115,7 +118,8 @@ $(cat "$BACKLOG")
 
 if run_agent "$PROMPT" "$LOG"; then
   log "Feature validator analysis completed."
-  new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  new_remaining=${new_remaining:-0}
   tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURES*: Analysis done — $new_remaining tasks in backlog"
 else
   exit_code=$?
