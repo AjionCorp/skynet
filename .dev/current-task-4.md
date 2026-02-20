@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix sync-runner.sh bash 3.2 array syntax incompatibility — `scripts/sync-runner.sh` lines 56-57 use `declare -a _sync_names=()` and `declare -a _sync_results=()`, and later iterate with `"${!_sync_names[@]}"` (line ~75) which requires bash 4+ for the `${!}` indirect expansion on indexed arrays. On macOS with bash 3.2 (the default), this silently fails or produces incorrect results. Fix: replace `"${!_sync_names[@]}"` with a counter-based loop: `local _i=0; while [ $_i -lt ${#_sync_names[@]} ]; do ... _i=$((_i + 1)); done`. Also verify no other bash 4+ syntax is used in the file. Run `pnpm typecheck` and `bash -n scripts/sync-runner.sh` with bash 3.2 to verify. Criterion #1 (portability — macOS compatibility is a mission requirement)
+## [FIX] Pass agent prompt via stdin instead of CLI argument to avoid ARG_MAX — in `scripts/agents/claude.sh` line 39, the prompt is passed as a direct CLI argument: `_agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt"`. On macOS, `ARG_MAX` is ~1MB. With large `SKYNET_WORKER_CONTEXT` and `SKYNET_WORKER_CONVENTIONS` config values, the prompt can exceed this limit. Fix: change the invocation to pipe the prompt via stdin: `echo "$prompt" | _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS --print -` or write to a temp file and pass via `cat`. Check the `_agent_exec` function in `scripts/_agent.sh` to ensure stdin piping is compatible. If using a temp file, ensure it's cleaned up in the trap handler. Test with a large prompt string (>500KB) to verify. Run `pnpm typecheck`. Criterion #3 (reliability — prevents silent failures on large projects with extensive conventions)
 **Status:** completed
-**Started:** 2026-02-20 01:45
+**Started:** 2026-02-20 01:51
 **Completed:** 2026-02-20
-**Branch:** dev/fix-sync-runnersh-bash-32-array-syntax-i
+**Branch:** dev/pass-agent-prompt-via-stdin-instead-of-c
 **Worker:** 4
 
 ### Changes
