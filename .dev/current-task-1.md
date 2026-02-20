@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Centralize failed-root active-hash computation in one shell helper and reuse it across snapshot + drift alert paths — extract a canonical helper in `scripts/_config.sh` (or sourced helper) and consume it from `scripts/watchdog.sh` so parity and alert logic cannot diverge. Mission: Criterion #3 deterministic behavior and Criterion #4 telemetry consistency.
+## [FIX] Close blocked config parity root for watchdog/one-shot knobs — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` so `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` defaults/descriptions stay synchronized and verified by tests. Mission: Criterion #1 discoverability and Criterion #3 deterministic config behavior.
 **Status:** completed
-**Started:** 2026-02-20 17:04
+**Started:** 2026-02-20 17:24
 **Completed:** 2026-02-20
-**Branch:** dev/centralize-failed-root-active-hash-compu
+**Branch:** dev/close-blocked-config-parity-root-for-wat
 **Worker:** 1
 
 ### Changes
