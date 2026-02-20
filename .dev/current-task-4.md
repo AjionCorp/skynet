@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Expand E2E CLI test suite with export/import round-trip and doctor --fix verification — in `tests/e2e/cli-commands.test.sh`, add 3 new test cases after the existing ones: (a) **Export/import round-trip**: run `skynet export --output /tmp/skynet-test-export.json`, verify JSON file exists and contains expected keys, then modify backlog.md (add a test line), run `skynet import /tmp/skynet-test-export.json --force`, verify backlog.md was restored to pre-modification state. (b) **Doctor --fix**: create a stale `.dev/worker-99.heartbeat` file with epoch 0, run `skynet doctor` and verify WARN for stale heartbeat, run `skynet doctor --fix` and verify the stale file was deleted, re-run `skynet doctor` and verify PASS. (c) **Config set/get round-trip**: run `skynet config set SKYNET_MAX_WORKERS 6`, then `skynet config get SKYNET_MAX_WORKERS` and verify output is "6", then restore original value. These are the last untested CLI workflows. Criterion #2 (comprehensive E2E coverage)
+## [TEST] Add `completions.test.ts` CLI unit test — the `completions` command is the newest CLI addition and has zero test coverage. Create `packages/cli/src/commands/__tests__/completions.test.ts`. Test: (a) bash output contains `complete -W` with all registered command names (init, setup-agents, start, stop, etc.), (b) bash output contains `_skynet()` function definition and `COMPREPLY`, (c) zsh output starts with `#compdef skynet` and contains `_arguments`, (d) zsh output includes all registered commands, (e) invalid shell argument (e.g., "fish") produces error output or exits with non-zero, (f) installation hint is written to stderr. Mock `process.stdout.write` and `process.stderr.write`. Follow patterns in `init.test.ts` and `config.test.ts`. Criterion #2 (complete CLI test coverage — currently 21/23 commands tested)
 **Status:** completed
-**Started:** 2026-02-20 01:05
+**Started:** 2026-02-20 01:11
 **Completed:** 2026-02-20
-**Branch:** dev/expand-e2e-cli-test-suite-with-exportimp
+**Branch:** dev/add-completionstestts-cli-unit-test--the
 **Worker:** 4
 
 ### Changes
