@@ -333,7 +333,9 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
     log "Stale lock detected (${age_minutes}m old). Moving to failed."
     task_title=$(grep "^##" "$WORKER_TASK_FILE" | head -1 | sed 's/^## //')
     echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
-    remove_from_backlog "- [ ] $task_title"
+    remove_from_backlog "- [>] $task_title"
+    # Fallback: also try [x] in case another code path already marked it done
+    remove_from_backlog "- [x] $task_title"
   fi
 fi
 
