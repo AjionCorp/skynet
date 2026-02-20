@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# auth-check.sh — Shared Claude Code auth resilience for pipeline scripts
+# auth-check.sh — Shared AI agent auth resilience for pipeline scripts
 #
 # Source this from any pipeline script AFTER sourcing _config.sh
 #   source "$SCRIPTS_DIR/auth-check.sh"
 #   check_claude_auth || exit 1
+#   check_codex_auth   # non-fatal — just sets fail flag for fallback awareness
 #
 # What it does:
 # - On first failure: sends Telegram alert, adds blocker to blockers.md
@@ -93,6 +94,67 @@ check_claude_auth() {
     fi
   else
     log "Claude Code not authenticated. (alert throttled, next in $((AUTH_NOTIFY_INTERVAL - elapsed))s)"
+  fi
+
+  return 1
+}
+
+CODEX_NOTIFY_INTERVAL=3600  # seconds between repeat Telegram alerts
+
+check_codex_auth() {
+  # Check if codex binary is installed
+  if ! command -v "${SKYNET_CODEX_BIN:-codex}" &>/dev/null; then
+    # Not installed — not an error, just unavailable
+    return 1
+  fi
+
+  # Check auth: OPENAI_API_KEY env var or ~/.codex/auth.json
+  local _codex_auth_ok=false
+  local _auth_file="${SKYNET_CODEX_AUTH_FILE:-$HOME/.codex/auth.json}"
+
+  if [ -n "${OPENAI_API_KEY:-}" ]; then
+    _codex_auth_ok=true
+  elif [ -f "$_auth_file" ] && [ -s "$_auth_file" ]; then
+    _codex_auth_ok=true
+  fi
+
+  if $_codex_auth_ok; then
+    # Auth looks good — clear any previous failure state
+    if [ -f "${SKYNET_CODEX_AUTH_FAIL_FLAG:-}" ]; then
+      rm -f "$SKYNET_CODEX_AUTH_FAIL_FLAG"
+      log "Codex CLI auth restored."
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER CODEX RESTORED* — Codex CLI authenticated again."
+      if [ -f "$BLOCKERS" ]; then
+        grep -v "Codex CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp" || true
+        mv "$BLOCKERS.tmp" "$BLOCKERS"
+      fi
+    fi
+    return 0
+  fi
+
+  # Auth missing — throttle notifications
+  local now
+  now=$(date +%s)
+  local should_notify=true
+
+  if [ -f "${SKYNET_CODEX_AUTH_FAIL_FLAG:-}" ]; then
+    local last_notify
+    last_notify=$(cat "$SKYNET_CODEX_AUTH_FAIL_FLAG")
+    local elapsed=$((now - last_notify))
+    if [ "$elapsed" -lt "$CODEX_NOTIFY_INTERVAL" ]; then
+      should_notify=false
+    fi
+  fi
+
+  if $should_notify; then
+    echo "$now" > "$SKYNET_CODEX_AUTH_FAIL_FLAG"
+    tg "🟡 *$SKYNET_PROJECT_NAME_UPPER CODEX AUTH MISSING* — Run \`codex\` to login (ChatGPT). Fallback agent unavailable."
+    log "Codex CLI not authenticated. Telegram alert sent."
+    if ! grep -q "Codex CLI authentication" "$BLOCKERS" 2>/dev/null; then
+      echo "- **$(date '+%Y-%m-%d %H:%M')**: Codex CLI authentication missing. Run \`codex\` to login. Fallback agent unavailable." >> "$BLOCKERS"
+    fi
+  else
+    log "Codex CLI not authenticated. (alert throttled, next in $((CODEX_NOTIFY_INTERVAL - elapsed))s)"
   fi
 
   return 1

@@ -214,6 +214,12 @@ if check_claude_auth; then
   claude_auth_ok=true
 fi
 
+# Also check Codex auth (non-blocking — just sets fail flag for awareness)
+codex_auth_ok=false
+if check_codex_auth; then
+  codex_auth_ok=true
+fi
+
 # Count backlog tasks (grep -c exits 1 on no match, so use || true and default)
 backlog_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
 backlog_count=${backlog_count:-0}

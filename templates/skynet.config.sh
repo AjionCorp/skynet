@@ -81,8 +81,9 @@ export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"  # CLI flags
 export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | /path/to/plugin.sh (default: auto)
 
 # ---- Codex CLI (OpenAI fallback) ----
-export SKYNET_CODEX_BIN="codex"          # Path to Codex CLI binary (default: codex)
-export SKYNET_CODEX_FLAGS="--full-auto"  # CLI flags for Codex (default: --full-auto)
+export SKYNET_CODEX_BIN="codex"
+export SKYNET_CODEX_FLAGS="--full-auto"
+export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup (default: /opt/homebrew/bin:/usr/local/bin)

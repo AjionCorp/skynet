@@ -246,22 +246,33 @@ rotate_log_if_needed "$LOG"
 fix_start_epoch=$(date +%s)
 
 # --- Set up worktree for the failed branch ---
-if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
-  # Check if the branch can merge cleanly into main before reusing it
-  _merge_base=$(git merge-base "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null || true)
-  if [ -n "$_merge_base" ] && git merge-tree "$_merge_base" "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null | grep -q '<<<<<<<'; then
-    log "Branch $branch_name has merge conflicts — creating fresh branch"
-    git branch -D "$branch_name" 2>/dev/null || true
-    branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
-    setup_worktree "$branch_name" true
-    log "Created fresh fix branch in worktree: $branch_name"
-  else
-    setup_worktree "$branch_name" false
-    log "Checked out existing branch in worktree: $branch_name"
-  fi
-else
+_make_fix_branch() {
   branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
   setup_worktree "$branch_name" true
+}
+
+if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
+  # Check if branch is already checked out in another worktree (e.g. dev-worker)
+  _branch_worktree=$(git worktree list --porcelain 2>/dev/null | grep -B2 "branch refs/heads/$branch_name" | head -1 | sed 's/^worktree //' || true)
+  if [ -n "$_branch_worktree" ]; then
+    log "Branch $branch_name is in use by worktree $_branch_worktree — creating fresh fix branch"
+    _make_fix_branch
+    log "Created fresh fix branch in worktree: $branch_name"
+  else
+    # Check if the branch can merge cleanly into main before reusing it
+    _merge_base=$(git merge-base "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null || true)
+    if [ -n "$_merge_base" ] && git merge-tree "$_merge_base" "$SKYNET_MAIN_BRANCH" "$branch_name" 2>/dev/null | grep -q '<<<<<<<'; then
+      log "Branch $branch_name has merge conflicts — creating fresh branch"
+      git branch -D "$branch_name" 2>/dev/null || true
+      _make_fix_branch
+      log "Created fresh fix branch in worktree: $branch_name"
+    else
+      setup_worktree "$branch_name" false
+      log "Checked out existing branch in worktree: $branch_name"
+    fi
+  fi
+else
+  _make_fix_branch
   log "Created new fix branch in worktree: $branch_name"
 fi
 
