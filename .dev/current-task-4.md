@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close canonical config-parity blocked root for one-shot/watchdog knobs — align `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` so `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` defaults/descriptions match exactly, then add/update config command tests and keep `pnpm typecheck` green. Mission: Criterion #1 adoption safety and Criterion #3 deterministic config behavior.
+## [TEST] Close blocked CLI operational E2E smoke root in one canonical update — stabilize `tests/e2e/cli-commands.test.sh` assertions for `stop`, `pause/resume`, `completions bash`, and `validate`, and keep `pnpm typecheck` passing. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
 **Status:** completed
-**Started:** 2026-02-20 10:52
+**Started:** 2026-02-20 11:03
 **Completed:** 2026-02-20
-**Branch:** dev/close-canonical-config-parity-blocked-ro
+**Branch:** dev/close-blocked-cli-operational-e2e-smoke-
 **Worker:** 4
 
 ### Changes
