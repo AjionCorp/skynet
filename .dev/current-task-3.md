@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for reconciliation-before-fixer ordering in both normal and one-shot cycles — in `scripts/tests/watchdog.sh`, assert the reconcile/supersede pass runs before every fixer dispatch decision and logs exactly one deterministic before/after active-root counter pair per cycle. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
+## [INFRA] Centralize failed-task markdown escaping/unescaping into shared helpers and migrate all writers/parsers — add shared shell helpers in `scripts/_config.sh` (or sourced helper) so `task-fixer.sh` and `watchdog.sh` use one canonical encode/decode path for `|`, backticks, and newlines in table fields. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 16:43
+**Started:** 2026-02-20 16:44
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-reconciliati
+**Branch:** dev/centralize-failed-task-markdown-escaping
 **Worker:** 3
 
 ### Changes
