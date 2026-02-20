@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce one canonical active failed row per normalized root before fixer/driver cycles — in `scripts/watchdog.sh` and `scripts/project-driver.sh`, keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicates, and emit reconciliation metrics (`active_roots`, `duplicate_active_rows`, `superseded_rows`). Mission: Criterion #2 throughput and Criterion #3 deterministic state.
+## [TEST] Add shell regression for failed-task field codec round-trip invariants — in shell tests for failed-task parsing/writes, feed adversarial task/error/branch strings through shared codec helpers and assert parse-stable round trips plus unchanged active-root counting semantics. Mission: Criterion #2 quality gates and Criterion #3 convergent parsing.
 **Status:** completed
-**Started:** 2026-02-20 17:55
+**Started:** 2026-02-20 17:57
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-one-canonical-active-failed-row-
+**Branch:** dev/add-shell-regression-for-failed-task-fie
 **Worker:** 2
 
 ### Changes
