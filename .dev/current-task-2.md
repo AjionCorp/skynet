@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock Codex large-prompt reliability root (canonical) — in `scripts/agents/codex.sh` and shell regression tests, keep stdin-first prompt delivery, preserve child exit codes through `_agent_exec`, and pass `pnpm typecheck` plus >300KB prompt coverage without spawning new retry variants. Mission: Criterion #6 multi-agent compatibility and Criterion #2 self-correction closure.
+## [INFRA] Canonicalize active failed-task roots and collapse duplicate variants — in `scripts/watchdog.sh` pre-dispatch reconciliation plus one cleanup invocation, enforce one active row per normalized root (`pending|fixing-*|blocked`), supersede redundant variants, and emit before/after root counts to logs/events. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 10:27
+**Started:** 2026-02-20 10:29
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-codex-large-prompt-reliability-r
+**Branch:** dev/canonicalize-active-failed-task-roots-an
 **Worker:** 2
 
 ### Changes
