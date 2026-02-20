@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for auth-gate dispatch suppression lifecycle — in `scripts/tests/watchdog.sh`, simulate failed agent auth checks to assert dispatch suppression, then restore auth and assert exactly one recovery event with next-cycle dispatch resumption. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
+## [NMI] Publish one canonical blocked-root diagnostics row per true open root — parse `.dev/failed-tasks.md` active `blocked|pending` rows, capture latest exact `pnpm typecheck` diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, then emit one follow-up task per normalized root and supersede duplicate variants. Mission: Criterion #2 self-correction closure and Criterion #3 convergent retry state.
 **Status:** completed
-**Started:** 2026-02-20 17:34
+**Started:** 2026-02-20 17:47
 **Completed:** 2026-02-20
-**Branch:** dev/add-shell-regression-for-auth-gate-dispa
+**Branch:** dev/publish-one-canonical-blocked-root-diagn
 **Worker:** 2
 
 ### Changes
