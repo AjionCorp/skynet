@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for watchdog convergence snapshot event shape — in shell tests for `scripts/watchdog.sh`, verify `failed_root_snapshot` emits once per cycle with expected counters and that preserved `fixing-*` rows do not inflate duplicate counts. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
+## [FIX] Close canonical CLI helper DRY retry root with lock-compat parity — in `packages/cli/src/utils/readFile.ts`, `packages/cli/src/utils/isProcessRunning.ts`, and dependent CLI commands, resolve remaining retry drift and ensure `pnpm typecheck` passes without behavior changes for dir-lock and file-lock paths. Mission: Criterion #3 maintainability/reliability and Criterion #2 retry-loop closure.
 **Status:** completed
-**Started:** 2026-02-20 16:08
+**Started:** 2026-02-20 16:11
 **Completed:** 2026-02-20
-**Branch:** dev/add-shell-regression-for-watchdog-conver
+**Branch:** dev/close-canonical-cli-helper-dry-retry-roo
 **Worker:** 3
 
 ### Changes
