@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet init --from-snapshot` to bootstrap from exported state — in `packages/cli/src/commands/init.ts`, add `--from-snapshot <path>` option via `.option('--from-snapshot <path>', 'Initialize from a previously exported pipeline snapshot')`. When provided, after creating the `.dev/` directory structure and copying scripts (the normal init flow), read the JSON snapshot file (same format as `skynet export` output), validate it has expected keys (backlog.md, completed.md, etc.), and overwrite the default state files with the snapshot's content. Log which files were restored: "Restored N files from snapshot". Skip `skynet.config.sh` from the snapshot (machine-specific paths would be wrong — keep the freshly generated one). This enables duplicating a pipeline setup from one project to another, useful for teams adopting Skynet across multiple repositories. Criterion #1 (faster multi-project adoption)
+## [FIX] Add missing handler and type exports to `packages/dashboard/src/index.ts` — the root `index.ts` handler export block (lines 41-54) is missing `createEventsHandler` and `createMissionRawHandler` which were added after the initial block was written. The type export block (lines 2-29) is missing `SelfCorrectionStats` and `EventEntry`. Fix: add `createEventsHandler` and `createMissionRawHandler` to the handler re-export block. Add `SelfCorrectionStats` and `EventEntry` to the type re-export block. These are needed by external consumers importing from `@ajioncorp/skynet` root path (the admin app uses sub-path imports so it works, but any external Next.js app embedding the dashboard would get undefined). Run `pnpm typecheck`. Criterion #1 (correct npm package API surface)
 **Status:** completed
-**Started:** 2026-02-20 01:13
+**Started:** 2026-02-20 01:25
 **Completed:** 2026-02-20
-**Branch:** dev/add-skynet-init---from-snapshot-to-boots
+**Branch:** dev/add-missing-handler-and-type-exports-to-
 **Worker:** 4
 
 ### Changes
