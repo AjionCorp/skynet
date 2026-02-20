@@ -86,6 +86,7 @@ interface InitOptions {
   dir?: string;
   copyScripts?: boolean;
   nonInteractive?: boolean;
+  fromSnapshot?: string;
 }
 
 export async function initCommand(options: InitOptions) {
@@ -283,6 +284,43 @@ export async function initCommand(options: InitOptions) {
   } else {
     writeFileSync(gitignorePath, gitignoreEntries.join("\n") + "\n");
     console.log("    .gitignore (created)");
+  }
+
+  // Restore state from snapshot if --from-snapshot was provided
+  if (options.fromSnapshot) {
+    const snapshotPath = resolve(options.fromSnapshot);
+    if (!existsSync(snapshotPath)) {
+      console.error(`\n  Error: Snapshot file not found: ${snapshotPath}`);
+      process.exit(1);
+    }
+
+    let snapshot: Record<string, string>;
+    try {
+      const raw = readFileSync(snapshotPath, "utf-8");
+      snapshot = JSON.parse(raw);
+    } catch {
+      console.error(`\n  Error: Failed to parse snapshot file as JSON.`);
+      process.exit(1);
+    }
+
+    // Validate expected keys
+    const expectedKeys = ["backlog.md", "completed.md", "failed-tasks.md", "blockers.md", "mission.md"];
+    const missingKeys = expectedKeys.filter((key) => !(key in snapshot));
+    if (missingKeys.length > 0) {
+      console.error(`\n  Error: Snapshot is missing expected keys: ${missingKeys.join(", ")}`);
+      process.exit(1);
+    }
+
+    // Write snapshot content into .dev/, skipping skynet.config.sh (machine-specific)
+    let restored = 0;
+    for (const [filename, content] of Object.entries(snapshot)) {
+      if (filename === "skynet.config.sh") continue;
+      if (typeof content !== "string") continue;
+      writeFileSync(join(devDir, filename), content, "utf-8");
+      restored++;
+    }
+
+    console.log(`\n  Restored ${restored} files from snapshot`);
   }
 
   console.log(`

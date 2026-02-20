@@ -38,6 +38,7 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--copy-scripts", "Copy scripts instead of symlinking")
   .option("--non-interactive", "Skip all interactive prompts (use defaults)")
+  .option("--from-snapshot <path>", "Initialize from a previously exported pipeline snapshot")
   .action(initCommand);
 
 program
