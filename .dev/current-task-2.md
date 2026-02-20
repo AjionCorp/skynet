@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Add hardening-phase operator runbook to `README.md` — document current 6/6 mission status, hardening priorities (security/consistency/dedupe), and runbook for `backlog=0` with non-zero pending retries. Mission: Criterion #1 adoption clarity and Criterion #5 measurable progress.
+## [FIX] Restore config template parity for watchdog/one-shot knobs — ensure `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` `KNOWN_VARS` contain consistent `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` docs/defaults with no ghost variables. Mission: Criterion #1 adoption clarity and Criterion #3 deterministic config behavior.
 **Status:** completed
-**Started:** 2026-02-20 09:50
+**Started:** 2026-02-20 09:52
 **Completed:** 2026-02-20
-**Branch:** dev/add-hardening-phase-operator-runbook-to-
+**Branch:** dev/restore-config-template-parity-for-watch
 **Worker:** 2
 
 ### Changes
