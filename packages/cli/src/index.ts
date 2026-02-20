@@ -18,6 +18,7 @@ import { resumeCommand } from "./commands/resume.js";
 import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
 import { upgradeCommand } from "./commands/upgrade.js";
 import { watchCommand } from "./commands/watch.js";
+import { metricsCommand } from "./commands/metrics.js";
 
 const program = new Command();
 
@@ -143,6 +144,12 @@ program
   .description("Real-time terminal dashboard for monitoring the pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(watchCommand);
+
+program
+  .command("metrics")
+  .description("Show pipeline performance analytics")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(metricsCommand);
 
 program
   .command("upgrade")
