@@ -1,0 +1,43 @@
+name: Publish Dashboard to npm
+
+on:
+  push:
+    tags:
+      - "dashboard-v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test dashboard
+        run: pnpm --filter @ajioncorp/skynet test
+
+      - name: Build and verify
+        working-directory: packages/dashboard
+        run: |
+          pnpm build
+          test -f dist/index.js
+
+      - name: Publish to npm
+        working-directory: packages/dashboard
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
