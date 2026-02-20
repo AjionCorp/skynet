@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface stale-active convergence counters in status surfaces — add `staleActiveCompletedRows` and `supersededActiveRows` from watchdog reconciliation to `packages/dashboard/src/handlers/pipeline-status.ts` and CLI `status --json` output, keeping field semantics aligned. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [DATA] Refresh blockers Active from canonical failed roots after stale-active supersede — in `scripts/watchdog.sh` blockers sync path, rebuild `.dev/blockers.md` Active from normalized active failed roots only after the convergence pass and skip file rewrite when active-root hash is unchanged. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:10
+**Started:** 2026-02-20 18:14
 **Completed:** 2026-02-20
-**Branch:** dev/surface-stale-active-convergence-counter
+**Branch:** dev/refresh-blockers-active-from-canonical-f
 **Worker:** 3
 
 ### Changes
