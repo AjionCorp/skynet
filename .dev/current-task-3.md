@@ -1,3 +1,10 @@
 # Current Task
-**Status:** idle
-**Last failure:** 2026-02-20 06:27 -- [FIX] Align health score formula between watchdog.sh and CLI/dashboard — in `scripts/watchdog.sh` `_health_score_alert()` (line 651), the health score uses `100 - failedPending*5 - blockerCount*10 - staleHeartbeats*2` but is missing the `staleTasks24h * 1` deduction that `packages/cli/src/commands/status.ts` (line 284) and `packages/dashboard/src/handlers/pipeline-status.ts` (line 132) include. This means the watchdog fires alerts using a different (higher) score than what users see in `skynet status` and the dashboard. Fix: in `_health_score_alert()`, after the stale heartbeat deduction (line 677), add a count of claimed `[>]` tasks in backlog.md older than 24 hours (check current-task-N.md timestamps) and subtract 1 per stale task: `local stale_24h=0; for _ct in "$DEV_DIR"/current-task-*.md; do ... done; score=$((score - stale_24h))`. Run `pnpm typecheck`. Criterion #3 (consistent health score across all views) (dead worker recovered by watchdog)
+## [FIX] Unify stale-threshold and health-score parity across CLI/dashboard/watchdog — align `packages/cli/src/commands/status.ts`, `packages/cli/src/commands/watch.ts`, `packages/dashboard/src/handlers/pipeline-status.ts`, and `scripts/watchdog.sh` to shared `SKYNET_STALE_MINUTES` input and identical deductions (`failed`, `blockers`, `staleHeartbeats`, `staleTasks24h`) with score-breakdown logging. Mission: Criterion #4 telemetry consistency and Criterion #3 deterministic behavior.
+**Status:** completed
+**Started:** 2026-02-20 09:48
+**Completed:** 2026-02-20
+**Branch:** dev/unify-stale-threshold-and-health-score-p
+**Worker:** 3
+
+### Changes
+-- See git log for details
