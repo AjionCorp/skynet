@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Use mkdir-based atomic lock for watchdog PID singleton enforcement — in `scripts/watchdog.sh` lines 22-31, the PID lock uses a file-based check-then-write pattern: `if [ -f "$WATCHDOG_LOCK" ]; then ... rm -f; fi; echo $$ > "$WATCHDOG_LOCK"`. This has a TOCTOU race — between `rm -f` and `echo $$`, a second watchdog can pass the check and both believe they're the singleton. The same pattern exists in `scripts/dev-worker.sh` lines 254-259. Fix: replace the PID file approach with `mkdir`-based atomic locking (same pattern as the backlog mutex at `scripts/_config.sh`). Use `mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null` as the atomic test-and-set, then write `$$` inside it as `pid`. On cleanup, `rm -rf "$WATCHDOG_LOCK_DIR"`. Apply the same fix to `dev-worker.sh`. Run `pnpm typecheck`. Criterion #3 (no race conditions in singleton enforcement)
+## [FIX] Use configurable `SKYNET_AUTH_NOTIFY_INTERVAL` in auth-check.sh instead of hardcoded value — in `scripts/auth-check.sh` line 16, `AUTH_NOTIFY_INTERVAL=3600` is hardcoded, ignoring the `SKYNET_AUTH_NOTIFY_INTERVAL=3600` defined in `templates/skynet.config.sh` line 59. The config variable is dead — changing it has no effect. Fix: change line 16 from `AUTH_NOTIFY_INTERVAL=3600` to `AUTH_NOTIFY_INTERVAL="${SKYNET_AUTH_NOTIFY_INTERVAL:-3600}"`. Also check if `CODEX_NOTIFY_INTERVAL` (around line 102) has the same issue and apply the same pattern. Run `pnpm typecheck`. Criterion #3 (config variables must actually be honored — no dead config)
 **Status:** completed
-**Started:** 2026-02-20 01:55
+**Started:** 2026-02-20 02:05
 **Completed:** 2026-02-20
-**Branch:** dev/use-mkdir-based-atomic-lock-for-watchdog
+**Branch:** dev/use-configurable-skynetauthnotifyinterva
 **Worker:** 2
 
 ### Changes
