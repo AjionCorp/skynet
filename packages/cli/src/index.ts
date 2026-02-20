@@ -6,6 +6,7 @@ import { startCommand } from "./commands/start.js";
 import { statusCommand } from "./commands/status.js";
 import { stopCommand } from "./commands/stop.js";
 import { doctorCommand } from "./commands/doctor.js";
+import { validateCommand } from "./commands/validate.js";
 import { logsCommand } from "./commands/logs.js";
 import { versionCommand } from "./commands/version.js";
 import { addTaskCommand } from "./commands/add-task.js";
@@ -77,6 +78,12 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--fix", "Auto-fix issues where possible")
   .action(doctorCommand);
+
+program
+  .command("validate")
+  .description("Run pre-flight checks for the target project")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(validateCommand);
 
 program
   .command("logs")
