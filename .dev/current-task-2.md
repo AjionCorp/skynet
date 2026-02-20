@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Emit blocked-root diagnostics snapshot from current logs — add a watchdog/helper step that maps every `status=blocked` + `attempts>=3` row to the latest exact `pnpm typecheck` diagnostic (file, line, error code) from worker/fixer logs, then writes a concise root-cause snapshot into `.dev/blockers.md` Active. Mission: Criterion #2 self-correction closure.
+## [NMI] Refresh blocked-root diagnostics snapshot to one canonical row per root cause — rebuild `.dev/blockers.md` Active from current `status=blocked` + `attempts>=3` rows in `.dev/failed-tasks.md`, attaching latest exact `pnpm typecheck` file:line:error diagnostics from worker/fixer logs and removing resolved entries. Mission: Criterion #2 self-correction closure.
 **Status:** completed
-**Started:** 2026-02-20 10:05
+**Started:** 2026-02-20 10:23
 **Completed:** 2026-02-20
-**Branch:** dev/emit-blocked-root-diagnostics-snapshot-f
+**Branch:** dev/refresh-blocked-root-diagnostics-snapsho
 **Worker:** 2
 
 ### Changes
