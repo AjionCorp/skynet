@@ -1,21 +1,46 @@
 #!/usr/bin/env bash
-# watchdog.sh — Lightweight dispatcher that prevents idle time
-# Runs every 3 min via crontab. Checks if workers are idle with work waiting, kicks them off.
+# watchdog.sh — Persistent dispatcher that keeps the pipeline alive
+# Loops every 3 min. Checks if workers are idle with work waiting, kicks them off.
 # Does NOT invoke Claude itself — just launches the worker scripts.
 # Auth-aware: skips Claude-dependent workers when auth is expired.
 # Crash recovery: detects stale locks, unclaims orphaned tasks, kills orphan processes.
-set -euo pipefail
+set -uo pipefail  # no -e: loop must survive individual cycle failures
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 LOG="$SCRIPTS_DIR/watchdog.log"
+WATCHDOG_LOCK="${SKYNET_LOCK_PREFIX}-watchdog.lock"
+WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 
 cd "$PROJECT_DIR"
 
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
+
+# --- Singleton enforcement via PID lock ---
+if [ -f "$WATCHDOG_LOCK" ]; then
+  _existing_pid=$(cat "$WATCHDOG_LOCK" 2>/dev/null || echo "")
+  if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+    log "Watchdog already running (PID $_existing_pid). Exiting."
+    exit 0
+  fi
+  rm -f "$WATCHDOG_LOCK"
+fi
+echo $$ > "$WATCHDOG_LOCK"
+
+_watchdog_cleanup() {
+  rm -f "$WATCHDOG_LOCK"
+}
+trap _watchdog_cleanup EXIT INT TERM
+
+log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
+
+# --- Main loop ---
+while true; do
+(
+set -euo pipefail
+
 # Trim logs to last 24h on each watchdog run
 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
-
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
 
 is_running() {
   local lockfile="$1"
@@ -620,3 +645,10 @@ if [ -f "$DEV_DIR/fixer-stats.log" ]; then
     log "Fixer stats (24h): ${_success_24h}/${_total_24h} success (${_rate}%)"
   fi
 fi
+
+) || log "Watchdog cycle failed (exit $?) — will retry next cycle"
+
+# --- End of cycle — sleep before next iteration ---
+sleep "$WATCHDOG_INTERVAL"
+
+done  # end main loop
