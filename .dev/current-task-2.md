@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Compact duplicate non-active failed history rows before archive rotation — in `scripts/watchdog.sh`, collapse repeated `fixed|superseded` rows with the same normalized root+branch into one canonical history row before moving rows to `.dev/failed-tasks-archive.md`, preserving the newest attempts/error context and emitting deterministic `history_rows_compacted` metrics. Mission: Criterion #2 retry-loop throughput and Criterion #3 state convergence.
+## [INFRA] Emit canonical project-driver telemetry snapshot per cycle — in `scripts/project-driver.sh`, write `.dev/project-driver-telemetry.json` atomically with deterministic fields (`ts`, `pendingBacklog`, `claimedBacklog`, `pendingRetries`, `fixRate`, `duplicateSkipped`, `maxNewTasks`, `driver_low_fix_rate_mode`) so downstream status surfaces can read one stable source of truth. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:19
+**Started:** 2026-02-20 18:29
 **Completed:** 2026-02-20
-**Branch:** dev/compact-duplicate-non-active-failed-hist
+**Branch:** dev/emit-canonical-project-driver-telemetry-
 **Worker:** 2
 
 ### Changes
