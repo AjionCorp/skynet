@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix dashboard typecheck — 35 fetch mock type errors blocking all worker merges — `pnpm typecheck` fails with TS2741 ("Property 'preconnect' is missing") and TS2352 (fetch-to-Mock cast error) in 11 dashboard component test files: `ActivityFeed.test.tsx`, `EventsDashboard.test.tsx`, `LogViewer.test.tsx`, `MissionDashboard.test.tsx`, `MonitoringDashboard.test.tsx`, `PipelineDashboard.test.tsx`, `PromptsDashboard.test.tsx`, `SettingsDashboard.test.tsx`, `SyncDashboard.test.tsx`, `TasksDashboard.test.tsx`, `WorkerScaling.test.tsx`. All errors come from `global.fetch = vi.fn().mockResolvedValue(...)` where the mock lacks the `preconnect` property added in newer Node.js/undici types. Fix: in each test file's `mockFetchWith()` or `beforeEach` block, replace direct `global.fetch = vi.fn()...` assignment with `vi.stubGlobal('fetch', vi.fn().mockResolvedValue(...))` which bypasses the type check on assignment. For places that cast `global.fetch as Mock`, change to `vi.mocked(global.fetch)`. Also check `AdminLayout.test.tsx` and `SkynetProvider.test.tsx` for the same pattern. Run `pnpm typecheck` — must exit 0 with zero errors. Criterion #2 (typecheck is the quality gate — 0 errors required for any worker to merge)
+## [FIX] Guard `skynet init` against re-run silently overwriting existing `skynet.config.sh` — in `packages/cli/src/commands/init.ts` line 179, `writeFileSync(join(devDir, "skynet.config.sh"), configContent)` unconditionally overwrites the config file. If a user accidentally re-runs `skynet init` in an already-initialized project, their customized config (port, notification tokens, agent settings) is silently destroyed. The `.md` state files are correctly guarded with `existsSync` checks, but the two shell config files are not. Fix: before writing `skynet.config.sh` (line 179) and `skynet.project.sh` (line 184), check `existsSync`. If the file exists AND `--force` is not set, print `"  Existing skynet.config.sh found — skipping (use --force to overwrite)"` and skip. Add `.option('--force', 'Overwrite existing config files')` to the init command options. Run `pnpm typecheck`. Criterion #1 (safe init — no accidental config destruction on re-run)
 **Status:** completed
-**Started:** 2026-02-20 03:18
+**Started:** 2026-02-20 03:22
 **Completed:** 2026-02-20
-**Branch:** dev/fix-dashboard-typecheck--35-fetch-mock-t
+**Branch:** dev/guard-skynet-init-against-re-run-silentl
 **Worker:** 1
 
 ### Changes
