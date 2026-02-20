@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close blocked Codex prompt root with exact repro+guard test — use `.dev/blockers.md` repro to patch `scripts/agents/codex.sh` so stdin-first prompt delivery and child exit-code propagation are both preserved through `_agent_exec`, then add/update shell regression for >300KB prompt payloads and run `pnpm typecheck`. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
+## [FIX] Close blocked pipeline-logs optimization root with response-shape parity — in `packages/dashboard/src/handlers/pipeline-logs.ts` and related tests, keep buffer-based newline counting while preserving exact empty-file and no-trailing-newline response behavior and passing `pnpm typecheck`. Mission: Criterion #3 runtime efficiency and Criterion #2 reliable gates.
 **Status:** completed
-**Started:** 2026-02-20 10:43
+**Started:** 2026-02-20 10:45
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-codex-prompt-root-with-exa
+**Branch:** dev/close-blocked-pipeline-logs-optimization
 **Worker:** 1
 
 ### Changes
