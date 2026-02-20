@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add project-driver regression for unchecked-cap + ordering invariants — in `scripts/tests/project-driver.sh`, fixture backlog with mixed `[>]`, `[ ]`, and misplaced `[x]` rows; assert claimed rows remain byte-identical and first, pending rows are capped at 15, checked history is moved to the bottom, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent planning behavior.
+## [DATA] Surface watchdog canonicalization-precedence counters in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include `canonicalizationPrecedenceApplied` alongside existing reconciliation counters so operators can verify one-root-one-active-row convergence from a single status call. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:47
+**Started:** 2026-02-20 18:55
 **Completed:** 2026-02-20
-**Branch:** dev/add-project-driver-regression-for-unchec
+**Branch:** dev/surface-watchdog-canonicalization-preced
 **Worker:** 4
 
 ### Changes
