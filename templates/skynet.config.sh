@@ -4,89 +4,89 @@
 # This file should be in .gitignore (it contains local paths and secrets)
 
 # ---- Project Identity ----
-export SKYNET_PROJECT_NAME="PLACEHOLDER_PROJECT_NAME"
-export SKYNET_PROJECT_DIR="PLACEHOLDER_PROJECT_DIR"
-export SKYNET_DEV_DIR="$SKYNET_PROJECT_DIR/.dev"
+export SKYNET_PROJECT_NAME="PLACEHOLDER_PROJECT_NAME"  # Unique name for this project (used in lock files, worktree paths)
+export SKYNET_PROJECT_DIR="PLACEHOLDER_PROJECT_DIR"    # Absolute path to the project root
+export SKYNET_DEV_DIR="$SKYNET_PROJECT_DIR/.dev"       # Pipeline state directory (backlog, completed, etc.)
 
 # ---- Lock Files (auto-derived from project name) ----
-export SKYNET_LOCK_PREFIX="/tmp/skynet-${SKYNET_PROJECT_NAME}"
+export SKYNET_LOCK_PREFIX="/tmp/skynet-${SKYNET_PROJECT_NAME}"  # Prefix for all PID lock files
 
 # ---- Dev Server ----
-export SKYNET_DEV_SERVER_CMD="pnpm dev"
-export SKYNET_DEV_SERVER_URL="http://localhost:3000"
-export SKYNET_DEV_SERVER_PORT=3000
-export SKYNET_DEV_PORT=3000  # Base port for dev server; workers offset from this
+export SKYNET_DEV_SERVER_CMD="pnpm dev"                          # Command to start the dev server
+export SKYNET_DEV_SERVER_URL="http://localhost:3000"              # Dev server URL for health checks (default: http://localhost:3000)
+export SKYNET_DEV_SERVER_PORT=3000                                # Dev server port (used by start-dev.sh)
+export SKYNET_DEV_PORT=3000                                      # Base port for dev server; workers offset from this (default: 3000)
 
 # ---- Build & Test Commands ----
-export SKYNET_TYPECHECK_CMD="pnpm typecheck"
-export SKYNET_LINT_CMD="pnpm lint"
+export SKYNET_TYPECHECK_CMD="pnpm typecheck"  # Type-check command, also used as SKYNET_GATE_1 fallback (default: pnpm typecheck)
+export SKYNET_LINT_CMD="pnpm lint"            # Lint command (not used as a gate by default)
 
 # ---- Quality Gates (run in order before merge) ----
 # Define quality gates as numbered SKYNET_GATE_N variables.
 # Each gate is a command run from the worktree directory.
 # If any gate fails, the branch is NOT merged.
 # Default: just typecheck (SKYNET_GATE_1 falls back to SKYNET_TYPECHECK_CMD)
-export SKYNET_GATE_1="pnpm typecheck"
+export SKYNET_GATE_1="pnpm typecheck"  # Gate 1: must pass before merge (default: $SKYNET_TYPECHECK_CMD)
 # export SKYNET_GATE_2="pnpm lint"
 # export SKYNET_GATE_3="npx playwright test e2e/smoke.spec.ts --reporter=list"
 
 # ---- Playwright (leave empty to skip tests) ----
-export SKYNET_PLAYWRIGHT_DIR=""
-export SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"
-export SKYNET_FEATURE_TEST="e2e/features.spec.ts"
+export SKYNET_PLAYWRIGHT_DIR=""                         # Directory containing Playwright tests (empty = skip)
+export SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"            # Smoke test file path
+export SKYNET_FEATURE_TEST="e2e/features.spec.ts"       # Feature test file path
 
 # ---- Git ----
-export SKYNET_BRANCH_PREFIX="dev/"
-export SKYNET_MAIN_BRANCH="main"
+export SKYNET_BRANCH_PREFIX="dev/"   # Prefix for feature branches created by dev-workers (default: dev/)
+export SKYNET_MAIN_BRANCH="main"     # Main branch name for merges (default: main)
 
 # ---- Worker Tuning ----
-export SKYNET_MAX_WORKERS=4
-export SKYNET_MAX_FIXERS=3
-export SKYNET_MAX_TASKS_PER_RUN=5
-export SKYNET_STALE_MINUTES=45
-export SKYNET_MAX_FIX_ATTEMPTS=3
-export SKYNET_MAX_LOG_SIZE_KB=1024  # Max log file size in KB before rotation (default 1MB)
+export SKYNET_MAX_WORKERS=4          # Max concurrent dev-worker instances; watchdog dispatches up to N (default: 4)
+export SKYNET_MAX_FIXERS=3           # Max concurrent task-fixer instances (default: 3)
+export SKYNET_MAX_TASKS_PER_RUN=5    # Max tasks a single dev-worker processes before exiting (default: 5)
+export SKYNET_STALE_MINUTES=45       # Minutes before a worker heartbeat is considered stale/stuck (default: 45)
+export SKYNET_MAX_FIX_ATTEMPTS=3     # Max fix attempts before a failed task is escalated to blockers (default: 3)
+export SKYNET_MAX_LOG_SIZE_KB=1024   # Max log file size in KB before rotation (default: 1024 = 1MB)
 
 # ---- Auth (Claude Code OAuth) ----
-export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"
-export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"
-export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"
-export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"
-export SKYNET_AUTH_NOTIFY_INTERVAL=3600
+export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"  # Cached auth token path
+export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"     # Sentinel file set when auth fails
+export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                     # macOS Keychain service name
+export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)
+export SKYNET_AUTH_NOTIFY_INTERVAL=3600                                          # Seconds between auth-failure notifications
 
 # ---- Notifications ----
 # Comma-separated list of enabled notification channels.
 # Built-in channels: telegram, slack, discord
-export SKYNET_NOTIFY_CHANNELS="telegram"
+export SKYNET_NOTIFY_CHANNELS="telegram"  # Active notification channels (default: telegram)
 
 # Telegram — leave empty to disable
-export SKYNET_TG_ENABLED=false
-export SKYNET_TG_BOT_TOKEN=""
-export SKYNET_TG_CHAT_ID=""
+export SKYNET_TG_ENABLED=false    # Enable Telegram notifications
+export SKYNET_TG_BOT_TOKEN=""     # Telegram bot token from @BotFather
+export SKYNET_TG_CHAT_ID=""       # Telegram chat/group ID for notifications
 
 # Slack — set webhook URL to enable (create at https://api.slack.com/messaging/webhooks)
-export SKYNET_SLACK_WEBHOOK_URL=""
+export SKYNET_SLACK_WEBHOOK_URL=""   # Slack incoming webhook URL (empty = disabled)
 
 # Discord — set webhook URL to enable (Server Settings > Integrations > Webhooks)
-export SKYNET_DISCORD_WEBHOOK_URL=""
+export SKYNET_DISCORD_WEBHOOK_URL=""  # Discord webhook URL (empty = disabled)
 
 # ---- Claude Code ----
-export SKYNET_CLAUDE_BIN="claude"
-export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
+export SKYNET_CLAUDE_BIN="claude"                              # Path to Claude Code binary (default: claude)
+export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"  # CLI flags for Claude Code (default: --print --dangerously-skip-permissions)
 
 # ---- Agent Plugin ----
 # Which AI agent to use. Built-in: "auto", "claude", "codex"
 # Or set to an absolute path for a custom agent plugin script.
 # Custom plugins must define: agent_run "prompt" "logfile" and agent_check
-export SKYNET_AGENT_PLUGIN="auto"  # auto | claude | codex | /path/to/plugin.sh
+export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | /path/to/plugin.sh (default: auto)
 
 # ---- Codex CLI (OpenAI fallback) ----
-export SKYNET_CODEX_BIN="codex"
-export SKYNET_CODEX_FLAGS="--full-auto"
+export SKYNET_CODEX_BIN="codex"          # Path to Codex CLI binary (default: codex)
+export SKYNET_CODEX_FLAGS="--full-auto"  # CLI flags for Codex (default: --full-auto)
 
 # ---- Environment ----
-export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"
+export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup (default: /opt/homebrew/bin:/usr/local/bin)
 
 # ---- Server Error Scanning ----
 # Space-separated list of env vars to check in server logs
-export SKYNET_ERROR_ENV_KEYS=""
+export SKYNET_ERROR_ENV_KEYS=""  # Env var names whose absence triggers server error warnings (empty = skip)
