@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Add `tg` notification and `emit_event` when task-fixer escalates task to blocked — in `scripts/task-fixer.sh` lines 231-236, when `fix_attempts >= MAX_FIX_ATTEMPTS`, the script marks the task as `blocked` in failed-tasks.md and writes to blockers.md, but sends NO notification and emits NO event. Humans are never alerted when a task is permanently blocked. Fix: after line 234 (the `echo >> "$BLOCKERS"` line), add two lines: `tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $task_title"` and `emit_event "task_blocked" "Fixer $FIXER_ID: $task_title (max attempts)"`. Run `pnpm typecheck`. Criterion #2 (self-correction visibility) and #4 (dashboard event coverage)
+## [FEAT] Add `skynet validate` CLI command for pre-flight project validation — create `packages/cli/src/commands/validate.ts`. Unlike `doctor` (which checks the pipeline itself), `validate` checks the TARGET project's readiness: (a) parse `SKYNET_GATE_N` variables from config and dry-run each gate command, reporting pass/fail per gate, (b) verify git remote is accessible via `git ls-remote origin HEAD`, (c) check disk space in project dir (warn if < 1GB free), (d) verify `.dev/mission.md` exists and has content. Print summary: "N/M pre-flight checks passed". Register as `program.command('validate').description('Run pre-flight checks for the target project')` in `packages/cli/src/index.ts`. This helps users verify their project is correctly set up BEFORE starting the pipeline. Criterion #1 (under 5 min to autonomous — validate catches config issues early)
 **Status:** completed
-**Started:** 2026-02-20 01:25
+**Started:** 2026-02-20 01:28
 **Completed:** 2026-02-20
-**Branch:** dev/add-tg-notification-and-emitevent-when-t
+**Branch:** dev/add-skynet-validate-cli-command-for-pre-
 **Worker:** 1
 
 ### Changes
