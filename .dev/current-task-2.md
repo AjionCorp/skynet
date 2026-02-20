@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add `skynet changelog` CLI command for release note generation — create `packages/cli/src/commands/changelog.ts`. Reads `.dev/completed.md`, parses the pipe-delimited table, groups entries by date, organizes by tag ([FEAT] → "Features", [FIX] → "Bug Fixes", [INFRA] → "Infrastructure", [TEST] → "Tests", [DOCS] → "Documentation"). Output format: `## YYYY-MM-DD\n### Features\n- task description\n### Bug Fixes\n- task description\n...`. Default prints to stdout. Add `--output <path>` flag to write to a file. Add `--since <date>` flag to filter entries after a given date (useful for generating notes between releases). Register as `program.command('changelog').description('Generate changelog from completed tasks')` in `packages/cli/src/index.ts`. Criterion #5 (measurable mission progress → releasable artifact)
+## [FIX] Fix `sync-runner.sh` pre-flight check using non-existent API route — `scripts/sync-runner.sh` line 28 checks `curl -sf "$BASE_URL/api/admin/sync-status"` but there is NO `/api/admin/sync-status` route in the admin package (the sync data comes from the pipeline-status handler). This means sync-runner ALWAYS fails the pre-flight check with "Dev server not reachable" even when the server is healthy — the sync logic has never successfully executed. Fix: change line 28 from `"$BASE_URL/api/admin/sync-status"` to `"$BASE_URL/api/admin/pipeline/status"` which exists and returns JSON. Run `pnpm typecheck` to verify. Criterion #3 (reliability — scripts should actually work)
 **Status:** completed
-**Started:** 2026-02-20 01:13
+**Started:** 2026-02-20 01:25
 **Completed:** 2026-02-20
-**Branch:** dev/-documentation-output-format--yyyy-mm-dd
+**Branch:** dev/fix-sync-runnersh-pre-flight-check-using
 **Worker:** 2
 
 ### Changes
