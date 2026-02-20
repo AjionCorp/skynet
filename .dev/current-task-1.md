@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix health-check.sh lock path using `$SCRIPTS_DIR` instead of `$SKYNET_LOCK_PREFIX` — in `scripts/health-check.sh` line 15, `LOCK_FILE="$SCRIPTS_DIR/health-check.lock"` places the lock inside `.dev/scripts/` instead of `/tmp/skynet-{project}-*`. Every other script uses `${SKYNET_LOCK_PREFIX}-{name}.lock` (resolving to `/tmp/`). This causes three problems: (a) `skynet doctor` scans `${lockPrefix}-health-check.lock` at the temp path, never finding it — health-check always shows as "not running", (b) `skynet stop` cannot stop health-check for the same reason, (c) the lock directory pollutes the project's `.dev/scripts/` directory. Fix: change line 15 from `LOCK_FILE="$SCRIPTS_DIR/health-check.lock"` to `LOCK_FILE="${SKYNET_LOCK_PREFIX}-health-check.lock"`. Run `bash -n scripts/health-check.sh` and `pnpm typecheck`. Criterion #3 (consistent lock paths — all CLI tools can discover and manage all running processes)
+## [FIX] Fix dashboard typecheck — 35 fetch mock type errors blocking all worker merges — `pnpm typecheck` fails with TS2741 ("Property 'preconnect' is missing") and TS2352 (fetch-to-Mock cast error) in 11 dashboard component test files: `ActivityFeed.test.tsx`, `EventsDashboard.test.tsx`, `LogViewer.test.tsx`, `MissionDashboard.test.tsx`, `MonitoringDashboard.test.tsx`, `PipelineDashboard.test.tsx`, `PromptsDashboard.test.tsx`, `SettingsDashboard.test.tsx`, `SyncDashboard.test.tsx`, `TasksDashboard.test.tsx`, `WorkerScaling.test.tsx`. All errors come from `global.fetch = vi.fn().mockResolvedValue(...)` where the mock lacks the `preconnect` property added in newer Node.js/undici types. Fix: in each test file's `mockFetchWith()` or `beforeEach` block, replace direct `global.fetch = vi.fn()...` assignment with `vi.stubGlobal('fetch', vi.fn().mockResolvedValue(...))` which bypasses the type check on assignment. For places that cast `global.fetch as Mock`, change to `vi.mocked(global.fetch)`. Also check `AdminLayout.test.tsx` and `SkynetProvider.test.tsx` for the same pattern. Run `pnpm typecheck` — must exit 0 with zero errors. Criterion #2 (typecheck is the quality gate — 0 errors required for any worker to merge)
 **Status:** completed
-**Started:** 2026-02-20 02:47
+**Started:** 2026-02-20 03:18
 **Completed:** 2026-02-20
-**Branch:** dev/fix-health-checksh-lock-path-using-scrip
+**Branch:** dev/fix-dashboard-typecheck--35-fetch-mock-t
 **Worker:** 1
 
 ### Changes
