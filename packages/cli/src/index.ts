@@ -15,6 +15,7 @@ import { cleanupCommand } from "./commands/cleanup.js";
 import { pauseCommand } from "./commands/pause.js";
 import { resumeCommand } from "./commands/resume.js";
 import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
+import { upgradeCommand } from "./commands/upgrade.js";
 
 const program = new Command();
 
@@ -122,6 +123,12 @@ program
   .description("Resume a paused Skynet pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(resumeCommand);
+
+program
+  .command("upgrade")
+  .description("Upgrade skynet-cli to the latest version")
+  .option("--check", "Only check if an update is available (dry-run)")
+  .action(upgradeCommand);
 
 const configCmd = program
   .command("config")
