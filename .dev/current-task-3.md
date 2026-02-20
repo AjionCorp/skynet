@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce canonical failed-task active-root convergence pre-dispatch — in `scripts/watchdog.sh`, guarantee exactly one active row (`pending|fixing-*|blocked`) per normalized root in `.dev/failed-tasks.md`, supersede redundant active variants, and emit reconciliation counters each cycle. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [FIX] Close blocked Codex large-prompt reliability root with deterministic stdin-first + exit-code invariants — in `scripts/agents/codex.sh` and shell regression tests, keep >300KB prompt coverage green while preserving child exit codes through `_agent_exec`. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
 **Status:** completed
-**Started:** 2026-02-20 10:56
+**Started:** 2026-02-20 11:02
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-canonical-failed-task-active-roo
+**Branch:** dev/close-blocked-codex-large-prompt-reliabi
 **Worker:** 3
 
 ### Changes
