@@ -45,6 +45,7 @@ program
   .option("--copy-scripts", "Copy scripts instead of symlinking")
   .option("--non-interactive", "Skip all interactive prompts (use defaults)")
   .option("--from-snapshot <path>", "Initialize from a previously exported pipeline snapshot")
+  .option("--force", "Overwrite existing config files")
   .action(initCommand);
 
 program
