@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for auth-gate dispatch suppression and recovery lifecycle — in `scripts/tests/watchdog.sh`, simulate failed agent auth checks to assert dispatch suppression, then restore auth and assert exactly one recovery event with next-cycle dispatch resumption. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
+## [INFRA] Add failed-task history rotation guardrail with archive parity checks — in `scripts/watchdog.sh`, move older `fixed|superseded` rows from `.dev/failed-tasks.md` into `.dev/failed-tasks-archive.md` after a configurable cap while preserving active row ordering and table integrity. Mission: Criterion #2 retry-loop throughput and Criterion #3 deterministic state management.
 **Status:** completed
-**Started:** 2026-02-20 17:57
+**Started:** 2026-02-20 17:58
 **Completed:** 2026-02-20
-**Branch:** dev/add-shell-regression-for-auth-gate-dispa
+**Branch:** dev/add-failed-task-history-rotation-guardra
 **Worker:** 3
 
 ### Changes
