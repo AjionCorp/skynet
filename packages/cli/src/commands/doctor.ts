@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync, rmSync } from "fs";
+import { existsSync, readdirSync, unlinkSync, writeFileSync, rmSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
@@ -578,7 +578,7 @@ export async function doctorCommand(options: DoctorOptions) {
           lines.push(`export ${key}="${def}"`);
         }
         try {
-          const existing = readFileSync(configPath, "utf-8");
+          const existing = readFile(configPath);
           writeFileSync(configPath, existing.trimEnd() + "\n" + lines.join("\n") + "\n", "utf-8");
           console.log(`    Fixed: appended ${missingKeys.length} default config var(s)`);
           fixCount += missingKeys.length;

@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   ChevronDown,
   ChevronRight,
+  Wrench,
 } from "lucide-react";
 import type { PipelineStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
@@ -601,14 +602,56 @@ export function PipelineDashboard() {
             <span className="rounded-md bg-red-500/10 px-2 py-0.5 text-xs text-red-400">{status.failedPendingCount}</span>
           </div>
           <div className="divide-y divide-red-500/10">
-            {status.failed.filter((f) => f.status.includes("pending")).map((task, i) => (
-              <div key={i} className="bg-zinc-900/50 px-5 py-3">
-                <p className="text-sm text-zinc-300">{task.task}</p>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {task.error} &middot; Attempt {task.attempts}/3 &middot; {task.date}
-                </p>
-              </div>
-            ))}
+            {status.failed
+              .filter((f) => f.status.includes("pending") || f.status.startsWith("fixing-"))
+              .map((task, i) => {
+                const fixerId = task.status.startsWith("fixing-") ? task.status.split("-")[1] : null;
+                return (
+                  <div key={i} className="bg-zinc-900/50 px-5 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-zinc-300">{task.task}</p>
+                      {fixerId && (
+                        <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
+                          Claimed by F{fixerId}
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {task.error} &middot; Attempt {task.attempts}/3 &middot; {task.date}
+                    </p>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {/* Task Fixers */}
+      {status.failed.some((f) => f.status.startsWith("fixing-")) && (
+        <div className="rounded-xl border border-amber-500/20 overflow-hidden">
+          <div className="flex items-center gap-2 bg-amber-500/5 px-5 py-3">
+            <Wrench className="h-4 w-4 text-amber-400" />
+            <span className="text-sm font-semibold text-amber-400">Task Fixers</span>
+          </div>
+          <div className="divide-y divide-amber-500/10">
+            {status.failed
+              .filter((f) => f.status.startsWith("fixing-"))
+              .map((task, i) => {
+                const fixerId = task.status.split("-")[1] || "?";
+                return (
+                  <div key={i} className="bg-zinc-900/50 px-5 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-zinc-300">{task.task}</p>
+                      <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-400">
+                        Fixer F{fixerId}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {task.error} &middot; Attempt {task.attempts}/3 &middot; {task.date}
+                    </p>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

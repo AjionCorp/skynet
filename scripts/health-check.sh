@@ -47,7 +47,8 @@ trap 'release_lock' EXIT
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
-if ! check_claude_auth; then
+if ! check_any_auth; then
+  log "No agent auth available (Claude/Codex). Skipping health-check."
   exit 1
 fi
 

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, act, fireEvent } from "@testing-library/react";
 import { MonitoringDashboard } from "./MonitoringDashboard";
 import { SkynetProvider } from "./SkynetProvider";
 import type { MonitoringStatus } from "../types";
@@ -12,6 +12,7 @@ import type { MonitoringStatus } from "../types";
 const MOCK_STATUS: MonitoringStatus = {
   workers: [
     { name: "dev-worker-1", label: "Dev Worker 1", category: "core", schedule: "continuous", description: "Main dev worker", running: true, pid: 12345, ageMs: 60000, lastLog: null, lastLogTime: null, logFile: "dev-worker-1" },
+    { name: "task-fixer-2", label: "Task Fixer 2", category: "core", schedule: "on demand", description: "Fixes failed tasks", running: true, pid: 54321, ageMs: 120000, lastLog: null, lastLogTime: null, logFile: "task-fixer-2" },
     { name: "watchdog", label: "Watchdog", category: "core", schedule: "every 30s", description: "Monitors workers", running: false, pid: null, ageMs: null, lastLog: null, lastLogTime: null, logFile: "watchdog" },
     { name: "auth-refresh", label: "Auth Refresh", category: "infra", schedule: "every 5m", description: "Refreshes auth token", running: true, pid: 54321, ageMs: 120000, lastLog: null, lastLogTime: null, logFile: "auth-refresh" },
   ],
@@ -29,7 +30,9 @@ const MOCK_STATUS: MonitoringStatus = {
   completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "" }],
   completedCount: 15,
   averageTaskDuration: "45m",
-  failed: [],
+  failed: [
+    { date: "2024-01-02", task: "Fix billing", branch: "fix/billing", error: "Tests", attempts: "2", status: "fixing-2" },
+  ],
   failedPendingCount: 0,
   hasBlockers: false,
   blockerLines: [],
@@ -37,7 +40,13 @@ const MOCK_STATUS: MonitoringStatus = {
   selfCorrectionRate: 92,
   selfCorrectionStats: { fixed: 5, blocked: 1, superseded: 2, pending: 0, selfCorrected: 3 },
   syncHealth: { lastRun: "2024-01-01", endpoints: [] },
-  auth: { tokenCached: true, tokenCacheAgeMs: 1000, authFailFlag: false, lastFailEpoch: null },
+  auth: {
+    tokenCached: true,
+    tokenCacheAgeMs: 1000,
+    authFailFlag: false,
+    lastFailEpoch: null,
+    codex: { status: "ok", expiresInMs: 3600000, hasRefreshToken: true, source: "file" },
+  },
   backlogLocked: false,
   git: { branch: "main", commitsAhead: 0, dirtyFiles: 0, lastCommit: "abc123" },
   postCommitGate: { lastResult: "pass", lastCommit: "abc123", lastTime: "2024-01-01" },
@@ -208,5 +217,20 @@ describe("MonitoringDashboard", () => {
     const { unmount } = renderWithProvider(<MonitoringDashboard />);
     unmount();
     expect(mockES.close).toHaveBeenCalled();
+  });
+
+  it("shows fixer claimed task on workers tab", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Workers")).toBeDefined();
+    });
+    fireEvent.click(screen.getByText("Workers"));
+    await waitFor(() => {
+      expect(screen.getByText("Fixing:")).toBeDefined();
+      expect(screen.getByText("Fix billing")).toBeDefined();
+    });
   });
 });

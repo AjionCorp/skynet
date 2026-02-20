@@ -6,7 +6,7 @@
 #   agent_run "prompt" "log" — runs the agent, returns exit code
 #
 # Expects these env vars (set by _agent.sh / _config.sh):
-#   SKYNET_CODEX_BIN, SKYNET_CODEX_FLAGS, SKYNET_CODEX_MODEL,
+#   SKYNET_CODEX_BIN, SKYNET_CODEX_FLAGS, SKYNET_CODEX_MODEL, SKYNET_CODEX_SUBCOMMAND,
 #   SKYNET_CODEX_AUTH_FILE, SKYNET_CODEX_AUTH_FAIL_FLAG
 
 agent_check() {
@@ -37,6 +37,7 @@ agent_run() {
   if [ -n "${SKYNET_CODEX_MODEL:-}" ]; then
     model_flag="--model $SKYNET_CODEX_MODEL"
   fi
+  local subcommand="${SKYNET_CODEX_SUBCOMMAND:-exec}"
   # shellcheck disable=SC2086
-  _agent_exec $SKYNET_CODEX_BIN $SKYNET_CODEX_FLAGS $model_flag "$prompt" >> "$log_file" 2>&1
+  _agent_exec $SKYNET_CODEX_BIN $subcommand $SKYNET_CODEX_FLAGS $model_flag "$prompt" >> "$log_file" 2>&1
 }

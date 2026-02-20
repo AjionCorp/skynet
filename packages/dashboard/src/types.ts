@@ -15,6 +15,7 @@ export interface SkynetConfig {
   lockPrefix: string;
   authTokenCache?: string;
   authFailFlag?: string;
+  codexAuthFile?: string;
   workers: SkynetWorkerDef[];
   triggerableScripts: string[];
   taskTags: string[];
@@ -148,6 +149,14 @@ export interface AuthStatus {
   tokenCacheAgeMs: number | null;
   authFailFlag: boolean;
   lastFailEpoch: number | null;
+  codex: CodexAuthStatus;
+}
+
+export interface CodexAuthStatus {
+  status: "ok" | "missing" | "expired" | "invalid" | "api_key";
+  expiresInMs: number | null;
+  hasRefreshToken: boolean;
+  source: "api_key" | "file" | "missing" | "invalid";
 }
 
 // ===== Monitoring Status (full, from monitoring-dashboard) =====

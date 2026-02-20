@@ -99,6 +99,14 @@ export const DEFAULT_WORKERS: SkynetWorkerDef[] = [
     description: "OAuth token refresh",
   },
   {
+    name: "codex-auth-refresh",
+    label: "Codex Auth Refresh",
+    category: "infra",
+    schedule: "Every 30m",
+    description: "Codex OAuth token refresh",
+    logFile: "codex-auth-refresh",
+  },
+  {
     name: "watchdog",
     label: "Watchdog",
     category: "infra",

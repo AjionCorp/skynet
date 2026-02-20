@@ -58,6 +58,8 @@ export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                   
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)
 export SKYNET_AUTH_NOTIFY_INTERVAL=3600                                          # Seconds between auth-failure notifications
 export SKYNET_CODEX_NOTIFY_INTERVAL=3600                                         # Seconds between Codex auth-failure notifications
+export SKYNET_CODEX_REFRESH_BUFFER_SECS=900                                      # Refresh Codex tokens if expiring within N seconds
+export SKYNET_CODEX_OAUTH_ISSUER=""                                              # Optional override for Codex OAuth issuer
 
 # ---- Notifications ----
 # Comma-separated list of enabled notification channels.
@@ -91,11 +93,16 @@ export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | /p
 
 # ---- Codex CLI (OpenAI fallback) ----
 export SKYNET_CODEX_BIN="codex"
+export SKYNET_CODEX_SUBCOMMAND="exec"  # Use non-interactive Codex CLI subcommand for workers
 export SKYNET_CODEX_FLAGS="--full-auto"
 export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup; add pnpm/node paths if not in /opt/homebrew/bin
+
+# ---- Worktrees ----
+# Use a project-local worktree base to keep Codex sandbox happy and avoid /tmp issues.
+export SKYNET_WORKTREE_BASE="$SKYNET_DEV_DIR/worktrees"
 
 # ---- Server Error Scanning ----
 # Space-separated list of env vars to check in server logs

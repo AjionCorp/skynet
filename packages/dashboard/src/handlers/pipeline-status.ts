@@ -1,4 +1,4 @@
-import type { SkynetConfig, MissionProgress } from "../types";
+import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 
@@ -64,6 +64,45 @@ function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const rem = Math.round(minutes % 60);
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+}
+
+function decodeJwtExp(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+  try {
+    const json = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    return typeof json.exp === "number" ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function readCodexAuthStatus(
+  readFile: (path: string, encoding: BufferEncoding) => string,
+  authFile: string
+): CodexAuthStatus {
+  try {
+    const raw = JSON.parse(readFile(authFile, "utf-8"));
+    const tokens = raw?.tokens || {};
+    const token = tokens.id_token || tokens.access_token || "";
+    const refresh = tokens.refresh_token || "";
+    if (!token) {
+      return { status: "invalid", expiresInMs: null, hasRefreshToken: !!refresh, source: "invalid" };
+    }
+    const exp = decodeJwtExp(token);
+    if (!exp) {
+      return { status: "ok", expiresInMs: null, hasRefreshToken: !!refresh, source: "file" };
+    }
+    const remainingMs = exp * 1000 - Date.now();
+    if (remainingMs <= 0) {
+      return { status: "expired", expiresInMs: 0, hasRefreshToken: !!refresh, source: "file" };
+    }
+    return { status: "ok", expiresInMs: remainingMs, hasRefreshToken: !!refresh, source: "file" };
+  } catch {
+    return { status: "invalid", expiresInMs: null, hasRefreshToken: false, source: "invalid" };
+  }
 }
 
 /**
@@ -443,6 +482,27 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         }
       }
 
+      const codexAuthFile =
+        config.codexAuthFile ??
+        process.env.SKYNET_CODEX_AUTH_FILE ??
+        (process.env.HOME ? `${process.env.HOME}/.codex/auth.json` : "");
+      let codexAuth: CodexAuthStatus = {
+        status: "missing",
+        expiresInMs: null,
+        hasRefreshToken: false,
+        source: "missing",
+      };
+      if (process.env.OPENAI_API_KEY) {
+        codexAuth = {
+          status: "api_key",
+          expiresInMs: null,
+          hasRefreshToken: false,
+          source: "api_key",
+        };
+      } else if (codexAuthFile && existsSync(codexAuthFile)) {
+        codexAuth = readCodexAuthStatus((p, enc) => readFileSync(p, enc), codexAuthFile);
+      }
+
       // Backlog mutex
       const backlogLockPath = `${lockPrefix}-backlog.lock`;
       const backlogLocked = existsSync(backlogLockPath);
@@ -590,6 +650,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             tokenCacheAgeMs,
             authFailFlag,
             lastFailEpoch,
+            codex: codexAuth,
           },
           backlogLocked,
           git: {

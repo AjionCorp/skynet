@@ -84,8 +84,8 @@ fi
 # --- Tests failed — analyze failures and add tasks ---
 # Auth check: only needed for the AI analysis part (Playwright tests don't need auth)
 source "$SCRIPTS_DIR/auth-check.sh"
-if ! check_claude_auth; then
-  log "Claude auth failed. Skipping failure analysis."
+if ! check_any_auth; then
+  log "No agent auth available (Claude/Codex). Skipping failure analysis."
   exit 0
 fi
 

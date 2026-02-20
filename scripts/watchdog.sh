@@ -14,6 +14,7 @@ set +e
 LOG="$SCRIPTS_DIR/watchdog.log"
 WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
+WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
 
 cd "$PROJECT_DIR"
 
@@ -240,11 +241,11 @@ IDLE_EOF
   # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
   local worktree_dirs=()
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
-    worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${_wid}:${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
+  worktree_dirs+=("${WORKTREE_BASE}/w${_wid}:${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
   done
-  worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock")
+worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock")
   for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
-    worktree_dirs+=("/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-${_fid}:${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
+  worktree_dirs+=("${WORKTREE_BASE}/fixer-${_fid}:${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
   done
 
   for entry in "${worktree_dirs[@]}"; do
@@ -288,15 +289,18 @@ validate_backlog
 # --- Auth pre-check: don't kick off Claude workers if auth is down ---
 # Uses shared check_claude_auth which auto-triggers auth-refresh on failure
 source "$SCRIPTS_DIR/auth-check.sh"
+agent_auth_ok=false
 claude_auth_ok=false
 if check_claude_auth; then
   claude_auth_ok=true
+  agent_auth_ok=true
 fi
 
 # Also check Codex auth (non-blocking — just sets fail flag for awareness)
 codex_auth_ok=false
 if check_codex_auth; then
   codex_auth_ok=true
+  agent_auth_ok=true
 fi
 
 # Count backlog tasks (grep -c exits 1 on no match, so use || true and default)
@@ -332,7 +336,7 @@ _handle_stale_worker() {
   local hb_file="$DEV_DIR/worker-${wid}.heartbeat"
   local lockfile="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
   local task_file="$DEV_DIR/current-task-${wid}.md"
-  local worktree="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${wid}"
+  local worktree="${WORKTREE_BASE}/w${wid}"
   local stale_seconds=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
 
   # Only check if heartbeat file exists (worker is actively executing a task)
@@ -706,7 +710,7 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
 fi
 
 # --- Only kick Claude-dependent workers if auth is OK ---
-if $claude_auth_ok && ! $pipeline_paused; then
+if $agent_auth_ok && ! $pipeline_paused; then
   # Rule 1: Kick dev-workers proportional to backlog size
   # Worker N starts when backlog has >= N tasks and worker N is idle
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do

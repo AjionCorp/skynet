@@ -760,6 +760,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                   {categoryWorkers.map((w) => {
                     // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
                     const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
+                    const fixerMatch = w.name.match(/task-fixer-?(\d+)?/);
+                    const fixerId = fixerMatch ? (fixerMatch[1] || "1") : null;
+                    const fixerTask = fixerId
+                      ? status.failed.find((f) => f.status === `fixing-${fixerId}`)
+                      : null;
                     return (
                     <div key={w.name}>
                       <WorkerCard
@@ -769,6 +774,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                         onViewLogs={() => switchToLogs(w.logFile)}
                         triggering={!!triggering[w.name]}
                       />
+                      {fixerTask && (
+                        <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+                          <span className="font-medium text-amber-300">Fixing:</span> {fixerTask.task}
+                        </div>
+                      )}
                       {triggerMsg[w.name] && (
                         <p className={`mt-1 px-1 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
                           {triggerMsg[w.name]}
@@ -1029,7 +1039,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
               <Key className="h-3.5 w-3.5" />
               Authentication
             </div>
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
+            <div className="mt-4 grid gap-4 sm:grid-cols-4">
               <div>
                 <p className="text-xs text-zinc-500">Token Cache</p>
                 <div className="mt-1 flex items-center gap-2">
@@ -1054,6 +1064,40 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                   <p className="mt-0.5 text-xs text-zinc-600">
                     Last fail: {formatAge(Date.now() - status.auth.lastFailEpoch * 1000)} ago
                   </p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-zinc-500">Codex Auth</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <div
+                    className={`h-2 w-2 rounded-full ${
+                      status.auth.codex.status === "ok" || status.auth.codex.status === "api_key"
+                        ? "bg-emerald-400"
+                        : status.auth.codex.status === "expired"
+                          ? "bg-amber-400"
+                          : "bg-red-400"
+                    }`}
+                  />
+                  <span className="text-sm text-white">
+                    {status.auth.codex.status === "api_key"
+                      ? "API Key"
+                      : status.auth.codex.status === "ok"
+                        ? "OK"
+                        : status.auth.codex.status === "expired"
+                          ? "Expired"
+                          : status.auth.codex.status === "missing"
+                            ? "Missing"
+                            : "Invalid"}
+                  </span>
+                </div>
+                {status.auth.codex.expiresInMs !== null && (
+                  <p className="mt-0.5 text-xs text-zinc-600">
+                    Expires in {formatAge(status.auth.codex.expiresInMs)} 
+                    {!status.auth.codex.hasRefreshToken ? " (no refresh)" : ""}
+                  </p>
+                )}
+                {status.auth.codex.expiresInMs === null && !status.auth.codex.hasRefreshToken && status.auth.codex.status === "ok" && (
+                  <p className="mt-0.5 text-xs text-zinc-600">No refresh token</p>
                 )}
               </div>
               <div>

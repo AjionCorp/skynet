@@ -30,6 +30,7 @@ const CRON_SCHEDULES: Record<string, { schedule: string; description: string }> 
   "watchdog":           { schedule: "*/3 * * * *",   description: "Watchdog (every 3 min)" },
   "health-check":       { schedule: "0 8 * * *",     description: "Health check (daily at 8am)" },
   "auth-refresh":       { schedule: "0 * * * *",     description: "Auth refresh (hourly)" },
+  "codex-auth-refresh": { schedule: "*/30 * * * *",  description: "Codex auth refresh (every 30 min)" },
   "dev-worker":         { schedule: "*/15 * * * *",  description: "Dev worker (every 15 min)" },
   "task-fixer":         { schedule: "*/30 * * * *",  description: "Task fixer (every 30 min)" },
   "ui-tester":          { schedule: "0 * * * *",     description: "UI tester (hourly)" },

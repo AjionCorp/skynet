@@ -56,7 +56,8 @@ fi
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
-if ! check_claude_auth; then
+if ! check_any_auth; then
+  log "No agent auth available (Claude/Codex). Skipping project-driver."
   exit 1
 fi
 
@@ -73,7 +74,21 @@ else
 fi
 
 # --- Gather all state (guard against missing files on fresh projects) ---
-if [ -f "$BACKLOG" ]; then backlog_content=$(cat "$BACKLOG"); else backlog_content="(file not found)"; fi
+if [ -f "$BACKLOG" ]; then
+  backlog_content=$(cat "$BACKLOG")
+  backlog_unchecked_content=$(grep '^\- \[[ >]\]' "$BACKLOG" 2>/dev/null || true)
+  backlog_recent_done_content=$(grep '^\- \[x\]' "$BACKLOG" 2>/dev/null | tail -40 || true)
+  backlog_prompt_content="$backlog_unchecked_content"
+  if [ -n "$backlog_recent_done_content" ]; then
+    backlog_prompt_content="$backlog_prompt_content
+
+# Recent checked history (last 40)
+$backlog_recent_done_content"
+  fi
+else
+  backlog_content="(file not found)"
+  backlog_prompt_content="(file not found)"
+fi
 if [ -f "$COMPLETED" ]; then completed_content=$(head -2 "$COMPLETED"; tail -30 "$COMPLETED"); else completed_content="(file not found)"; fi
 if [ -f "$FAILED" ]; then failed_content=$(cat "$FAILED"); else failed_content="(file not found)"; fi
 if [ -f "$CURRENT_TASK" ]; then current_task_content=$(cat "$CURRENT_TASK"); else current_task_content="(file not found)"; fi
@@ -138,8 +153,8 @@ $mission_content
 ### Task Metrics
 - Pending: $remaining | Claimed: $claimed | Completed: $completed_count | Failed (pending retry): $failed_count
 
-### Backlog (.dev/backlog.md)
-$backlog_content
+### Backlog (.dev/backlog.md — unchecked + recent checked history)
+$backlog_prompt_content
 
 ### Current Task (.dev/current-task.md)
 $current_task_content
@@ -199,6 +214,13 @@ You are the strategic brain of this pipeline. Every action you take must advance
 - Reprioritize based on: mission impact > unblocking others > ease of completion
 - Clear resolved blockers from blockers.md
 - Don't duplicate tasks already in backlog, completed, or failed
+- If pending retry failures are high, prioritize failed-task deduplication/reconciliation before net-new feature work
+- Keep one canonical task per root cause; supersede retries/variants instead of adding parallel duplicates
+- If a root already has any active \`fixing-*\` row in \`.dev/failed-tasks.md\`, do not generate a parallel pending variant for that same root
+- If pending retry failures exceed 20, bias generation toward reliability/security/reconciliation work and avoid net-new feature tasks unless they directly unblock the loop
+- Prefer one durable root-cause task title over repeated \"re-open\" variants; merge retries into the same canonical task description
+- Preserve any currently claimed \'[>]\' tasks exactly as-is at the top of backlog updates; do not rewrite or demote in-progress claims
+- Keep at most 15 unchecked tasks total (\'[ ]\' + \'[>]\'); prioritize and trim lower-impact pending items when above limit
 
 ### 4. Self-Improvement Awareness
 - If you notice the pipeline itself has gaps (missing scripts, broken flows, missing tests), generate tasks to fix them
@@ -244,6 +266,24 @@ if [ -f "$COMPLETED" ]; then
     while IFS= read -r _line; do
       _normalize_task_line "$_line"
     done <<< "$_completed_tasks" >> "$_dedup_normalized"
+  fi
+fi
+# Also include active failed-task roots (pending/fixing-*/blocked) to avoid duplicate root-cause tasks
+if [ -f "$FAILED" ]; then
+  _failed_active_tasks=$(awk -F'|' '
+    function trim(v){ gsub(/^ +| +$/,"",v); return v }
+    NR>2 {
+      t=trim($3); s=trim($7)
+      if (t != "" && (s == "pending" || s ~ /^fixing-/ || s == "blocked")) {
+        print "- [ ] " t
+      }
+    }
+  ' "$FAILED")
+  if [ -n "$_failed_active_tasks" ]; then
+    echo "$_failed_active_tasks" >> "$_dedup_snapshot"
+    while IFS= read -r _line; do
+      _normalize_task_line "$_line"
+    done <<< "$_failed_active_tasks" >> "$_dedup_normalized"
   fi
 fi
 

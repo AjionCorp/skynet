@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Reconcile blocked/pending drift between failed-task and backlog state after fixer cycles — add a watchdog post-cycle reconciliation report (`active_roots`, `duplicate_active_rows`, `superseded_rows`) and emit events for every superseded duplicate. Mission: Criterion #2 retry-loop stability and Criterion #4 visibility.
+## [TEST] Add lock-compat regression coverage for CLI helper DRY root — extend CLI command tests to prove shared `isProcessRunning` handles both directory locks and file locks identically to prior behavior, and that `readFile` fallback semantics remain unchanged. Mission: Criterion #2 quality gates and Criterion #3 deterministic behavior.
 **Status:** completed
-**Started:** 2026-02-20 11:07
+**Started:** 2026-02-20 15:54
 **Completed:** 2026-02-20
-**Branch:** dev/reconcile-blockedpending-drift-between-f
+**Branch:** dev/add-lock-compat-regression-coverage-for-
 **Worker:** 3
 
 ### Changes

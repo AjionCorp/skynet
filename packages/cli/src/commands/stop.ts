@@ -103,7 +103,7 @@ export async function stopCommand(options: StopOptions) {
   for (let i = 1; i <= maxFixers; i++) workers.push(`task-fixer-${i}`);
   workers.push(
     "project-driver", "sync-runner", "ui-tester",
-    "feature-validator", "health-check", "auth-refresh", "watchdog",
+    "feature-validator", "health-check", "auth-refresh", "codex-auth-refresh", "watchdog",
   );
 
   let stopped = 0;

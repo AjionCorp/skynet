@@ -22,6 +22,54 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMins}m`;
 }
 
+function decodeJwtExp(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length < 2) return null;
+  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
+  try {
+    const json = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    return typeof json.exp === "number" ? json.exp : null;
+  } catch {
+    return null;
+  }
+}
+
+function getCodexAuthStatus(vars: Record<string, string>): string {
+  if (process.env.OPENAI_API_KEY) {
+    return "Codex Auth: OK (API key env)";
+  }
+
+  const authFile = vars.SKYNET_CODEX_AUTH_FILE || `${process.env.HOME || ""}/.codex/auth.json`;
+  if (!authFile || !existsSync(authFile)) {
+    return "Codex Auth: Missing (no auth file)";
+  }
+
+  try {
+    const raw = readFileSync(authFile, "utf-8");
+    const data = JSON.parse(raw);
+    const tokens = data?.tokens || {};
+    const token = tokens.id_token || tokens.access_token || "";
+    const refresh = tokens.refresh_token || "";
+    if (!token) {
+      return "Codex Auth: Invalid (missing token)";
+    }
+    const exp = decodeJwtExp(token);
+    if (!exp) {
+      return refresh ? "Codex Auth: OK (no exp)" : "Codex Auth: OK (no exp, no refresh)";
+    }
+    const remaining = exp - Math.floor(Date.now() / 1000);
+    const mins = Math.floor(Math.max(0, remaining) / 60);
+    if (remaining <= 0) {
+      return refresh ? "Codex Auth: Expired (refresh token present)" : "Codex Auth: Expired";
+    }
+    const refreshNote = refresh ? "" : " (no refresh token)";
+    return `Codex Auth: OK (expires in ${mins}m)${refreshNote}`;
+  } catch {
+    return "Codex Auth: Invalid (unreadable auth file)";
+  }
+}
+
 function getLastActivityTimestamp(devDir: string): Date | null {
   const files = ["backlog.md", "completed.md", "failed-tasks.md", "current-task.md"];
   let latest: Date | null = null;
@@ -210,7 +258,7 @@ export async function statusCommand(options: StatusOptions) {
   const workers = [
     ...workerNames, "task-fixer", "project-driver",
     "sync-runner", "ui-tester", "feature-validator", "health-check",
-    "auth-refresh", "watchdog",
+    "auth-refresh", "codex-auth-refresh", "watchdog",
   ];
 
   let runningCount = 0;
@@ -261,6 +309,7 @@ export async function statusCommand(options: StatusOptions) {
   } else {
     print("\n  Auth: No token cached");
   }
+  print(`  ${getCodexAuthStatus(vars)}`);
 
   // --- Blockers ---
   const blockers = readFile(join(devDir, "blockers.md"));

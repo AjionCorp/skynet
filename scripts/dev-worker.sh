@@ -39,7 +39,7 @@ if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
 fi
 
 # Per-worker worktree directory (isolated from other workers)
-WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-w${WORKER_ID}"
+WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/w${WORKER_ID}"
 
 cd "$PROJECT_DIR"
 
@@ -220,6 +220,7 @@ unclaim_task() {
 
 # Create a worktree for a feature branch. Installs deps via pnpm.
 setup_worktree() {
+  mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
   local branch="$1"
   local from_main="${2:-true}"  # true = create new branch from main, false = use existing
 
@@ -309,7 +310,8 @@ fi
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
-if ! check_claude_auth; then
+if ! check_any_auth; then
+  log "No agent auth available (Claude/Codex). Skipping worker."
   exit 1
 fi
 

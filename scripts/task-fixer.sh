@@ -22,7 +22,7 @@ FIXER_STATS="$DEV_DIR/fixer-stats.log"
 FIXER_COOLDOWN="$DEV_DIR/fixer-cooldown"
 
 # Instance-specific worktree (isolated from dev-workers and other fixers)
-WORKTREE_DIR="/tmp/skynet-${SKYNET_PROJECT_NAME}-worktree-fixer-${FIXER_ID}"
+WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/fixer-${FIXER_ID}"
 
 cd "$PROJECT_DIR"
 
@@ -47,6 +47,7 @@ format_duration() {
 
 # --- Worktree helpers ---
 setup_worktree() {
+  mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
   local branch="$1"
   local from_main="${2:-true}"
   cleanup_worktree 2>/dev/null || true
@@ -193,7 +194,8 @@ fi
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"
-if ! check_claude_auth; then
+if ! check_any_auth; then
+  log "No agent auth available (Claude/Codex). Skipping task-fixer."
   exit 1
 fi
 
@@ -219,11 +221,30 @@ fi
 
 pending_failure=""
 if _acquire_failed_lock; then
-  # Find first pending failure that isn't claimed by another fixer
-  pending_failure=$(grep '| pending |' "$FAILED" 2>/dev/null | head -1 || true)
+  # Find first pending failure that isn't maxed out
+  while IFS= read -r _line; do
+    [ -z "$_line" ] && continue
+    _title=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+    _branch=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
+    _error=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
+    _attempts=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
+    if ! echo "$_attempts" | grep -Eq '^[0-9]+$'; then
+      _attempts=0
+    fi
+    if [ "$_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
+      log "Task '$_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
+      update_failed_line "$_title" "| $(date '+%Y-%m-%d') | $_title | $_branch | $_error | $_attempts | blocked |"
+      echo "- **$(date '+%Y-%m-%d')**: Task '$_title' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_error" >> "$BLOCKERS"
+      tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $_title"
+      emit_event "task_blocked" "Fixer $FIXER_ID: $_title (max attempts)"
+      continue
+    fi
+    pending_failure="$_line"
+    break
+  done < <(grep '| pending |' "$FAILED" 2>/dev/null || true)
+
   if [ -n "$pending_failure" ]; then
     # Mark as claimed by this fixer instance (pending → fixing-N)
-    # Use awk for exact line match to avoid sed escaping issues
     task_match_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
     __AWK_TITLE="$task_match_title" __AWK_FID="$FIXER_ID" awk \
       'BEGIN{title=ENVIRON["__AWK_TITLE"]; fid=ENVIRON["__AWK_FID"]} index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
@@ -242,6 +263,9 @@ task_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $
 branch_name=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
 error_summary=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
 fix_attempts=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
+if ! echo "$fix_attempts" | grep -Eq '^[0-9]+$'; then
+  fix_attempts=0
+fi
 
 # Check if max attempts reached
 if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
@@ -443,6 +467,9 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
 
     _merge_succeeded=false
+    _err_trap=$(trap -p ERR || true)
+    trap - ERR
+    set +e
     if git merge "$branch_name" --no-edit 2>>"$LOG"; then
       _merge_succeeded=true
     else
@@ -464,6 +491,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         git rebase --abort 2>/dev/null || true
         git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
       fi
+    fi
+    set -e
+    if [ -n "$_err_trap" ]; then
+      eval "$_err_trap"
     fi
 
     if $_merge_succeeded; then

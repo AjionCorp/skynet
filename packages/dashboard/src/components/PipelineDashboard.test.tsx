@@ -36,7 +36,13 @@ const MOCK_STATUS: PipelineStatus = {
   selfCorrectionRate: 92,
   selfCorrectionStats: { fixed: 5, blocked: 1, superseded: 2, pending: 0, selfCorrected: 3 },
   syncHealth: { lastRun: "2024-01-01", endpoints: [] },
-  auth: { tokenCached: true, tokenCacheAgeMs: 1000, authFailFlag: false, lastFailEpoch: null },
+  auth: {
+    tokenCached: true,
+    tokenCacheAgeMs: 1000,
+    authFailFlag: false,
+    lastFailEpoch: null,
+    codex: { status: "ok", expiresInMs: 3600000, hasRefreshToken: true, source: "file" },
+  },
   backlogLocked: false,
   git: { branch: "main", commitsAhead: 0, dirtyFiles: 0, lastCommit: "abc123" },
   postCommitGate: { lastResult: "pass", lastCommit: "abc123", lastTime: "2024-01-01" },
@@ -130,6 +136,43 @@ describe("PipelineDashboard", () => {
     expect(screen.getByText("Critical")).toBeDefined();
     const badge = screen.getByText("Critical");
     expect(badge.className).toContain("red");
+  });
+
+  it("shows claimed badge for failed tasks being fixed", async () => {
+    const withFailed = {
+      ...MOCK_STATUS,
+      failedPendingCount: 2,
+      failed: [
+        { date: "2024-01-01", task: "Fix login", branch: "fix/login", error: "Typecheck", attempts: "1", status: "pending" },
+        { date: "2024-01-02", task: "Fix billing", branch: "fix/billing", error: "Tests", attempts: "2", status: "fixing-2" },
+      ],
+    };
+    renderWithProvider(<PipelineDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: withFailed, error: null }) });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Failed Tasks")).toBeDefined();
+    });
+    expect(screen.getByText("Claimed by F2")).toBeDefined();
+  });
+
+  it("renders task fixer section with active fixer tasks", async () => {
+    const withFixers = {
+      ...MOCK_STATUS,
+      failedPendingCount: 1,
+      failed: [
+        { date: "2024-01-02", task: "Fix billing", branch: "fix/billing", error: "Tests", attempts: "2", status: "fixing-2" },
+      ],
+    };
+    renderWithProvider(<PipelineDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: withFixers, error: null }) });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Task Fixers")).toBeDefined();
+    });
+    expect(screen.getByText("Fixer F2")).toBeDefined();
   });
 
   it("renders self-correction rate display", async () => {
