@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock Codex large-prompt stdin/exit-code reliability from canonical repro — apply the exact failing repro from `.dev/blockers.md` to `scripts/agents/codex.sh` and associated shell regression test, preserving stdin-first delivery and child exit-code propagation through `_agent_exec` with green `pnpm typecheck`. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
+## [FIX] Land canonical pipeline-logs line-count optimization with strict response parity — in `packages/dashboard/src/handlers/pipeline-logs.ts` and handler tests, keep buffer newline counting while preserving empty-file/no-trailing-newline response shape and typecheck. Mission: Criterion #3 runtime efficiency and Criterion #2 reliable gates.
 **Status:** completed
-**Started:** 2026-02-20 10:34
+**Started:** 2026-02-20 10:37
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-codex-large-prompt-stdinexit-cod
+**Branch:** dev/land-canonical-pipeline-logs-line-count-
 **Worker:** 3
 
 ### Changes
