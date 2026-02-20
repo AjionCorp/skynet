@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add health score alert notification to watchdog — in `scripts/watchdog.sh`, after the crash recovery and stale detection phases, compute a simple health score using the same logic as the pipeline-status handler: start at 100, subtract 5 per pending failed task (grep `status=pending` in failed-tasks.md), subtract 10 per active blocker (count non-empty lines under `## Active` in blockers.md), subtract 2 per stale heartbeat. If score drops below `${SKYNET_HEALTH_ALERT_THRESHOLD:-50}`, call `emit_event "health_alert" "Health score: $score"` and `notify_all "Pipeline health alert: score $score/100"`. Use a sentinel file `.dev/health-alert-sent` to prevent repeated alerts — only alert once per drop, delete sentinel when score recovers above threshold. Add `SKYNET_HEALTH_ALERT_THRESHOLD="50"` to `templates/skynet.config.sh` with comment. Criterion #3 (proactive failure detection)
+## [INFRA] Add agent execution timeout to prevent zombie agent processes — in `scripts/_agent.sh`, wrap the agent invocation with a configurable timeout. Add `SKYNET_AGENT_TIMEOUT_MINUTES="45"` to `templates/skynet.config.sh`. In the `run_agent()` function (currently in each plugin's `agent_run()`), prefix the agent command with a portable timeout: on Linux use `timeout ${timeout_secs}`, on macOS use `perl -e 'alarm shift; exec @ARGV' ${timeout_secs}` (bash 3.2 compatible, no GNU coreutils dependency). If the agent times out, return exit code 124 (standard timeout convention). In `scripts/dev-worker.sh`, after the agent call (~line 440), detect exit code 124 and log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m" before marking as failed. In `scripts/task-fixer.sh`, apply the same timeout wrapper. This prevents a single hung agent (network issue, infinite loop, LLM API outage) from blocking a worker slot indefinitely. Criterion #3 (no zombie processes)
 **Status:** completed
-**Started:** 2026-02-20 00:35
+**Started:** 2026-02-20 00:48
 **Completed:** 2026-02-20
-**Branch:** dev/add-health-score-alert-notification-to-w
+**Branch:** dev/add-agent-execution-timeout-to-prevent-z
 **Worker:** 2
 
 ### Changes
