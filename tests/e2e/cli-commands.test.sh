@@ -2,7 +2,8 @@
 # tests/e2e/cli-commands.test.sh — End-to-end test for full CLI command integration
 #
 # Usage: bash tests/e2e/cli-commands.test.sh
-# Verifies: init, add-task, status, doctor, reset-task, version
+# Verifies: init, add-task, status, doctor, reset-task, version,
+#           export/import round-trip, doctor --fix, config set/get
 
 set -euo pipefail
 
@@ -28,6 +29,10 @@ assert_grep() { grep -q "$1" "$2" && pass "$3" || fail "$3"; }
 assert_output_grep() {
   # $1 = pattern, $2 = captured output, $3 = description
   echo "$2" | grep -q "$1" && pass "$3" || fail "$3"
+}
+assert_not_grep() {
+  # $1 = pattern, $2 = file, $3 = description — PASS when pattern is absent
+  grep -q "$1" "$2" && fail "$3" || pass "$3"
 }
 
 # ── Step 1: Build and pack the CLI ──────────────────────────────────
@@ -151,6 +156,78 @@ CLI_VERSION=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$REPO_
 
 assert_output_grep "skynet-cli v${CLI_VERSION}" "$VERSION_OUTPUT" "version: output matches package.json version"
 assert_output_grep "skynet-cli v"               "$VERSION_OUTPUT" "version: shows version prefix"
+
+# ── Test 7: skynet export / import round-trip ─────────────────────
+
+echo ""
+log "Test 7: skynet export / import round-trip"
+
+EXPORT_FILE="/tmp/skynet-test-export.json"
+CLEANUP+=("$EXPORT_FILE")
+
+EXPORT_OUTPUT=$(cd "$PROJECT_DIR" && npx skynet export --output "$EXPORT_FILE" --dir . 2>&1) || true
+
+assert_file "$EXPORT_FILE" "export: JSON snapshot file created"
+
+# Verify JSON contains expected keys
+KEYS_OK=$(node -e "
+  var d = JSON.parse(require('fs').readFileSync('$EXPORT_FILE','utf8'));
+  var keys = ['backlog.md','completed.md','failed-tasks.md','blockers.md','mission.md','skynet.config.sh'];
+  console.log(keys.every(function(k){ return k in d; }) ? 'OK' : 'MISSING');
+") || true
+[[ "$KEYS_OK" == "OK" ]] && pass "export: JSON contains all expected keys" || fail "export: JSON contains all expected keys"
+
+assert_output_grep 'exported to' "$EXPORT_OUTPUT" "export: output confirms export path"
+
+# Modify backlog.md — inject a marker line
+echo "- [ ] [TEST] Injected line for round-trip test" >> "$DEV/backlog.md"
+assert_grep 'Injected line for round-trip test' "$DEV/backlog.md" "export/import: backlog modification applied"
+
+# Import the snapshot (should overwrite backlog to pre-modification state)
+IMPORT_OUTPUT=$(cd "$PROJECT_DIR" && npx skynet import "$EXPORT_FILE" --dir . --force 2>&1) || true
+
+assert_output_grep 'Imported' "$IMPORT_OUTPUT" "import: output confirms import"
+assert_not_grep 'Injected line for round-trip test' "$DEV/backlog.md" "import: backlog restored to pre-modification state"
+
+# ── Test 8: skynet doctor --fix (stale heartbeat) ────────────────
+
+echo ""
+log "Test 8: skynet doctor --fix (stale heartbeat)"
+
+# Create stale heartbeat file with epoch 0 (worker-1 is within default scan range)
+echo "0" > "$DEV/worker-1.heartbeat"
+
+DOCTOR_STALE1=$(cd "$PROJECT_DIR" && npx skynet doctor --dir . 2>&1) || true
+assert_output_grep '\[WARN\].*Stale Heartbeats' "$DOCTOR_STALE1" "doctor: WARN for stale heartbeat"
+
+# Run --fix and verify stale heartbeat deleted
+DOCTOR_FIX=$(cd "$PROJECT_DIR" && npx skynet doctor --fix --dir . 2>&1) || true
+[[ ! -f "$DEV/worker-1.heartbeat" ]] && pass "doctor --fix: stale heartbeat file deleted" || fail "doctor --fix: stale heartbeat file deleted"
+
+# Re-run doctor — heartbeats should now PASS
+DOCTOR_STALE2=$(cd "$PROJECT_DIR" && npx skynet doctor --dir . 2>&1) || true
+assert_output_grep '\[PASS\].*Stale Heartbeats' "$DOCTOR_STALE2" "doctor: PASS after fix"
+
+# ── Test 9: skynet config set/get round-trip ─────────────────────
+
+echo ""
+log "Test 9: skynet config set/get round-trip"
+
+# Read original value
+ORIG_MAX=$(cd "$PROJECT_DIR" && npx skynet config --dir . get SKYNET_MAX_WORKERS 2>&1) || true
+
+# Set to 6
+SET_OUTPUT=$(cd "$PROJECT_DIR" && npx skynet config --dir . set SKYNET_MAX_WORKERS 6 2>&1) || true
+assert_output_grep 'Updated' "$SET_OUTPUT" "config set: confirms update"
+
+# Get and verify
+NEW_MAX=$(cd "$PROJECT_DIR" && npx skynet config --dir . get SKYNET_MAX_WORKERS 2>&1) || true
+[[ "$(echo "$NEW_MAX" | tr -d '[:space:]')" == "6" ]] && pass "config get: returns 6" || fail "config get: returns 6 (got: $NEW_MAX)"
+
+# Restore original value
+cd "$PROJECT_DIR" && npx skynet config --dir . set SKYNET_MAX_WORKERS "$ORIG_MAX" >/dev/null 2>&1 || true
+RESTORED=$(cd "$PROJECT_DIR" && npx skynet config --dir . get SKYNET_MAX_WORKERS 2>&1) || true
+[[ "$(echo "$RESTORED" | tr -d '[:space:]')" == "$(echo "$ORIG_MAX" | tr -d '[:space:]')" ]] && pass "config set: original value restored" || fail "config set: original value restored"
 
 # ── Summary ─────────────────────────────────────────────────────────
 
