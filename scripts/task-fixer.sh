@@ -162,8 +162,7 @@ cleanup_on_exit() {
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if _acquire_failed_lock; then
       if [ -f "$FAILED" ]; then
-        sed -i.bak "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
-        rm -f "$FAILED.bak"
+        sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
       fi
       _release_failed_lock
     fi
@@ -386,8 +385,7 @@ if $SHUTDOWN_REQUESTED; then
   log "Shutdown requested before fix attempt — unclaiming and exiting cleanly"
   if _acquire_failed_lock; then
     if [ -f "$FAILED" ]; then
-      sed -i.bak "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
-      rm -f "$FAILED.bak"
+      sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
     fi
     _release_failed_lock
   fi
