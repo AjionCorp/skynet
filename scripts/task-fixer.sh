@@ -50,6 +50,7 @@ setup_worktree() {
   mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
   local branch="$1"
   local from_main="${2:-true}"
+  WORKTREE_LAST_ERROR=""
   cleanup_worktree 2>/dev/null || true
   if $from_main; then
     # Delete stale fix branch if it exists (left over from a previous crashed attempt)
@@ -57,9 +58,30 @@ setup_worktree() {
       log "Deleting stale branch $branch before creating worktree"
       git branch -D "$branch" 2>/dev/null || true
     fi
-    git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH"
+    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH" 2>&1); then
+      log "Worktree add failed for $branch: $_wt_out"
+      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+        WORKTREE_LAST_ERROR="branch_in_use"
+      else
+        WORKTREE_LAST_ERROR="worktree_add_failed"
+      fi
+      return 1
+    fi
   else
-    git worktree add "$WORKTREE_DIR" "$branch"
+    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" "$branch" 2>&1); then
+      log "Worktree add failed for existing branch $branch: $_wt_out"
+      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+        WORKTREE_LAST_ERROR="branch_in_use"
+      else
+        WORKTREE_LAST_ERROR="worktree_add_failed"
+      fi
+      return 1
+    fi
+  fi
+  if [ ! -d "$WORKTREE_DIR" ]; then
+    log "Worktree directory missing after add: $WORKTREE_DIR"
+    WORKTREE_LAST_ERROR="worktree_missing"
+    return 1
   fi
   log "Installing deps in worktree..."
   (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
@@ -289,9 +311,18 @@ rotate_log_if_needed "$LOG"
 fix_start_epoch=$(date +%s)
 
 # --- Set up worktree for the failed branch ---
+_handle_worktree_failure() {
+  log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
+  update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | pending |"
+  _CURRENT_TASK_TITLE=""
+  exit 0
+}
+
 _make_fix_branch() {
   branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
-  setup_worktree "$branch_name" true
+  if ! setup_worktree "$branch_name" true; then
+    _handle_worktree_failure
+  fi
 }
 
 if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
@@ -310,7 +341,9 @@ if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
       _make_fix_branch
       log "Created fresh fix branch in worktree: $branch_name"
     else
-      setup_worktree "$branch_name" false
+      if ! setup_worktree "$branch_name" false; then
+        _handle_worktree_failure
+      fi
       log "Checked out existing branch in worktree: $branch_name"
     fi
   fi

@@ -223,14 +223,36 @@ setup_worktree() {
   mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
   local branch="$1"
   local from_main="${2:-true}"  # true = create new branch from main, false = use existing
+  WORKTREE_LAST_ERROR=""
 
   # Clean any leftover worktree from previous runs
   cleanup_worktree 2>/dev/null || true
 
   if $from_main; then
-    git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH"
+    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH" 2>&1); then
+      log "Worktree add failed for $branch: $_wt_out"
+      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+        WORKTREE_LAST_ERROR="branch_in_use"
+      else
+        WORKTREE_LAST_ERROR="worktree_add_failed"
+      fi
+      return 1
+    fi
   else
-    git worktree add "$WORKTREE_DIR" "$branch"
+    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" "$branch" 2>&1); then
+      log "Worktree add failed for existing branch $branch: $_wt_out"
+      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+        WORKTREE_LAST_ERROR="branch_in_use"
+      else
+        WORKTREE_LAST_ERROR="worktree_add_failed"
+      fi
+      return 1
+    fi
+  fi
+  if [ ! -d "$WORKTREE_DIR" ]; then
+    log "Worktree directory missing after add: $WORKTREE_DIR"
+    WORKTREE_LAST_ERROR="worktree_missing"
+    return 1
   fi
 
   # Install dependencies (fast — pnpm content-addressable store is cached)
@@ -434,6 +456,13 @@ EOF
   if git show-ref --verify --quiet "refs/heads/$branch_name" 2>/dev/null; then
     # Branch exists from a prior failed attempt — reuse it
     if ! setup_worktree "$branch_name" false; then
+      if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
+        log "Branch $branch_name is already checked out in another worktree — skipping for now."
+        _stop_heartbeat
+        unclaim_task "$task_title"
+        _CURRENT_TASK_TITLE=""
+        break
+      fi
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
@@ -445,6 +474,13 @@ EOF
   else
     # Create new feature branch from main
     if ! setup_worktree "$branch_name" true; then
+      if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
+        log "Branch $branch_name is already checked out in another worktree — skipping for now."
+        _stop_heartbeat
+        unclaim_task "$task_title"
+        _CURRENT_TASK_TITLE=""
+        break
+      fi
       log "Failed to create worktree for $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
