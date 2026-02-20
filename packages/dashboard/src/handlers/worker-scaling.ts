@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, readFileSync, writeFileSync, unlinkSync, constants } from "fs";
+import { openSync, readFileSync, writeFileSync, unlinkSync, rmSync, constants } from "fs";
 import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 
@@ -233,9 +233,9 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             // Process already dead
           }
 
-          // Clean up PID lock file
+          // Clean up lock directory (mkdir-based mutex)
           try {
-            unlinkSync(instance.lockFile);
+            rmSync(instance.lockFile, { recursive: true, force: true });
           } catch {
             // Already cleaned up by EXIT trap
           }
