@@ -82,7 +82,7 @@ function parseBacklog(raw: string) {
 export function createTasksHandlers(config: SkynetConfig) {
   const { devDir, lockPrefix, taskTags } = config;
   const backlogPath = `${devDir}/backlog.md`;
-  const backlogLockPath = `${lockPrefix}backlog.lock`;
+  const backlogLockPath = `${lockPrefix}-backlog.lock`;
 
   async function GET(): Promise<Response> {
     try {

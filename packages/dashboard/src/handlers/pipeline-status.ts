@@ -419,8 +419,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // Auth status
       const { existsSync, readFileSync, statSync } = await import("fs");
-      const tokenCachePath = config.authTokenCache ?? `${lockPrefix}claude-token`;
-      const authFailPath = config.authFailFlag ?? `${lockPrefix}auth-failed`;
+      const tokenCachePath = config.authTokenCache ?? `${lockPrefix}-claude-token`;
+      const authFailPath = config.authFailFlag ?? `${lockPrefix}-auth-failed`;
 
       const tokenCached = existsSync(tokenCachePath);
       let tokenCacheAgeMs: number | null = null;
@@ -444,7 +444,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       }
 
       // Backlog mutex
-      const backlogLockPath = `${lockPrefix}backlog.lock`;
+      const backlogLockPath = `${lockPrefix}-backlog.lock`;
       const backlogLocked = existsSync(backlogLockPath);
 
       // Git status — run in project root (parent of devDir)
