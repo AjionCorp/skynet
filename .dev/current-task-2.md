@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add JSON output mode to `skynet status` for programmatic access — FRESH implementation (previous branch `dev/add-json-output-mode-to-skynet-status-fo` has merge conflict — delete it). In `packages/cli/src/commands/status.ts`, add `--json` boolean option via `.option('--json', 'Output as JSON')`. When set, collect all already-computed data into `{ project, paused, tasks: { pending, claimed, completed, failed }, workers: [...], healthScore, selfCorrectionRate, missionProgress: [...], lastActivity }` and output via `console.log(JSON.stringify(data, null, 2))` then `process.exit(0)`. Also add `--quiet` flag that outputs only the health score number. All data variables already exist — just collect them before the formatted output section. Criterion #1 (developer experience) and #5 (mission progress measurable from any context)
+## [FEAT] Add EventsDashboard component and `/admin/events` page — FRESH implementation (delete stale branch `dev/add-adminevents-page-with-event-filterin` first). Create `packages/dashboard/src/components/EventsDashboard.tsx`: fetches from `/api/admin/events` (already exists), renders a table of events with columns: timestamp, event type (colored badge using inline styles — green for completed/succeeded, red for failed, blue for claimed/started, yellow for killed/warning), and detail text. Add a filter dropdown for event type and a text search input. Use `useSkynet()` hook for API prefix. Export from `packages/dashboard/src/components/index.ts`. Create `packages/admin/src/app/admin/events/page.tsx` importing EventsDashboard. Add nav entry in `packages/admin/src/app/admin/layout.tsx`: `{ href: "/admin/events", label: "Events", icon: Activity }` (import Activity from lucide-react). Criterion #4
 **Status:** completed
-**Started:** 2026-02-19 23:16
-**Completed:** 2026-02-19
-**Branch:** dev/add-json-output-mode-to-skynet-status-fo
+**Started:** 2026-02-20 00:21
+**Completed:** 2026-02-20
+**Branch:** dev/add-eventsdashboard-component-and-admine
 **Worker:** 2
 
 ### Changes
