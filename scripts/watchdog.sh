@@ -428,6 +428,79 @@ _auto_supersede_completed_tasks() {
 # --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
 _auto_supersede_completed_tasks
 
+# --- Archive old completed tasks to prevent unbounded state file growth ---
+# If completed.md has >100 entries, move entries older than 7 days to
+# completed-archive.md, keeping only the most recent 100 in the active file.
+_archive_old_completions() {
+  [ -f "$COMPLETED" ] || return 0
+
+  local header_lines=2
+  local max_entries=100
+  local max_age_days=7
+  local archive="$DEV_DIR/completed-archive.md"
+
+  # Count data rows (everything after the 2-line header)
+  local total_entries
+  total_entries=$(tail -n +$((header_lines + 1)) "$COMPLETED" | grep -c '^|' 2>/dev/null || true)
+  total_entries=${total_entries:-0}
+
+  [ "$total_entries" -le "$max_entries" ] && return 0
+
+  # Calculate the cutoff date (7 days ago) — works on both macOS and Linux
+  local cutoff_date
+  if date -v-${max_age_days}d '+%Y-%m-%d' >/dev/null 2>&1; then
+    cutoff_date=$(date -v-${max_age_days}d '+%Y-%m-%d')
+  else
+    cutoff_date=$(date -d "${max_age_days} days ago" '+%Y-%m-%d')
+  fi
+
+  # Split entries into keep (recent or within max_age_days) and archive (old)
+  local keep_lines=""
+  local archive_lines=""
+  local archived_count=0
+
+  while IFS= read -r line; do
+    # Extract date from first column: | 2026-02-20 | ...
+    local entry_date
+    entry_date=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
+
+    # If date is older than cutoff, mark for archival
+    if [ -n "$entry_date" ] && [ "$entry_date" < "$cutoff_date" ]; then
+      archive_lines="${archive_lines}${line}
+"
+      archived_count=$((archived_count + 1))
+    else
+      keep_lines="${keep_lines}${line}
+"
+    fi
+  done < <(tail -n +$((header_lines + 1)) "$COMPLETED" | grep '^|')
+
+  [ "$archived_count" -eq 0 ] && return 0
+
+  # Ensure we still keep at least max_entries (don't archive too aggressively)
+  local keep_count=$((total_entries - archived_count))
+  if [ "$keep_count" -lt "$max_entries" ]; then
+    # Not enough old entries to archive while keeping 100 — skip
+    return 0
+  fi
+
+  # Create or append to archive file (with header if new)
+  if [ ! -f "$archive" ]; then
+    head -n "$header_lines" "$COMPLETED" > "$archive"
+  fi
+  printf '%s' "$archive_lines" >> "$archive"
+
+  # Rewrite completed.md with header + kept entries
+  head -n "$header_lines" "$COMPLETED" > "$COMPLETED.tmp"
+  printf '%s' "$keep_lines" >> "$COMPLETED.tmp"
+  mv "$COMPLETED.tmp" "$COMPLETED"
+
+  log "Archived $archived_count completed entries older than $max_age_days days"
+}
+
+# --- Run archival before branch cleanup ---
+_archive_old_completions
+
 # --- Cleanup stale branches for resolved failed tasks ---
 # Deletes local (and remote) dev/* branches for tasks in failed-tasks.md
 # whose status is fixed, superseded, or blocked. Skips "merged to main"

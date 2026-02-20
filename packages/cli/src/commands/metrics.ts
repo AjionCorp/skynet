@@ -80,8 +80,10 @@ export async function metricsCommand(options: MetricsOptions) {
   // ──────────────────────────────────────────
   // Completed tasks analysis
   // ──────────────────────────────────────────
+  // Read both active and archived completions for full historical metrics
   const completedContent = readFile(join(devDir, "completed.md"));
-  const completedRows = completedContent
+  const archiveContent = readFile(join(devDir, "completed-archive.md"));
+  const completedRows = (completedContent + "\n" + archiveContent)
     .split("\n")
     .filter((l) => l.startsWith("|") && !l.includes("| Date |") && !l.includes("---"));
 
