@@ -5,18 +5,27 @@ import { Loader2, ScrollText, RefreshCw } from "lucide-react";
 import type { LogData } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
-const LOG_SOURCES = [
-  { value: "dev-worker-1", label: "Worker 1" },
-  { value: "dev-worker-2", label: "Worker 2" },
-  { value: "dev-worker-3", label: "Worker 3" },
-  { value: "dev-worker-4", label: "Worker 4" },
-  { value: "task-fixer", label: "Fixer 1" },
-  { value: "task-fixer-2", label: "Fixer 2" },
-  { value: "task-fixer-3", label: "Fixer 3" },
-  { value: "watchdog", label: "Watchdog" },
-  { value: "health-check", label: "Health Check" },
-  { value: "project-driver", label: "Project Driver" },
-];
+function getLogSources(maxWorkers: number, maxFixers: number) {
+  const sources: { value: string; label: string }[] = [];
+  for (let i = 1; i <= maxWorkers; i++) {
+    sources.push({ value: `dev-worker-${i}`, label: `Worker ${i}` });
+  }
+  for (let i = 1; i <= maxFixers; i++) {
+    sources.push({
+      value: i === 1 ? "task-fixer" : `task-fixer-${i}`,
+      label: `Fixer ${i}`,
+    });
+  }
+  sources.push(
+    { value: "watchdog", label: "Watchdog" },
+    { value: "health-check", label: "Health Check" },
+    { value: "project-driver", label: "Project Driver" },
+  );
+  return sources;
+}
+
+const DEFAULT_MAX_WORKERS = 4;
+const DEFAULT_MAX_FIXERS = 3;
 
 export interface LogViewerProps {
   /** Default log source to select on mount */
@@ -31,11 +40,44 @@ export function LogViewer({
 }: LogViewerProps) {
   const { apiPrefix } = useSkynet();
   const [source, setSource] = useState(defaultSource);
+  const [logSources, setLogSources] = useState(() =>
+    getLogSources(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS),
+  );
   const [logData, setLogData] = useState<LogData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefresh, setAutoRefresh] = useState(false);
   const preRef = useRef<HTMLPreElement>(null);
+
+  // Fetch worker/fixer counts from config API
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiPrefix}/config`);
+        const json = await res.json();
+        if (cancelled) return;
+        const entries: { key: string; value: string }[] =
+          json.data?.entries ?? [];
+        let maxWorkers = DEFAULT_MAX_WORKERS;
+        let maxFixers = DEFAULT_MAX_FIXERS;
+        for (const entry of entries) {
+          if (entry.key === "SKYNET_MAX_WORKERS") {
+            const n = Number(entry.value);
+            if (Number.isInteger(n) && n >= 1) maxWorkers = n;
+          }
+          if (entry.key === "SKYNET_MAX_FIXERS") {
+            const n = Number(entry.value);
+            if (Number.isInteger(n) && n >= 1) maxFixers = n;
+          }
+        }
+        setLogSources(getLogSources(maxWorkers, maxFixers));
+      } catch {
+        // Keep defaults on failure
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [apiPrefix]);
 
   const fetchLogs = useCallback(async () => {
     try {
@@ -97,7 +139,7 @@ export function LogViewer({
           onChange={handleSourceChange}
           className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 outline-none focus:border-cyan-500/50"
         >
-          {LOG_SOURCES.map((s) => (
+          {logSources.map((s) => (
             <option key={s.value} value={s.value}>
               {s.label}
             </option>
