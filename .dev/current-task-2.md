@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add a watchdog guard to auto-supersede stale `pending` rows already completed by canonical root — in `scripts/watchdog.sh`, compare normalized failed-task roots to `.dev/completed.md` and mark stale retries `superseded` in one pass without touching active fixer rows. Mission: Criterion #2 loop efficiency and Criterion #3 wasted-cycle elimination.
+## [TEST] Add watchdog regression for stale-completed supersede guard against active fixer rows — in shell tests, verify `_auto_supersede_completed_tasks` marks only stale `pending` rows as `superseded` while preserving `fixing-*` rows for the same normalized root. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 15:56
+**Started:** 2026-02-20 16:02
 **Completed:** 2026-02-20
-**Branch:** dev/add-a-watchdog-guard-to-auto-supersede-s
+**Branch:** dev/add-watchdog-regression-for-stale-comple
 **Worker:** 2
 
 ### Changes
