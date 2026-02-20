@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add backlog-empty recovery generation in `project-driver.sh` — when pending backlog is zero but `.dev/failed-tasks.md` still has `status=pending`, generate recovery tasks and emit `driver_recovery_tasks_generated` instead of idling. Mission: Criterion #2 self-correction continuity.
+## [FIX] Finish backlog parser DRY extraction with behavior-parity tests — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts` imports, and add regression tests for blockedBy parsing parity. Mission: Criterion #3 maintainability and deterministic parsing.
 **Status:** completed
-**Started:** 2026-02-20 09:51
+**Started:** 2026-02-20 09:54
 **Completed:** 2026-02-20
-**Branch:** dev/add-backlog-empty-recovery-generation-in
+**Branch:** dev/finish-backlog-parser-dry-extraction-wit
 **Worker:** 4
 
 ### Changes
