@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Re-open CLI operational E2E smoke coverage (single canonical task) — extend `tests/e2e/cli-commands.test.sh` with deterministic checks for `skynet stop`, `pause/resume`, `completions bash`, and `validate`, then keep `pnpm typecheck` green. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
+## [FIX] Finish backlog parser DRY extraction with behavior-parity tests — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts` imports, and add regression tests for blockedBy parsing parity. Mission: Criterion #3 maintainability and deterministic parsing.
 **Status:** completed
 **Started:** 2026-02-20 09:56
 **Completed:** 2026-02-20
-**Branch:** dev/re-open-cli-operational-e2e-smoke-covera
+**Branch:** dev/finish-backlog-parser-dry-extraction-wit
 **Worker:** 3
 
 ### Changes
