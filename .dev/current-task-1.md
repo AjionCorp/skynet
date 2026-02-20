@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add failed-task history rotation guardrail to bound fixer context size — in `scripts/watchdog.sh`, archive older `fixed|superseded` rows from `.dev/failed-tasks.md` into `.dev/failed-tasks-archive.md` after a configurable cap while preserving active row ordering. Mission: Criterion #2 retry-loop throughput and Criterion #3 deterministic state management.
+## [INFRA] Run one canonical stale-active root supersede sweep for current blocked/pending drift — in `scripts/watchdog.sh` reconciliation, supersede `status=blocked|pending` rows in `.dev/failed-tasks.md` whose normalized root already exists in `.dev/completed.md`, preserve all `fixing-*` rows byte-for-byte, and emit deterministic before/after root counters. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 17:31
+**Started:** 2026-02-20 17:50
 **Completed:** 2026-02-20
-**Branch:** dev/add-failed-task-history-rotation-guardra
+**Branch:** dev/run-one-canonical-stale-active-root-supe
 **Worker:** 1
 
 ### Changes
