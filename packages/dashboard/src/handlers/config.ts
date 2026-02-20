@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
 import type { SkynetConfig } from "../types";
 
 /**
@@ -70,7 +70,9 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
     }
   }
 
-  writeFileSync(configPath, result.join("\n"), "utf-8");
+  const tmpPath = configPath + ".tmp";
+  writeFileSync(tmpPath, result.join("\n"), "utf-8");
+  renameSync(tmpPath, configPath);
 }
 
 /**
@@ -88,6 +90,19 @@ function validateUpdates(updates: Record<string, string>): string | null {
     // Key must be a valid bash variable name
     if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
       return `Invalid config key "${key}"`;
+    }
+    // Key-specific validation
+    if (key === "SKYNET_MAX_WORKERS") {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 1) {
+        return `SKYNET_MAX_WORKERS must be a positive integer, got "${value}"`;
+      }
+    }
+    if (key === "SKYNET_STALE_MINUTES") {
+      const n = Number(value);
+      if (!Number.isInteger(n) || n < 5) {
+        return `SKYNET_STALE_MINUTES must be an integer >= 5, got "${value}"`;
+      }
     }
   }
   return null;
