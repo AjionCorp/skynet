@@ -19,6 +19,7 @@ import { configListCommand, configGetCommand, configSetCommand } from "./command
 import { upgradeCommand } from "./commands/upgrade.js";
 import { watchCommand } from "./commands/watch.js";
 import { metricsCommand } from "./commands/metrics.js";
+import { exportCommand } from "./commands/export.js";
 
 const program = new Command();
 
@@ -150,6 +151,13 @@ program
   .description("Show pipeline performance analytics")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(metricsCommand);
+
+program
+  .command("export")
+  .description("Export pipeline state as a JSON snapshot")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--output <path>", "Custom output file path")
+  .action(exportCommand);
 
 program
   .command("upgrade")
