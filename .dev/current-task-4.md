@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Refresh `.dev/blockers.md` Active from current failed-root reality — rebuild Active blockers from `.dev/failed-tasks.md` rows with `status=blocked` or high-attempt pending roots, attach exact latest diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, and remove resolved stale root bullets. Mission: Criterion #2 self-correction closure and Criterion #4 trustworthy visibility.
+## [INFRA] Harden project-driver generation filter against retry-root duplication — in `scripts/project-driver.sh`, reject new unchecked tasks whose normalized title matches any active failed-task root (including `fixing-*`), log each skip, and keep unchecked backlog count <= 15. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop stability.
 **Status:** completed
-**Started:** 2026-02-20 15:54
+**Started:** 2026-02-20 15:56
 **Completed:** 2026-02-20
-**Branch:** dev/refresh-devblockersmd-active-from-curren
+**Branch:** dev/harden-project-driver-generation-filter-
 **Worker:** 4
 
 ### Changes
