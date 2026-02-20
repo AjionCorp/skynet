@@ -90,10 +90,11 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           // fs.watch not available — client will rely on EventSource reconnect
         }
 
-        // Heartbeat every 30s to keep the connection alive through proxies
+        // Poll every 10s to catch lock file changes (worker start/stop)
+        // Lock files live in /tmp/ which fs.watch doesn't cover
         heartbeatInterval = setInterval(() => {
-          send(": heartbeat\n\n");
-        }, 30_000);
+          if (!closed) pushStatus();
+        }, 10_000);
       },
       cancel() {
         cleanup();
