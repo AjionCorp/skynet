@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Emit canonical failed-root convergence snapshot event each watchdog cycle — in `scripts/watchdog.sh`, after reconciliation emit one structured `failed_root_snapshot` event with `active_roots`, `duplicate_active_rows`, and `blocked_roots` counts for longitudinal observability. Mission: Criterion #4 real-time visibility and Criterion #5 measurable progress.
+## [TEST] Add shell regression for watchdog convergence snapshot event shape — in shell tests for `scripts/watchdog.sh`, verify `failed_root_snapshot` emits once per cycle with expected counters and that preserved `fixing-*` rows do not inflate duplicate counts. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 16:07
+**Started:** 2026-02-20 16:08
 **Completed:** 2026-02-20
-**Branch:** dev/emit-canonical-failed-root-convergence-s
+**Branch:** dev/add-shell-regression-for-watchdog-conver
 **Worker:** 3
 
 ### Changes
