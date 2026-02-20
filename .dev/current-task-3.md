@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `permissions: contents: read` to CI workflow and npm metadata to published packages — (1) In `.github/workflows/ci.yml`, add top-level `permissions: contents: read` to enforce least-privilege access for the GITHUB_TOKEN. Both publish workflows already have explicit permissions — CI should too. (2) In `packages/cli/package.json`, add: `"description": "CLI for Skynet — autonomous AI development pipeline"`, `"repository": { "type": "git", "url": "https://github.com/AjionCorp/skynet" }`, `"license": "MIT"`, `"engines": { "node": ">=20" }`, `"keywords": ["skynet", "ai", "pipeline", "claude", "autonomous"]`. (3) In `packages/dashboard/package.json`, add the same fields with `"description": "Embeddable dashboard components and API handlers for Skynet pipeline monitoring"`. (4) Fix `packages/cli/src/commands/init.ts` line 177 which ends with `;;` (double semicolons — TypeScript treats the second as an empty statement, but it's a typo). Run `pnpm typecheck`. Criterion #1 (professional npm packages) and #2 (CI security best practice)
+## [FIX] Add `validate`, `changelog`, and `--from-snapshot` to completions.ts — in `packages/cli/src/commands/completions.ts`, the `COMMANDS` object (lines 1-25) is missing 2 registered commands and 1 flag: (1) Add `validate: ["--dir", "--help"]` to COMMANDS. (2) Add `changelog: ["--since", "--output", "--dir", "--help"]` to COMMANDS. (3) Add `"--from-snapshot"` to the `init` flags array (currently only has `--name`, `--dir`, `--copy-scripts`, `--non-interactive`). (4) In the zsh `commands` array (lines 90-114), add `'validate:Run pre-flight project validation checks'` and `'changelog:Generate changelog from completed tasks'`. Run `pnpm typecheck`. Criterion #1 (complete tab completion — all 25 commands discoverable)
 **Status:** completed
-**Started:** 2026-02-20 02:49
+**Started:** 2026-02-20 03:02
 **Completed:** 2026-02-20
-**Branch:** dev/add-permissions-contents-read-to-ci-work
+**Branch:** dev/add-validate-changelog-and---from-snapsh
 **Worker:** 3
 
 ### Changes
