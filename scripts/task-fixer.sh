@@ -61,7 +61,7 @@ setup_worktree() {
     git worktree add "$WORKTREE_DIR" "$branch"
   fi
   log "Installing deps in worktree..."
-  (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+  (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
 }
 
 cleanup_worktree() {

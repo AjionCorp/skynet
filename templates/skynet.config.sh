@@ -19,6 +19,7 @@ export SKYNET_DEV_PORT=3000                                      # Base port for
 # ---- Build & Test Commands ----
 export SKYNET_TYPECHECK_CMD="pnpm typecheck"  # Type-check command, also used as SKYNET_GATE_1 fallback (default: pnpm typecheck)
 export SKYNET_LINT_CMD="pnpm lint"            # Lint command (not used as a gate by default)
+export SKYNET_INSTALL_CMD="pnpm install --frozen-lockfile"  # Package install command — change for npm/yarn/bun projects
 
 # ---- Quality Gates (run in order before merge) ----
 # Define quality gates as numbered SKYNET_GATE_N variables.

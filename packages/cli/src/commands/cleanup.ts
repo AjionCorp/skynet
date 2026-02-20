@@ -1,20 +1,13 @@
-import { readFileSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
+import { readFile } from "../utils/readFile";
 
 interface CleanupOptions {
   dir?: string;
   force?: boolean;
 }
 
-function readFile(path: string): string {
-  try {
-    return readFileSync(path, "utf-8");
-  } catch {
-    return "";
-  }
-}
 
 function slugify(title: string): string {
   return title

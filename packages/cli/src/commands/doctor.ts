@@ -2,6 +2,8 @@ import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync, rmSyn
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
+import { isProcessRunning } from "../utils/isProcessRunning";
+import { readFile } from "../utils/readFile";
 
 interface DoctorOptions {
   dir?: string;
@@ -19,30 +21,6 @@ function getToolVersion(cmd: string): string | null {
   }
 }
 
-function isProcessRunning(lockFile: string): { running: boolean; pid: string } {
-  try {
-    // Support dir-based locks (lockFile/pid) and legacy file-based locks
-    let pid: string;
-    try {
-      pid = readFileSync(join(lockFile, "pid"), "utf-8").trim();
-    } catch {
-      pid = readFileSync(lockFile, "utf-8").trim();
-    }
-    if (!/^\d+$/.test(pid)) return { running: false, pid: "" };
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
-    return { running: true, pid };
-  } catch {
-    return { running: false, pid: "" };
-  }
-}
-
-function readFile(filePath: string): string {
-  try {
-    return readFileSync(filePath, "utf-8");
-  } catch {
-    return "";
-  }
-}
 
 type Status = "PASS" | "WARN" | "FAIL";
 

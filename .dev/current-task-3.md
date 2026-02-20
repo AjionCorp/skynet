@@ -1,10 +1,3 @@
 # Current Task
-## [FIX] Add `git pull` before first merge attempt in dev-worker.sh and task-fixer.sh to reduce unnecessary conflicts — in `scripts/dev-worker.sh` lines 588-591, the first merge attempt goes directly to `git merge "$branch_name" --no-edit` without pulling the latest `main`. With 4 concurrent workers, `main` advances between branch creation and merge time. The `git pull` only happens in the rebase recovery path at line 597, meaning every concurrent merge conflicts first, then recovers — wasting 10-30 seconds per task. Fix: add `git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true` between lines 588 and 590 (after `cd "$PROJECT_DIR"`, before the first `git merge`). Apply the same fix in `scripts/task-fixer.sh` before its merge attempt at line 445. Run `bash -n` on both files and `pnpm typecheck`. Criterion #3 (reliability — proactively prevent merge conflicts instead of recovering from them)
-**Status:** completed
-**Started:** 2026-02-20 03:19
-**Completed:** 2026-02-20
-**Branch:** dev/add-git-pull-before-first-merge-attempt-
-**Worker:** 3
-
-### Changes
--- See git log for details
+**Status:** idle
+**Last failure:** 2026-02-20 06:27 -- [FIX] Align health score formula between watchdog.sh and CLI/dashboard — in `scripts/watchdog.sh` `_health_score_alert()` (line 651), the health score uses `100 - failedPending*5 - blockerCount*10 - staleHeartbeats*2` but is missing the `staleTasks24h * 1` deduction that `packages/cli/src/commands/status.ts` (line 284) and `packages/dashboard/src/handlers/pipeline-status.ts` (line 132) include. This means the watchdog fires alerts using a different (higher) score than what users see in `skynet status` and the dashboard. Fix: in `_health_score_alert()`, after the stale heartbeat deduction (line 677), add a count of claimed `[>]` tasks in backlog.md older than 24 hours (check current-task-N.md timestamps) and subtract 1 per stale task: `local stale_24h=0; for _ct in "$DEV_DIR"/current-task-*.md; do ... done; score=$((score - stale_24h))`. Run `pnpm typecheck`. Criterion #3 (consistent health score across all views) (dead worker recovered by watchdog)

@@ -234,7 +234,7 @@ setup_worktree() {
 
   # Install dependencies (fast — pnpm content-addressable store is cached)
   log "Installing deps in worktree..."
-  (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+  (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
 }
 
 # Remove worktree. Optionally delete the branch too.
@@ -521,8 +521,8 @@ EOF
     _lock_mtime=$(file_mtime "$WORKTREE_DIR/pnpm-lock.yaml")
     _modules_mtime=$(file_mtime "$WORKTREE_DIR/node_modules/.modules.yaml")
     if [ "$_lock_mtime" -gt "$_modules_mtime" ]; then
-      log "pnpm-lock.yaml newer than node_modules — running pnpm install"
-      (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+      log "Lock file newer than node_modules — running install"
+      (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
     fi
   fi
 

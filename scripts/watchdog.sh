@@ -422,22 +422,46 @@ for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   _handle_stale_worker "$_wid"
 done
 
+# --- Normalize a task title for fuzzy matching ---
+# Strips tags ([FIX], [FEAT], etc.), strips "FRESH implementation" suffix,
+# lowercases, collapses whitespace, and truncates to first 50 characters.
+_normalize_title() {
+  echo "$1" | \
+    sed 's/\[[A-Z][A-Z]*\] *//g' | \
+    sed 's/ *[-—]* *FRESH implementation.*$//' | \
+    tr '[:upper:]' '[:lower:]' | \
+    sed 's/  */ /g; s/^ *//; s/ *$//' | \
+    cut -c1-50
+}
+
 # --- Auto-supersede pending failed tasks that were re-completed ---
 # When a task fails and gets re-implemented as a fresh task, the new task
 # goes to completed.md while the old failed entry stays as status=pending.
-# This detects such cases by matching core task titles (before " — ") and
-# auto-marks the old failed entries as superseded.
+# This detects such cases by normalizing core task titles (before " — "):
+# strip tags, strip "FRESH implementation" suffix, lowercase, collapse
+# whitespace, and compare the first 50 characters.
 _auto_supersede_completed_tasks() {
   [ -f "$FAILED" ] || return 0
   [ -f "$COMPLETED" ] || return 0
 
-  # Build list of completed core titles (text before " — ")
-  local completed_cores
-  completed_cores=$(awk -F'|' 'NR > 2 {
+  # Build list of completed core titles (text before " — "), then normalize
+  local completed_raw
+  completed_raw=$(awk -F'|' 'NR > 2 {
     t = $3; gsub(/^ +| +$/, "", t); sub(/ —.*/, "", t)
     if (t != "") print t
   }' "$COMPLETED")
-  [ -z "$completed_cores" ] && return 0
+  [ -z "$completed_raw" ] && return 0
+
+  local completed_normalized=""
+  while IFS= read -r _line; do
+    local _norm
+    _norm=$(_normalize_title "$_line")
+    if [ -n "$_norm" ]; then
+      completed_normalized="${completed_normalized}${_norm}
+"
+    fi
+  done <<< "$completed_raw"
+  [ -z "$completed_normalized" ] && return 0
 
   local updated=0
 
@@ -449,12 +473,15 @@ _auto_supersede_completed_tasks() {
     task=$(echo "$task" | sed 's/^ *//;s/ *$//')
     branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
 
-    # Extract core title (before first " — ")
+    # Extract core title (before first " — ") and normalize
     local core_title="${task%% —*}"
     [ -z "$core_title" ] && continue
+    local norm_title
+    norm_title=$(_normalize_title "$core_title")
+    [ -z "$norm_title" ] && continue
 
-    # Check if any completed task shares this core title
-    if echo "$completed_cores" | grep -qxF "$core_title"; then
+    # Check if any completed task shares this normalized core title
+    if echo "$completed_normalized" | grep -qxF "$norm_title"; then
       # Replace pending → superseded for this specific line (match by branch)
       awk -v br="$branch" '{
         if (index($0, br) > 0 && match($0, /\| *pending *\|/))
@@ -462,7 +489,7 @@ _auto_supersede_completed_tasks() {
         print
       }' "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
       updated=$((updated + 1))
-      log "Auto-superseded: $core_title (branch: $branch, completed via fresh implementation)"
+      log "Auto-superseded: $core_title (branch: $branch, normalized match in completed.md)"
     fi
   done < <(tail -n +3 "$FAILED")
 

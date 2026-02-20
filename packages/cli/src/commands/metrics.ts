@@ -1,18 +1,11 @@
-import { readFileSync } from "fs";
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
+import { readFile } from "../utils/readFile";
 
 interface MetricsOptions {
   dir?: string;
 }
 
-function readFile(path: string): string {
-  try {
-    return readFileSync(path, "utf-8");
-  } catch {
-    return "";
-  }
-}
 
 /**
  * Parse duration string ("Nm" or "Nh Mm") to minutes.

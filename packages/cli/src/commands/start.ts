@@ -1,29 +1,13 @@
-import { readFileSync, existsSync, readdirSync } from "fs";
+import { existsSync, readdirSync } from "fs";
 import { resolve, join } from "path";
 import { execSync, spawn } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
+import { isProcessRunning } from "../utils/isProcessRunning";
 
 interface StartOptions {
   dir?: string;
 }
 
-function isProcessRunning(lockFile: string): boolean {
-  try {
-    // Support dir-based locks (lockFile/pid) and legacy file-based locks
-    let pid: string;
-    try {
-      pid = readFileSync(join(lockFile, "pid"), "utf-8").trim();
-    } catch {
-      pid = readFileSync(lockFile, "utf-8").trim();
-    }
-    // Validate PID is numeric to prevent shell injection
-    if (!/^\d+$/.test(pid)) return false;
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function startCommand(options: StartOptions) {
   const projectDir = resolve(options.dir || process.cwd());
@@ -83,7 +67,7 @@ export async function startCommand(options: StartOptions) {
       process.exit(1);
     }
 
-    if (existsSync(watchdogLock) && isProcessRunning(watchdogLock)) {
+    if (existsSync(watchdogLock) && isProcessRunning(watchdogLock).running) {
       console.log("  Watchdog is already running.");
     } else {
       console.log("  No launchd agents found. Launching watchdog.sh directly...\n");
