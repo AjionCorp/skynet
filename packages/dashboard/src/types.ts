@@ -151,38 +151,7 @@ export interface AuthStatus {
 
 // ===== Monitoring Status (full, from monitoring-dashboard) =====
 
-export interface MonitoringStatus {
-  workers: WorkerInfo[];
-  currentTask: CurrentTask;
-  currentTasks: Record<string, CurrentTask>;
-  heartbeats: Record<string, WorkerHeartbeat>;
-  backlog: {
-    items: BacklogItem[];
-    pendingCount: number;
-    claimedCount: number;
-    doneCount: number;
-  };
-  completed: CompletedTask[];
-  completedCount: number;
-  averageTaskDuration: string | null;
-  failed: FailedTask[];
-  failedPendingCount: number;
-  hasBlockers: boolean;
-  blockerLines: string[];
-  healthScore: number;
-  selfCorrectionRate: number;
-  selfCorrectionStats: SelfCorrectionStats;
-  syncHealth: {
-    lastRun: string | null;
-    endpoints: SyncEndpoint[];
-  };
-  auth: AuthStatus;
-  backlogLocked: boolean;
-  git: GitStatus;
-  postCommitGate: PostCommitGate;
-  missionProgress: MissionProgress[];
-  timestamp: string;
-}
+export type MonitoringStatus = PipelineStatus;
 
 // ===== Agent Types =====
 
