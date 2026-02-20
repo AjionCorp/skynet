@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Run one canonical failed-root reconciliation sweep and refresh blocker parity snapshot — execute watchdog reconcile-only twice on unchanged inputs, confirm idempotence counters/hashes, and refresh `.dev/blockers.md` Active metadata from canonical normalized roots without touching Resolved/Celebration sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [TEST] Add watchdog regression for stale-active supersede guardrails across `blocked|pending` rows — in `scripts/tests/watchdog.sh`, assert completed-root supersede touches only stale `blocked|pending` rows, never rewrites `fixing-*` rows, and preserves unaffected active-row ordering byte-for-byte. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
 **Started:** 2026-02-20 17:44
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-root-reconcilia
+**Branch:** dev/add-watchdog-regression-for-stale-active
 **Worker:** 3
 
 ### Changes
