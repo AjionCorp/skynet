@@ -1,31 +1,11 @@
-import { readFileSync, existsSync } from "fs";
+import { existsSync } from "fs";
 import { resolve, join } from "path";
 import { spawnSync } from "child_process";
+import { loadConfig } from "../utils/loadConfig";
 
 interface TestNotifyOptions {
   dir?: string;
   channel?: string;
-}
-
-function loadConfig(projectDir: string): Record<string, string> {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    throw new Error("skynet.config.sh not found. Run 'skynet init' first.");
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
 }
 
 function checkChannelConfig(channel: string, vars: Record<string, string>): string | null {
@@ -117,11 +97,9 @@ function testChannel(
 export async function testNotifyCommand(options: TestNotifyOptions) {
   const projectDir = resolve(options.dir || process.cwd());
 
-  let vars: Record<string, string>;
-  try {
-    vars = loadConfig(projectDir);
-  } catch (err) {
-    console.error((err as Error).message);
+  const vars = loadConfig(projectDir);
+  if (!vars) {
+    console.error("skynet.config.sh not found. Run 'skynet init' first.");
     process.exit(1);
   }
 

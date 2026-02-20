@@ -1,30 +1,10 @@
 import { readFileSync, existsSync, statfsSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
+import { loadConfig } from "../utils/loadConfig";
 
 interface ValidateOptions {
   dir?: string;
-}
-
-function loadConfig(projectDir: string): Record<string, string> | null {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    return null;
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
 }
 
 type Status = "PASS" | "WARN" | "FAIL";

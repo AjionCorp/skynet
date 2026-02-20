@@ -1,6 +1,7 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
+import { loadConfig } from "../utils/loadConfig";
 
 interface WatchOptions {
   dir?: string;
@@ -13,30 +14,6 @@ const RED = "\x1b[31m";
 const BOLD = "\x1b[1m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
-
-function loadConfig(projectDir: string): Record<string, string> {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    throw new Error(`skynet.config.sh not found. Run 'skynet init' first.`);
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(
-        /\$\{?(\w+)\}?/g,
-        (_, key) => vars[key] || process.env[key] || ""
-      );
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
-}
 
 function readFile(path: string): string {
   try {
@@ -254,6 +231,10 @@ function renderDashboard(projectDir: string, vars: Record<string, string>) {
 export async function watchCommand(options: WatchOptions) {
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
+  if (!vars) {
+    console.error("skynet.config.sh not found. Run 'skynet init' first.");
+    process.exit(1);
+  }
 
   // Render immediately, then every 3 seconds
   renderDashboard(projectDir, vars);

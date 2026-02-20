@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "fs";
 import { resolve, join, dirname } from "path";
+import { loadConfig } from "../utils/loadConfig";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { platform } from "os";
@@ -45,29 +46,6 @@ function detectScheduler(forceCron: boolean): "launchd" | "cron" {
 /** Extract agent name from plist template filename: com.skynet.PROJECT.<name>.plist -> <name> */
 function agentNameFromTemplate(filename: string): string {
   return filename.replace(/^com\.skynet\.PROJECT\./, "").replace(/\.plist$/, "");
-}
-
-function loadConfig(projectDir: string): Record<string, string> {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    throw new Error(`skynet.config.sh not found at ${configPath}. Run 'skynet init' first.`);
-  }
-
-  // Parse bash exports into key-value pairs
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      // Resolve variable references like $SKYNET_PROJECT_NAME
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
 }
 
 function setupLaunchd(
@@ -299,6 +277,10 @@ export async function setupAgentsCommand(options: SetupAgentsOptions) {
 
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
+  if (!vars) {
+    console.error("skynet.config.sh not found. Run 'skynet init' first.");
+    process.exit(1);
+  }
 
   const projectName = vars.SKYNET_PROJECT_NAME;
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;

@@ -1,34 +1,18 @@
 import { readFileSync, unlinkSync, existsSync } from "fs";
 import { resolve, join } from "path";
+import { loadConfig } from "../utils/loadConfig";
 
 interface ResumeOptions {
   dir?: string;
 }
 
-function loadConfig(projectDir: string): Record<string, string> {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    throw new Error(`skynet.config.sh not found. Run 'skynet init' first.`);
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
-}
-
 export async function resumeCommand(options: ResumeOptions) {
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
+  if (!vars) {
+    console.error("skynet.config.sh not found. Run 'skynet init' first.");
+    process.exit(1);
+  }
 
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
   const pauseFile = join(devDir, "pipeline-paused");
