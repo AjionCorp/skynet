@@ -75,9 +75,9 @@ describe("PipelineDashboard", () => {
       EventSourceSpy(url);
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for ActivityFeed sub-component and any other fetches
-    global.fetch = vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [], error: null }))
-    );
+    ));
   });
 
   afterEach(() => {

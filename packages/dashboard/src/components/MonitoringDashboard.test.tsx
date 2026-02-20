@@ -72,9 +72,9 @@ describe("MonitoringDashboard", () => {
       mockES.url = url;
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for sub-components (WorkerScaling, agents, logs)
-    global.fetch = vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: [], error: null }))
-    );
+    ));
   });
 
   afterEach(() => {

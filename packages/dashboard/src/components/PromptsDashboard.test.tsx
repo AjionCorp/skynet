@@ -38,9 +38,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: PromptTemplate[] | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data, error }))
-  );
+  ));
 }
 
 describe("PromptsDashboard", () => {
@@ -50,7 +50,7 @@ describe("PromptsDashboard", () => {
   });
 
   it("shows loading state initially", () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<PromptsDashboard />);
     expect(screen.getByText("Loading prompt templates...")).toBeDefined();
   });

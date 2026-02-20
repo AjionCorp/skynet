@@ -17,9 +17,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: EventEntry[] | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data, error }))
-  );
+  ));
 }
 
 describe("ActivityFeed", () => {
@@ -94,7 +94,7 @@ describe("ActivityFeed", () => {
   });
 
   it("displays error message when fetch throws", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<ActivityFeed />);
     await waitFor(() => {
       expect(screen.getByText("Network error")).toBeDefined();

@@ -22,9 +22,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockConfigGet(entries: ConfigEntry[], configPath = "/path/to/skynet.config.sh") {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data: { entries, configPath }, error: null }))
-  );
+  ));
 }
 
 describe("SettingsDashboard", () => {
@@ -79,7 +79,7 @@ describe("SettingsDashboard", () => {
       e.key === "MAX_WORKERS" ? { ...e, value: "8" } : e
     );
 
-    global.fetch = vi.fn()
+    vi.stubGlobal('fetch', vi.fn()
       // Initial GET
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { entries: MOCK_ENTRIES, configPath: "" }, error: null }))
@@ -87,7 +87,7 @@ describe("SettingsDashboard", () => {
       // POST save
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { entries: updatedEntries }, error: null }))
-      );
+      ));
 
     renderWithProvider(<SettingsDashboard />);
 
@@ -114,7 +114,7 @@ describe("SettingsDashboard", () => {
     });
 
     // Verify POST was called with correct body
-    const postCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+    const postCall = vi.mocked(global.fetch).mock.calls.find(
       (c: unknown[]) => typeof c[1] === "object" && (c[1] as RequestInit).method === "POST"
     );
     expect(postCall).toBeDefined();
@@ -123,7 +123,7 @@ describe("SettingsDashboard", () => {
   });
 
   it("displays validation error on invalid input (API error)", async () => {
-    global.fetch = vi.fn()
+    vi.stubGlobal('fetch', vi.fn()
       // Initial GET
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { entries: MOCK_ENTRIES, configPath: "" }, error: null }))
@@ -131,7 +131,7 @@ describe("SettingsDashboard", () => {
       // POST returns validation error
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: null, error: "Invalid value for MAX_WORKERS: must be a number" }))
-      );
+      ));
 
     renderWithProvider(<SettingsDashboard />);
 
@@ -153,7 +153,7 @@ describe("SettingsDashboard", () => {
   });
 
   it("shows loading state initially", () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {})); // never resolves
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {}))); // never resolves
     renderWithProvider(<SettingsDashboard />);
     expect(screen.getByText("Loading configuration...")).toBeDefined();
   });
@@ -167,9 +167,9 @@ describe("SettingsDashboard", () => {
   });
 
   it("displays error when API returns error", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: null, error: "Config file not found" }))
-    );
+    ));
     renderWithProvider(<SettingsDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Config file not found")).toBeDefined();
@@ -177,7 +177,7 @@ describe("SettingsDashboard", () => {
   });
 
   it("displays error when fetch throws", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<SettingsDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Network error")).toBeDefined();

@@ -16,14 +16,14 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockWorkersGet(workers: WorkerScaleInfo[]) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data: { workers }, error: null }))
-  );
+  ));
 }
 
 /** Smart mock: GET always returns workers, POST returns success */
 function mockFetchSmart(workers: WorkerScaleInfo[]) {
-  global.fetch = vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
+  vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init?: RequestInit) => {
     if (init?.method === "POST") {
       return Promise.resolve(
         new Response(JSON.stringify({ data: { message: "scaled" }, error: null }))
@@ -32,7 +32,7 @@ function mockFetchSmart(workers: WorkerScaleInfo[]) {
     return Promise.resolve(
       new Response(JSON.stringify({ data: { workers }, error: null }))
     );
-  });
+  }));
 }
 
 describe("WorkerScaling", () => {
@@ -71,7 +71,7 @@ describe("WorkerScaling", () => {
     fireEvent.click(buttons[1]);
 
     await waitFor(() => {
-      const postCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+      const postCall = vi.mocked(global.fetch).mock.calls.find(
         (c: unknown[]) => typeof c[1] === "object" && (c[1] as RequestInit).method === "POST"
       );
       expect(postCall).toBeDefined();
@@ -94,7 +94,7 @@ describe("WorkerScaling", () => {
     fireEvent.click(buttons[0]);
 
     await waitFor(() => {
-      const postCall = (global.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
+      const postCall = vi.mocked(global.fetch).mock.calls.find(
         (c: unknown[]) => typeof c[1] === "object" && (c[1] as RequestInit).method === "POST"
       );
       expect(postCall).toBeDefined();
@@ -146,9 +146,9 @@ describe("WorkerScaling", () => {
   });
 
   it("displays error when API returns error", async () => {
-    global.fetch = vi.fn().mockResolvedValue(
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ data: null, error: "Failed to read worker state" }))
-    );
+    ));
     renderWithProvider(<WorkerScaling pollInterval={999999} />);
     await waitFor(() => {
       expect(screen.getByText("Failed to read worker state")).toBeDefined();
@@ -156,7 +156,7 @@ describe("WorkerScaling", () => {
   });
 
   it("displays error when fetch throws", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<WorkerScaling pollInterval={999999} />);
     await waitFor(() => {
       expect(screen.getByText("Network error")).toBeDefined();

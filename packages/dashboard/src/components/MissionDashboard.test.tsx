@@ -46,9 +46,9 @@ function mockFetchForMission(
   missionError: string | null = null,
   pipelineError: string | null = null,
 ) {
-  global.fetch = vi.fn()
+  vi.stubGlobal('fetch', vi.fn()
     .mockResolvedValueOnce(new Response(JSON.stringify({ data: mission, error: missionError })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ data: pipeline, error: pipelineError })));
+    .mockResolvedValueOnce(new Response(JSON.stringify({ data: pipeline, error: pipelineError }))));
 }
 
 describe("MissionDashboard", () => {
@@ -58,7 +58,7 @@ describe("MissionDashboard", () => {
   });
 
   it("shows loading state initially", () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<MissionDashboard />);
     expect(screen.getByText("Loading mission status...")).toBeDefined();
   });
