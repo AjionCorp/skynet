@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Harden project-driver generation filter against retry-root duplication — in `scripts/project-driver.sh`, reject new unchecked tasks whose normalized title matches any active failed-task root (including `fixing-*`), log each skip, and keep unchecked backlog count <= 15. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop stability.
+## [INFRA] Collapse canonical duplicate `pending` retry rows for the CLI helper DRY root — in `scripts/watchdog.sh` reconciliation, when multiple `pending` rows normalize to `close blocked cli helper dry root for readfile isprocessrunning`, keep one canonical active row, mark the rest `superseded`, and emit per-row `task_superseded` events without modifying active `fixing-*` rows. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 15:56
+**Started:** 2026-02-20 15:58
 **Completed:** 2026-02-20
-**Branch:** dev/harden-project-driver-generation-filter-
+**Branch:** dev/collapse-canonical-duplicate-pending-ret
 **Worker:** 4
 
 ### Changes
