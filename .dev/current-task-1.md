@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Close stale-active failed-root drift in one deterministic watchdog sweep — in `scripts/watchdog.sh`, run a canonical active-root convergence pass that supersedes only `status=blocked|pending` rows whose normalized root is already present in `.dev/completed.md`, preserves `fixing-*` rows byte-for-byte, and emits before/after counters plus one stable root-hash summary. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [DATA] Surface `driver_low_fix_rate_mode` counters in status JSON outputs — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` to include deterministic low-fix-rate counters (`activated`, `reasonFixRate`, `reasonRetryPressure`, `cappedNewTasks`) sourced from project-driver telemetry so operators can verify pressure behavior. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:11
+**Started:** 2026-02-20 18:29
 **Completed:** 2026-02-20
-**Branch:** dev/close-stale-active-failed-root-drift-in-
+**Branch:** dev/surface-driverlowfixratemode-counters-in
 **Worker:** 1
 
 ### Changes

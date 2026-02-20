@@ -547,6 +547,29 @@ EOF
 
   log "Claude Code completed. Running checks before merge..."
 
+  if [ ! -d "$WORKTREE_DIR" ]; then
+    log "Worktree missing before gates — re-adding $branch_name"
+    if ! setup_worktree "$branch_name" false; then
+      log "Failed to re-add worktree for $branch_name — recording failure."
+      tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (worktree missing)"
+      emit_event "task_failed" "Worker $WORKER_ID: $task_title (worktree missing)"
+      cleanup_worktree "$branch_name"
+      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | worktree missing before gates | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(worktree missing)_"
+      fi
+      _CURRENT_TASK_TITLE=""
+      _one_shot_exit=1
+      cat > "$WORKER_TASK_FILE" <<EOF
+# Current Task
+**Status:** idle
+**Last failure:** $(date '+%Y-%m-%d %H:%M') -- $task_title (worktree missing)
+EOF
+      log "Moved to failed-tasks. Branch $branch_name kept for task-fixer."
+      continue
+    fi
+  fi
+
   # --- Run configurable quality gates (in worktree) ---
   # Clean .dev/ changes Claude may have made in the worktree
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)

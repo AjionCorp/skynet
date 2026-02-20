@@ -455,6 +455,13 @@ emit_event "fix_started" "Fixer $FIXER_ID: $task_title"
 if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   log "Task-fixer succeeded. Running quality gates before merge..."
 
+  if [ ! -d "$WORKTREE_DIR" ]; then
+    log "Worktree missing before gates — re-adding $branch_name"
+    if ! setup_worktree "$branch_name" false; then
+      _handle_worktree_failure
+    fi
+  fi
+
   # Clean .dev/ in worktree before gates
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
   (cd "$WORKTREE_DIR" && git clean -fd test-results/ 2>/dev/null || true)
