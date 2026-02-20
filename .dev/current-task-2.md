@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Resolve blocked-root state drift between `.dev/backlog.md` and `.dev/failed-tasks.md` — add a watchdog reconciliation pass that supersedes stale blocked/pending duplicates for already-fixed roots and emits before/after root counts, without touching active `fixing-*` rows. Mission: Criterion #2 retry-loop stability and Criterion #3 state convergence.
+## [INFRA] Run one canonical failed-task compaction sweep for active roots — in `scripts/watchdog.sh`, dedupe `pending|superseded` duplicates by normalized root+branch in `.dev/failed-tasks.md`, keep one active row per root, and emit before/after counters. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 11:00
+**Started:** 2026-02-20 11:08
 **Completed:** 2026-02-20
-**Branch:** dev/resolve-blocked-root-state-drift-between
+**Branch:** dev/run-one-canonical-failed-task-compaction
 **Worker:** 2
 
 ### Changes
