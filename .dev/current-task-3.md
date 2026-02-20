@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface parse-guard and fixing-root supersede counters in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include watchdog reconciliation counters (`parseGuardRows`, `supersededByFixingRoot`, `activeRowsBefore`, `activeRowsAfter`) so operators can verify convergence behavior from one status call. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [INFRA] Enforce unchecked backlog hard-cap and canonical ordering in project-driver writes — in `scripts/project-driver.sh`, after task generation and before write, deterministically keep all claimed `[>]` rows first, then pending `[ ]`, trim lowest-priority pending rows beyond 15 unchecked total, and preserve checked history rows without mutation. Mission: Criterion #3 deterministic planning state and Criterion #2 no-task-loss reliability.
 **Status:** completed
-**Started:** 2026-02-20 18:44
+**Started:** 2026-02-20 18:46
 **Completed:** 2026-02-20
-**Branch:** dev/surface-parse-guard-and-fixing-root-supe
+**Branch:** dev/enforce-unchecked-backlog-hard-cap-and-c
 **Worker:** 3
 
 ### Changes
