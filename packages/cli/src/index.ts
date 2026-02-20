@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { createRequire } from "module";
 import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { setupAgentsCommand } from "./commands/setup-agents.js";
@@ -26,12 +27,15 @@ import { completionsCommand } from "./commands/completions.js";
 import { testNotifyCommand } from "./commands/test-notify.js";
 import { changelogCommand } from "./commands/changelog.js";
 
+const require = createRequire(import.meta.url);
+const pkg = require("../package.json");
+
 const program = new Command();
 
 program
   .name("skynet")
   .description("AI-powered development pipeline powered by Claude Code")
-  .version("0.1.0");
+  .version(pkg.version);
 
 program
   .command("init")
