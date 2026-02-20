@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Prevent project-driver re-queue variants for known failed roots — in `scripts/project-driver.sh` prompt and generated-task postfilter, reject new tasks whose normalized title matches existing canonical roots in `.dev/failed-tasks.md` unless the task is an explicit continuation of that root. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop reduction.
+## [NMI] Refresh blockers Active from blocked roots with exact diagnostics — map each `status=blocked` + `attempts>=3` entry in `.dev/failed-tasks.md` to the latest exact `pnpm typecheck` diagnostic from worker/fixer logs and rewrite `.dev/blockers.md` Active with one canonical row per root cause. Mission: Criterion #2 self-correction closure.
 **Status:** completed
-**Started:** 2026-02-20 10:05
+**Started:** 2026-02-20 10:14
 **Completed:** 2026-02-20
-**Branch:** dev/prevent-project-driver-re-queue-variants
+**Branch:** dev/refresh-blockers-active-from-blocked-roo
 **Worker:** 3
 
 ### Changes
