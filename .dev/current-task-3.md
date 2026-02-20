@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `config-migrate.test.ts` CLI unit test for config migrate subcommand — create `packages/cli/src/commands/__tests__/config-migrate.test.ts`. Mock `fs.readFileSync` for both template config and user config files. Test: (a) detects missing variables by comparing template vs user config, (b) appends new variables with their default values and preceding comments from template, (c) reports "Added N new config variables: VAR1, VAR2" when variables are missing, (d) reports "Config is up to date" when all variables are present, (e) handles missing template file gracefully, (f) handles missing user config file with helpful error message. Follow existing CLI test patterns. Criterion #2 (test coverage for new config migrate feature)
+## [FIX] Cap pipeline-status handler `completed` array to last 50 entries — in `packages/dashboard/src/handlers/pipeline-status.ts` lines 329-351, the entire `completed.md` table is parsed and returned as the `completed` array in the API response (line ~570). With 170+ completed tasks and growing, this response payload grows unboundedly. The only consumer is `MonitoringDashboard.tsx` which uses `status.completed.slice(-5)` (last 5 entries). Fix: (1) compute `completedCount` and `averageTaskDuration` from the full array BEFORE slicing, (2) replace the full `completed` array with `completed.slice(-50)` in the response object, keeping only the 50 most recent entries. This reduces API response size by ~80% without affecting any dashboard view. Run `pnpm typecheck`. Criterion #3 (efficient API responses — no unbounded payloads)
 **Status:** completed
-**Started:** 2026-02-20 01:12
+**Started:** 2026-02-20 01:49
 **Completed:** 2026-02-20
-**Branch:** dev/add-config-migratetestts-cli-unit-test-f
+**Branch:** dev/cap-pipeline-status-handler-completed-ar
 **Worker:** 3
 
 ### Changes
