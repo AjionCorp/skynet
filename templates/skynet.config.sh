@@ -44,6 +44,7 @@ export SKYNET_MAX_WORKERS=4          # Max concurrent dev-worker instances; watc
 export SKYNET_MAX_FIXERS=3           # Max concurrent task-fixer instances (default: 3)
 export SKYNET_MAX_TASKS_PER_RUN=5    # Max tasks a single dev-worker processes before exiting (default: 5)
 export SKYNET_STALE_MINUTES=45       # Minutes before a worker heartbeat is considered stale/stuck (default: 45)
+export SKYNET_AGENT_TIMEOUT_MINUTES=45  # Max minutes an agent can run before being killed (0 = no timeout, default: 45)
 export SKYNET_MAX_FIX_ATTEMPTS=3     # Max fix attempts before a failed task is escalated to blockers (default: 3)
 export SKYNET_DRIVER_BACKLOG_THRESHOLD=5  # Project-driver kicks off when backlog has fewer than N tasks (default: 5)
 export SKYNET_HEALTH_ALERT_THRESHOLD="50"  # Health score threshold (0-100) — watchdog alerts when score drops below this (default: 50)

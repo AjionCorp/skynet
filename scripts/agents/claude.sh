@@ -36,5 +36,5 @@ agent_run() {
   local log_file="${2:-/dev/null}"
   unset CLAUDECODE 2>/dev/null || true
   # shellcheck disable=SC2086
-  $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt" >> "$log_file" 2>&1
+  _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt" >> "$log_file" 2>&1
 }
