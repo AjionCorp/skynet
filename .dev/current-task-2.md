@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Remove any remaining shell-execution path from `skynet config set` — in `packages/cli/src/commands/config.ts`, eliminate `execSync`/shell-interpolated writes, enforce strict `^SKYNET_[A-Z0-9_]+$` key validation, and add regression tests for metacharacter payloads. Mission: Criterion #1 safe adoption and Criterion #3 reliability.
+## [DOCS] Add hardening-phase operator runbook to `README.md` — document current 6/6 mission status, hardening priorities (security/consistency/dedupe), and runbook for `backlog=0` with non-zero pending retries. Mission: Criterion #1 adoption clarity and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 09:47
+**Started:** 2026-02-20 09:50
 **Completed:** 2026-02-20
-**Branch:** dev/remove-any-remaining-shell-execution-pat
+**Branch:** dev/add-hardening-phase-operator-runbook-to-
 **Worker:** 2
 
 ### Changes
