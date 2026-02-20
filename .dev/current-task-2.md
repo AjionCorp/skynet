@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Refresh `.dev/blockers.md` Active automatically after failed-task reconciliation — in `scripts/watchdog.sh`, add one canonical rebuild step that keeps exactly one Active bullet per active failed root and removes stale duplicate-root bullets without mutating Celebration/Resolved sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [TEST] Add watchdog regression coverage for stale blocked-root supersede with duplicates — in shell tests for `scripts/watchdog.sh`, feed fixtures containing duplicate `blocked|pending` rows for roots already in `.dev/completed.md` and assert exactly one canonical active row remains, unaffected `fixing-*` rows are preserved, and ordering is deterministic. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 16:25
+**Started:** 2026-02-20 16:33
 **Completed:** 2026-02-20
-**Branch:** dev/refresh-devblockersmd-active-automatical
+**Branch:** dev/add-watchdog-regression-coverage-for-sta
 **Worker:** 2
 
 ### Changes
