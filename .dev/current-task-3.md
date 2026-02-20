@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Execute one canonical failed-task cleanup pass after reconciliation — run one scripted sweep over `.dev/failed-tasks.md` to collapse duplicate `pending` rows by normalized title+branch, supersede already-completed retries, and log before/after counts. Mission: Criterion #2 loop efficiency and Criterion #3 convergent state.
+## [INFRA] Prevent project-driver re-queue variants for known failed roots — in `scripts/project-driver.sh` prompt and generated-task postfilter, reject new tasks whose normalized title matches existing canonical roots in `.dev/failed-tasks.md` unless the task is an explicit continuation of that root. Mission: Criterion #3 convergent planning and Criterion #2 retry-loop reduction.
 **Status:** completed
-**Started:** 2026-02-20 09:58
+**Started:** 2026-02-20 10:05
 **Completed:** 2026-02-20
-**Branch:** dev/execute-one-canonical-failed-task-cleanu
+**Branch:** dev/prevent-project-driver-re-queue-variants
 **Worker:** 3
 
 ### Changes
