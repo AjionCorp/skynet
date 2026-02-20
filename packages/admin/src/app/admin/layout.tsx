@@ -14,6 +14,7 @@ const pages = [
   { href: "/admin/workers", label: "Workers", icon: Users },
   { href: "/admin/logs", label: "Logs", icon: ScrollText },
   { href: "/admin/mission", label: "Mission", icon: Target },
+  { href: "/admin/events", label: "Events", icon: Activity },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
