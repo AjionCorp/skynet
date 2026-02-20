@@ -47,7 +47,7 @@ function listLogFiles(scriptsDir: string) {
   }
 
   console.log("\n  Available log files:\n");
-  console.log("    %-30s  %8s  %s", "File", "Size", "Modified");
+  console.log(`    ${"File".padEnd(30)}  ${"Size".padStart(8)}  Modified`);
   console.log("    " + "-".repeat(60));
 
   for (const entry of entries) {
