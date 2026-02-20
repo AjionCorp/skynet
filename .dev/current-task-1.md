@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical failed-task convergence sweep and enforce steady-state invariants — in `scripts/watchdog.sh`, add/verify a single idempotent pass that keeps exactly one active row (`pending|fixing-*|blocked`) per normalized root in `.dev/failed-tasks.md`, supersedes duplicate variants, and emits before/after counters. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [TEST] Add regression coverage for CLI failed-root convergence JSON fields under mixed states — in `packages/cli/src/commands/__tests__/status.test.ts`, assert `activeRoots`, `duplicateActiveRows`, and `blockedRoots` remain correct for fixtures containing `pending|fixing-*|blocked|superseded` rows. Mission: Criterion #2 quality gates and Criterion #4 telemetry consistency.
 **Status:** completed
-**Started:** 2026-02-20 15:54
+**Started:** 2026-02-20 16:16
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-task-convergenc
+**Branch:** dev/add-regression-coverage-for-cli-failed-r
 **Worker:** 1
 
 ### Changes
