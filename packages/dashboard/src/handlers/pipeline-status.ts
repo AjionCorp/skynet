@@ -567,7 +567,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           currentTasks,
           heartbeats,
           backlog,
-          completed,
+          completed: completed.slice(-50),
           completedCount: completed.length,
           averageTaskDuration,
           failed,
