@@ -59,6 +59,8 @@ program
   .command("status")
   .description("Show pipeline status summary")
   .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--json", "Output as JSON")
+  .option("--quiet", "Output only the health score number")
   .action(statusCommand);
 
 program

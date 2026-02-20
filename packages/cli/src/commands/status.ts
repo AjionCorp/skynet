@@ -4,6 +4,8 @@ import { execSync } from "child_process";
 
 interface StatusOptions {
   dir?: string;
+  json?: boolean;
+  quiet?: boolean;
 }
 
 function loadConfig(projectDir: string): Record<string, string> {
@@ -111,6 +113,11 @@ export async function statusCommand(options: StatusOptions) {
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
   const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
 
+  // Use a conditional log so --json and --quiet suppress formatted output
+  const print = (msg: string) => {
+    if (!options.json && !options.quiet) console.log(msg);
+  };
+
   // --- Health Score Inputs ---
   let staleHeartbeatCount = 0;
   let staleTasks24hCount = 0;
@@ -127,9 +134,9 @@ export async function statusCommand(options: StatusOptions) {
     } catch {
       // sentinel exists but unreadable — still paused
     }
-    console.log(`\n  Skynet Pipeline Status (${projectName}) — PAUSED${pauseInfo}\n`);
+    print(`\n  Skynet Pipeline Status (${projectName}) — PAUSED${pauseInfo}\n`);
   } else {
-    console.log(`\n  Skynet Pipeline Status (${projectName})\n`);
+    print(`\n  Skynet Pipeline Status (${projectName})\n`);
   }
 
   // --- Task Counts ---
@@ -147,14 +154,14 @@ export async function statusCommand(options: StatusOptions) {
   const failedPending = (failed.match(/\| pending \|/g) || []).length;
   const failedFixed = (failed.match(/\| fixed \|/g) || []).length;
 
-  console.log("  Tasks:");
-  console.log(`    Pending:    ${pending}`);
-  console.log(`    Claimed:    ${claimed}`);
-  console.log(`    Completed:  ${completedCount}`);
-  console.log(`    Failed:     ${failedPending} pending, ${failedFixed} fixed`);
+  print("  Tasks:");
+  print(`    Pending:    ${pending}`);
+  print(`    Claimed:    ${claimed}`);
+  print(`    Completed:  ${completedCount}`);
+  print(`    Failed:     ${failedPending} pending, ${failedFixed} fixed`);
 
   // --- Current Tasks (per-worker) ---
-  console.log("\n  Current Tasks:");
+  print("\n  Current Tasks:");
 
   const taskFiles = ["current-task.md"];
   try {
@@ -198,12 +205,12 @@ export async function statusCommand(options: StatusOptions) {
         ? taskTitle.substring(0, maxLen) + "..."
         : taskTitle;
 
-      console.log(`    ${label}: [${taskStatus}] ${shortTitle}${duration}`);
+      print(`    ${label}: [${taskStatus}] ${shortTitle}${duration}`);
     }
   }
 
   if (!hasActiveTasks) {
-    console.log("    Idle — no active tasks");
+    print("    Idle — no active tasks");
   }
 
   // --- Heartbeat staleness + task age for health score ---
@@ -251,30 +258,30 @@ export async function statusCommand(options: StatusOptions) {
     }
   }
 
-  console.log(`\n  Workers: ${runningCount}/${workers.length}`);
+  print(`\n  Workers: ${runningCount}/${workers.length}`);
   if (workerStatuses.length > 0) {
     for (const ws of workerStatuses) {
       const icon = ws.running ? "running" : "stale";
       const pidLabel = ws.pid ? ` (PID ${ws.pid})` : "";
-      console.log(`    ${ws.name}: ${icon}${pidLabel}`);
+      print(`    ${ws.name}: ${icon}${pidLabel}`);
     }
   } else {
-    console.log("    No lock files found");
+    print("    No lock files found");
   }
 
   // --- Last Activity ---
   const lastActivity = getLastActivityTimestamp(devDir);
   if (lastActivity) {
     const ago = formatDuration(Date.now() - lastActivity.getTime());
-    console.log(`\n  Last Activity: ${ago} ago`);
+    print(`\n  Last Activity: ${ago} ago`);
   }
 
   // --- Recent Completions ---
   const recent = parseRecentCompletions(completedContent, 3);
   if (recent.length > 0) {
-    console.log("\n  Recent Completions:");
+    print("\n  Recent Completions:");
     for (const entry of recent) {
-      console.log(`    ${entry}`);
+      print(`    ${entry}`);
     }
   }
 
@@ -283,22 +290,22 @@ export async function statusCommand(options: StatusOptions) {
   if (existsSync(tokenCache)) {
     const age = Date.now() - statSync(tokenCache).mtimeMs;
     const mins = Math.floor(age / 60000);
-    console.log(`\n  Auth: OK (token cached ${mins}m ago)`);
+    print(`\n  Auth: OK (token cached ${mins}m ago)`);
   } else {
-    console.log("\n  Auth: No token cached");
+    print("\n  Auth: No token cached");
   }
 
   // --- Blockers ---
   const blockers = readFile(join(devDir, "blockers.md"));
   let blockerCount = 0;
   if (blockers.includes("No active blockers")) {
-    console.log("  Blockers: None");
+    print("  Blockers: None");
   } else {
     blockerCount = (blockers.match(/^- /gm) || []).length;
     if (blockerCount > 0) {
-      console.log(`  Blockers: ${blockerCount} active`);
+      print(`  Blockers: ${blockerCount} active`);
     } else {
-      console.log("  Blockers: None");
+      print("  Blockers: None");
     }
   }
 
@@ -311,7 +318,7 @@ export async function statusCommand(options: StatusOptions) {
   healthScore = Math.max(0, Math.min(100, healthScore));
 
   const healthLabel = healthScore > 80 ? "Good" : healthScore > 50 ? "Degraded" : "Critical";
-  console.log(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
+  print(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
   // --- Self-Correction Rate ---
   const failedLines = failed
@@ -323,10 +330,11 @@ export async function statusCommand(options: StatusOptions) {
   const scrSelfCorrected = scrFixed + scrSuperseded;
   const scrResolved = scrSelfCorrected + scrBlocked;
   const scrRate = scrResolved > 0 ? Math.round((scrSelfCorrected / scrResolved) * 100) : 0;
-  console.log(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
+  print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
   const missionRaw = readFile(join(devDir, "mission.md"));
+  const missionProgress: { id: number; criterion: string; status: string; evidence: string }[] = [];
   if (missionRaw) {
     const scMatch = missionRaw.match(/## Success Criteria\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
     if (scMatch) {
@@ -413,6 +421,8 @@ export async function statusCommand(options: StatusOptions) {
               break;
           }
 
+          missionProgress.push({ id, criterion, status, evidence });
+
           if (status === "met") metCount++;
           else if (status === "partial") partialCount++;
 
@@ -425,13 +435,35 @@ export async function statusCommand(options: StatusOptions) {
           summaryLines.push(`    ${id}. ${icon} ${shortCriterion} (${evidence})`);
         }
 
-        console.log(`\n  Mission Progress: ${metCount}/${criteriaLines.length} met, ${partialCount} partial`);
+        print(`\n  Mission Progress: ${metCount}/${criteriaLines.length} met, ${partialCount} partial`);
         for (const sl of summaryLines) {
-          console.log(sl);
+          print(sl);
         }
       }
     }
   }
 
-  console.log("");
+  // --- JSON output mode ---
+  if (options.json) {
+    const data = {
+      project: projectName,
+      paused: isPaused,
+      tasks: { pending, claimed, completed: completedCount, failed: failedPending },
+      workers: workerStatuses,
+      healthScore,
+      selfCorrectionRate: scrRate,
+      missionProgress,
+      lastActivity: lastActivity ? lastActivity.toISOString() : null,
+    };
+    console.log(JSON.stringify(data, null, 2));
+    process.exit(0);
+  }
+
+  // --- Quiet output mode ---
+  if (options.quiet) {
+    console.log(healthScore);
+    process.exit(0);
+  }
+
+  print("");
 }
