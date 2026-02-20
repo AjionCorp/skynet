@@ -57,6 +57,7 @@ export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"   
 export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                     # macOS Keychain service name
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)
 export SKYNET_AUTH_NOTIFY_INTERVAL=3600                                          # Seconds between auth-failure notifications
+export SKYNET_CODEX_NOTIFY_INTERVAL=3600                                         # Seconds between Codex auth-failure notifications
 
 # ---- Notifications ----
 # Comma-separated list of enabled notification channels.

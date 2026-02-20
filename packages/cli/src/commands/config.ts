@@ -37,6 +37,7 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_AUTH_KEYCHAIN_SERVICE: "Keychain service name",
   SKYNET_AUTH_KEYCHAIN_ACCOUNT: "Keychain account name",
   SKYNET_AUTH_NOTIFY_INTERVAL: "Auth notify interval (seconds)",
+  SKYNET_CODEX_NOTIFY_INTERVAL: "Codex auth notify interval (seconds)",
   SKYNET_NOTIFY_CHANNELS: "Notification channels",
   SKYNET_TG_ENABLED: "Telegram notifications enabled",
   SKYNET_TG_BOT_TOKEN: "Telegram bot token",
