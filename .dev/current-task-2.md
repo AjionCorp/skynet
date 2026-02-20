@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for stale-claimed demotion safety rules — assert only truly orphaned claimed rows are demoted, active claimed rows are preserved byte-for-byte, and post-sweep backlog ordering remains `[>]` then `[ ]` then `[x]`. Mission: Criterion #2 quality gates and Criterion #3 deterministic planning.
+## [FIX] Restore project-driver backlog ordering convergence when checked rows appear above claims — in `scripts/project-driver.sh`, make the rewrite/sanitizer path rebuild from extracted marker rows so `[x]` can never persist above `[>]`, while preserving claimed lines byte-for-byte. Mission: Criterion #3 deterministic planning and Criterion #2 loop reliability.
 **Status:** completed
-**Started:** 2026-02-20 16:47
+**Started:** 2026-02-20 16:48
 **Completed:** 2026-02-20
-**Branch:** dev/add-shell-regression-for-stale-claimed-d
+**Branch:** dev/restore-project-driver-backlog-ordering-
 **Worker:** 2
 
 ### Changes
