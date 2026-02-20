@@ -56,6 +56,9 @@ All state lives in `.dev/` as markdown: `backlog.md`, `completed.md`, `failed-ta
 | `skynet config <sub>` | View or edit `skynet.config.sh` — `config list`, `config get KEY`, `config set KEY VALUE` with validation |
 | `skynet export` | Export pipeline state as a JSON snapshot |
 | `skynet import` | Restore pipeline state from an exported snapshot |
+| `skynet validate` | Run pre-flight project validation checks |
+| `skynet changelog` | Generate changelog from completed tasks |
+| `skynet test-notify` | Test notification channel configuration |
 | `skynet completions` | Generate bash or zsh shell completions |
 
 ## Dashboard
@@ -76,6 +79,11 @@ The dashboard provides real-time views into pipeline state:
 | `SyncDashboard` | Data sync endpoint health |
 | `PromptsDashboard` | View worker prompt templates |
 | `WorkerScaling` | Adjust worker concurrency |
+| `ActivityFeed` | Recent pipeline events with color-coded status indicators |
+| `EventsDashboard` | Full event history with search, filtering, and polling |
+| `LogViewer` | Tail worker and system logs by source |
+| `SettingsDashboard` | View and edit `skynet.config.sh` settings |
+| `MissionDashboard` | Mission progress tracking with goal completion status |
 
 API handlers follow a factory pattern — `createPipelineStatusHandler(config)` returns a Next.js route handler. Mount them in any Next.js app with `createConfig({ projectName, devDir, lockPrefix })`.
 
@@ -96,6 +104,10 @@ After `skynet init`, two config files live in `.dev/`:
 | `SKYNET_MAX_FIX_ATTEMPTS` | `3` | Retries before task-fixer marks task as blocked |
 | `SKYNET_AGENT_PLUGIN` | `auto` | Agent selection: `auto`, `claude`, `codex`, or path to custom plugin |
 | `SKYNET_NOTIFY_CHANNELS` | `telegram` | Notification channels: `telegram`, `slack`, `discord` |
+| `SKYNET_WATCHDOG_INTERVAL` | `180` | Seconds between watchdog dispatch cycles |
+| `SKYNET_MAX_FIXERS` | `3` | Parallel task-fixer instances |
+| `SKYNET_DRIVER_BACKLOG_THRESHOLD` | `5` | Trigger project-driver when backlog drops below this count |
+| `SKYNET_AGENT_TIMEOUT_MINUTES` | `45` | Kill agent process after N minutes of wall-clock time |
 
 **`skynet.project.sh`** — project-specific, committable:
 
