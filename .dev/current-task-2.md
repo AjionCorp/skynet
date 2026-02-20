@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add watchdog preflight sanitizer for malformed failed-task rows before dispatch — add one idempotent pass in `scripts/watchdog.sh` that validates `.dev/failed-tasks.md` row column counts, repairs only known legacy corruption patterns from unescaped table pipes, and emits before/after counters (`rows_scanned`, `rows_repaired`, `rows_skipped`). Mission: Criterion #2 self-correction throughput and Criterion #3 convergent recovery state.
+## [INFRA] Prevent project-driver from generating retry variants for active failed roots — in `scripts/project-driver.sh`, normalize unchecked candidate titles against active `pending|blocked|fixing-*` roots in `.dev/failed-tasks.md`, skip generation when a canonical root is already active, and log deterministic `driver_duplicate_root_skipped` counters. Mission: Criterion #2 retry-loop reduction and Criterion #3 durable root-cause planning.
 **Status:** completed
-**Started:** 2026-02-20 18:04
+**Started:** 2026-02-20 18:11
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-preflight-sanitizer-for-mal
+**Branch:** dev/prevent-project-driver-from-generating-r
 **Worker:** 2
 
 ### Changes
