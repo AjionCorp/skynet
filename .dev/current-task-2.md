@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock dashboard backlog-parser DRY extraction root — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts`, and add parity tests to end this retry loop. Mission: Criterion #3 maintainability and Criterion #2 retry-loop reduction.
+## [INFRA] Supersede legacy duplicate pending failed roots after canonicalization pass — run a one-time scripted sweep marking redundant pending rows for already-fixed/completed roots as `superseded` and emit `task_superseded` transitions. Mission: Criterion #2 self-correction efficiency and Criterion #3 clean state.
 **Status:** completed
-**Started:** 2026-02-20 10:29
+**Started:** 2026-02-20 10:30
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-dashboard-backlog-parser-dry-ext
+**Branch:** dev/supersede-legacy-duplicate-pending-faile
 **Worker:** 2
 
 ### Changes
