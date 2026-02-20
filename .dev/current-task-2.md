@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix duplicate Activity icon for events page in admin navigation — in `packages/admin/src/app/admin/layout.tsx`, both `pipeline` (line 9) and `events` (line 17) use the `Activity` icon from lucide-react. This makes the sidebar navigation confusing — two identical icons for different pages. Fix: change the `events` entry to use the `ScrollText` icon (or `FileText`/`ListOrdered`), which better represents an event log/audit trail. Import `ScrollText` from `lucide-react` and update the icon property. Run `pnpm typecheck`. Criterion #4 (dashboard usability — distinct visual navigation)
+## [FIX] Add `SKYNET_WORKER_CONTEXT` and `SKYNET_WORKER_CONVENTIONS` as commented-out examples in config template — `dev-worker.sh` line 461 uses `${SKYNET_WORKER_CONTEXT:-}` and line 482 uses `${SKYNET_WORKER_CONVENTIONS:-}` for injecting project-specific context and coding conventions into agent prompts. `task-fixer.sh` line 382 also uses `${SKYNET_WORKER_CONVENTIONS:-}`. These are documented in `KNOWN_VARS` (config.ts lines 59-60) but NOT in `templates/skynet.config.sh`, making them completely undiscoverable to users. Fix: add after the Agent Plugin section (after line 85 in the template) as commented-out examples: `# export SKYNET_WORKER_CONTEXT=""  # Path to file with project-specific context injected into agent prompts` and `# export SKYNET_WORKER_CONVENTIONS=""  # Path to file with coding conventions injected into agent prompts`. Run `pnpm typecheck`. Criterion #1 (all config knobs discoverable in the template)
 **Status:** completed
-**Started:** 2026-02-20 02:23
+**Started:** 2026-02-20 02:31
 **Completed:** 2026-02-20
-**Branch:** dev/fix-duplicate-activity-icon-for-events-p
+**Branch:** dev/add-skynetworkercontext-and-skynetworker
 **Worker:** 2
 
 ### Changes
