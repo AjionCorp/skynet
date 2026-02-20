@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Produce diagnostics bundle for blocked roots before requeue — for each blocked root cause, capture exact failing file/line/typecheck diagnostics from worker/fixer logs, record minimal repro scope in `.dev/blockers.md` Active, and supersede stale duplicate failed rows for that root. Mission: Criterion #2 self-correction closure.
+## [FIX] Restore config template parity for watchdog and one-shot knobs — ensure `templates/skynet.config.sh` and `packages/cli/src/commands/config.ts` `KNOWN_VARS` stay aligned for `SKYNET_WATCHDOG_INTERVAL`, `SKYNET_ONE_SHOT`, and `SKYNET_ONE_SHOT_TASK` with no ghost vars. Mission: Criterion #1 adoption clarity and Criterion #3 deterministic config behavior.
 **Status:** completed
-**Started:** 2026-02-20 10:00
+**Started:** 2026-02-20 10:02
 **Completed:** 2026-02-20
-**Branch:** dev/produce-diagnostics-bundle-for-blocked-r
+**Branch:** dev/restore-config-template-parity-for-watch
 **Worker:** 2
 
 ### Changes
