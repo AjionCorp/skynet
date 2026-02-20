@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run canonical stale-active failed-root supersede before both fixer dispatch and project-driver generation — in `scripts/watchdog.sh` and `scripts/project-driver.sh`, share one normalized-root active snapshot path that supersedes stale `status=blocked|pending` rows already present in `.dev/completed.md`, preserves `fixing-*` rows byte-for-byte, and emits deterministic before/after counters once per cycle. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [TEST] Add watchdog regression for blocked-row supersede guardrails — in `scripts/tests/watchdog.sh`, assert completed-root supersede touches only stale `blocked|pending` rows, never rewrites `fixing-*` rows, and preserves unaffected active-row ordering. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 17:18
+**Started:** 2026-02-20 17:20
 **Completed:** 2026-02-20
-**Branch:** dev/run-canonical-stale-active-failed-root-s
+**Branch:** dev/add-watchdog-regression-for-blocked-row-
 **Worker:** 3
 
 ### Changes
