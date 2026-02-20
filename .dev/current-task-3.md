@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface blocked-duplication convergence counters in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include `blockedRowsBefore`, `blockedRowsAfter`, and `blockedDuplicatesCompacted` from watchdog telemetry for operator verification of blocked-root cleanup progress. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [DATA] Read watchdog reconciliation counters from snapshot in dashboard status handler — update `packages/dashboard/src/handlers/pipeline-status.ts` to consume `.dev/watchdog-telemetry.json` as the primary source for reconciliation counters (including blocked-duplication fields) with a safe fallback to current behavior when the snapshot is missing. Mission: Criterion #4 telemetry trust and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:56
+**Started:** 2026-02-20 18:58
 **Completed:** 2026-02-20
-**Branch:** dev/surface-blocked-duplication-convergence-
+**Branch:** dev/read-watchdog-reconciliation-counters-fr
 **Worker:** 3
 
 ### Changes
