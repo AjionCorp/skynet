@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Update config.ts KNOWN_VARS dictionary with missing config variable descriptions — in `packages/cli/src/commands/config.ts`, the `KNOWN_VARS` object (lines 10-53) is missing descriptions for 5 config variables that were added to `templates/skynet.config.sh` after the dictionary was created. Add these entries before the closing brace on line 53: `SKYNET_AGENT_TIMEOUT_MINUTES: "Max minutes before agent process is killed (default: 45)"`, `SKYNET_HEALTH_ALERT_THRESHOLD: "Health score threshold for watchdog alerts (default: 50)"`, `SKYNET_MAX_EVENTS_LOG_KB: "Max events.log size in KB before rotation (default: 1024)"`, `SKYNET_MAX_FIXERS: "Maximum concurrent task-fixer instances (default: 3)"`, `SKYNET_DRIVER_BACKLOG_THRESHOLD: "Pending task count before project-driver generates more (default: 5)"`, `SKYNET_START_DEV_CMD: "Command to start the dev server (optional)"`. This makes `skynet config list` show descriptions for ALL variables instead of blanks for newer ones. Criterion #1 (accurate developer tooling)
+## [TEST] Add `test-notify.test.ts` CLI unit test — create `packages/cli/src/commands/__tests__/test-notify.test.ts`. Mock `child_process.execSync` for notify script execution and `fs.readFileSync` for config parsing. Test: (a) reads `SKYNET_NOTIFY_CHANNELS` from config and identifies enabled channels, (b) executes correct `scripts/notify/<channel>.sh` for each enabled channel, (c) `--channel telegram` tests only the specified channel, (d) reports per-channel OK/FAILED with captured output, (e) handles no configured channels with helpful message ("No notification channels configured"), (f) handles script execution failure (exit code != 0) gracefully with FAILED status. Follow existing CLI test patterns in `init.test.ts`. Criterion #2 (complete CLI test coverage)
 **Status:** completed
-**Started:** 2026-02-20 01:09
+**Started:** 2026-02-20 01:11
 **Completed:** 2026-02-20
-**Branch:** dev/update-configts-knownvars-dictionary-wit
+**Branch:** dev/add-test-notifytestts-cli-unit-test--cre
 **Worker:** 2
 
 ### Changes
