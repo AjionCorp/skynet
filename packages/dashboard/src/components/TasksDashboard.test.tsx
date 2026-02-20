@@ -25,9 +25,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data, error }))
-  );
+  ));
 }
 
 describe("TasksDashboard", () => {
@@ -38,7 +38,7 @@ describe("TasksDashboard", () => {
 
   it("shows loading spinner initially", () => {
     // Never-resolving fetch to keep loading state
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<TasksDashboard />);
     // The loading state shows a spinner (Loader2 with animate-spin)
     const spinner = document.querySelector(".animate-spin");
@@ -60,7 +60,7 @@ describe("TasksDashboard", () => {
   });
 
   it("shows em-dash while loading counts", () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<TasksDashboard />);
     const dashes = screen.getAllByText("\u2014");
     // 3 summary cards should show em-dash
@@ -163,9 +163,9 @@ describe("TasksDashboard", () => {
     fireEvent.change(titleInput, { target: { value: "New task title" } });
 
     // Mock for POST response
-    global.fetch = vi.fn()
+    vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null })));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
 
     // Submit the form
     const submitButton = screen.getByText("Add Task");
@@ -189,9 +189,9 @@ describe("TasksDashboard", () => {
     const titleInput = document.getElementById("task-title") as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: "New task" } });
 
-    global.fetch = vi.fn()
+    vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null })));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
 
     fireEvent.click(screen.getByText("Add Task"));
 

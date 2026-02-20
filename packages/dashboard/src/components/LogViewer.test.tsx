@@ -22,9 +22,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockLogsGet(data: LogData | null, error: string | null = null) {
-  global.fetch = vi.fn().mockImplementation(() =>
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(() =>
     Promise.resolve(new Response(JSON.stringify({ data, error })))
-  );
+  ));
 }
 
 describe("LogViewer", () => {
@@ -86,7 +86,7 @@ describe("LogViewer", () => {
     expect(screen.getByText("Auto-refresh ON")).toBeDefined();
 
     // Reset call count to track polling
-    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(global.fetch).mockClear();
     mockLogsGet(MOCK_LOG_DATA);
 
     // Advance 5 seconds — should trigger one poll
@@ -97,7 +97,7 @@ describe("LogViewer", () => {
     fireEvent.click(screen.getByText("Auto-refresh ON"));
     expect(screen.getByText("Auto-refresh OFF")).toBeDefined();
 
-    (global.fetch as ReturnType<typeof vi.fn>).mockClear();
+    vi.mocked(global.fetch).mockClear();
 
     // Advance another 5 seconds — no more polls
     await vi.advanceTimersByTimeAsync(5000);
@@ -126,7 +126,7 @@ describe("LogViewer", () => {
   });
 
   it("changes source and fetches new logs", async () => {
-    global.fetch = vi.fn()
+    vi.stubGlobal('fetch', vi.fn()
       // Config fetch on mount
       .mockResolvedValueOnce(
         new Response(JSON.stringify({ data: { entries: [] }, error: null }))
@@ -141,7 +141,7 @@ describe("LogViewer", () => {
           data: { ...MOCK_LOG_DATA, script: "watchdog", lines: ["[watchdog] checking workers..."] },
           error: null,
         }))
-      );
+      ));
 
     renderWithProvider(<LogViewer />);
 
@@ -158,7 +158,7 @@ describe("LogViewer", () => {
     });
 
     // Verify second fetch was called with watchdog param
-    const calls = (global.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const calls = vi.mocked(global.fetch).mock.calls;
     const watchdogCall = calls.find((c: unknown[]) =>
       typeof c[0] === "string" && (c[0] as string).includes("watchdog")
     );
@@ -180,7 +180,7 @@ describe("LogViewer", () => {
   });
 
   it("displays error when fetch throws", async () => {
-    global.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<LogViewer />);
     await waitFor(() => {
       expect(screen.getByText("Network error")).toBeDefined();

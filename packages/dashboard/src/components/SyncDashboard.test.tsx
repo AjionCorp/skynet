@@ -25,9 +25,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: Record<string, unknown> | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data, error }))
-  );
+  ));
 }
 
 describe("SyncDashboard", () => {
@@ -37,7 +37,7 @@ describe("SyncDashboard", () => {
   });
 
   it("shows loading state initially", () => {
-    global.fetch = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<SyncDashboard />);
     expect(screen.getByText("Loading sync status...")).toBeDefined();
   });

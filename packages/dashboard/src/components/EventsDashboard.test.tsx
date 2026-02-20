@@ -27,9 +27,9 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: EventEntry[] | null, error: string | null = null) {
-  global.fetch = vi.fn().mockResolvedValue(
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
     new Response(JSON.stringify({ data, error }))
-  );
+  ));
 }
 
 // ---------------------------------------------------------------------------
