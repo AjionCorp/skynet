@@ -514,6 +514,18 @@ EOF
   (cd "$WORKTREE_DIR" && git checkout -- "${DEV_DIR##*/}/" 2>/dev/null || true)
   (cd "$WORKTREE_DIR" && git clean -fd test-results/ 2>/dev/null || true)
 
+  # --- Ensure dependencies are fresh before quality gates ---
+  # If pnpm-lock.yaml is newer than node_modules, re-install to avoid
+  # "Cannot find module" errors when new deps were added on main.
+  if [ -f "$WORKTREE_DIR/pnpm-lock.yaml" ]; then
+    _lock_mtime=$(file_mtime "$WORKTREE_DIR/pnpm-lock.yaml")
+    _modules_mtime=$(file_mtime "$WORKTREE_DIR/node_modules/.modules.yaml")
+    if [ "$_lock_mtime" -gt "$_modules_mtime" ]; then
+      log "pnpm-lock.yaml newer than node_modules — running pnpm install"
+      (cd "$WORKTREE_DIR" && pnpm install --frozen-lockfile --prefer-offline) >> "$LOG" 2>&1
+    fi
+  fi
+
   _gate_failed=""
   _gate_idx=1
   while true; do
