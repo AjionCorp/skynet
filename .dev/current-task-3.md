@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Refresh `.dev/blockers.md` Active from post-reconciliation canonical failed roots — rebuild Active entries from current `.dev/failed-tasks.md` so exactly one bullet remains per true open root and stale duplicate-root bullets are removed while preserving Celebration/Resolved sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
+## [INFRA] Enforce canonical backlog marker ordering before each dispatch cycle — in `scripts/watchdog.sh` (or shared `_config.sh` helper), run a pre-cycle sanitizer that guarantees all `[>]` rows stay first, `[ ]` rows follow, and any misplaced top-level `[x]` rows are moved into checked history without rewriting claimed lines byte-for-byte. Mission: Criterion #3 deterministic planning state and Criterion #2 no-task-loss reliability.
 **Status:** completed
-**Started:** 2026-02-20 17:10
+**Started:** 2026-02-20 17:14
 **Completed:** 2026-02-20
-**Branch:** dev/refresh-devblockersmd-active-from-post-r
+**Branch:** dev/enforce-canonical-backlog-marker-orderin
 **Worker:** 3
 
 ### Changes
