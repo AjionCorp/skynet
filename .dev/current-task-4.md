@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Prevent future duplicate retry variants at source in project-driver output filtering — hard-fail generation of new unchecked tasks whose normalized title matches any active/blocked canonical root in `.dev/failed-tasks.md`, log skipped roots, and keep unchecked backlog capped under 15 in `scripts/project-driver.sh`. Mission: Criterion #3 convergent planning and Criterion #2 self-correction stability.
+## [TEST] Add concurrency regression coverage for failed-task writes — extend shell tests for `scripts/task-fixer.sh` and `scripts/watchdog.sh` to simulate concurrent append/update paths and assert single canonical active row per normalized root after reconciliation. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
 **Started:** 2026-02-20 10:48
 **Completed:** 2026-02-20
-**Branch:** dev/prevent-future-duplicate-retry-variants-
+**Branch:** dev/add-concurrency-regression-coverage-for-
 **Worker:** 4
 
 ### Changes
