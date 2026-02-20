@@ -531,7 +531,7 @@ EOF
   # --- Non-blocking: Check server logs for runtime errors ---
   if [ -f "$SERVER_LOG" ]; then
     log "Checking server logs for runtime errors..."
-    bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
+    bash "$SCRIPTS_DIR/check-server-errors.sh" "$SCRIPTS_DIR/next-dev-w${WORKER_ID}.log" >> "$LOG" 2>&1 || \
       log "Server errors found -- written to blockers.md (non-blocking for merge)"
   fi
 

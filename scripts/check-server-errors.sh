@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # check-server-errors.sh — Scan dev server log for runtime errors
 # Writes actionable errors to blockers.md
-# Usage: bash scripts/check-server-errors.sh [minutes_to_check]
+# Usage: bash scripts/check-server-errors.sh [log_path] [minutes_to_check]
 # Returns: 0 if no errors, 1 if errors found
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-SERVER_LOG="$SCRIPTS_DIR/next-dev.log"
+SERVER_LOG="${1:-$SCRIPTS_DIR/next-dev.log}"
 LOG="$SCRIPTS_DIR/server-errors.log"
 # shellcheck disable=SC2034
-MINUTES="${1:-5}"
+MINUTES="${2:-5}"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
