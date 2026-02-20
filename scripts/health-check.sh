@@ -12,7 +12,7 @@ cd "$PROJECT_DIR"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 # --- PID lock (prevent concurrent health-check runs) ---
-LOCK_FILE="$SCRIPTS_DIR/health-check.lock"
+LOCK_FILE="${SKYNET_LOCK_PREFIX}-health-check.lock"
 
 acquire_lock() {
   if mkdir "$LOCK_FILE" 2>/dev/null; then
