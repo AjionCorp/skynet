@@ -162,6 +162,13 @@ export async function changelogCommand(options: ChangelogOptions) {
   const content = readFileSync(completedPath, "utf-8");
   let entries = parseCompletedEntries(content);
 
+  // Also read archived completions for full historical data
+  const archivePath = join(devDir, "completed-archive.md");
+  if (existsSync(archivePath)) {
+    const archiveContent = readFileSync(archivePath, "utf-8");
+    entries = entries.concat(parseCompletedEntries(archiveContent));
+  }
+
   if (entries.length === 0) {
     console.log("  No completed tasks found.");
     return;
