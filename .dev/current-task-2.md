@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add EventsDashboard component and `/admin/events` page — FRESH implementation (delete stale branch `dev/add-adminevents-page-with-event-filterin` first). Create `packages/dashboard/src/components/EventsDashboard.tsx`: fetches from `/api/admin/events` (already exists), renders a table of events with columns: timestamp, event type (colored badge using inline styles — green for completed/succeeded, red for failed, blue for claimed/started, yellow for killed/warning), and detail text. Add a filter dropdown for event type and a text search input. Use `useSkynet()` hook for API prefix. Export from `packages/dashboard/src/components/index.ts`. Create `packages/admin/src/app/admin/events/page.tsx` importing EventsDashboard. Add nav entry in `packages/admin/src/app/admin/layout.tsx`: `{ href: "/admin/events", label: "Events", icon: Activity }` (import Activity from lucide-react). Criterion #4
+## [FEAT] Add `skynet export` CLI command for pipeline state snapshot — create `packages/cli/src/commands/export.ts`. Reads all `.dev/` state files (backlog.md, completed.md, failed-tasks.md, blockers.md, mission.md, skynet.config.sh, events.log) and writes them as a single JSON file to `skynet-snapshot-{ISO-date}.json` with keys matching filenames and string values. Useful for archiving pipeline state, debugging, or migrating to a new project. Add `--output` flag for custom path. Register in `packages/cli/src/index.ts`. Criterion #1 (developer experience)
 **Status:** completed
-**Started:** 2026-02-20 00:21
+**Started:** 2026-02-20 00:23
 **Completed:** 2026-02-20
-**Branch:** dev/add-eventsdashboard-component-and-admine
+**Branch:** dev/add-skynet-export-cli-command-for-pipeli
 **Worker:** 2
 
 ### Changes
