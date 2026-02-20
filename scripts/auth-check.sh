@@ -11,7 +11,7 @@
 # - On repeat failures: throttles alerts to once per hour (not every 3 min)
 # - On recovery: sends Telegram "restored" message, clears blocker
 
-type log &>/dev/null || log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
+type log >/dev/null 2>&1 || log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 
 AUTH_NOTIFY_INTERVAL="${SKYNET_AUTH_NOTIFY_INTERVAL:-3600}"  # seconds between repeat Telegram alerts
 
@@ -103,7 +103,7 @@ CODEX_NOTIFY_INTERVAL="${SKYNET_CODEX_NOTIFY_INTERVAL:-3600}"  # seconds between
 
 check_codex_auth() {
   # Check if codex binary is installed
-  if ! command -v "${SKYNET_CODEX_BIN:-codex}" &>/dev/null; then
+  if ! command -v "${SKYNET_CODEX_BIN:-codex}" >/dev/null 2>&1; then
     # Not installed — not an error, just unavailable
     return 1
   fi
