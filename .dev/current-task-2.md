@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add events handler unit tests and ActivityFeed component tests — FRESH implementation (previous branch `dev/add-events-handler-unit-tests-and-activi` has merge conflict — delete it). Create `packages/dashboard/src/handlers/events.test.ts`: test `createEventsHandler` reads pipe-delimited events.log and returns proper `EventEntry[]` shape, test empty/missing events.log returns empty array, test malformed lines are skipped gracefully, test limit to last 100 entries when file has more, test epoch-to-ISO conversion accuracy. Create `packages/dashboard/src/components/ActivityFeed.test.tsx` using vitest + @testing-library/react: test renders event list from mock fetch data, test color-codes dots by event type (green for completed, red for failed), test empty state shows appropriate message, test 10s auto-refresh interval is set. Follow existing test patterns in `packages/dashboard/src/handlers/*.test.ts`. Criterion #2 (test coverage for event system)
+## [FEAT] Add `skynet upgrade` CLI command for self-update — create `packages/cli/src/commands/upgrade.ts`. Check current installed version vs npm registry latest via `npm view @ajioncorp/skynet-cli version`. If outdated, run `npm install -g @ajioncorp/skynet-cli@latest` via `child_process.execSync`. If up-to-date, print "Already on latest version (X.Y.Z)". Add `--check` flag for dry-run that only reports whether an update is available without installing. Register in `packages/cli/src/index.ts`. Criterion #1 (developer experience — smooth upgrade path)
 **Status:** completed
-**Started:** 2026-02-19 22:00
+**Started:** 2026-02-19 22:04
 **Completed:** 2026-02-19
-**Branch:** dev/add-events-handler-unit-tests-and-activi
+**Branch:** dev/add-skynet-upgrade-cli-command-for-self-
 **Worker:** 2
 
 ### Changes
