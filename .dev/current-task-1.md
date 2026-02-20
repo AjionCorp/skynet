@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix pipeline-status.ts `handlerCount` always returning 0 in production builds — in `packages/dashboard/src/handlers/pipeline-status.ts` lines 546-553, handler counting uses `readdir(handlersDir).filter((f) => f.endsWith(".ts") && !f.includes(".test."))`. In production Next.js builds, `__dirname` points to compiled output containing `.js` files, not `.ts`. The filter matches zero files, so `handlerCount` is always 0, breaking mission criterion #1 and #4 evaluation. Fix: change the filter to check for both extensions: `f.endsWith(".ts") || f.endsWith(".js")` and exclude both `.test.ts` and `.test.js`. Alternatively, hardcode the handler count as a known constant (currently 10 handlers) since it changes rarely and counting compiled files is inherently fragile. Run `pnpm typecheck` and `pnpm build` to verify. Criterion #4 (dashboard shows correct mission progress in production)
+## [INFRA] Add typecheck and test steps to publish-cli.yml before npm publish — in `.github/workflows/publish-cli.yml`, the publish job runs `pnpm build` and checks that `dist/index.js` exists, but does NOT run `pnpm typecheck` or `pnpm test` before publishing. A developer can push a `cli-v*` tag on a commit with failing tests and the broken version ships to npm. Fix: add two steps before the publish step: (1) `pnpm typecheck` to catch type errors, (2) `pnpm --filter @ajioncorp/skynet-cli test` to run CLI unit tests. If either fails, the publish is blocked. This prevents broken CLI releases from reaching users via `npx skynet init`. Run `pnpm typecheck`. Criterion #2 (CI quality gates prevent broken releases)
 **Status:** completed
 **Started:** 2026-02-20 02:20
 **Completed:** 2026-02-20
-**Branch:** dev/fix-pipeline-statusts-handlercount-alway
+**Branch:** dev/add-typecheck-and-test-steps-to-publish-
 **Worker:** 1
 
 ### Changes
