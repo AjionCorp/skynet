@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix health-check.sh unquoted `$SKYNET_LINT_CMD` causing word splitting — in `scripts/health-check.sh` line 102, `if $SKYNET_LINT_CMD >> "$LOG" 2>&1` expands without quotes. If the user sets `SKYNET_LINT_CMD="pnpm run lint"`, word splitting treats each space-separated token as a separate argument to the first token, breaking the command with confusing "command not found" errors. The quality gates in `dev-worker.sh` use `eval "$_gate_cmd"` which handles the full string as a shell command. Fix: change line 102 from `if $SKYNET_LINT_CMD >> "$LOG" 2>&1` to `if eval "$SKYNET_LINT_CMD" >> "$LOG" 2>&1`. Apply the same fix to `$SKYNET_TYPECHECK_CMD` if it has the same pattern anywhere in the file. Run `bash -n scripts/health-check.sh` and `pnpm typecheck`. Criterion #1 (portability — commands with spaces must work)
+## [DOCS] Add README.md for `@ajioncorp/skynet` dashboard package — the npm package for embedding Skynet's dashboard into external Next.js apps has no README (`packages/dashboard/README.md` does not exist). The npmjs.com page would be blank. Create `packages/dashboard/README.md` with sections: (1) One-line description: "Embeddable dashboard components and API handlers for Skynet pipeline monitoring", (2) Installation: `npm install @ajioncorp/skynet` with peer deps (next >=14, react >=18), (3) Quick Start showing `SkynetProvider` setup and component import pattern, (4) Handler factories table mapping each `createXxxHandler(config)` to its API route, (5) Available components list (PipelineDashboard, TasksDashboard, MonitoringDashboard, etc.), (6) TypeScript types reference linking to `types.ts`. Add `"README.md"` to the `files` array in `packages/dashboard/package.json` if a `files` field exists. Keep under 100 lines. Run `pnpm typecheck`. Criterion #1 (usable npm package surface for external consumers)
 **Status:** completed
-**Started:** 2026-02-20 02:21
+**Started:** 2026-02-20 02:33
 **Completed:** 2026-02-20
-**Branch:** dev/fix-health-checksh-unquoted-skynetlintcm
+**Branch:** dev/add-readmemd-for-ajioncorpskynet-dashboa
 **Worker:** 4
 
 ### Changes
