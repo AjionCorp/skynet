@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add shell completions for bash and zsh — create `packages/cli/src/commands/completions.ts`. Register as `program.command('completions').description('Generate shell completions')` with `.argument('<shell>', 'Shell type: bash or zsh')` in `packages/cli/src/index.ts`. For bash: output a `complete -W "<all-commands>" skynet` script plus per-command flag completions using `_skynet()` function with `COMPREPLY`. For zsh: output a `#compdef skynet` script using `_arguments` with all 22 commands and their flags. Include all registered commands: init, setup-agents, start, stop, pause, resume, status, doctor, logs, version, add-task, run, dashboard, reset-task, cleanup, watch, upgrade, metrics, export, import, config, completions. Print installation hint to stderr: "# Add to ~/.bashrc: eval \"$(skynet completions bash)\"". Criterion #1 (developer experience — tab completion for 22 commands)
+## [TEST] Expand E2E CLI test suite with export/import round-trip and doctor --fix verification — in `tests/e2e/cli-commands.test.sh`, add 3 new test cases after the existing ones: (a) **Export/import round-trip**: run `skynet export --output /tmp/skynet-test-export.json`, verify JSON file exists and contains expected keys, then modify backlog.md (add a test line), run `skynet import /tmp/skynet-test-export.json --force`, verify backlog.md was restored to pre-modification state. (b) **Doctor --fix**: create a stale `.dev/worker-99.heartbeat` file with epoch 0, run `skynet doctor` and verify WARN for stale heartbeat, run `skynet doctor --fix` and verify the stale file was deleted, re-run `skynet doctor` and verify PASS. (c) **Config set/get round-trip**: run `skynet config set SKYNET_MAX_WORKERS 6`, then `skynet config get SKYNET_MAX_WORKERS` and verify output is "6", then restore original value. These are the last untested CLI workflows. Criterion #2 (comprehensive E2E coverage)
 **Status:** completed
-**Started:** 2026-02-20 00:47
+**Started:** 2026-02-20 01:05
 **Completed:** 2026-02-20
-**Branch:** dev/add-shell-completions-for-bash-and-zsh--
+**Branch:** dev/expand-e2e-cli-test-suite-with-exportimp
 **Worker:** 4
 
 ### Changes
