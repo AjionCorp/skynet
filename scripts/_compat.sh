@@ -4,7 +4,7 @@
 
 # Detect platform
 SKYNET_IS_MACOS=false
-[[ "$(uname -s)" == "Darwin" ]] && SKYNET_IS_MACOS=true
+[ "$(uname -s)" = "Darwin" ] && SKYNET_IS_MACOS=true
 
 # Portable file modification time (epoch seconds)
 file_mtime() {
@@ -59,7 +59,7 @@ to_upper() {
 
 # Portable readlink -f (resolve symlinks)
 realpath_portable() {
-  if command -v realpath &>/dev/null; then
+  if command -v realpath >/dev/null 2>&1; then
     realpath "$1"
   elif $SKYNET_IS_MACOS; then
     python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1" 2>/dev/null || echo "$1"

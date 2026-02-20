@@ -11,7 +11,7 @@
 
 agent_check() {
   # Is the binary installed?
-  if ! command -v "$SKYNET_CLAUDE_BIN" &>/dev/null; then
+  if ! command -v "$SKYNET_CLAUDE_BIN" >/dev/null 2>&1; then
     return 1
   fi
   # Check cached token if available

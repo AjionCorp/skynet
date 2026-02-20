@@ -34,7 +34,7 @@ _agent_exec() {
     return $?
   fi
 
-  if command -v timeout &>/dev/null; then
+  if command -v timeout >/dev/null 2>&1; then
     # Linux: GNU coreutils timeout (returns 124 on timeout)
     timeout "$timeout_secs" "$@"
     return $?
@@ -91,7 +91,7 @@ _load_plugin_as() {
   source "$plugin_path"
 
   # Default agent_check if plugin doesn't define one
-  if ! declare -f agent_check &>/dev/null; then
+  if ! declare -f agent_check >/dev/null 2>&1; then
     agent_check() { return 0; }
   fi
 
@@ -158,7 +158,7 @@ else
   source "$_plugin_resolved"
 
   # Default agent_check if plugin doesn't define one
-  if ! declare -f agent_check &>/dev/null; then
+  if ! declare -f agent_check >/dev/null 2>&1; then
     agent_check() { return 0; }
   fi
 
