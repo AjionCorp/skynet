@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unify stale-threshold and health-score parity across CLI/dashboard/watchdog — align `packages/cli/src/commands/status.ts`, `packages/cli/src/commands/watch.ts`, `packages/dashboard/src/handlers/pipeline-status.ts`, and `scripts/watchdog.sh` to shared `SKYNET_STALE_MINUTES` input and identical deductions (`failed`, `blockers`, `staleHeartbeats`, `staleTasks24h`) with score-breakdown logging. Mission: Criterion #4 telemetry consistency and Criterion #3 deterministic behavior.
+## [FIX] Enforce duplicate-pending prevention at write-time in `task-fixer.sh` — before append to `.dev/failed-tasks.md`, update attempts/error on normalized pending match instead of inserting a new row; verify behavior with repeated retries on same task title/branch. Mission: Criterion #3 clean state and fixer efficiency.
 **Status:** completed
-**Started:** 2026-02-20 09:48
+**Started:** 2026-02-20 09:49
 **Completed:** 2026-02-20
-**Branch:** dev/unify-stale-threshold-and-health-score-p
+**Branch:** dev/enforce-duplicate-pending-prevention-at-
 **Worker:** 3
 
 ### Changes
