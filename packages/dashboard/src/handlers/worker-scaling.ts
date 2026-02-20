@@ -1,6 +1,6 @@
 import { spawn } from "child_process";
 import { openSync, readFileSync, writeFileSync, unlinkSync, constants } from "fs";
-import { resolve } from "path";
+import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 
 const SCALABLE_TYPES = ["dev-worker", "task-fixer", "project-driver"] as const;
@@ -58,9 +58,16 @@ function resetStaleTaskFile(devDir: string, workerType: ScalableType, slotId: nu
   }
 }
 
-function readPidFile(path: string): number | null {
+function readPidFile(lockPath: string): number | null {
   try {
-    const pid = Number(readFileSync(path, "utf-8").trim());
+    // Support dir-based locks (lockPath/pid) and legacy file-based locks
+    let content: string;
+    try {
+      content = readFileSync(join(lockPath, "pid"), "utf-8").trim();
+    } catch {
+      content = readFileSync(lockPath, "utf-8").trim();
+    }
+    const pid = Number(content);
     return Number.isFinite(pid) && pid > 0 ? pid : null;
   } catch {
     return null;

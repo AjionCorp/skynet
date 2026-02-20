@@ -162,7 +162,13 @@ validate_backlog() {
       # Check dev-workers
       for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
         local wid_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
-        [ -f "$wid_lock" ] && kill -0 "$(cat "$wid_lock" 2>/dev/null)" 2>/dev/null || continue
+        local _wid_pid=""
+        if [ -d "$wid_lock" ] && [ -f "$wid_lock/pid" ]; then
+          _wid_pid=$(cat "$wid_lock/pid" 2>/dev/null || echo "")
+        elif [ -f "$wid_lock" ]; then
+          _wid_pid=$(cat "$wid_lock" 2>/dev/null || echo "")
+        fi
+        [ -n "$_wid_pid" ] && kill -0 "$_wid_pid" 2>/dev/null || continue
         local task_file="$DEV_DIR/current-task-${wid}.md"
         [ -f "$task_file" ] && grep -q "in_progress" "$task_file" 2>/dev/null || continue
         local worker_title
@@ -185,7 +191,13 @@ validate_backlog() {
             _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
             _fixer_task="$DEV_DIR/current-task-fixer-${_fid}.md"
           fi
-          if [ -f "$_fixer_lock" ] && kill -0 "$(cat "$_fixer_lock" 2>/dev/null)" 2>/dev/null; then
+          local _fixer_pid=""
+          if [ -d "$_fixer_lock" ] && [ -f "$_fixer_lock/pid" ]; then
+            _fixer_pid=$(cat "$_fixer_lock/pid" 2>/dev/null || echo "")
+          elif [ -f "$_fixer_lock" ]; then
+            _fixer_pid=$(cat "$_fixer_lock" 2>/dev/null || echo "")
+          fi
+          if [ -n "$_fixer_pid" ] && kill -0 "$_fixer_pid" 2>/dev/null; then
             if [ -f "$_fixer_task" ]; then
               local fixer_title
               fixer_title=$(grep "^##" "$_fixer_task" 2>/dev/null | head -1 | sed 's/^## //')

@@ -12,26 +12,40 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 set +e
 
 LOG="$SCRIPTS_DIR/watchdog.log"
-WATCHDOG_LOCK="${SKYNET_LOCK_PREFIX}-watchdog.lock"
+WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
 
-# --- Singleton enforcement via PID lock ---
-if [ -f "$WATCHDOG_LOCK" ]; then
-  _existing_pid=$(cat "$WATCHDOG_LOCK" 2>/dev/null || echo "")
-  if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-    log "Watchdog already running (PID $_existing_pid). Exiting."
+# --- Singleton enforcement via mkdir-based atomic lock ---
+if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+  echo $$ > "$WATCHDOG_LOCK_DIR/pid"
+else
+  # Lock dir exists — check for stale lock (owner PID no longer running)
+  if [ -d "$WATCHDOG_LOCK_DIR" ] && [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
+    _existing_pid=$(cat "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null || echo "")
+    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+      log "Watchdog already running (PID $_existing_pid). Exiting."
+      exit 0
+    fi
+    # Stale lock — reclaim atomically
+    rm -rf "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+    if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+      echo $$ > "$WATCHDOG_LOCK_DIR/pid"
+    else
+      log "Watchdog lock contention. Exiting."
+      exit 0
+    fi
+  else
+    log "Watchdog lock contention. Exiting."
     exit 0
   fi
-  rm -f "$WATCHDOG_LOCK"
 fi
-echo $$ > "$WATCHDOG_LOCK"
 
 _watchdog_cleanup() {
-  rm -f "$WATCHDOG_LOCK"
+  rm -rf "$WATCHDOG_LOCK_DIR"
 }
 trap _watchdog_cleanup EXIT INT TERM
 
@@ -47,7 +61,13 @@ bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 
 is_running() {
   local lockfile="$1"
-  [ -f "$lockfile" ] && kill -0 "$(cat "$lockfile")" 2>/dev/null
+  local pid=""
+  if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+    pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+  elif [ -f "$lockfile" ]; then
+    pid=$(cat "$lockfile" 2>/dev/null || echo "")
+  fi
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
 # --- Backlog mutex helpers (same pattern as dev-worker.sh) ---
@@ -107,11 +127,16 @@ crash_recovery() {
   all_locks+=("${SKYNET_LOCK_PREFIX}-project-driver.lock")
 
   for lockfile in "${all_locks[@]}"; do
-    [ -f "$lockfile" ] || continue
-
-    local lock_pid
-    lock_pid=$(cat "$lockfile" 2>/dev/null || echo "")
-    [ -z "$lock_pid" ] && { rm -f "$lockfile"; recovered=$((recovered + 1)); continue; }
+    # Support both dir-based locks (lockfile/pid) and legacy file-based locks
+    local lock_pid=""
+    if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+      lock_pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+    elif [ -f "$lockfile" ]; then
+      lock_pid=$(cat "$lockfile" 2>/dev/null || echo "")
+    else
+      continue
+    fi
+    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); continue; }
 
     local stale=false
 
@@ -136,7 +161,7 @@ crash_recovery() {
     fi
 
     if $stale; then
-      rm -f "$lockfile"
+      rm -rf "$lockfile"
       recovered=$((recovered + 1))
     fi
   done
@@ -303,18 +328,20 @@ _handle_stale_worker() {
     local age_min=$(( hb_age / 60 ))
     log "STALE WORKER $wid: heartbeat is ${age_min}m old (threshold: ${SKYNET_STALE_MINUTES}m). Killing."
 
-    # Kill the worker process
-    if [ -f "$lockfile" ]; then
-      local wpid
+    # Kill the worker process (supports both dir-based and file-based locks)
+    local wpid=""
+    if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+      wpid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+    elif [ -f "$lockfile" ]; then
       wpid=$(cat "$lockfile" 2>/dev/null || echo "")
-      if [ -n "$wpid" ] && kill -0 "$wpid" 2>/dev/null; then
-        kill "$wpid" 2>/dev/null || true
-        sleep 2
-        kill -9 "$wpid" 2>/dev/null || true
-        log "Killed worker $wid (PID $wpid)"
-      fi
-      rm -f "$lockfile"
     fi
+    if [ -n "$wpid" ] && kill -0 "$wpid" 2>/dev/null; then
+      kill "$wpid" 2>/dev/null || true
+      sleep 2
+      kill -9 "$wpid" 2>/dev/null || true
+      log "Killed worker $wid (PID $wpid)"
+    fi
+    rm -rf "$lockfile"
 
     # Unclaim its task in backlog
     local task_title=""
