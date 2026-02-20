@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce unchecked backlog hard-cap and canonical ordering in project-driver writes — in `scripts/project-driver.sh`, after task generation and before write, deterministically keep all claimed `[>]` rows first, then pending `[ ]`, trim lowest-priority pending rows beyond 15 unchecked total, and preserve checked history rows without mutation. Mission: Criterion #3 deterministic planning state and Criterion #2 no-task-loss reliability.
+## [DATA] Surface blocked-duplication convergence counters in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include `blockedRowsBefore`, `blockedRowsAfter`, and `blockedDuplicatesCompacted` from watchdog telemetry for operator verification of blocked-root cleanup progress. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:46
+**Started:** 2026-02-20 18:56
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-unchecked-backlog-hard-cap-and-c
+**Branch:** dev/surface-blocked-duplication-convergence-
 **Worker:** 3
 
 ### Changes
