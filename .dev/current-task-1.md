@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix CLI status command hardcoded worker heartbeat and worker list — in `packages/cli/src/commands/status.ts`, line 212 has `for (let wid = 1; wid <= 2; wid++)` which only checks workers 1-2 for heartbeat staleness. With `SKYNET_MAX_WORKERS=4`, workers 3-4 are invisible to the health score calculation. Fix: read `SKYNET_MAX_WORKERS` from the config object (already available as `vars`) and use `for (let wid = 1; wid <= maxWorkers; wid++)`. Also update the `workers` array (line 234) which hardcodes `"dev-worker-1", "dev-worker-2"` — dynamically generate entries for all `maxWorkers` workers. This ensures `skynet status` accurately reflects all running workers. Criterion #3 (no hidden stale workers) and #1 (accurate status output)
+## [TEST] Add mission-raw and pipeline-stream handler unit tests — create `packages/dashboard/src/handlers/mission-raw.test.ts`: test it reads and returns `.dev/mission.md` raw content, test missing file returns appropriate error/empty response, test response shape matches expected interface. Create `packages/dashboard/src/handlers/pipeline-stream.test.ts`: test SSE headers are set correctly (`text/event-stream`, `no-cache`), test file-watch setup is called (mock `fs.watch`), test stream sends data in SSE format (`data: {...}\n\n`), test cleanup on client disconnect. Follow existing handler test patterns. These are the last 2 untested handlers in the dashboard package. Criterion #2 (complete handler test coverage)
 **Status:** completed
-**Started:** 2026-02-19 21:01
+**Started:** 2026-02-19 21:02
 **Completed:** 2026-02-19
-**Branch:** dev/fix-cli-status-command-hardcoded-worker-
+**Branch:** dev/add-mission-raw-and-pipeline-stream-hand
 **Worker:** 1
 
 ### Changes
