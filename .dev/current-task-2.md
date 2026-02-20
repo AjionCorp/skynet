@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Land canonical CLI helper DRY extraction for `readFile`/`isProcessRunning` — finalize shared utilities in `packages/cli/src/utils/`, migrate `doctor.ts`/`status.ts`/`watch.ts`/`start.ts`/`metrics.ts`/`cleanup.ts`, and add dir-lock plus file-lock compatibility tests. Mission: Criterion #3 maintainability and Criterion #1 reliability.
+## [TEST] Add regression coverage for failed-task convergence across `pending|fixing-*|blocked` states — extend shell tests for `scripts/watchdog.sh` and `scripts/task-fixer.sh` to prove duplicate active variants collapse to one canonical root and stale `fixing-*` rows return to `pending` when fixer lock is absent. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 10:38
+**Started:** 2026-02-20 10:39
 **Completed:** 2026-02-20
-**Branch:** dev/land-canonical-cli-helper-dry-extraction
+**Branch:** dev/add-regression-coverage-for-failed-task-
 **Worker:** 2
 
 ### Changes
