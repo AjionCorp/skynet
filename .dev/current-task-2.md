@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Publish one canonical blocked-root diagnostics row per true open root — parse `.dev/failed-tasks.md` active `blocked|pending` rows, capture latest exact `pnpm typecheck` diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, then emit one follow-up task per normalized root and supersede duplicate variants. Mission: Criterion #2 self-correction closure and Criterion #3 convergent retry state.
+## [INFRA] Enforce one canonical active failed row per normalized root before fixer/driver cycles — in `scripts/watchdog.sh` and `scripts/project-driver.sh`, keep exactly one active row per normalized root (`pending|blocked|fixing-*`), supersede duplicates, and emit reconciliation metrics (`active_roots`, `duplicate_active_rows`, `superseded_rows`). Mission: Criterion #2 throughput and Criterion #3 deterministic state.
 **Status:** completed
-**Started:** 2026-02-20 17:47
+**Started:** 2026-02-20 17:55
 **Completed:** 2026-02-20
-**Branch:** dev/publish-one-canonical-blocked-root-diagn
+**Branch:** dev/enforce-one-canonical-active-failed-row-
 **Worker:** 2
 
 ### Changes
