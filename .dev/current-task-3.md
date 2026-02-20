@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add config handler unit tests — create `packages/dashboard/src/handlers/config.test.ts`. Test: (1) GET parses `skynet.config.sh` lines matching `SKYNET_*="value"` and returns key-value pairs, (2) GET handles missing config file gracefully, (3) POST validates known keys — `SKYNET_MAX_WORKERS` must be positive integer, `SKYNET_STALE_MINUTES` must be >= 5, (4) POST rejects invalid values with descriptive error, (5) POST performs atomic write (writes .tmp then renames), (6) handles empty config file. Follow patterns from `packages/dashboard/src/handlers/pipeline-status.test.ts`. Criterion #2 (test coverage — config handler is only untested handler)
+## [TEST] Add vitest component tests for SettingsDashboard, WorkerScaling, and LogViewer — create `packages/dashboard/src/components/SettingsDashboard.test.tsx`, `WorkerScaling.test.tsx`, and `LogViewer.test.tsx` using vitest + @testing-library/react. For SettingsDashboard: test renders config key-value rows from mock API response, test save button sends POST with updated values, test displays validation error on invalid input. For WorkerScaling: test renders worker type rows with current counts, test increment/decrement buttons trigger scale API call, test disables + button at max limit. For LogViewer: test renders log type dropdown, test displays log content in monospace pre block, test auto-refresh toggle works. These are the only 3 interactive components with zero test coverage. Follow handler test mocking patterns. Criterion #2 (complete test coverage for dashboard components)
 **Status:** completed
-**Started:** 2026-02-19 20:56
+**Started:** 2026-02-19 22:03
 **Completed:** 2026-02-19
-**Branch:** dev/add-config-handler-unit-tests--create-pa
+**Branch:** dev/add-vitest-component-tests-for-settingsd
 **Worker:** 3
 
 ### Changes
