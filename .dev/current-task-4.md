@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
+## [DATA] Surface retry-pressure diagnostics in pipeline status and CLI JSON — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` to return `retryPressure` (`pendingRetries`, `blockedRetries`, `activeRetryRoots`, `pressureMode`) derived from canonical failed-root parsing. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 18:17
+**Started:** 2026-02-20 18:24
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-active-root-
+**Branch:** dev/surface-retry-pressure-diagnostics-in-pi
 **Worker:** 4
 
 ### Changes
