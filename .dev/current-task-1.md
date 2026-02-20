@@ -1,9 +1,9 @@
 # Current Task
-## [NMI] Reconcile blockers Active with current canonical roots after claimed sweeps complete — regenerate `.dev/blockers.md` Active from `.dev/failed-tasks.md` (`status=blocked`, `attempts>=3`), attach latest exact `pnpm typecheck` diagnostics, and remove stale root entries that are already fixed/superseded. Mission: Criterion #2 self-correction closure.
+## [FIX] Land canonical CLI helper DRY extraction for `readFile`/`isProcessRunning` — finalize shared utilities in `packages/cli/src/utils/`, migrate `doctor.ts`/`status.ts`/`watch.ts`/`start.ts`/`metrics.ts`/`cleanup.ts`, and add dir-lock plus file-lock compatibility tests. Mission: Criterion #3 maintainability and Criterion #1 reliability.
 **Status:** completed
 **Started:** 2026-02-20 10:42
 **Completed:** 2026-02-20
-**Branch:** dev/reconcile-blockers-active-with-current-c
+**Branch:** dev/land-canonical-cli-helper-dry-extraction
 **Worker:** 1
 
 ### Changes
