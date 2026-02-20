@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Finish backlog parser DRY extraction with behavior-parity tests — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts` imports, and add regression tests for blockedBy parsing parity. Mission: Criterion #3 maintainability and deterministic parsing.
+## [NMI] Canonicalize blocked retry roots from `.dev/failed-tasks.md` — parse all `status=blocked` and `attempts>=3` rows, capture exact `pnpm typecheck` diagnostics from corresponding worker/fixer logs, and emit exactly one canonical follow-up task per root cause (Codex prompt path, config parity, CLI E2E, pipeline-logs, parser DRY). Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 09:56
+**Started:** 2026-02-20 09:57
 **Completed:** 2026-02-20
-**Branch:** dev/finish-backlog-parser-dry-extraction-wit
+**Branch:** dev/canonicalize-blocked-retry-roots-from-de
 **Worker:** 3
 
 ### Changes
