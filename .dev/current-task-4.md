@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Execute one canonical failed-task cleanup pass and commit resulting state files — run the reconciler so `.dev/failed-tasks.md` no longer lists stale blocked roots already fixed (Codex stdin path, config parity, CLI E2E smoke, pipeline-logs optimization, backlog-parser DRY, CLI helper DRY), keeping only true active roots. Mission: Criterion #2 retry-loop closure and Criterion #3 state convergence.
+## [TEST] Add shell regression for failed-task table serialization/parsing invariants — add tests covering rows with embedded `|`, long error strings, and repeated retries; assert canonical parser still counts `pending|blocked|fixing-*` correctly and reconciliation supersedes duplicates deterministically. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
 **Status:** completed
-**Started:** 2026-02-20 16:39
+**Started:** 2026-02-20 16:45
 **Completed:** 2026-02-20
-**Branch:** dev/execute-one-canonical-failed-task-cleanu
+**Branch:** dev/add-shell-regression-for-failed-task-tab
 **Worker:** 4
 
 ### Changes
