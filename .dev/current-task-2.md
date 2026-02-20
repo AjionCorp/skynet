@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix stale lock recovery using wrong backlog marker causing 0m re-executions — in `scripts/dev-worker.sh` line 336, when stale lock detection triggers, the code calls `remove_from_backlog "- [ ] $task_title"` but by that point the task is marked `[>]` (claimed), not `[ ]` (pending). Since `remove_from_backlog` does an exact match via `grep -Fxv`, the remove silently fails. The `[>]` entry persists, watchdog later unclaims it back to `[ ]`, and the task re-executes with "0m" duration because the implementation already exists. Fix: change line 336 from `remove_from_backlog "- [ ] $task_title"` to `remove_from_backlog "- [>] $task_title"`. Also add a fallback: if the `[>]` match fails, try `[x]` in case it was already marked done by another code path. Run `pnpm typecheck`. Criterion #3 (no duplicate executions — directly explains the 0m duration entries in completed.md)
+## [INFRA] Extract loadConfig() to shared CLI utility module — the identical `loadConfig()` function is copy-pasted in 19 CLI command files (`status.ts`, `doctor.ts`, `add-task.ts`, `pause.ts`, `resume.ts`, `run.ts`, `logs.ts`, `stop.ts`, `start.ts`, `watch.ts`, `reset-task.ts`, `validate.ts`, `setup-agents.ts`, `test-notify.ts`, `metrics.ts`, `changelog.ts`, `export.ts`, `import.ts`, `cleanup.ts`). Create `packages/cli/src/utils/loadConfig.ts` exporting a single `loadConfig(projectDir: string): Record<string, string> | null` function with the fixed regex (supporting both quoted and unquoted values). Update all 19 files to `import { loadConfig } from '../utils/loadConfig'` and delete their local copies. This makes future config parser changes (like the unquoted value fix) a single-file change instead of 19. Run `pnpm typecheck`. Criterion #3 (maintainable code — DRY principle)
 **Status:** completed
-**Started:** 2026-02-20 01:40
+**Started:** 2026-02-20 01:49
 **Completed:** 2026-02-20
-**Branch:** dev/tasktitle-also-add-a-fallback-if-the--ma
+**Branch:** dev/extract-loadconfig-to-shared-cli-utility
 **Worker:** 2
 
 ### Changes
