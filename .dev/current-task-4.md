@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Close blocked CLI operational E2E smoke root in one canonical update — stabilize `tests/e2e/cli-commands.test.sh` assertions for `stop`, `pause/resume`, `completions bash`, and `validate`, and keep `pnpm typecheck` passing. Mission: Criterion #2 quality gates and Criterion #1 safe adoption.
+## [FIX] Close blocked dashboard backlog-parser DRY root without behavior drift — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts`, and add parity tests. Mission: Criterion #3 maintainability and Criterion #2 retry-loop reduction.
 **Status:** completed
-**Started:** 2026-02-20 11:03
+**Started:** 2026-02-20 11:04
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-cli-operational-e2e-smoke-
+**Branch:** dev/close-blocked-dashboard-backlog-parser-d
 **Worker:** 4
 
 ### Changes
