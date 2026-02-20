@@ -23,7 +23,7 @@ The pipeline runs as a continuous loop:
 
 1. **project-driver** reads `mission.md` and pipeline state, then generates and prioritizes tasks in `backlog.md`.
 2. **watchdog** runs every 3 minutes — it detects idle workers, checks auth, cleans up stale locks and orphaned worktrees, and dispatches workers when there's work to do.
-3. **dev-worker** (up to 2 in parallel) claims a task, creates an isolated git worktree, invokes the AI agent with project context, then runs numbered quality gates (`SKYNET_GATE_1`, `SKYNET_GATE_2`, ...) before merging to main.
+3. **dev-worker** (up to 4 in parallel) claims a task, creates an isolated git worktree, invokes the AI agent with project context, then runs numbered quality gates (`SKYNET_GATE_1`, `SKYNET_GATE_2`, ...) before merging to main.
 4. **task-fixer** picks up failed tasks from `failed-tasks.md`, checks for merge conflicts (creating a fresh branch if needed), and retries with full error context — up to `SKYNET_MAX_FIX_ATTEMPTS` before marking as blocked.
 5. **watchdog** detects the worker is idle again and dispatches the next task.
 
@@ -49,6 +49,10 @@ All state lives in `.dev/` as markdown: `backlog.md`, `completed.md`, `failed-ta
 | `skynet reset-task <title>` | Resets a failed task back to pending (clears attempts, optionally deletes branch) |
 | `skynet dashboard` | Launches the admin dashboard (Next.js app) and opens browser |
 | `skynet cleanup` | Removes stale worktrees, lock files, and rotates logs |
+| `skynet run <prompt>` | Execute a one-shot task without adding to backlog |
+| `skynet watch` | Real-time terminal dashboard with 3s refresh |
+| `skynet upgrade` | Check for and install latest CLI version |
+| `skynet metrics` | Display pipeline performance analytics |
 | `skynet config <sub>` | View or edit `skynet.config.sh` — `config list`, `config get KEY`, `config set KEY VALUE` with validation |
 
 ## Dashboard
