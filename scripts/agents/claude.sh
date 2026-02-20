@@ -35,6 +35,8 @@ agent_run() {
   local prompt="$1"
   local log_file="${2:-/dev/null}"
   unset CLAUDECODE 2>/dev/null || true
+  # Pipe prompt via stdin to avoid ARG_MAX limit (~1MB on macOS).
+  # printf is a shell builtin — not subject to ARG_MAX.
   # shellcheck disable=SC2086
-  _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS "$prompt" >> "$log_file" 2>&1
+  printf '%s\n' "$prompt" | _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS >> "$log_file" 2>&1
 }
