@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce canonical backlog marker ordering in project-driver writes — in `scripts/project-driver.sh` backlog rewrite path, guarantee `[>]` rows remain first (byte-for-byte), `[ ]` rows follow, and top-level `[x]` rows are moved only into checked history section so active work is never buried by history noise. Mission: Criterion #3 deterministic planning state and Criterion #2 no-task-loss reliability.
+## [TEST] Add cross-surface parity regression for stale-active counters and root-hash fields — add/extend tests in `scripts/tests/watchdog.sh`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and CLI status tests to prove `staleActiveCompletedRows`, `supersededActiveRows`, and root-hash parity fields match semantics across watchdog, dashboard, and `status --json`. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
 **Status:** completed
-**Started:** 2026-02-20 18:03
+**Started:** 2026-02-20 18:16
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-canonical-backlog-marker-orderin
+**Branch:** dev/add-cross-surface-parity-regression-for-
 **Worker:** 4
 
 ### Changes
