@@ -54,6 +54,9 @@ All state lives in `.dev/` as markdown: `backlog.md`, `completed.md`, `failed-ta
 | `skynet upgrade` | Check for and install latest CLI version |
 | `skynet metrics` | Display pipeline performance analytics |
 | `skynet config <sub>` | View or edit `skynet.config.sh` — `config list`, `config get KEY`, `config set KEY VALUE` with validation |
+| `skynet export` | Export pipeline state as a JSON snapshot |
+| `skynet import` | Restore pipeline state from an exported snapshot |
+| `skynet completions` | Generate bash or zsh shell completions |
 
 ## Dashboard
 
@@ -88,7 +91,7 @@ After `skynet init`, two config files live in `.dev/`:
 | `SKYNET_PROJECT_DIR` | — | Absolute path to project root |
 | `SKYNET_DEV_SERVER_CMD` | `pnpm dev` | Command to start dev server |
 | `SKYNET_GATE_1` / `_2` / `_3` | `pnpm typecheck` | Quality gates run before merge (sequential) |
-| `SKYNET_MAX_WORKERS` | `2` | Parallel dev workers |
+| `SKYNET_MAX_WORKERS` | `4` | Parallel dev workers |
 | `SKYNET_STALE_MINUTES` | `45` | Auto-kill stuck workers after N minutes |
 | `SKYNET_MAX_FIX_ATTEMPTS` | `3` | Retries before task-fixer marks task as blocked |
 | `SKYNET_AGENT_PLUGIN` | `auto` | Agent selection: `auto`, `claude`, `codex`, or path to custom plugin |
