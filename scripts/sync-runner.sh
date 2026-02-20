@@ -15,14 +15,39 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# --- PID lock ---
+# --- PID lock (mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-sync-runner.lock"
-if [ -f "$LOCKFILE" ] && kill -0 "$(cat "$LOCKFILE")" 2>/dev/null; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE")). Exiting." >> "$LOG"
+
+acquire_lock() {
+  if mkdir "$LOCKFILE" 2>/dev/null; then
+    echo $$ > "$LOCKFILE/pid"
+    return 0
+  fi
+  # Lock exists — check for stale lock (owner PID no longer running)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    local lock_pid
+    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
+      log "Removing stale lock (PID $lock_pid no longer running)."
+      rm -rf "$LOCKFILE" 2>/dev/null || true
+      if mkdir "$LOCKFILE" 2>/dev/null; then
+        echo $$ > "$LOCKFILE/pid"
+        return 0
+      fi
+    fi
+  fi
+  return 1
+}
+
+release_lock() {
+  rm -rf "$LOCKFILE" 2>/dev/null || true
+}
+
+if ! acquire_lock; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE/pid" 2>/dev/null || echo '?')). Exiting." >> "$LOG"
   exit 0
 fi
-echo $$ > "$LOCKFILE"
-trap 'rm -f "$LOCKFILE"' EXIT
+trap 'release_lock' EXIT
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL/api/admin/pipeline/status" > /dev/null 2>&1; then
