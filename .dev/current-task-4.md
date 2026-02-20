@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression for legacy malformed failed-task rows — in `scripts/tests/watchdog.sh`, add fixtures with unescaped pipe-expanded rows and escaped-field variants to assert parser guard behavior is deterministic, active-root counting is unchanged for valid rows, and skip diagnostics are emitted with stable reason codes. Mission: Criterion #2 quality gates and Criterion #3 deterministic state handling.
+## [TEST] Add project-driver regression for unchecked-cap + ordering invariants — in `scripts/tests/project-driver.sh`, fixture backlog with mixed `[>]`, `[ ]`, and misplaced `[x]` rows; assert claimed rows remain byte-identical and first, pending rows are capped at 15, checked history is moved to the bottom, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent planning behavior.
 **Status:** completed
-**Started:** 2026-02-20 18:44
+**Started:** 2026-02-20 18:47
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-for-legacy-malfo
+**Branch:** dev/add-project-driver-regression-for-unchec
 **Worker:** 4
 
 ### Changes
