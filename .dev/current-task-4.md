@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add CLI status JSON regression for failed-root hash parity fields — in `packages/cli/src/commands/__tests__/status.test.ts`, assert `activeRootHash`, `blockersActiveHash`, and `hashMatch` are stable for matching vs drifting fixtures. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
+## [INFRA] Add duplicate-active-root pressure alerting in watchdog with throttle guard — when `duplicate_active_rows > 0` across consecutive cycles, emit a single throttled high-severity event/notification with current root counts and cooldown handling. Mission: Criterion #2 self-correction closure and Criterion #4 operational awareness.
 **Status:** completed
-**Started:** 2026-02-20 16:54
+**Started:** 2026-02-20 16:57
 **Completed:** 2026-02-20
-**Branch:** dev/add-cli-status-json-regression-for-faile
+**Branch:** dev/add-duplicate-active-root-pressure-alert
 **Worker:** 4
 
 ### Changes
