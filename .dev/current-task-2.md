@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical failed-task compaction sweep for active roots — in `scripts/watchdog.sh`, dedupe `pending|superseded` duplicates by normalized root+branch in `.dev/failed-tasks.md`, keep one active row per root, and emit before/after counters. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [FIX] Close canonical CLI helper DRY root for `readFile`/`isProcessRunning` without behavior drift — in `packages/cli/src/utils/readFile.ts` and `packages/cli/src/utils/isProcessRunning.ts`, finalize shared helpers, migrate remaining command imports (`doctor.ts`, `status.ts`, `watch.ts`, `start.ts`, `metrics.ts`, `cleanup.ts`), and keep dir-lock/file-lock parity. Mission: Criterion #3 maintainability and Criterion #1 reliability.
 **Status:** completed
-**Started:** 2026-02-20 11:08
+**Started:** 2026-02-20 15:54
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-task-compaction
+**Branch:** dev/close-canonical-cli-helper-dry-root-for-
 **Worker:** 2
 
 ### Changes
