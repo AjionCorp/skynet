@@ -46,7 +46,7 @@ describe("initCommand", () => {
     // Default mocks: templates exist, state files don't
     mockExistsSync.mockReturnValue(false);
     mockReadFileSync.mockReturnValue(
-      'export SKYNET_PROJECT_NAME="PLACEHOLDER_PROJECT_NAME"\nexport SKYNET_PROJECT_DIR="PLACEHOLDER_PROJECT_DIR"\nexport SKYNET_DEV_SERVER_CMD="pnpm dev"\nexport SKYNET_DEV_SERVER_PORT=3000\nexport SKYNET_DEV_SERVER_URL="http://localhost:3000"\nexport SKYNET_TYPECHECK_CMD="pnpm typecheck"\nexport SKYNET_LINT_CMD="pnpm lint"\nexport SKYNET_PLAYWRIGHT_DIR=""\nexport SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"\nexport SKYNET_FEATURE_TEST="e2e/features.spec.ts"\nexport SKYNET_MAIN_BRANCH="main"\nexport SKYNET_TG_ENABLED=false\nexport SKYNET_TG_BOT_TOKEN=""\nexport SKYNET_TG_CHAT_ID=""' as never,
+      'export SKYNET_PROJECT_NAME="PLACEHOLDER_PROJECT_NAME"\nexport SKYNET_PROJECT_DIR="PLACEHOLDER_PROJECT_DIR"\nexport SKYNET_DEV_SERVER_CMD="pnpm dev"\nexport SKYNET_DEV_PORT=3000\nexport SKYNET_DEV_SERVER_URL="http://localhost:3000"\nexport SKYNET_TYPECHECK_CMD="pnpm typecheck"\nexport SKYNET_LINT_CMD="pnpm lint"\nexport SKYNET_PLAYWRIGHT_DIR=""\nexport SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"\nexport SKYNET_FEATURE_TEST="e2e/features.spec.ts"\nexport SKYNET_MAIN_BRANCH="main"\nexport SKYNET_TG_ENABLED=false\nexport SKYNET_TG_BOT_TOKEN=""\nexport SKYNET_TG_CHAT_ID=""' as never,
     );
     mockReaddirSync.mockReturnValue([] as never);
     mockStatSync.mockReturnValue({ isDirectory: () => false } as never);

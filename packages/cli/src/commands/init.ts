@@ -143,7 +143,7 @@ export async function initCommand(options: InitOptions) {
     .replace("PLACEHOLDER_PROJECT_NAME", shellEscape(projectName))
     .replace("PLACEHOLDER_PROJECT_DIR", shellEscape(projectDir))
     .replace('export SKYNET_DEV_SERVER_CMD="pnpm dev"', `export SKYNET_DEV_SERVER_CMD="${shellEscape(devServerCmd)}"`)
-    .replace("export SKYNET_DEV_SERVER_PORT=3000", `export SKYNET_DEV_SERVER_PORT=${portNum}`)
+    .replace("export SKYNET_DEV_PORT=3000", `export SKYNET_DEV_PORT=${portNum}`)
     .replace(
       'export SKYNET_DEV_SERVER_URL="http://localhost:3000"',
       `export SKYNET_DEV_SERVER_URL="http://localhost:${portNum}"`
