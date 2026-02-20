@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add watchdog regression coverage for stale blocked-root supersede with duplicates — in shell tests for `scripts/watchdog.sh`, feed fixtures containing duplicate `blocked|pending` rows for roots already in `.dev/completed.md` and assert exactly one canonical active row remains, unaffected `fixing-*` rows are preserved, and ordering is deterministic. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery.
+## [FIX] Make failed-task markdown row writes pipe-safe across writers — in `scripts/task-fixer.sh` and any shared failed-task write helpers, escape or encode literal `|` in task/error/branch fields so `.dev/failed-tasks.md` remains parse-stable and row corruption cannot create phantom duplicates. Mission: Criterion #3 deterministic state and Criterion #2 retry-loop reliability.
 **Status:** completed
-**Started:** 2026-02-20 16:33
+**Started:** 2026-02-20 16:40
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-regression-coverage-for-sta
+**Branch:** dev/make-failed-task-markdown-row-writes-pip
 **Worker:** 2
 
 ### Changes
