@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add watchdog drift metric for stale-active failed rows — emit a per-cycle counter (for example `stale_active_rows`) when an active failed-task row matches completed work, and include it in `failed_root_snapshot` so operators can detect regression immediately. Mission: Criterion #4 real-time visibility and Criterion #3 deterministic self-healing.
+## [DATA] Execute one canonical failed-task cleanup pass and commit resulting state files — run the reconciler so `.dev/failed-tasks.md` no longer lists stale blocked roots already fixed (Codex stdin path, config parity, CLI E2E smoke, pipeline-logs optimization, backlog-parser DRY, CLI helper DRY), keeping only true active roots. Mission: Criterion #2 retry-loop closure and Criterion #3 state convergence.
 **Status:** completed
-**Started:** 2026-02-20 16:34
+**Started:** 2026-02-20 16:39
 **Completed:** 2026-02-20
-**Branch:** dev/add-watchdog-drift-metric-for-stale-acti
+**Branch:** dev/execute-one-canonical-failed-task-cleanu
 **Worker:** 4
 
 ### Changes
