@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add project-driver regression for backlog history rotation invariants — in shell tests for `scripts/project-driver.sh`, verify rotation never reorders or rewrites leading claimed `[>]` rows and never removes unchecked `[ ]` tasks while archiving only older `[x]` history entries. Mission: Criterion #2 quality gates and Criterion #3 deterministic planning behavior.
+## [INFRA] Refresh `.dev/blockers.md` Active automatically after failed-task reconciliation — in `scripts/watchdog.sh`, add one canonical rebuild step that keeps exactly one Active bullet per active failed root and removes stale duplicate-root bullets without mutating Celebration/Resolved sections. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 **Status:** completed
-**Started:** 2026-02-20 16:18
+**Started:** 2026-02-20 16:25
 **Completed:** 2026-02-20
-**Branch:** dev/add-project-driver-regression-for-backlo
+**Branch:** dev/refresh-devblockersmd-active-automatical
 **Worker:** 2
 
 ### Changes
