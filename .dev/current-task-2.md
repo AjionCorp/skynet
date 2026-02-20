@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close canonical Codex large-prompt blocked root with stdin-first + exit-code invariants — in `scripts/agents/codex.sh` and shell regression tests, preserve stdin-first prompt delivery, preserve child exit codes through `_agent_exec`, and keep >300KB prompt coverage passing with `pnpm typecheck` green. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
+## [NMI] Publish canonical blocked-root repro matrix from current logs — regenerate `.dev/blockers.md` Active from `.dev/failed-tasks.md` blocked roots using latest `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log` `pnpm typecheck` diagnostics, keeping exactly one root-cause row per canonical title with explicit pass conditions. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 10:56
+**Started:** 2026-02-20 10:57
 **Completed:** 2026-02-20
-**Branch:** dev/close-canonical-codex-large-prompt-block
+**Branch:** dev/publish-canonical-blocked-root-repro-mat
 **Worker:** 2
 
 ### Changes
