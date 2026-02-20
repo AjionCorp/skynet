@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add CI job dependency chain to save GitHub Actions minutes — in `.github/workflows/ci.yml`, add `needs:` to expensive jobs so they skip when fast checks fail. Add: `build` → `needs: [typecheck]`, `e2e-cli` → `needs: [typecheck, unit-test]`, `e2e-admin` → `needs: [typecheck, build]`. Currently all 7 jobs run in parallel — if `typecheck` fails (the most common failure mode), 6 other jobs still run for ~15 minutes before also failing. Keep `lint-sh` and `lint-ts` independent (fast, no deps). This saves CI minutes on failures while keeping the parallel-on-success benefit for lint jobs. Criterion #2 (efficient CI pipeline)
+## [INFRA] Add Playwright E2E tests for events, logs, settings, and workers admin pages — in `packages/admin/e2e/`, extend `dashboard.spec.ts` or create `pages.spec.ts`. Add 4 test cases: (a) `/admin/events` page loads and shows events table with timestamp and type columns, (b) `/admin/logs` page loads and shows log type dropdown and monospace content area, (c) `/admin/settings` page loads and shows config key-value table with save button, (d) `/admin/workers` page loads and shows worker scaling controls with +/- buttons. These are the last 4 admin pages without E2E coverage (the other 6 are covered in `admin.spec.ts` and `dashboard.spec.ts`). Criterion #2 (complete admin E2E coverage) and #4 (verified dashboard visibility)
 **Status:** completed
-**Started:** 2026-02-20 01:26
+**Started:** 2026-02-20 01:28
 **Completed:** 2026-02-20
-**Branch:** dev/add-ci-job-dependency-chain-to-save-gith
+**Branch:** dev/add-playwright-e2e-tests-for-events-logs
 **Worker:** 4
 
 ### Changes
