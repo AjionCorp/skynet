@@ -376,6 +376,7 @@ if $SHUTDOWN_REQUESTED; then
   exit 0
 fi
 
+emit_event "fix_started" "Fixer $FIXER_ID: $task_title"
 if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   log "Task-fixer succeeded. Running quality gates before merge..."
 
@@ -431,12 +432,14 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     _CURRENT_TASK_TITLE=""
     log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
     tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
+    emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
     echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
   fi
 else
   exit_code=$?
   log "Task-fixer failed again (exit $exit_code): $task_title"
   tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
+  emit_event "fix_failed" "Fixer $FIXER_ID: $task_title"
 
   cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))

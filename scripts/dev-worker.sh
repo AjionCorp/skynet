@@ -388,6 +388,7 @@ EOF
   log "Starting task ($tasks_attempted/$MAX_TASKS_PER_RUN): $task_title"
   log "Branch: $branch_name"
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
+  emit_event "task_claimed" "Worker $WORKER_ID: $task_title"
 
   # Write current task status for this worker
   task_start_epoch=$(date +%s)
@@ -461,6 +462,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
   if [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
+    emit_event "task_failed" "Worker $WORKER_ID: $task_title"
     cleanup_worktree "$branch_name"
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
@@ -503,6 +505,7 @@ EOF
     _gate_label=$(echo "$_gate_failed" | awk '{print $NF}')
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
+    emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"
     cleanup_worktree  # Keep branch for task-fixer
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
@@ -588,6 +591,7 @@ EOF
   remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
   remaining=${remaining:-0}
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
+  emit_event "task_completed" "Worker $WORKER_ID: $task_title"
 done
 
 log "Dev worker $WORKER_ID finished. Attempted $tasks_attempted task(s)."
