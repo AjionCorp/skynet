@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add a dedicated failed-task mutex for all writers — introduce `${SKYNET_LOCK_PREFIX}-failed-tasks.lock` helpers in `scripts/_config.sh` and require lock acquisition for every `failed-tasks.md` mutation path in `scripts/task-fixer.sh`, `scripts/watchdog.sh`, and CLI reset flows to prevent interleaved duplicate rows. Mission: Criterion #3 reliability and Criterion #2 retry-loop stability.
+## [NMI] Canonicalize blocked root diagnostics into one reproducible matrix — regenerate `.dev/blockers.md` Active from current `status=blocked` and `attempts>=3` rows in `.dev/failed-tasks.md`, attach exact `pnpm typecheck` file:line diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, and supersede duplicate blocked variants. Mission: Criterion #2 self-correction closure and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 10:49
+**Started:** 2026-02-20 10:53
 **Completed:** 2026-02-20
-**Branch:** dev/add-a-dedicated-failed-task-mutex-for-al
+**Branch:** dev/canonicalize-blocked-root-diagnostics-in
 **Worker:** 3
 
 ### Changes
