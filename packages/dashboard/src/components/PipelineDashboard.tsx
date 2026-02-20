@@ -210,7 +210,7 @@ export function PipelineDashboard() {
           <div className="mt-1 flex items-center gap-2">
             <p className="text-2xl font-bold text-white">{status.selfCorrectionRate}%</p>
             <span className={`rounded-full px-2 py-0.5 text-xs font-semibold bg-${scrColor}-500/20 text-${scrColor}-400`}>
-              {status.selfCorrectionStats.fixed}/{status.selfCorrectionStats.fixed + status.selfCorrectionStats.blocked + status.selfCorrectionStats.superseded} fixed
+              {status.selfCorrectionStats.fixed} fixed + {status.selfCorrectionStats.superseded} routed around
             </span>
           </div>
         </div>

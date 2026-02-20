@@ -318,9 +318,10 @@ export async function statusCommand(options: StatusOptions) {
   const scrFixed = failedLines.filter((l) => l.includes("| fixed |")).length;
   const scrBlocked = failedLines.filter((l) => l.includes("| blocked |")).length;
   const scrSuperseded = failedLines.filter((l) => l.includes("| superseded |")).length;
-  const scrTotal = scrFixed + scrBlocked + scrSuperseded;
-  const scrRate = scrTotal > 0 ? Math.round((scrFixed / scrTotal) * 100) : 0;
-  console.log(`  Self-correction rate: ${scrRate}% (${scrFixed}/${scrTotal} failures auto-fixed)`);
+  const scrSelfCorrected = scrFixed + scrSuperseded;
+  const scrResolved = scrSelfCorrected + scrBlocked;
+  const scrRate = scrResolved > 0 ? Math.round((scrSelfCorrected / scrResolved) * 100) : 0;
+  console.log(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
   const missionRaw = readFile(join(devDir, "mission.md"));
