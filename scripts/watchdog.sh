@@ -148,9 +148,29 @@ crash_recovery() {
       # PID alive — check if it's been running too long (zombie/hung worker)
       local lock_mtime
       lock_mtime=$(file_mtime "$lockfile")
-      local lock_age_secs=$(( $(date +%s) - lock_mtime ))
+      local now=$(date +%s)
+      local lock_age_secs=$(( now - lock_mtime ))
       local stale_secs=$((SKYNET_STALE_MINUTES * 60))
       if [ "$lock_age_secs" -gt "$stale_secs" ]; then
+        # Before killing, check if this worker has a fresh heartbeat.
+        # Dev workers write heartbeat files; if the heartbeat is recent,
+        # the worker is legitimately busy on a long task — skip it.
+        local wid=""
+        case "$lockfile" in
+          *-dev-worker-*.lock) wid="${lockfile##*-dev-worker-}"; wid="${wid%.lock}" ;;
+        esac
+        if [ -n "$wid" ]; then
+          local hb_file="$DEV_DIR/worker-${wid}.heartbeat"
+          if [ -f "$hb_file" ]; then
+            local hb_epoch
+            hb_epoch=$(cat "$hb_file" 2>/dev/null || echo 0)
+            local hb_age=$(( now - hb_epoch ))
+            if [ "$hb_age" -le "$stale_secs" ]; then
+              log "Worker $wid lock is old but heartbeat is fresh (${hb_age}s) — skipping"
+              continue
+            fi
+          fi
+        fi
         stale=true
         log "Zombie worker: $lockfile (PID $lock_pid, ${lock_age_secs}s old > ${stale_secs}s limit)"
         # Graceful kill first, then force
