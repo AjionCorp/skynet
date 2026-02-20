@@ -17,6 +17,7 @@ import { pauseCommand } from "./commands/pause.js";
 import { resumeCommand } from "./commands/resume.js";
 import { configListCommand, configGetCommand, configSetCommand } from "./commands/config.js";
 import { upgradeCommand } from "./commands/upgrade.js";
+import { watchCommand } from "./commands/watch.js";
 
 const program = new Command();
 
@@ -136,6 +137,12 @@ program
   .description("Resume a paused Skynet pipeline")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(resumeCommand);
+
+program
+  .command("watch")
+  .description("Real-time terminal dashboard for monitoring the pipeline")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(watchCommand);
 
 program
   .command("upgrade")
