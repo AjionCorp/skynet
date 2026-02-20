@@ -45,6 +45,13 @@ format_duration() {
   fi
 }
 
+# Detect usage/credits limits from the agent log tail.
+usage_limit_hit() {
+  local log_file="$1"
+  [ -f "$log_file" ] || return 1
+  tail -n 200 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"
+}
+
 # --- Worktree helpers ---
 setup_worktree() {
   mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
@@ -564,6 +571,15 @@ else
   if [ "$exit_code" -eq 124 ]; then
     log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"
     tg "⏰ *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}*: Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m — $task_title"
+  fi
+  if [ "${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-false}" = "true" ] && usage_limit_hit "$LOG"; then
+    log "Usage limit detected — not counting failure toward cooldown/attempts."
+    cleanup_worktree  # Keep branch for next attempt
+    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | usage limit (no attempt recorded) | $fix_attempts | pending |"
+    _CURRENT_TASK_TITLE=""
+    emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
+    log "Task-fixer finished."
+    exit 0
   fi
   log "Task-fixer failed again (exit $exit_code): $task_title"
   tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX FAILED*: $task_title (attempt $((fix_attempts + 1)))"
