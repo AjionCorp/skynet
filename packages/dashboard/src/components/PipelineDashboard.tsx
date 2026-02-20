@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { PipelineStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
+import { ActivityFeed } from "./ActivityFeed";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -572,6 +573,9 @@ export function PipelineDashboard() {
           </div>
         )}
       </div>
+
+      {/* Activity Feed */}
+      <ActivityFeed />
 
       {/* Footer */}
       <p className="text-center text-xs text-zinc-700">
