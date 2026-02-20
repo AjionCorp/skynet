@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix worker-scaling handler using `unlinkSync` on directory-based lock files — in `packages/dashboard/src/handlers/worker-scaling.ts` line 238, `unlinkSync(instance.lockFile)` attempts to delete the lock as a file, but all workers now use mkdir-based locks where `lockFile` is a directory containing a `pid` file. `unlinkSync` throws `EISDIR` on directories, which is silently swallowed by the catch block at line 239. Scale-down operations never clean up lock directories, leaving stale locks that cause `skynet doctor`, `status`, and `stop` to report phantom running workers. Fix: change line 238 from `unlinkSync(instance.lockFile)` to `rmSync(instance.lockFile, { recursive: true, force: true })`. Import `rmSync` from `fs` if not already imported. This matches the pattern already used correctly in `packages/cli/src/commands/stop.ts` line 42. Run `pnpm typecheck`. Criterion #3 (reliable scale-down — no stale locks) and Criterion #4 (dashboard operations must actually work)
+## [FIX] Use `sed_inplace` wrapper in task-fixer.sh instead of raw `sed -i.bak` — in `scripts/task-fixer.sh`, two locations (lines 165 and 389) use `sed -i.bak ... "$FAILED"; rm -f "$FAILED.bak"` to modify failed-tasks.md. The `_compat.sh` module provides `sed_inplace()` specifically for portable sed-in-place editing. The raw `sed -i.bak` pattern creates a `.bak` file that requires manual cleanup — if the process is killed between `sed` and `rm -f`, the `.bak` persists indefinitely. Fix: at line 165, change `sed -i.bak "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"; rm -f "$FAILED.bak"` to `sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"`. Apply the same change at line 389. Run `bash -n scripts/task-fixer.sh` and `pnpm typecheck`. Criterion #1 (portability — use the portable wrapper consistently)
 **Status:** completed
-**Started:** 2026-02-20 02:47
+**Started:** 2026-02-20 02:48
 **Completed:** 2026-02-20
-**Branch:** dev/fix-worker-scaling-handler-using-unlinks
+**Branch:** dev/use-sedinplace-wrapper-in-task-fixersh-i
 **Worker:** 2
 
 ### Changes
