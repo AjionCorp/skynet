@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add `completions.test.ts` CLI unit test — the `completions` command is the newest CLI addition and has zero test coverage. Create `packages/cli/src/commands/__tests__/completions.test.ts`. Test: (a) bash output contains `complete -W` with all registered command names (init, setup-agents, start, stop, etc.), (b) bash output contains `_skynet()` function definition and `COMPREPLY`, (c) zsh output starts with `#compdef skynet` and contains `_arguments`, (d) zsh output includes all registered commands, (e) invalid shell argument (e.g., "fish") produces error output or exits with non-zero, (f) installation hint is written to stderr. Mock `process.stdout.write` and `process.stderr.write`. Follow patterns in `init.test.ts` and `config.test.ts`. Criterion #2 (complete CLI test coverage — currently 21/23 commands tested)
+## [FEAT] Add `skynet init --from-snapshot` to bootstrap from exported state — in `packages/cli/src/commands/init.ts`, add `--from-snapshot <path>` option via `.option('--from-snapshot <path>', 'Initialize from a previously exported pipeline snapshot')`. When provided, after creating the `.dev/` directory structure and copying scripts (the normal init flow), read the JSON snapshot file (same format as `skynet export` output), validate it has expected keys (backlog.md, completed.md, etc.), and overwrite the default state files with the snapshot's content. Log which files were restored: "Restored N files from snapshot". Skip `skynet.config.sh` from the snapshot (machine-specific paths would be wrong — keep the freshly generated one). This enables duplicating a pipeline setup from one project to another, useful for teams adopting Skynet across multiple repositories. Criterion #1 (faster multi-project adoption)
 **Status:** completed
-**Started:** 2026-02-20 01:11
+**Started:** 2026-02-20 01:13
 **Completed:** 2026-02-20
-**Branch:** dev/add-completionstestts-cli-unit-test--the
+**Branch:** dev/add-skynet-init---from-snapshot-to-boots
 **Worker:** 4
 
 ### Changes
