@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add pipeline-status regression for failed-root hash parity fields — in `packages/dashboard/src/handlers/pipeline-status.test.ts`, assert matching fixtures produce `hashMatch=true` and drift fixtures produce `hashMatch=false` with stable `activeRootHash`/`blockersActiveHash` values. Mission: Criterion #2 quality gates and Criterion #4 telemetry trust.
+## [DATA] Run one canonical reconcile-only convergence sweep and refresh state files — execute watchdog reconcile-only mode to collapse stale active duplicates, then rebuild `.dev/blockers.md` Active from canonical failed roots so parity converges; commit only state-file updates. Mission: Criterion #2 self-correction closure and Criterion #5 measurable progress.
 **Status:** completed
 **Started:** 2026-02-20 17:01
 **Completed:** 2026-02-20
-**Branch:** dev/add-pipeline-status-regression-for-faile
+**Branch:** dev/run-one-canonical-reconcile-only-converg
 **Worker:** 3
 
 ### Changes
