@@ -424,18 +424,52 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"
-    git merge "$branch_name" --no-edit
-    git branch -d "$branch_name"
 
-    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
-    fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
-    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
+    _merge_succeeded=false
+    if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+      _merge_succeeded=true
+    else
+      # Merge failed — attempt rebase recovery (max 1 attempt)
+      log "Merge conflict — attempting rebase recovery..."
+      git merge --abort 2>/dev/null || true
+      git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+      git checkout "$branch_name" 2>>"$LOG"
+      if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
+        log "Rebase succeeded — retrying merge."
+        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+        if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+          _merge_succeeded=true
+        else
+          git merge --abort 2>/dev/null || true
+        fi
+      else
+        log "Rebase has conflicts — aborting rebase recovery."
+        git rebase --abort 2>/dev/null || true
+        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+      fi
+    fi
 
-    _CURRENT_TASK_TITLE=""
-    log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-    tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
-    emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
-    echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
+    if $_merge_succeeded; then
+      git branch -d "$branch_name"
+
+      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
+      fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
+      echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
+
+      _CURRENT_TASK_TITLE=""
+      log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
+      emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
+      echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
+    else
+      log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
+      new_attempts=$((fix_attempts + 1))
+      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
+      _CURRENT_TASK_TITLE=""
+      tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
+      emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
+      echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
+    fi
   fi
 else
   exit_code=$?
