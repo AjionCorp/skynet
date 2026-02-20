@@ -21,6 +21,7 @@ export interface SkynetConfig {
   scriptsDir?: string; // defaults to devDir + "/scripts"
   agentPrefix?: string; // for LaunchAgent labels
   maxWorkers?: number; // max dev-worker instances (default 4)
+  maxFixers?: number; // max task-fixer instances (default 3)
 }
 
 // ===== Worker / Pipeline Types =====

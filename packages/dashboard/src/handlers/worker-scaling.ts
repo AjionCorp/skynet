@@ -23,8 +23,9 @@ function isScalable(t: string): t is ScalableType {
   return (SCALABLE_TYPES as readonly string[]).includes(t);
 }
 
-function maxForType(t: ScalableType, maxWorkers: number): number {
+function maxForType(t: ScalableType, maxWorkers: number, maxFixers: number): number {
   if (t === "dev-worker") return maxWorkers;
+  if (t === "task-fixer") return maxFixers;
   return TYPE_MAX[t];
 }
 
@@ -77,10 +78,11 @@ function readPidFile(lockPath: string): number | null {
 function getRunning(
   lockPrefix: string,
   type: ScalableType,
-  maxWorkers: number
+  maxWorkers: number,
+  maxFixers: number
 ): { id: number; pid: number; lockFile: string }[] {
   const out: { id: number; pid: number; lockFile: string }[] = [];
-  const max = maxForType(type, maxWorkers);
+  const max = maxForType(type, maxWorkers, maxFixers);
 
   for (let i = 1; i <= max; i++) {
     // dev-worker uses numbered lock files; others check both unnumbered (id=1) and numbered
@@ -108,12 +110,13 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
   const { lockPrefix, devDir } = config;
   const scriptsDir = config.scriptsDir ?? `${devDir}/scripts`;
   const maxWorkers = config.maxWorkers ?? 4;
+  const maxFixers = config.maxFixers ?? 3;
 
   async function GET(): Promise<Response> {
     try {
       const workers = SCALABLE_TYPES.map((type) => {
-        const max = maxForType(type, maxWorkers);
-        const running = getRunning(lockPrefix, type, maxWorkers);
+        const max = maxForType(type, maxWorkers, maxFixers);
+        const running = getRunning(lockPrefix, type, maxWorkers, maxFixers);
         return {
           type,
           label: TYPE_LABELS[type],
@@ -160,7 +163,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         );
       }
 
-      const max = maxForType(workerType, maxWorkers);
+      const max = maxForType(workerType, maxWorkers, maxFixers);
       if (
         typeof count !== "number" ||
         !Number.isInteger(count) ||
@@ -176,7 +179,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         );
       }
 
-      const running = getRunning(lockPrefix, workerType, maxWorkers);
+      const running = getRunning(lockPrefix, workerType, maxWorkers, maxFixers);
       const currentCount = running.length;
       const delta = count - currentCount;
 
