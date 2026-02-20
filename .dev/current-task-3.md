@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add regression coverage for CLI failed-root convergence JSON fields under mixed states — in `packages/cli/src/commands/__tests__/status.test.ts`, assert `activeRoots`, `duplicateActiveRows`, and `blockedRoots` remain correct for fixtures containing `pending|fixing-*|blocked|superseded` rows. Mission: Criterion #2 quality gates and Criterion #4 telemetry consistency.
+## [INFRA] Add failed-task history rotation guardrail to keep fixer context bounded — in `scripts/watchdog.sh`, move older `fixed|superseded` rows beyond a cap from `.dev/failed-tasks.md` to `.dev/failed-tasks-archive.md` while preserving active `pending|fixing-*|blocked` rows order. Mission: Criterion #2 retry-loop throughput and Criterion #3 deterministic state management.
 **Status:** completed
-**Started:** 2026-02-20 16:13
+**Started:** 2026-02-20 16:18
 **Completed:** 2026-02-20
-**Branch:** dev/add-regression-coverage-for-cli-failed-r
+**Branch:** dev/add-failed-task-history-rotation-guardra
 **Worker:** 3
 
 ### Changes
