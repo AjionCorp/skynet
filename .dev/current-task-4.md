@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Replace `[[` with `case` in watchdog.sh for bash 3.2 style consistency — in `scripts/watchdog.sh` line 529, inside `_cleanup_stale_branches()`: `[[ "$branch" == dev/* ]] || continue`. While `[[` technically works in bash 3.2, the project's shell rules state bash 3.2 compatibility and the rest of the codebase uses `[ ... ]` exclusively. This is the only `[[` usage in the pipeline scripts (except `_compat.sh` for platform detection). Fix: replace with a `case` statement: `case "$branch" in dev/*) ;; *) continue ;; esac`. Run `bash -n scripts/watchdog.sh` and `pnpm typecheck` to verify. Criterion #1 (portability — consistent bash 3.2 style across all scripts)
+## [FIX] Add missing KNOWN_VARS entries for SKYNET_WORKER_CONTEXT, SKYNET_WORKER_CONVENTIONS, and SKYNET_WATCHDOG_INTERVAL — in `packages/cli/src/commands/config.ts` lines 11-59, the `KNOWN_VARS` dictionary (used for `skynet config list` descriptions) is missing 3 config variables that exist in the real config and are referenced in pipeline scripts. Add before the closing brace: `SKYNET_WORKER_CONTEXT: "Path to file with project-specific context injected into worker prompts"`, `SKYNET_WORKER_CONVENTIONS: "Path to file with coding conventions injected into worker prompts"`, `SKYNET_WATCHDOG_INTERVAL: "Seconds between watchdog monitoring cycles (default: 180)"`. This makes `skynet config list` show descriptions for ALL variables. Run `pnpm typecheck`. Criterion #1 (accurate developer tooling — no blank description rows)
 **Status:** completed
-**Started:** 2026-02-20 01:51
+**Started:** 2026-02-20 01:52
 **Completed:** 2026-02-20
-**Branch:** dev/-continue-while--technically-works-in-ba
+**Branch:** dev/add-missing-knownvars-entries-for-skynet
 **Worker:** 4
 
 ### Changes
