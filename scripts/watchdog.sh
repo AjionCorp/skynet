@@ -356,6 +356,7 @@ EOF
     rm -f "$hb_file"
 
     tg "💀 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Killed stale worker $wid (stuck ${age_min}m). Task unclaimed: ${task_title:-unknown}"
+    emit_event "worker_killed" "Killed stale worker $wid"
   fi
 }
 
@@ -451,6 +452,7 @@ _cleanup_stale_branches() {
     if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
       git -C "$PROJECT_DIR" branch -D "$branch" 2>/dev/null && {
         log "Deleted stale local branch: $branch (status: $status)"
+        emit_event "branch_cleaned" "Cleaned $branch"
         deleted=$((deleted + 1))
       }
     fi
