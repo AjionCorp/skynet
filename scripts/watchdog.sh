@@ -608,7 +608,7 @@ if $claude_auth_ok && ! $pipeline_paused; then
   if ! $driver_running; then
     should_kick=false
     last_kick_file="${SKYNET_LOCK_PREFIX}-project-driver-last-kick"
-    if [ "$backlog_count" -lt 5 ]; then
+    if [ "$backlog_count" -lt "${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}" ]; then
       should_kick=true
     elif [ ! -f "$last_kick_file" ]; then
       should_kick=true
