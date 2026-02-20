@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add component tests for MonitoringDashboard, PromptsDashboard, and SyncDashboard — create `packages/dashboard/src/components/MonitoringDashboard.test.tsx`, `PromptsDashboard.test.tsx`, and `SyncDashboard.test.tsx` using vitest + @testing-library/react. For MonitoringDashboard: test renders agent status cards from mock fetch, test shows Running/Stopped indicators, test handles missing agent data. For PromptsDashboard: test renders prompt template list from mock fetch, test code block formatting, test empty state. For SyncDashboard: test renders sync health status, test shows "No sync endpoints configured" when empty, test displays endpoint statuses. Mock `fetch` globally with `vi.fn()`. Follow patterns in `PipelineDashboard.test.tsx` and `TasksDashboard.test.tsx`. These are the last 3 user-facing dashboard components without tests. Criterion #2 (complete component test coverage)
+## [FEAT] Add `skynet metrics` CLI command for pipeline performance analytics — FRESH implementation (delete stale branch `dev/counts-and-percentages-read-devfailed-ta` first). Create `packages/cli/src/commands/metrics.ts`. Read `.dev/completed.md` (pipe-delimited markdown table with `| Date | Task | Branch | Duration | Notes |`): count total completed, parse Duration column ("Nm" or "Nh Mm" format) to compute average, compute tasks-per-hour, group by tag ([FEAT]/[FIX]/[TEST]/[INFRA]/[DOCS]). Read `.dev/failed-tasks.md`: count by status (fixed/blocked/superseded/pending), compute fix success rate. Output as a formatted console table. Register as `program.command('metrics').description('Show pipeline performance analytics').action(runMetrics)` in `packages/cli/src/index.ts`. Criterion #5
 **Status:** completed
-**Started:** 2026-02-19 23:17
-**Completed:** 2026-02-19
-**Branch:** dev/add-component-tests-for-monitoringdashbo
+**Started:** 2026-02-20 00:20
+**Completed:** 2026-02-20
+**Branch:** dev/add-skynet-metrics-cli-command-for-pipel
 **Worker:** 4
 
 ### Changes
