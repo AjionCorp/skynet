@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity — in `packages/dashboard/src/handlers/pipeline-logs.ts` and tests, retain buffer newline counting while restoring strict typecheck and exact empty/no-trailing-newline behavior. Mission: Criterion #3 runtime efficiency and Criterion #2 reliable gates.
+## [FIX] Unblock Codex large-prompt stdin/exit-code reliability from canonical repro — apply the exact failing repro from `.dev/blockers.md` to `scripts/agents/codex.sh` and associated shell regression test, preserving stdin-first delivery and child exit-code propagation through `_agent_exec` with green `pnpm typecheck`. Mission: Criterion #6 multi-agent compatibility and Criterion #2 retry-loop closure.
 **Status:** completed
-**Started:** 2026-02-20 10:29
+**Started:** 2026-02-20 10:34
 **Completed:** 2026-02-20
-**Branch:** dev/unblock-pipeline-logs-buffer-line-count-
+**Branch:** dev/unblock-codex-large-prompt-stdinexit-cod
 **Worker:** 3
 
 ### Changes
