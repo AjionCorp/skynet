@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Supersede stale `blocked|pending` rows when a `fixing-*` row already owns the same normalized root — in `scripts/watchdog.sh` reconciliation, when canonical precedence selects a `fixing-*` active row for a root, mark lower-priority active variants (`blocked|pending`) as `superseded` in the same pass and emit deterministic counters (`superseded_by_fixing_root`, `active_roots_after`). Mission: Criterion #2 retry-loop throughput and Criterion #3 one-root-one-active-row convergence.
+## [INFRA] Canonicalize duplicate `status=blocked` root variants during watchdog reconciliation — in `scripts/watchdog.sh`, when multiple blocked rows share one normalized root and no `fixing-*` row owns that root, keep one deterministic canonical blocked row (latest row index tie-break, highest attempts preserved), mark lower-priority blocked variants `superseded`, and emit `blocked_duplicates_compacted` counters. Mission: Criterion #2 self-correction throughput and Criterion #3 one-root-one-active-row convergence.
 **Status:** completed
-**Started:** 2026-02-20 18:46
+**Started:** 2026-02-20 18:54
 **Completed:** 2026-02-20
-**Branch:** dev/supersede-stale-blockedpending-rows-when
+**Branch:** dev/canonicalize-duplicate-statusblocked-roo
 **Worker:** 1
 
 ### Changes
