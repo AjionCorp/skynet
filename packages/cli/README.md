@@ -41,6 +41,8 @@ skynet watch
 | `skynet metrics` | Show pipeline performance analytics |
 | `skynet export` | Export pipeline state as a JSON snapshot |
 | `skynet config` | View and edit pipeline configuration |
+| `skynet import` | Restore pipeline state from snapshot |
+| `skynet completions` | Generate shell completions for bash/zsh |
 
 ## Configuration
 
