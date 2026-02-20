@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Enforce canonical backlog marker ordering before each dispatch cycle — in `scripts/watchdog.sh` (or shared `_config.sh` helper), run a pre-cycle sanitizer that guarantees all `[>]` rows stay first, `[ ]` rows follow, and any misplaced top-level `[x]` rows are moved into checked history without rewriting claimed lines byte-for-byte. Mission: Criterion #3 deterministic planning state and Criterion #2 no-task-loss reliability.
+## [INFRA] Run canonical stale-active failed-root supersede before both fixer dispatch and project-driver generation — in `scripts/watchdog.sh` and `scripts/project-driver.sh`, share one normalized-root active snapshot path that supersedes stale `status=blocked|pending` rows already present in `.dev/completed.md`, preserves `fixing-*` rows byte-for-byte, and emits deterministic before/after counters once per cycle. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
 **Status:** completed
-**Started:** 2026-02-20 17:14
+**Started:** 2026-02-20 17:18
 **Completed:** 2026-02-20
-**Branch:** dev/enforce-canonical-backlog-marker-orderin
+**Branch:** dev/run-canonical-stale-active-failed-root-s
 **Worker:** 3
 
 ### Changes
