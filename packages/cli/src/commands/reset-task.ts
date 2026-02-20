@@ -2,31 +2,11 @@ import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
+import { loadConfig } from "../utils/loadConfig";
 
 interface ResetTaskOptions {
   dir?: string;
   force?: boolean;
-}
-
-function loadConfig(projectDir: string): Record<string, string> {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    throw new Error(`skynet.config.sh not found. Run 'skynet init' first.`);
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
 }
 
 function prompt(question: string): Promise<string> {
@@ -72,6 +52,10 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
 
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
+  if (!vars) {
+    console.error("skynet.config.sh not found. Run 'skynet init' first.");
+    process.exit(1);
+  }
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
   const failedPath = join(devDir, "failed-tasks.md");
   const backlogPath = join(devDir, "backlog.md");

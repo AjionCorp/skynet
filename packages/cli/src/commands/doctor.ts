@@ -1,31 +1,11 @@
 import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
+import { loadConfig } from "../utils/loadConfig";
 
 interface DoctorOptions {
   dir?: string;
   fix?: boolean;
-}
-
-function loadConfig(projectDir: string): Record<string, string> | null {
-  const configPath = join(projectDir, ".dev/skynet.config.sh");
-  if (!existsSync(configPath)) {
-    return null;
-  }
-
-  const content = readFileSync(configPath, "utf-8");
-  const vars: Record<string, string> = {};
-
-  for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)="(.*)"/);
-    if (match) {
-      let value = match[2];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
-      vars[match[1]] = value;
-    }
-  }
-
-  return vars;
 }
 
 function getToolVersion(cmd: string): string | null {
