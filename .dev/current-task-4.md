@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Run one canonical failed-task active-state convergence sweep in watchdog — in `scripts/watchdog.sh`, add a reconcile pass that supersedes stale `status=blocked|pending` rows whose normalized roots are already in `.dev/completed.md`, preserves `fixing-*` rows byte-for-byte, and emits deterministic counters (`active_rows_before`, `active_rows_after`, `superseded_rows`, `parse_guard_rows`). Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state.
+## [TEST] Add watchdog regression for legacy malformed failed-task rows — in `scripts/tests/watchdog.sh`, add fixtures with unescaped pipe-expanded rows and escaped-field variants to assert parser guard behavior is deterministic, active-root counting is unchanged for valid rows, and skip diagnostics are emitted with stable reason codes. Mission: Criterion #2 quality gates and Criterion #3 deterministic state handling.
 **Status:** completed
-**Started:** 2026-02-20 18:40
+**Started:** 2026-02-20 18:44
 **Completed:** 2026-02-20
-**Branch:** dev/run-one-canonical-failed-task-active-sta
+**Branch:** dev/add-watchdog-regression-for-legacy-malfo
 **Worker:** 4
 
 ### Changes
