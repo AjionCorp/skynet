@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Close blocked dashboard backlog-parser DRY root without behavior drift — centralize `extractTitle()` and `parseBlockedBy()` in `packages/dashboard/src/lib/backlog-parser.ts`, update `pipeline-status.ts` and `tasks.ts`, and add parity tests. Mission: Criterion #3 maintainability and Criterion #2 retry-loop reduction.
+## [NMI] Refresh `.dev/blockers.md` Active from current failed-root reality — rebuild Active blockers from `.dev/failed-tasks.md` rows with `status=blocked` or high-attempt pending roots, attach exact latest diagnostics from `.dev/scripts/dev-worker-*.log` and `.dev/scripts/task-fixer-*.log`, and remove resolved stale root bullets. Mission: Criterion #2 self-correction closure and Criterion #4 trustworthy visibility.
 **Status:** completed
-**Started:** 2026-02-20 11:04
+**Started:** 2026-02-20 15:54
 **Completed:** 2026-02-20
-**Branch:** dev/close-blocked-dashboard-backlog-parser-d
+**Branch:** dev/refresh-devblockersmd-active-from-curren
 **Worker:** 4
 
 ### Changes
