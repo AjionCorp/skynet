@@ -139,10 +139,18 @@ export function createTasksHandlers(config: SkynetConfig) {
         );
       }
 
-      // Atomic lock acquisition using mkdir (same pattern as shell scripts)
-      try {
-        mkdirSync(backlogLockPath);
-      } catch {
+      // Atomic lock acquisition using mkdir with retry (mirrors shell script pattern)
+      let lockAcquired = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        try {
+          mkdirSync(backlogLockPath);
+          lockAcquired = true;
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      if (!lockAcquired) {
         return Response.json(
           { data: null, error: "Backlog is locked by another process" },
           { status: 423 }
