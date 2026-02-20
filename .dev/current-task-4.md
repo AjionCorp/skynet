@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add vitest component tests for PipelineDashboard, TasksDashboard, and MissionDashboard — create `packages/dashboard/src/components/PipelineDashboard.test.tsx`, `TasksDashboard.test.tsx`, and `MissionDashboard.test.tsx` using vitest + @testing-library/react. For PipelineDashboard: test renders health score badge with correct color, test self-correction rate display, test ActivityFeed section renders, test SSE connection is attempted. For TasksDashboard: test renders pending/claimed/completed/failed counts from mock data, test task list renders with correct status badges, test filter/search functionality. For MissionDashboard: test renders mission content, test progress table shows met/partial/not-met badges, test fetches from correct API endpoints. Mock `fetch` globally. Follow existing handler test mocking patterns. Criterion #2 (dashboard component test coverage — currently 0 of 12 components have tests)
+## [TEST] Add component tests for MonitoringDashboard, PromptsDashboard, and SyncDashboard — create `packages/dashboard/src/components/MonitoringDashboard.test.tsx`, `PromptsDashboard.test.tsx`, and `SyncDashboard.test.tsx` using vitest + @testing-library/react. For MonitoringDashboard: test renders agent status cards from mock fetch, test shows Running/Stopped indicators, test handles missing agent data. For PromptsDashboard: test renders prompt template list from mock fetch, test code block formatting, test empty state. For SyncDashboard: test renders sync health status, test shows "No sync endpoints configured" when empty, test displays endpoint statuses. Mock `fetch` globally with `vi.fn()`. Follow patterns in `PipelineDashboard.test.tsx` and `TasksDashboard.test.tsx`. These are the last 3 user-facing dashboard components without tests. Criterion #2 (complete component test coverage)
 **Status:** completed
-**Started:** 2026-02-19 22:04
+**Started:** 2026-02-19 23:17
 **Completed:** 2026-02-19
-**Branch:** dev/add-vitest-component-tests-for-pipelined
+**Branch:** dev/add-component-tests-for-monitoringdashbo
 **Worker:** 4
 
 ### Changes
