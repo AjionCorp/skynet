@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync } from "fs";
+import { readFileSync, existsSync, readdirSync, unlinkSync, writeFileSync, rmSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
@@ -210,11 +210,16 @@ export async function doctorCommand(options: DoctorOptions) {
   const projectName = vars?.SKYNET_PROJECT_NAME;
   const lockPrefix = vars?.SKYNET_LOCK_PREFIX || (projectName ? `/tmp/skynet-${projectName}` : null);
 
-  const workers = [
-    "dev-worker-1", "dev-worker-2", "task-fixer", "project-driver",
-    "sync-runner", "ui-tester", "feature-validator", "health-check",
-    "auth-refresh", "watchdog",
-  ];
+  const maxWorkersDoc = Number(vars?.SKYNET_MAX_WORKERS) || 2;
+  const maxFixersDoc = Number(vars?.SKYNET_MAX_FIXERS) || 1;
+
+  const workers: string[] = [];
+  for (let i = 1; i <= maxWorkersDoc; i++) workers.push(`dev-worker-${i}`);
+  for (let i = 1; i <= maxFixersDoc; i++) workers.push(`task-fixer-${i}`);
+  workers.push(
+    "project-driver", "sync-runner", "ui-tester",
+    "feature-validator", "health-check", "auth-refresh", "watchdog",
+  );
 
   if (!lockPrefix) {
     console.log("    Cannot check — no lock prefix (config missing)");
@@ -222,6 +227,7 @@ export async function doctorCommand(options: DoctorOptions) {
   } else {
     let running = 0;
     let stale = 0;
+    const staleLockPaths: string[] = [];
 
     for (const w of workers) {
       const lockFile = `${lockPrefix}-${w}.lock`;
@@ -232,6 +238,7 @@ export async function doctorCommand(options: DoctorOptions) {
           running++;
         } else {
           console.log(`    ${w}: STALE lock`);
+          staleLockPaths.push(lockFile);
           stale++;
         }
       }
@@ -241,9 +248,31 @@ export async function doctorCommand(options: DoctorOptions) {
       console.log("    No lock files found (pipeline idle)");
       results.push({ name: "Workers", status: "PASS" });
     } else if (stale > 0 && running === 0) {
+      if (fixing) {
+        for (const lockPath of staleLockPaths) {
+          try {
+            rmSync(lockPath, { recursive: true, force: true });
+            console.log(`    Fixed: removed stale lock ${lockPath}`);
+            fixCount++;
+          } catch {
+            console.log(`    Could not remove ${lockPath}`);
+          }
+        }
+      }
       results.push({ name: "Workers", status: "WARN" });
     } else {
-      results.push({ name: "Workers", status: "PASS" });
+      if (fixing && stale > 0) {
+        for (const lockPath of staleLockPaths) {
+          try {
+            rmSync(lockPath, { recursive: true, force: true });
+            console.log(`    Fixed: removed stale lock ${lockPath}`);
+            fixCount++;
+          } catch {
+            console.log(`    Could not remove ${lockPath}`);
+          }
+        }
+      }
+      results.push({ name: "Workers", status: stale > 0 ? "WARN" : "PASS" });
     }
   }
 
