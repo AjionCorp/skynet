@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix mission criterion #2 evaluation formula in CLI status and pipeline-status handler — both `packages/cli/src/commands/status.ts` (line 393) and `packages/dashboard/src/handlers/pipeline-status.ts` (line 393) evaluate criterion #2 using `fixedCount / totalFailed` which gives ~14% because it divides `fixed` (5) by ALL failed entries (36). The correct formula — already used by the self-correction rate display on status.ts line 325 — is `(fixed + superseded) / (fixed + superseded + blocked)` which gives ~97%. Fix: in status.ts, replace the criterion #2 case (lines 390-397) to use the already-computed `scrSelfCorrected` and `scrResolved` variables. In pipeline-status.ts, do the same — use `selfCorrectedCount / (selfCorrectedCount + blockedCount)` instead of `fixedCount / totalFailed`. This is the single remaining display bug preventing all 6 mission criteria from showing as "met". Criterion #2 (accurate self-correction reporting)
+## [FEAT] Add `skynet setup-agents --uninstall` for clean agent removal — in `packages/cli/src/commands/setup-agents.ts`, add `--uninstall` boolean option. On macOS: for each skynet plist file in `~/Library/LaunchAgents/` (matching `com.skynet.*.plist` pattern), run `launchctl unload <path>` then `fs.unlinkSync(path)`. On Linux: read `crontab -l`, remove lines between `# BEGIN skynet` and `# END skynet` markers (inclusive), write back via `crontab -`. Print summary: "Removed N agents (watchdog, health-check, ...)". If no agents found, print "No skynet agents installed". Criterion #1 (complete lifecycle — currently no way to cleanly uninstall agents)
 **Status:** completed
-**Started:** 2026-02-19 22:00
+**Started:** 2026-02-19 22:02
 **Completed:** 2026-02-19
-**Branch:** dev/fix-mission-criterion-2-evaluation-formu
+**Branch:** dev/add-skynet-setup-agents---uninstall-for-
 **Worker:** 1
 
 ### Changes
