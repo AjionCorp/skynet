@@ -20,6 +20,7 @@ import { upgradeCommand } from "./commands/upgrade.js";
 import { watchCommand } from "./commands/watch.js";
 import { metricsCommand } from "./commands/metrics.js";
 import { exportCommand } from "./commands/export.js";
+import { importCommand } from "./commands/import.js";
 
 const program = new Command();
 
@@ -158,6 +159,16 @@ program
   .option("--dir <dir>", "Project directory (default: cwd)")
   .option("--output <path>", "Custom output file path")
   .action(exportCommand);
+
+program
+  .command("import")
+  .description("Restore pipeline state from a JSON snapshot")
+  .argument("<snapshot>", "Path to the snapshot JSON file (from skynet export)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--dry-run", "Show what would be overwritten without writing")
+  .option("--merge", "Append instead of overwrite for .md files")
+  .option("--force", "Skip confirmation prompt")
+  .action(importCommand);
 
 program
   .command("upgrade")
