@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Fix `skynet logs` column header using unsupported printf format specifiers — in `packages/cli/src/commands/logs.ts` line 50, `console.log("    %-30s  %8s  %s", "File", "Size", "Modified")` uses C-style printf format specifiers that Node.js `console.log` does NOT interpret. The actual output is the raw format string followed by the arguments: `    %-30s  %8s  %s File Size Modified`. The data rows below use manual `.padEnd(30)` and `.padStart(8)` (lines 59-60), making the header misaligned with the data. Fix: replace line 50 with explicit padding matching the data rows: `console.log(\`    ${"File".padEnd(30)}  ${"Size".padStart(8)}  Modified\`)`. Run `pnpm typecheck`. Criterion #1 (CLI output must be correct — users see this every time they run `skynet logs`)
+## [FIX] Migrate sync-runner.sh, feature-validator.sh, and ui-tester.sh to mkdir-based atomic PID locks — three scripts still use legacy file-based PID locks with a TOCTOU race window. (1) `scripts/sync-runner.sh` lines 19-25: `if [ -f "$LOCKFILE" ] && kill -0 ... echo $$ > "$LOCKFILE"`. (2) `scripts/feature-validator.sh` lines 19-25: identical pattern. (3) `scripts/ui-tester.sh` lines 18-24: identical pattern. All other main scripts (`watchdog.sh`, `dev-worker.sh`, `task-fixer.sh`, `project-driver.sh`) were already migrated to mkdir-based atomic locks. Fix: in each of the 3 files, replace the `if [ -f ] ... echo $$ >` block with `mkdir "$LOCKFILE" 2>/dev/null || { ... check stale ... exit 0; }; echo $$ > "$LOCKFILE/pid"`. Update each cleanup trap from `rm -f "$LOCKFILE"` to `rm -rf "$LOCKFILE"`. Follow the exact pattern in `scripts/health-check.sh` lines 17-32 (which already uses mkdir). Run `bash -n scripts/sync-runner.sh scripts/feature-validator.sh scripts/ui-tester.sh` and `pnpm typecheck`. Criterion #3 (no race conditions — consistent locking across all scripts)
 **Status:** completed
-**Started:** 2026-02-20 02:47
+**Started:** 2026-02-20 02:48
 **Completed:** 2026-02-20
-**Branch:** dev/fix-skynet-logs-column-header-using-unsu
+**Branch:** dev/-echo---block-with-mkdir-lockfile-2devnu
 **Worker:** 3
 
 ### Changes
