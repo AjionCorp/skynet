@@ -1,9 +1,9 @@
 # Current Task
-## [DOCS] Add npm package README for @ajioncorp/skynet-cli — create `packages/cli/README.md`. Sections: (1) **One-line description**: "CLI for Skynet — autonomous AI development pipeline". (2) **Installation**: `npm install -g @ajioncorp/skynet-cli`. (3) **Quick Start**: 4 lines — `skynet init --name my-project`, `skynet setup-agents`, `skynet start`, `skynet watch`. (4) **Commands**: table of all 21 commands (init, setup-agents, start, stop, pause, resume, status, doctor, logs, version, add-task, run, dashboard, reset-task, cleanup, watch, upgrade, metrics, export, config) with brief one-line descriptions. (5) **Configuration**: key `skynet.config.sh` variables (SKYNET_MAX_WORKERS, SKYNET_STALE_MINUTES, SKYNET_AGENT_PLUGIN, SKYNET_GATE_N). (6) **Dashboard**: `skynet dashboard` launches admin UI on port 3100. (7) **Links**: link to main repo README and CONTRIBUTING.md. Keep under 120 lines. Also add `"README.md"` to the `files` array in `packages/cli/package.json` so it ships with the npm tarball. The npm package currently has NO readme — the npmjs.com page is blank. Criterion #1 (developer experience for npm users)
+## [INFRA] Add standalone `build` verification job to CI workflow — in `.github/workflows/ci.yml`, add a `build` job that runs `pnpm build` to compile all TypeScript packages (admin, dashboard, CLI). Currently `pnpm build` is only run implicitly as part of the `e2e-admin` job, meaning build failures can be masked by earlier job failures. The new job should run after `install` (same pnpm store cache pattern as other jobs). Steps: checkout, setup Node 20, setup pnpm, `pnpm install`, `pnpm build`. This catches TypeScript compilation errors that `pnpm typecheck` might miss (since typecheck doesn't emit files). Criterion #2 (catching build errors before merge)
 **Status:** completed
-**Started:** 2026-02-20 00:31
+**Started:** 2026-02-20 00:32
 **Completed:** 2026-02-20
-**Branch:** dev/add-npm-package-readme-for-ajioncorpskyn
+**Branch:** dev/add-standalone-build-verification-job-to
 **Worker:** 2
 
 ### Changes
