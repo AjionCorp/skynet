@@ -38,6 +38,12 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     process.exit(1);
   }
 
+  // Reject newlines to prevent markdown injection into backlog
+  if (/[\n\r]/.test(title) || (options.description && /[\n\r]/.test(options.description))) {
+    console.error("Error: Title and description must not contain newlines.");
+    process.exit(1);
+  }
+
   // Build the task line
   let taskLine = `- [ ] [${tag}] ${title.trim()}`;
   if (options.description) {
