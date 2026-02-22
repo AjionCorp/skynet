@@ -72,6 +72,7 @@ _start_heartbeat() {
   (
     while true; do
       date +%s > "$HEARTBEAT_FILE"
+      db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       sleep 60
     done
   ) &
@@ -310,8 +311,10 @@ cleanup_on_exit() {
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      db_unclaim_task_by_title "$_CURRENT_TASK_TITLE" 2>/dev/null || true
       unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
     fi
+    db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || true
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   rm -rf "$LOCKFILE"
@@ -363,7 +366,7 @@ if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
   log "One-shot mode: task = ${SKYNET_ONE_SHOT_TASK:-}"
   tg "🚀 *$SKYNET_PROJECT_NAME_UPPER* one-shot run: ${SKYNET_ONE_SHOT_TASK:-}"
 else
-  remaining_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  remaining_count=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   remaining_count=${remaining_count:-0}
   tg "🚀 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting — $remaining_count tasks in backlog"
 fi
@@ -380,6 +383,11 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
   else
     log "Stale lock detected (${age_minutes}m old). Moving to failed."
     task_title=$(grep "^##" "$WORKER_TASK_FILE" | head -1 | sed 's/^## //')
+    # SQLite: fail the task if we can find its ID
+    _stale_id=$(db_get_task_id_by_title "$task_title" 2>/dev/null || true)
+    if [ -n "$_stale_id" ]; then
+      db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" 2>/dev/null || true
+    fi
     echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
     remove_from_backlog "- [>] $task_title"
     # Fallback: also try [x] in case another code path already marked it done
@@ -406,11 +414,32 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   # Atomically claim next unchecked task (or use provided task in one-shot mode)
   if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
     next_task="- [ ] ${SKYNET_ONE_SHOT_TASK}"
+    _db_task_id=""
   else
-    next_task=$(claim_next_task)
+    _db_result=$(db_claim_next_task "$WORKER_ID")
+    if [ -n "$_db_result" ]; then
+      _db_task_id=$(echo "$_db_result" | cut -d'|' -f1)
+      _db_title=$(echo "$_db_result" | cut -d'|' -f2)
+      _db_tag=$(echo "$_db_result" | cut -d'|' -f3)
+      next_task="- [ ] [${_db_tag}] ${_db_title}"
+      # Backward compat: also mark [>] in backlog file
+      acquire_lock && {
+        if [ -f "$BACKLOG" ]; then
+          __AWK_TITLE="$_db_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
+            if (index($0, title) > 0 && index($0, "- [ ]") == 1) sub(/- \[ \]/, "- [>]")
+            print
+          }' "$BACKLOG" > "$BACKLOG.tmp" && mv "$BACKLOG.tmp" "$BACKLOG"
+        fi
+        release_lock
+      }
+    else
+      next_task=""
+      _db_task_id=""
+    fi
   fi
   if [ -z "$next_task" ]; then
     log "Backlog empty. Kicking off project-driver to refill."
+    db_set_worker_idle "$WORKER_ID" "Backlog empty — project-driver kicked off" 2>/dev/null || true
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
@@ -445,6 +474,7 @@ EOF
 
   # Write current task status for this worker
   task_start_epoch=$(date +%s)
+  db_set_worker_status "$WORKER_ID" "dev" "in_progress" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || true
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
@@ -464,6 +494,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
+        [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
         unclaim_task "$task_title"
         _CURRENT_TASK_TITLE=""
         break
@@ -471,6 +502,7 @@ EOF
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
+      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
       continue
@@ -482,6 +514,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
+        [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
         unclaim_task "$task_title"
         _CURRENT_TASK_TITLE=""
         break
@@ -489,6 +522,7 @@ EOF
       log "Failed to create worktree for $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
+      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
       unclaim_task "$task_title"
       _CURRENT_TASK_TITLE=""
       continue
@@ -539,6 +573,8 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title"
     cleanup_worktree "$branch_name"
+    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
       mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
@@ -563,6 +599,8 @@ EOF
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (worktree missing)"
       emit_event "task_failed" "Worker $WORKER_ID: $task_title (worktree missing)"
       cleanup_worktree "$branch_name"
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" 2>/dev/null || true
+      db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
       if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
         echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | worktree missing before gates | 0 | pending |" >> "$FAILED"
         mark_in_backlog "- [>] $task_title" "- [x] $task_title _(worktree missing)_"
@@ -617,6 +655,8 @@ EOF
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"
     cleanup_worktree  # Keep branch for task-fixer
+    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
       mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
@@ -660,6 +700,8 @@ EOF
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (shell syntax error)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: bash-n)"
     cleanup_worktree
+    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | bash-n failed | 0 | pending |" >> "$FAILED"
       mark_in_backlog "- [>] $task_title" "- [x] $task_title _(bash-n failed)_"
@@ -679,6 +721,7 @@ EOF
   # --- Graceful shutdown checkpoint (before merge) ---
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested before merge — unclaiming task and exiting cleanly"
+    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
     unclaim_task "$task_title"
     _CURRENT_TASK_TITLE=""
     cleanup_worktree "$branch_name"
@@ -691,6 +734,7 @@ EOF
   # Acquire merge mutex — prevents concurrent merge races between workers/fixers
   if ! acquire_merge_lock; then
     log "Could not acquire merge lock — another worker is merging. Retrying task later."
+    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
     unclaim_task "$task_title"
     _CURRENT_TASK_TITLE=""
     cleanup_worktree "$branch_name"
@@ -728,6 +772,7 @@ EOF
 
   if ! $_merge_succeeded; then
     log "MERGE FAILED for $branch_name — moving to failed."
+    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
       mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
@@ -741,7 +786,13 @@ EOF
   git branch -d "$branch_name" 2>/dev/null || true
 
   _CURRENT_TASK_TITLE=""
-  task_duration=$(format_duration $(( $(date +%s) - task_start_epoch )))
+  task_duration_secs=$(( $(date +%s) - task_start_epoch ))
+  task_duration=$(format_duration $task_duration_secs)
+  # SQLite: mark task completed
+  if [ -n "${_db_task_id:-}" ]; then
+    db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" 2>/dev/null || true
+  fi
+  db_set_worker_status "$WORKER_ID" "dev" "completed" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || true
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
     mark_in_backlog "- [>] $task_title" "- [x] $task_title"
     echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
@@ -779,6 +830,8 @@ EOF
         mark_in_backlog "- [x] $task_title" "- [x] $task_title _(smoke failed)_"
         echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed | 0 | pending |" >> "$FAILED"
       fi
+      # SQLite: revert from completed to failed
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -794,7 +847,7 @@ EOF
   release_merge_lock
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-  remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   remaining=${remaining:-0}
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
   emit_event "task_completed" "Worker $WORKER_ID: $task_title"

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { getSkynetDB } from "../lib/db";
 
 /**
  * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
@@ -87,6 +88,25 @@ export function createTasksHandlers(config: SkynetConfig) {
 
   async function GET(): Promise<Response> {
     try {
+      // Prefer SQLite, fallback to file
+      try {
+        const db = getSkynetDB(devDir);
+        db.countPending(); // verify DB is initialized
+        const backlog = db.getBacklogItems();
+        const items = backlog.items.filter((i) => i.status !== "done");
+        return Response.json({
+          data: {
+            items,
+            pendingCount: backlog.pendingCount,
+            claimedCount: backlog.claimedCount,
+            doneCount: backlog.doneCount,
+          },
+          error: null,
+        });
+      } catch {
+        // SQLite unavailable — fall through to file-based parsing
+      }
+
       const raw = readFileSync(backlogPath, "utf-8");
       const backlog = parseBacklog(raw);
       const items = backlog.items.filter((i) => i.status !== "done");
@@ -234,6 +254,15 @@ export function createTasksHandlers(config: SkynetConfig) {
         const tmpPath = backlogPath + ".tmp";
         writeFileSync(tmpPath, lines.join("\n"), "utf-8");
         renameSync(tmpPath, backlogPath);
+
+        // Also write to SQLite (primary going forward)
+        try {
+          const db = getSkynetDB(devDir);
+          db.countPending(); // verify DB is initialized
+          db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
+        } catch {
+          // SQLite write failed — file write already succeeded, so continue
+        }
 
         return Response.json({
           data: { inserted: taskLine, position: position ?? "top" },

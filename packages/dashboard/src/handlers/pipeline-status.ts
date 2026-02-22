@@ -1,6 +1,7 @@
 import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
+import { getSkynetDB } from "../lib/db";
 
 /**
  * Parse current-task.md into a structured object.
@@ -328,13 +329,32 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         };
       });
 
-      // Current tasks (per-worker files)
+      // --- Try SQLite as primary data source ---
+      let usingSqlite = false;
+      let db: ReturnType<typeof getSkynetDB> | null = null;
+      try {
+        db = getSkynetDB(devDir);
+        // Verify the DB is initialized (tables exist) with a cheap query
+        db.countPending();
+        usingSqlite = true;
+      } catch {
+        db = null;
+        // SQLite unavailable or uninitialized — fall through to file-based parsing
+      }
+
       const maxW = config.maxWorkers ?? 4;
-      const currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
-      // Try per-worker files first, fall back to legacy single file
-      for (let wid = 1; wid <= maxW; wid++) {
-        const raw = readDevFile(devDir, `current-task-${wid}.md`);
-        if (raw) currentTasks[`worker-${wid}`] = parseCurrentTask(raw);
+
+      // Current tasks
+      let currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
+      if (usingSqlite && db) {
+        currentTasks = db.getAllCurrentTasks(maxW);
+      }
+      // Also check per-worker files (file-based fallback or supplement)
+      if (Object.keys(currentTasks).length === 0) {
+        for (let wid = 1; wid <= maxW; wid++) {
+          const raw = readDevFile(devDir, `current-task-${wid}.md`);
+          if (raw) currentTasks[`worker-${wid}`] = parseCurrentTask(raw);
+        }
       }
       // Legacy single file fallback
       const currentTaskRaw = readDevFile(devDir, "current-task.md");
@@ -343,96 +363,120 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         currentTasks["worker-1"] = currentTask;
       }
 
-      // Worker heartbeats — read .dev/worker-N.heartbeat epoch files
-      const heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
-      const staleThresholdMs = 45 * 60 * 1000; // matches SKYNET_STALE_MINUTES default
-      for (let wid = 1; wid <= maxW; wid++) {
-        const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
-        if (hbRaw) {
-          const epoch = Number(hbRaw);
-          const ageMs = Date.now() - epoch * 1000;
-          heartbeats[`worker-${wid}`] = {
-            lastEpoch: epoch,
-            ageMs,
-            isStale: ageMs > staleThresholdMs,
-          };
-        } else {
-          heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+      // Worker heartbeats
+      let heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
+      if (usingSqlite && db) {
+        heartbeats = db.getHeartbeats(maxW);
+      } else {
+        const staleThresholdMs = 45 * 60 * 1000;
+        for (let wid = 1; wid <= maxW; wid++) {
+          const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
+          if (hbRaw) {
+            const epoch = Number(hbRaw);
+            const ageMs = Date.now() - epoch * 1000;
+            heartbeats[`worker-${wid}`] = {
+              lastEpoch: epoch,
+              ageMs,
+              isStale: ageMs > staleThresholdMs,
+            };
+          } else {
+            heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+          }
         }
       }
 
       // Backlog
-      const backlogRaw = readDevFile(devDir, "backlog.md");
-      const backlog = parseBacklog(backlogRaw);
+      let backlog: ReturnType<typeof parseBacklog>;
+      if (usingSqlite && db) {
+        backlog = db.getBacklogItems();
+      } else {
+        const backlogRaw = readDevFile(devDir, "backlog.md");
+        backlog = parseBacklog(backlogRaw);
+      }
 
       // Completed
-      const completedRaw = readDevFile(devDir, "completed.md");
-      const completedLines = completedRaw
-        .split("\n")
-        .filter(
-          (l) =>
-            l.startsWith("|") &&
-            !l.includes("Date") &&
-            !l.includes("---")
-        );
-      const completed = completedLines.map((l) => {
-        const parts = l.split("|").map((p) => p.trim());
-        // New format: | Date | Task | Branch | Duration | Notes | (7 parts incl. leading/trailing empty)
-        // Old format: | Date | Task | Branch | Notes | (6 parts)
-        const hasDuration = parts.length >= 7;
-        return {
-          date: parts[1] ?? "",
-          task: parts[2] ?? "",
-          branch: parts[3] ?? "",
-          duration: hasDuration ? (parts[4] ?? "") : "",
-          notes: hasDuration ? (parts[5] ?? "") : (parts[4] ?? ""),
-        };
-      });
-
-      // Compute average task duration from entries that have duration data
-      const durationMinutes = completed
-        .map((c) => parseDurationMinutes(c.duration))
-        .filter((d): d is number => d !== null);
-      const averageTaskDuration =
-        durationMinutes.length > 0
-          ? formatDuration(
-              durationMinutes.reduce((a, b) => a + b, 0) / durationMinutes.length
-            )
-          : null;
+      let completed: { date: string; task: string; branch: string; duration: string; notes: string }[];
+      let averageTaskDuration: string | null;
+      if (usingSqlite && db) {
+        completed = db.getCompletedTasks(50);
+        averageTaskDuration = db.getAverageTaskDuration();
+      } else {
+        const completedRaw = readDevFile(devDir, "completed.md");
+        const completedLines = completedRaw
+          .split("\n")
+          .filter(
+            (l) =>
+              l.startsWith("|") &&
+              !l.includes("Date") &&
+              !l.includes("---")
+          );
+        completed = completedLines.map((l) => {
+          const parts = l.split("|").map((p) => p.trim());
+          const hasDuration = parts.length >= 7;
+          return {
+            date: parts[1] ?? "",
+            task: parts[2] ?? "",
+            branch: parts[3] ?? "",
+            duration: hasDuration ? (parts[4] ?? "") : "",
+            notes: hasDuration ? (parts[5] ?? "") : (parts[4] ?? ""),
+          };
+        });
+        const durationMinutes = completed
+          .map((c) => parseDurationMinutes(c.duration))
+          .filter((d): d is number => d !== null);
+        averageTaskDuration =
+          durationMinutes.length > 0
+            ? formatDuration(
+                durationMinutes.reduce((a, b) => a + b, 0) / durationMinutes.length
+              )
+            : null;
+      }
 
       // Failed tasks
-      const failedRaw = readDevFile(devDir, "failed-tasks.md");
-      const failedLines = failedRaw
-        .split("\n")
-        .filter(
-          (l) =>
-            l.startsWith("|") &&
-            !l.includes("Date") &&
-            !l.includes("---")
-        );
-      const failed = failedLines.map((l) => {
-        const parts = l.split("|").map((p) => p.trim());
-        return {
-          date: parts[1] ?? "",
-          task: parts[2] ?? "",
-          branch: parts[3] ?? "",
-          error: parts[4] ?? "",
-          attempts: parts[5] ?? "",
-          status: parts[6] ?? "",
-        };
-      });
+      let failed: { date: string; task: string; branch: string; error: string; attempts: string; status: string }[];
+      if (usingSqlite && db) {
+        failed = db.getFailedTasks();
+      } else {
+        const failedRaw = readDevFile(devDir, "failed-tasks.md");
+        const failedLines = failedRaw
+          .split("\n")
+          .filter(
+            (l) =>
+              l.startsWith("|") &&
+              !l.includes("Date") &&
+              !l.includes("---")
+          );
+        failed = failedLines.map((l) => {
+          const parts = l.split("|").map((p) => p.trim());
+          return {
+            date: parts[1] ?? "",
+            task: parts[2] ?? "",
+            branch: parts[3] ?? "",
+            error: parts[4] ?? "",
+            attempts: parts[5] ?? "",
+            status: parts[6] ?? "",
+          };
+        });
+      }
 
-      // Blockers — only parse the ## Active section
-      const blockersRaw = readDevFile(devDir, "blockers.md");
-      const activeMatch = blockersRaw.match(/## Active\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
-      const activeSection = activeMatch?.[1]?.trim() ?? "";
-      const hasBlockers =
-        activeSection.length > 0 &&
-        activeSection.toLowerCase() !== "none" &&
-        !activeSection.includes("No active blockers");
-      const blockerLines = hasBlockers
-        ? activeSection.split("\n").filter((l) => l.startsWith("- "))
-        : [];
+      // Blockers
+      let hasBlockers: boolean;
+      let blockerLines: string[];
+      if (usingSqlite && db) {
+        blockerLines = db.getActiveBlockerLines();
+        hasBlockers = blockerLines.length > 0;
+      } else {
+        const blockersRaw = readDevFile(devDir, "blockers.md");
+        const activeMatch = blockersRaw.match(/## Active\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
+        const activeSection = activeMatch?.[1]?.trim() ?? "";
+        hasBlockers =
+          activeSection.length > 0 &&
+          activeSection.toLowerCase() !== "none" &&
+          !activeSection.includes("No active blockers");
+        blockerLines = hasBlockers
+          ? activeSection.split("\n").filter((l) => l.startsWith("- "))
+          : [];
+      }
 
       // Sync health (from sync-health.md)
       const syncRaw = readDevFile(devDir, "sync-health.md");
@@ -561,45 +605,58 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
-      // Health score inputs
-      const failedPendingCount = failed.filter((f) =>
-        f.status.includes("pending")
-      ).length;
-      const staleHeartbeatCount = Object.values(heartbeats).filter(
-        (hb) => hb.isStale
-      ).length;
-      const twentyFourHoursMs = 24 * 60 * 60 * 1000;
-      const staleTasks24hCount = Object.values(currentTasks).filter((t) => {
-        if (!t.started) return false;
-        const startedDate = new Date(t.started);
-        return !isNaN(startedDate.getTime()) && Date.now() - startedDate.getTime() > twentyFourHoursMs;
-      }).length;
+      // Health score and self-correction stats
+      let healthScore: number;
+      let failedPendingCount: number;
+      let selfCorrectionStats: { fixed: number; blocked: number; superseded: number; pending: number; selfCorrected: number };
+      let selfCorrectionRate: number;
 
-      const healthScore = calculateHealthScore({
-        failedPendingCount,
-        blockerCount: blockerLines.length,
-        staleHeartbeatCount,
-        staleTasks24hCount,
-      });
+      if (usingSqlite && db) {
+        healthScore = db.calculateHealthScore(maxW);
+        const stats = db.getSelfCorrectionStats();
+        selfCorrectionStats = stats;
+        failedPendingCount = stats.pending;
+        const totalResolved = stats.selfCorrected + stats.blocked;
+        selfCorrectionRate = totalResolved > 0
+          ? Math.round((stats.selfCorrected / totalResolved) * 100)
+          : 0;
+      } else {
+        failedPendingCount = failed.filter((f) =>
+          f.status.includes("pending")
+        ).length;
+        const staleHeartbeatCount = Object.values(heartbeats).filter(
+          (hb) => hb.isStale
+        ).length;
+        const twentyFourHoursMs = 24 * 60 * 60 * 1000;
+        const staleTasks24hCount = Object.values(currentTasks).filter((t) => {
+          if (!t.started) return false;
+          const startedDate = new Date(t.started);
+          return !isNaN(startedDate.getTime()) && Date.now() - startedDate.getTime() > twentyFourHoursMs;
+        }).length;
 
-      // Self-correction stats
-      // Superseded tasks count as pipeline self-correction: the project-driver
-      // detected a failure, generated a fresh task, and a worker completed it.
-      const fixedCount = failed.filter((f) => f.status.includes("fixed")).length;
-      const supersededCount = failed.filter((f) => f.status.includes("superseded")).length;
-      const blockedCount = failed.filter((f) => f.status.includes("blocked")).length;
-      const selfCorrectedCount = fixedCount + supersededCount;
-      const selfCorrectionStats = {
-        fixed: fixedCount,
-        blocked: blockedCount,
-        superseded: supersededCount,
-        pending: failedPendingCount,
-        selfCorrected: selfCorrectedCount,
-      };
-      const totalResolved = selfCorrectedCount + blockedCount;
-      const selfCorrectionRate = totalResolved > 0
-        ? Math.round((selfCorrectedCount / totalResolved) * 100)
-        : 0;
+        healthScore = calculateHealthScore({
+          failedPendingCount,
+          blockerCount: blockerLines.length,
+          staleHeartbeatCount,
+          staleTasks24hCount,
+        });
+
+        const fixedCount = failed.filter((f) => f.status.includes("fixed")).length;
+        const supersededCount = failed.filter((f) => f.status.includes("superseded")).length;
+        const blockedCount = failed.filter((f) => f.status.includes("blocked")).length;
+        const selfCorrectedCount = fixedCount + supersededCount;
+        selfCorrectionStats = {
+          fixed: fixedCount,
+          blocked: blockedCount,
+          superseded: supersededCount,
+          pending: failedPendingCount,
+          selfCorrected: selfCorrectedCount,
+        };
+        const totalResolved = selfCorrectedCount + blockedCount;
+        selfCorrectionRate = totalResolved > 0
+          ? Math.round((selfCorrectedCount / totalResolved) * 100)
+          : 0;
+      }
 
       // Mission progress — count handlers from this package
       const { readdirSync: readdir } = await import("fs");
@@ -619,9 +676,11 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
+      const completedTotal = (usingSqlite && db) ? db.getCompletedCount() : completed.length;
+
       const missionProgress = parseMissionProgress({
         devDir,
-        completedCount: completed.length,
+        completedCount: completedTotal,
         failedLines: failed,
         handlerCount,
       });
@@ -634,7 +693,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           heartbeats,
           backlog,
           completed: completed.slice(-50),
-          completedCount: completed.length,
+          completedCount: completedTotal,
           averageTaskDuration,
           failed,
           failedPendingCount,

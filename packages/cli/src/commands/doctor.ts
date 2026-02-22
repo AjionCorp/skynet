@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isProcessRunning } from "../utils/isProcessRunning";
 import { readFile } from "../utils/readFile";
+import { isSqliteReady, sqliteScalar, sqliteRows } from "../utils/sqliteQuery";
 
 interface DoctorOptions {
   dir?: string;
@@ -180,6 +181,41 @@ export async function doctorCommand(options: DoctorOptions) {
     results.push({ name: "State Files", status: "FAIL" });
   } else {
     results.push({ name: "State Files", status: "WARN" });
+  }
+
+  // --- (5b) SQLite Database ---
+  console.log("\n  SQLite Database:");
+
+  const dbReady = isSqliteReady(devDir);
+  if (dbReady) {
+    try {
+      const taskCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks;")) || 0;
+      const tableCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM sqlite_master WHERE type='table';")) || 0;
+      const walMode = sqliteScalar(devDir, "PRAGMA journal_mode;");
+      console.log(`    skynet.db: OK (${taskCount} tasks, ${tableCount} tables, journal: ${walMode})`);
+
+      // Check integrity
+      const integrity = sqliteScalar(devDir, "PRAGMA integrity_check;");
+      if (integrity === "ok") {
+        console.log("    Integrity: OK");
+        results.push({ name: "SQLite Database", status: "PASS" });
+      } else {
+        console.log(`    Integrity: FAILED (${integrity})`);
+        results.push({ name: "SQLite Database", status: "FAIL" });
+      }
+    } catch {
+      console.log("    skynet.db: query error");
+      results.push({ name: "SQLite Database", status: "WARN" });
+    }
+  } else {
+    const dbPath = join(devDir, "skynet.db");
+    if (existsSync(dbPath)) {
+      console.log("    skynet.db: exists but tables not initialized");
+      results.push({ name: "SQLite Database", status: "WARN" });
+    } else {
+      console.log("    skynet.db: not found (run migration or start pipeline)");
+      results.push({ name: "SQLite Database", status: "WARN" });
+    }
   }
 
   // --- (6) Worker PID Lock Files ---
@@ -447,6 +483,22 @@ export async function doctorCommand(options: DoctorOptions) {
       }
     }
 
+    // SQLite cross-check: compare DB task count with file counts
+    if (dbReady && integrityIssues === 0) {
+      try {
+        const dbPending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='pending';")) || 0;
+        const dbClaimed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='claimed';")) || 0;
+        const filePending = pendingTitles.length;
+        const fileClaimed = claimedTitles.length;
+        if (Math.abs(dbPending - filePending) > 2 || Math.abs(dbClaimed - fileClaimed) > 2) {
+          console.log(`    DB/file drift: DB pending=${dbPending} vs file=${filePending}, DB claimed=${dbClaimed} vs file=${fileClaimed}`);
+          integrityIssues++;
+        }
+      } catch {
+        // SQLite check failed — skip
+      }
+    }
+
     if (integrityIssues === 0) {
       console.log("    No integrity issues found");
       results.push({ name: "Backlog Integrity", status: "PASS" });
@@ -503,6 +555,25 @@ export async function doctorCommand(options: DoctorOptions) {
         staleHeartbeatPaths.push(hbPath);
         staleCount++;
       }
+    }
+  }
+
+  // Also check SQLite heartbeats
+  if (dbReady) {
+    try {
+      const staleSecs = Math.floor(staleThresholdMs / 1000);
+      const dbStale = sqliteRows(devDir,
+        `SELECT id, heartbeat_epoch FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs};`
+      );
+      for (const row of dbStale) {
+        const epoch = Number(row[1]) || 0;
+        const ageMin = epoch ? Math.round((now - epoch * 1000) / 60000) : 0;
+        console.log(`    Worker ${row[0]} (DB): stale (${ageMin}m old, threshold: ${staleMinutes}m)`);
+        staleCount++;
+        heartbeatTotal++;
+      }
+    } catch {
+      // SQLite check failed — file-based already ran
     }
   }
 

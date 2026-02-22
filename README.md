@@ -904,21 +904,34 @@ The `echo` plugin is useful for testing the full pipeline lifecycle without burn
 
 ## State Files
 
-All pipeline state lives in `.dev/` as plain markdown. These files are managed exclusively by bash scripts — never edit them from TypeScript.
+Pipeline state is stored in SQLite (`.dev/skynet.db`) as the primary source of truth, with markdown files maintained for backward compatibility during the transition period. The database uses WAL mode for concurrent reader/writer access.
 
 | File | Committed | Purpose |
 |------|-----------|---------|
+| `skynet.db` | No (gitignored) | SQLite database — primary state store (tasks, workers, events, blockers, fixer stats) |
 | `skynet.config.sh` | No (gitignored) | Machine-specific paths, ports, secrets |
 | `skynet.project.sh` | Yes | Project context, worker conventions |
 | `mission.md` | Yes | Mission definition driving task generation |
-| `backlog.md` | Yes | Prioritized task queue |
-| `completed.md` | Yes | Completed task log with dates and durations |
-| `failed-tasks.md` | Yes | Failed task log with error details and retry status |
-| `blockers.md` | Yes | Active and resolved blockers |
-| `current-task-N.md` | Yes | Per-worker current task status |
-| `events.log` | No (gitignored) | Structured event log |
+| `backlog.md` | Yes | Prioritized task queue (legacy, kept in sync) |
+| `completed.md` | Yes | Completed task log (legacy, kept in sync) |
+| `failed-tasks.md` | Yes | Failed task log (legacy, kept in sync) |
+| `blockers.md` | Yes | Active blockers (legacy, kept in sync) |
+| `current-task-N.md` | Yes | Per-worker current task status (legacy, kept in sync) |
+| `events.log` | No (gitignored) | Structured event log (legacy, kept in sync) |
 | `sync-health.md` | Yes | Data sync endpoint health |
 | `scripts/post-merge-smoke.log` | No (gitignored) | Smoke test results |
+
+### SQLite schema
+
+The database contains 5 tables:
+
+- **`tasks`** — Unified table replacing backlog.md + completed.md + failed-tasks.md. Columns include `title`, `tag`, `status` (pending/claimed/completed/failed/fixing-N/fixed/blocked/superseded/done), `branch`, `worker_id`, `error`, `attempts`, `priority`, `normalized_root`, timestamps.
+- **`workers`** — Replaces current-task-N.md + worker-N.heartbeat. Tracks worker status, current task, heartbeat epoch.
+- **`blockers`** — Replaces blockers.md. Active/resolved blockers with task association.
+- **`events`** — Replaces events.log. Structured event log with worker attribution.
+- **`fixer_stats`** — Replaces fixer-stats.log. Fix attempt outcomes for rate calculation.
+
+Run `skynet doctor` to verify database integrity. Migrate existing markdown state with `bash scripts/migrate-to-sqlite.sh`.
 
 ### Backlog format
 
@@ -954,7 +967,7 @@ skynet/
 ├── packages/dashboard/    @ajioncorp/skynet (shared library)
 │   ├── src/components/    React components (PipelineDashboard, TasksDashboard, ...)
 │   ├── src/handlers/      Factory-pattern API handlers (createXxxHandler)
-│   └── src/lib/           Config loader, backlog parser, worker status
+│   └── src/lib/           Config loader, backlog parser, worker status, db.ts (SQLite)
 ├── packages/admin/        Reference Next.js 15 admin app
 │   └── src/app/           App Router pages + API routes
 ├── scripts/               Bash pipeline engine
@@ -962,6 +975,7 @@ skynet/
 │   ├── _agent.sh          AI agent abstraction (plugin system)
 │   ├── _notify.sh         Multi-channel notification dispatcher
 │   ├── _compat.sh         Cross-platform bash 3.2 compatibility
+│   ├── _db.sh             SQLite helper functions (CRUD for all tables)
 │   ├── _events.sh         Structured event logging
 │   ├── watchdog.sh        Dispatcher + crash recovery
 │   ├── dev-worker.sh      Coding worker (worktree -> agent -> gates -> merge)
@@ -975,10 +989,10 @@ skynet/
 
 ### Concurrency model
 
-- Workers use `mkdir`-based mutex locks (atomic on all Unix) for shared state access
+- SQLite WAL mode provides ACID transactions with concurrent readers and single writer — replaces `mkdir`-based mutex locks for state access
 - PID lock files in `/tmp/skynet-{project}-*.lock` prevent duplicate worker instances
 - Git worktrees provide full filesystem isolation so parallel workers never conflict
-- Heartbeat files detect stuck workers — watchdog auto-kills after `SKYNET_STALE_MINUTES`
+- Heartbeat epochs in the `workers` table detect stuck workers — watchdog auto-kills after `SKYNET_STALE_MINUTES`
 - Graceful shutdown via SIGTERM/SIGINT — workers finish their current checkpoint before exiting
 
 ### Developing Skynet itself

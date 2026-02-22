@@ -4,6 +4,7 @@ import { spawnSync } from "child_process";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
 import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
+import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery";
 
 interface ResetTaskOptions {
   dir?: string;
@@ -138,6 +139,19 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
     failedLines[matchIdx] = `| ${taskDate} | ${taskTitle} | ${branchName} | ${taskError} | 0 | pending |`;
     atomicWrite(failedPath, failedLines.join("\n"));
     console.log(`\n  Reset failed-tasks.md entry: attempts → 0, status → pending`);
+
+    // Also reset in SQLite if available
+    try {
+      if (isSqliteReady(devDir)) {
+        const safeTitle = sqlEscape(taskTitle);
+        sqliteQuery(devDir,
+          `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${new Date().toISOString()}' ` +
+          `WHERE title='${safeTitle}' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
+        );
+      }
+    } catch {
+      // SQLite update failed — file already updated
+    }
 
     // --- Step 3: Find and uncheck corresponding backlog entry ---
     const backlogContent = readFileSync(backlogPath, "utf-8");

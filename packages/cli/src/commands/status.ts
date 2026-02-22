@@ -4,6 +4,7 @@ import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isProcessRunning } from "../utils/isProcessRunning";
 import { readFile } from "../utils/readFile";
+import { isSqliteReady, sqliteScalar, sqliteRows } from "../utils/sqliteQuery";
 
 interface StatusOptions {
   dir?: string;
@@ -155,19 +156,42 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Task Counts ---
-  const backlog = readFile(join(devDir, "backlog.md"));
-  const pending = (backlog.match(/^- \[ \] /gm) || []).length;
-  const claimed = (backlog.match(/^- \[>\] /gm) || []).length;
+  const usingSqlite = isSqliteReady(devDir);
+  let pending = 0;
+  let claimed = 0;
+  let completedCount = 0;
+  let failedPending = 0;
+  let failedFixed = 0;
+  let completedContent = "";
+  let failed = "";
 
-  const completedContent = readFile(join(devDir, "completed.md"));
-  const completedLines = completedContent
-    .split("\n")
-    .filter((l) => l.startsWith("|") && !l.includes("| Date |") && !l.includes("---"));
-  const completedCount = completedLines.length;
+  if (usingSqlite) {
+    try {
+      pending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='pending';")) || 0;
+      claimed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='claimed';")) || 0;
+      completedCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','done');")) || 0;
+      failedPending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='failed';")) || 0;
+      failedFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
+    } catch {
+      // Fall through to file-based below
+    }
+  }
 
-  const failed = readFile(join(devDir, "failed-tasks.md"));
-  const failedPending = (failed.match(/\| pending \|/g) || []).length;
-  const failedFixed = (failed.match(/\| fixed \|/g) || []).length;
+  if (!usingSqlite || (pending === 0 && claimed === 0 && completedCount === 0)) {
+    const backlog = readFile(join(devDir, "backlog.md"));
+    pending = (backlog.match(/^- \[ \] /gm) || []).length;
+    claimed = (backlog.match(/^- \[>\] /gm) || []).length;
+
+    completedContent = readFile(join(devDir, "completed.md"));
+    const completedLines = completedContent
+      .split("\n")
+      .filter((l) => l.startsWith("|") && !l.includes("| Date |") && !l.includes("---"));
+    completedCount = completedLines.length;
+
+    failed = readFile(join(devDir, "failed-tasks.md"));
+    failedPending = (failed.match(/\| pending \|/g) || []).length;
+    failedFixed = (failed.match(/\| fixed \|/g) || []).length;
+  }
 
   print("  Tasks:");
   print(`    Pending:    ${pending}`);
@@ -178,76 +202,128 @@ export async function statusCommand(options: StatusOptions) {
   // --- Current Tasks (per-worker) ---
   print("\n  Current Tasks:");
 
-  const taskFiles = ["current-task.md"];
-  try {
-    const entries = readdirSync(devDir);
-    for (const entry of entries) {
-      if (entry.match(/^current-task-\d+\.md$/)) {
-        taskFiles.push(entry);
-      }
-    }
-  } catch {
-    // ignore
-  }
-
   let hasActiveTasks = false;
-  for (const file of taskFiles) {
-    const content = readFile(join(devDir, file));
-    if (!content) continue;
 
-    const titleMatch = content.match(/^## (.+)/m);
-    const statusMatch = content.match(/\*\*Status:\*\* (\w+)/);
-    const startedMatch = content.match(/\*\*Started:\*\* (.+)/);
-    const workerMatch = content.match(/\*\*Worker:\*\* (\w+)/);
+  if (usingSqlite) {
+    try {
+      const rows = sqliteRows(devDir, "SELECT id, worker_type, status, task_title, started_at FROM workers WHERE status IN ('in_progress','completed') ORDER BY id;");
+      for (const row of rows) {
+        const wid = row[0] || "?";
+        const wtype = row[1] || "dev";
+        const wstatus = row[2] || "unknown";
+        const wtitle = row[3] || "Unknown";
+        const wstarted = row[4] || "";
 
-    const taskStatus = statusMatch?.[1] || "unknown";
-    const taskTitle = titleMatch?.[1] || "Unknown";
-    const label = workerMatch?.[1] ? `Worker ${workerMatch[1]}` : file.replace(".md", "");
-
-    if (taskStatus === "in_progress" || taskStatus === "completed") {
-      hasActiveTasks = true;
-      let duration = "";
-      if (startedMatch?.[1]) {
-        const started = new Date(startedMatch[1]);
-        if (!isNaN(started.getTime())) {
-          duration = ` (${formatDuration(Date.now() - started.getTime())})`;
+        hasActiveTasks = true;
+        let duration = "";
+        if (wstarted) {
+          const started = new Date(wstarted);
+          if (!isNaN(started.getTime())) {
+            duration = ` (${formatDuration(Date.now() - started.getTime())})`;
+          }
         }
+
+        const maxLen = 60;
+        const shortTitle = wtitle.length > maxLen ? wtitle.substring(0, maxLen) + "..." : wtitle;
+        const label = wtype === "fixer" ? `Fixer ${wid}` : `Worker ${wid}`;
+        print(`    ${label}: [${wstatus}] ${shortTitle}${duration}`);
       }
-
-      // Truncate long task names
-      const maxLen = 60;
-      const shortTitle = taskTitle.length > maxLen
-        ? taskTitle.substring(0, maxLen) + "..."
-        : taskTitle;
-
-      print(`    ${label}: [${taskStatus}] ${shortTitle}${duration}`);
+    } catch {
+      // Fall through to file-based
+      hasActiveTasks = false;
     }
   }
 
   if (!hasActiveTasks) {
-    print("    Idle — no active tasks");
+    // File-based current tasks
+    const taskFiles = ["current-task.md"];
+    try {
+      const entries = readdirSync(devDir);
+      for (const entry of entries) {
+        if (entry.match(/^current-task-\d+\.md$/)) {
+          taskFiles.push(entry);
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    for (const file of taskFiles) {
+      const content = readFile(join(devDir, file));
+      if (!content) continue;
+
+      const titleMatch = content.match(/^## (.+)/m);
+      const statusMatch = content.match(/\*\*Status:\*\* (\w+)/);
+      const startedMatch = content.match(/\*\*Started:\*\* (.+)/);
+      const workerMatch = content.match(/\*\*Worker:\*\* (\w+)/);
+
+      const taskStatus = statusMatch?.[1] || "unknown";
+      const taskTitle = titleMatch?.[1] || "Unknown";
+      const fileLabel = workerMatch?.[1] ? `Worker ${workerMatch[1]}` : file.replace(".md", "");
+
+      if (taskStatus === "in_progress" || taskStatus === "completed") {
+        hasActiveTasks = true;
+        let duration = "";
+        if (startedMatch?.[1]) {
+          const started = new Date(startedMatch[1]);
+          if (!isNaN(started.getTime())) {
+            duration = ` (${formatDuration(Date.now() - started.getTime())})`;
+          }
+        }
+
+        const maxLen = 60;
+        const shortTitle = taskTitle.length > maxLen
+          ? taskTitle.substring(0, maxLen) + "..."
+          : taskTitle;
+
+        print(`    ${fileLabel}: [${taskStatus}] ${shortTitle}${duration}`);
+      }
+    }
+
+    if (!hasActiveTasks) {
+      print("    Idle — no active tasks");
+    }
   }
 
   // --- Heartbeat staleness + task age for health score ---
   const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
   const staleThresholdMs = 45 * 60 * 1000;
   const twentyFourHoursMs = 24 * 60 * 60 * 1000;
-  for (let wid = 1; wid <= maxWorkers; wid++) {
-    const hbPath = join(devDir, `worker-${wid}.heartbeat`);
-    if (existsSync(hbPath)) {
-      const epoch = Number(readFile(hbPath).trim());
-      if (epoch && Date.now() - epoch * 1000 > staleThresholdMs) {
-        staleHeartbeatCount++;
-      }
+
+  if (usingSqlite) {
+    try {
+      const staleSecs = Math.floor(staleThresholdMs / 1000);
+      staleHeartbeatCount = Number(sqliteScalar(devDir,
+        `SELECT COUNT(*) FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs};`
+      )) || 0;
+      staleTasks24hCount = Number(sqliteScalar(devDir,
+        `SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now') - julianday(started_at)) > 1;`
+      )) || 0;
+    } catch {
+      // Fall through to file-based
+      staleHeartbeatCount = 0;
+      staleTasks24hCount = 0;
     }
-    const taskPath = join(devDir, `current-task-${wid}.md`);
-    const taskContent = readFile(taskPath);
-    if (taskContent) {
-      const startedMatch = taskContent.match(/\*\*Started:\*\* (.+)/);
-      if (startedMatch?.[1]) {
-        const started = new Date(startedMatch[1]);
-        if (!isNaN(started.getTime()) && Date.now() - started.getTime() > twentyFourHoursMs) {
-          staleTasks24hCount++;
+  }
+
+  if (!usingSqlite || (staleHeartbeatCount === 0 && staleTasks24hCount === 0)) {
+    for (let wid = 1; wid <= maxWorkers; wid++) {
+      const hbPath = join(devDir, `worker-${wid}.heartbeat`);
+      if (existsSync(hbPath)) {
+        const epoch = Number(readFile(hbPath).trim());
+        if (epoch && Date.now() - epoch * 1000 > staleThresholdMs) {
+          staleHeartbeatCount++;
+        }
+      }
+      const taskPath = join(devDir, `current-task-${wid}.md`);
+      const taskContent = readFile(taskPath);
+      if (taskContent) {
+        const startedMatch = taskContent.match(/\*\*Started:\*\* (.+)/);
+        if (startedMatch?.[1]) {
+          const started = new Date(startedMatch[1]);
+          if (!isNaN(started.getTime()) && Date.now() - started.getTime() > twentyFourHoursMs) {
+            staleTasks24hCount++;
+          }
         }
       }
     }
@@ -292,7 +368,28 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Recent Completions ---
-  const recent = parseRecentCompletions(completedContent, 3);
+  let recent: string[] = [];
+
+  if (usingSqlite) {
+    try {
+      const rows = sqliteRows(devDir, "SELECT completed_at, title FROM tasks WHERE status IN ('completed','done') ORDER BY completed_at DESC LIMIT 3;");
+      recent = rows.map((r) => {
+        const date = (r[0] || "").slice(0, 10);
+        const title = r[1] || "";
+        return `${date}  ${title}`;
+      });
+    } catch {
+      recent = [];
+    }
+  }
+
+  if (recent.length === 0) {
+    if (!completedContent) {
+      completedContent = readFile(join(devDir, "completed.md"));
+    }
+    recent = parseRecentCompletions(completedContent, 3);
+  }
+
   if (recent.length > 0) {
     print("\n  Recent Completions:");
     for (const entry of recent) {
@@ -312,17 +409,29 @@ export async function statusCommand(options: StatusOptions) {
   print(`  ${getCodexAuthStatus(vars)}`);
 
   // --- Blockers ---
-  const blockers = readFile(join(devDir, "blockers.md"));
   let blockerCount = 0;
-  if (blockers.includes("No active blockers")) {
-    print("  Blockers: None");
-  } else {
-    blockerCount = (blockers.match(/^- /gm) || []).length;
-    if (blockerCount > 0) {
-      print(`  Blockers: ${blockerCount} active`);
-    } else {
-      print("  Blockers: None");
+
+  if (usingSqlite) {
+    try {
+      blockerCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM blockers WHERE status='active';")) || 0;
+    } catch {
+      blockerCount = 0;
     }
+  }
+
+  if (!usingSqlite || blockerCount === 0) {
+    const blockers = readFile(join(devDir, "blockers.md"));
+    if (blockers.includes("No active blockers")) {
+      // keep 0
+    } else {
+      blockerCount = (blockers.match(/^- /gm) || []).length;
+    }
+  }
+
+  if (blockerCount > 0) {
+    print(`  Blockers: ${blockerCount} active`);
+  } else {
+    print("  Blockers: None");
   }
 
   // --- Health Score ---
@@ -337,12 +446,33 @@ export async function statusCommand(options: StatusOptions) {
   print(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
   // --- Self-Correction Rate ---
-  const failedLines = failed
-    .split("\n")
-    .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
-  const scrFixed = failedLines.filter((l) => l.includes("| fixed |")).length;
-  const scrBlocked = failedLines.filter((l) => l.includes("| blocked |")).length;
-  const scrSuperseded = failedLines.filter((l) => l.includes("| superseded |")).length;
+  let scrFixed = 0;
+  let scrBlocked = 0;
+  let scrSuperseded = 0;
+
+  if (usingSqlite) {
+    try {
+      scrFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
+      scrBlocked = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='blocked';")) || 0;
+      scrSuperseded = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='superseded';")) || 0;
+    } catch {
+      scrFixed = 0;
+    }
+  }
+
+  if (!usingSqlite || (scrFixed === 0 && scrBlocked === 0 && scrSuperseded === 0)) {
+    // Ensure we have failed content loaded
+    if (!failed) {
+      failed = readFile(join(devDir, "failed-tasks.md"));
+    }
+    const failedLines = failed
+      .split("\n")
+      .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
+    scrFixed = failedLines.filter((l) => l.includes("| fixed |")).length;
+    scrBlocked = failedLines.filter((l) => l.includes("| blocked |")).length;
+    scrSuperseded = failedLines.filter((l) => l.includes("| superseded |")).length;
+  }
+
   const scrSelfCorrected = scrFixed + scrSuperseded;
   const scrResolved = scrSelfCorrected + scrBlocked;
   const scrRate = scrResolved > 0 ? Math.round((scrSelfCorrected / scrResolved) * 100) : 0;

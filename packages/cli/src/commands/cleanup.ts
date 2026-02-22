@@ -2,6 +2,7 @@ import { resolve, join } from "path";
 import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { readFile } from "../utils/readFile";
+import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery";
 
 interface CleanupOptions {
   dir?: string;
@@ -135,8 +136,26 @@ export async function cleanupCommand(options: CleanupOptions) {
 
   const merged = getMergedBranches(projectDir, mainBranch);
   const worktrees = getWorktreeBranches(projectDir);
-  const claimedSlugs = getClaimedSlugs(devDir);
-  const failedPending = getFailedBranches(devDir);
+  let claimedSlugs: Set<string>;
+  let failedPending: Set<string>;
+
+  // Try SQLite first for claimed slugs and failed branches
+  if (isSqliteReady(devDir)) {
+    try {
+      // Claimed tasks from SQLite
+      const claimedRows = sqliteRows(devDir, "SELECT title FROM tasks WHERE status='claimed';");
+      claimedSlugs = new Set(claimedRows.map((r) => slugify(r[0] || "")));
+      // Failed pending branches from SQLite
+      const failedRows = sqliteRows(devDir, "SELECT branch FROM tasks WHERE status IN ('failed','fixing-1','fixing-2','fixing-3') AND branch IS NOT NULL AND branch != '';");
+      failedPending = new Set(failedRows.map((r) => r[0]).filter(Boolean));
+    } catch {
+      claimedSlugs = getClaimedSlugs(devDir);
+      failedPending = getFailedBranches(devDir);
+    }
+  } else {
+    claimedSlugs = getClaimedSlugs(devDir);
+    failedPending = getFailedBranches(devDir);
+  }
 
   // Classify each branch
   const branches: BranchInfo[] = [];

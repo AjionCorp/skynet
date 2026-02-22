@@ -74,7 +74,11 @@ else
   log "No mission.md found. Using SKYNET_PROJECT_VISION fallback."
 fi
 
-# --- Gather all state (guard against missing files on fresh projects) ---
+# --- Gather all state (prefer SQLite, fallback to files on fresh projects) ---
+# SQLite-based context (primary — structured, consistent)
+_db_context=$(db_export_context 2>/dev/null || true)
+
+# File-based fallback for data not yet in SQLite
 if [ -f "$BACKLOG" ]; then
   backlog_content=$(cat "$BACKLOG")
   backlog_unchecked_content=$(grep '^\- \[[ >]\]' "$BACKLOG" 2>/dev/null || true)
@@ -96,18 +100,21 @@ if [ -f "$CURRENT_TASK" ]; then current_task_content=$(cat "$CURRENT_TASK"); els
 if [ -f "$BLOCKERS" ]; then blockers_content=$(cat "$BLOCKERS"); else blockers_content="(file not found)"; fi
 if [ -f "$SYNC_HEALTH" ]; then sync_health_content=$(cat "$SYNC_HEALTH"); else sync_health_content="(file not found)"; fi
 
-# Count task metrics
-remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+# Count task metrics (prefer SQLite, fallback to file)
+remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
 remaining=${remaining:-0}
-claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || true)
+claimed=$(db_count_claimed 2>/dev/null || grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo 0)
 claimed=${claimed:-0}
 # shellcheck disable=SC2034
-done_count=$(grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || true)
+done_count=$(db_count_by_status "done" 2>/dev/null || grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || echo 0)
 done_count=${done_count:-0}
-completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
-completed_count=${completed_count:-0}
-completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
-failed_count=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
+completed_count=$(db_count_by_status "completed" 2>/dev/null || echo "")
+if [ -z "$completed_count" ]; then
+  completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+  completed_count=${completed_count:-0}
+  completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
+fi
+failed_count=$(db_count_by_status "failed" 2>/dev/null || grep -c '| pending |' "$FAILED" 2>/dev/null || echo 0)
 failed_count=${failed_count:-0}
 
 # Get codebase structure summary (guard directories that may not exist yet)
@@ -127,16 +134,24 @@ fi
 
 log "State: $remaining pending, $claimed claimed, $completed_count completed, $failed_count failed"
 
-# --- Pipeline velocity metrics ---
-today_completed=$(grep -c "$(date '+%Y-%m-%d')" "$COMPLETED" 2>/dev/null || true)
+# --- Pipeline velocity metrics (prefer SQLite, fallback to file) ---
+_today=$(date '+%Y-%m-%d')
+today_completed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed' AND completed_at LIKE '${_today}%';" 2>/dev/null \
+  || grep -c "$_today" "$COMPLETED" 2>/dev/null || echo 0)
 today_completed=${today_completed:-0}
-total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
-total_completed=${total_completed:-0}
-total_completed=$((total_completed > 1 ? total_completed - 1 : 0))
-total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || true)
-total_failed=${total_failed:-0}
-total_failed=$((total_failed > 1 ? total_failed - 1 : 0))
-fixed_count=$(grep -c 'fixed' "$FAILED" 2>/dev/null || true)
+total_completed=$(db_count_by_status "completed" 2>/dev/null || echo "")
+if [ -z "$total_completed" ]; then
+  total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+  total_completed=${total_completed:-0}
+  total_completed=$((total_completed > 1 ? total_completed - 1 : 0))
+fi
+total_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','fixed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo "")
+if [ -z "$total_failed" ]; then
+  total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || true)
+  total_failed=${total_failed:-0}
+  total_failed=$((total_failed > 1 ? total_failed - 1 : 0))
+fi
+fixed_count=$(db_count_by_status "fixed" 2>/dev/null || grep -c 'fixed' "$FAILED" 2>/dev/null || echo 0)
 fixed_count=${fixed_count:-0}
 fix_rate=$((fixed_count * 100 / (total_failed > 0 ? total_failed : 1)))
 
@@ -257,13 +272,23 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 _dedup_snapshot=$(mktemp)
 _dedup_normalized=$(mktemp)
 trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized"' EXIT
+
+# SQLite-based dedup snapshot (primary — covers all task states)
+_db_all_titles=$(sqlite3 "$DB_PATH" "SELECT title FROM tasks WHERE status NOT IN ('superseded');" 2>/dev/null || true)
+if [ -n "$_db_all_titles" ]; then
+  while IFS= read -r _t; do
+    echo "- [ ] $_t" >> "$_dedup_snapshot"
+    _normalize_task_line "- [ ] $_t" >> "$_dedup_normalized"
+  done <<< "$_db_all_titles"
+fi
+
+# File-based fallback: also scan markdown files to catch anything not yet in SQLite
 if [ -f "$BACKLOG" ]; then
-  grep '^\- \[[ >x]\]' "$BACKLOG" > "$_dedup_snapshot" 2>/dev/null || true
+  grep '^\- \[[ >x]\]' "$BACKLOG" >> "$_dedup_snapshot" 2>/dev/null || true
   while IFS= read -r _line; do
     _normalize_task_line "$_line"
-  done < "$_dedup_snapshot" > "$_dedup_normalized"
+  done < <(grep '^\- \[[ >x]\]' "$BACKLOG" 2>/dev/null || true) >> "$_dedup_normalized"
 fi
-# Also include completed.md tasks so the LLM never regenerates already-done work
 if [ -f "$COMPLETED" ]; then
   _completed_tasks=$(awk -F'|' 'NR>2 {t=$3; gsub(/^ +| +$/,"",t); if(t!="") print "- [ ] " t}' "$COMPLETED")
   if [ -n "$_completed_tasks" ]; then
@@ -273,7 +298,6 @@ if [ -f "$COMPLETED" ]; then
     done <<< "$_completed_tasks" >> "$_dedup_normalized"
   fi
 fi
-# Also include active failed-task roots (pending/fixing-*/blocked) to avoid duplicate root-cause tasks
 if [ -f "$FAILED" ]; then
   _failed_active_tasks=$(awk -F'|' '
     function trim(v){ gsub(/^ +| +$/,"",v); return v }
@@ -291,6 +315,8 @@ if [ -f "$FAILED" ]; then
     done <<< "$_failed_active_tasks" >> "$_dedup_normalized"
   fi
 fi
+# Deduplicate the normalized file itself (SQLite + file may overlap)
+sort -u "$_dedup_normalized" -o "$_dedup_normalized"
 
 if run_agent "$PROMPT" "$LOG"; then
   # --- Deduplicate newly added tasks against pre-existing entries ---
@@ -325,7 +351,7 @@ if run_agent "$PROMPT" "$LOG"; then
     rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
   fi
 
-  new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  new_remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   new_remaining=${new_remaining:-0}
   log "Project driver completed successfully."
   tg "📋 *$SKYNET_PROJECT_NAME_UPPER BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
@@ -342,7 +368,7 @@ MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete"
 
 if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
   # Re-read pending count (may have changed after run_agent)
-  mc_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+  mc_pending=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   mc_pending=${mc_pending:-0}
 
   if [ "$mc_pending" -eq 0 ]; then
@@ -351,9 +377,12 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     mc_all_met=true
 
     # Criterion 1: Completed tasks > 50
-    mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
-    mc_completed=${mc_completed:-0}
-    mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
+    mc_completed=$(db_count_by_status "completed" 2>/dev/null || echo "")
+    if [ -z "$mc_completed" ]; then
+      mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
+      mc_completed=${mc_completed:-0}
+      mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
+    fi
     if [ "$mc_completed" -gt 50 ]; then
       log "  Criterion 1 (completed tasks >50): MET ($mc_completed)"
     else
@@ -362,11 +391,11 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     fi
 
     # Criterion 2: Self-correction rate > 95%
-    mc_fixed=$(grep -c '| fixed |' "$FAILED" 2>/dev/null || true)
+    mc_fixed=$(db_count_by_status "fixed" 2>/dev/null || grep -c '| fixed |' "$FAILED" 2>/dev/null || echo 0)
     mc_fixed=${mc_fixed:-0}
-    mc_blocked=$(grep -c '| blocked |' "$FAILED" 2>/dev/null || true)
+    mc_blocked=$(db_count_by_status "blocked" 2>/dev/null || grep -c '| blocked |' "$FAILED" 2>/dev/null || echo 0)
     mc_blocked=${mc_blocked:-0}
-    mc_superseded=$(grep -c '| superseded |' "$FAILED" 2>/dev/null || true)
+    mc_superseded=$(db_count_by_status "superseded" 2>/dev/null || grep -c '| superseded |' "$FAILED" 2>/dev/null || echo 0)
     mc_superseded=${mc_superseded:-0}
     mc_total_attempted=$((mc_fixed + mc_blocked + mc_superseded))
     if [ "$mc_total_attempted" -gt 0 ]; then

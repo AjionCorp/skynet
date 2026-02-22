@@ -1,6 +1,7 @@
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
+import { sqliteQuery, isSqliteReady } from "../utils/sqliteQuery";
 
 interface ExportOptions {
   dir?: string;
@@ -37,6 +38,15 @@ export async function exportCommand(options: ExportOptions) {
     }
   }
 
+  // Include SQLite DB dump if available
+  if (isSqliteReady(devDir)) {
+    try {
+      snapshot["skynet.db.dump"] = sqliteQuery(devDir, ".dump");
+    } catch {
+      // DB dump failed — skip
+    }
+  }
+
   const isoDate = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const defaultPath = `skynet-snapshot-${isoDate}.json`;
   const outputPath = resolve(options.output || defaultPath);
@@ -46,8 +56,9 @@ export async function exportCommand(options: ExportOptions) {
   console.log(`\n  Pipeline snapshot exported to: ${outputPath}`);
   console.log(`  Files included: ${STATE_FILES.length}`);
 
-  const included = STATE_FILES.filter((f) => snapshot[f] !== "");
-  const missing = STATE_FILES.filter((f) => snapshot[f] === "");
+  const allKeys = Object.keys(snapshot);
+  const included = allKeys.filter((f) => snapshot[f] !== "");
+  const missing = allKeys.filter((f) => snapshot[f] === "");
 
   if (included.length > 0) {
     console.log(`  Present: ${included.join(", ")}`);

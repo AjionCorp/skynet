@@ -1,11 +1,22 @@
 import { readFileSync } from "fs";
 import type { SkynetConfig, EventEntry } from "../types";
+import { getSkynetDB } from "../lib/db";
 
 export function createEventsHandler(config: SkynetConfig) {
   const eventsPath = `${config.devDir}/events.log`;
 
   return async function GET(): Promise<Response> {
     try {
+      // Prefer SQLite, fallback to file
+      try {
+        const db = getSkynetDB(config.devDir);
+        db.countPending(); // verify DB is initialized
+        const entries = db.getRecentEvents(100);
+        return Response.json({ data: entries, error: null });
+      } catch {
+        // SQLite unavailable or uninitialized — fall through to file-based parsing
+      }
+
       let raw: string;
       try {
         raw = readFileSync(eventsPath, "utf-8");

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
 import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
+import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery";
 
 interface AddTaskOptions {
   dir?: string;
@@ -107,6 +108,24 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     renameSync(tmpPath, backlogPath);
   } finally {
     releaseBacklogLock(lockPath);
+  }
+
+  // Dual-write: also INSERT into SQLite if available
+  try {
+    if (isSqliteReady(devDir)) {
+      const safeTitle = sqlEscape(title.trim());
+      const safeTag = sqlEscape(tag);
+      const safeDesc = sqlEscape(options.description?.trim() || "");
+      const root = sqlEscape(title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 50));
+      const now = new Date().toISOString();
+      sqliteQuery(devDir,
+        `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
+        `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
+        `${position === "top" ? 0 : 999}, '${root}', '${now}', '${now}');`
+      );
+    }
+  } catch {
+    // SQLite write failed — file write already succeeded
   }
 
   console.log(`\n  Added task to backlog (position: ${position}):\n`);

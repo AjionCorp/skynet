@@ -200,11 +200,13 @@ crash_recovery() {
       local stuck_title
       stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
       if [ -n "$stuck_title" ]; then
+        db_unclaim_task_by_title "$stuck_title" 2>/dev/null || true
         unclaim_task "$stuck_title"
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
       fi
-      # Reset current-task file to idle so the worker doesn't see stale in_progress
+      # Reset current-task file and SQLite worker status to idle
+      db_set_worker_idle "$wid" "dead worker recovered by watchdog" 2>/dev/null || true
       cat > "$task_file" <<IDLE_EOF
 # Current Task
 **Status:** idle
@@ -230,6 +232,7 @@ IDLE_EOF
       if [ -n "$claimed_lines" ]; then
         while IFS= read -r line; do
           local title="${line#- \[>\] }"
+          db_unclaim_task_by_title "$title" 2>/dev/null || true
           unclaim_task "$title"
           log "Unclaimed orphaned task (no workers alive): $title"
           recovered=$((recovered + 1))
@@ -303,13 +306,13 @@ if check_codex_auth; then
   agent_auth_ok=true
 fi
 
-# Count backlog tasks (grep -c exits 1 on no match, so use || true and default)
-backlog_count=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
+# Count backlog tasks (prefer SQLite, fallback to grep)
+backlog_count=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
 backlog_count=${backlog_count:-0}
 backlog_count=$((backlog_count + 0))
 
 # Count pending failed tasks
-failed_pending=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
+failed_pending=$(db_count_by_status "failed" 2>/dev/null || grep -c '| pending |' "$FAILED" 2>/dev/null || echo 0)
 failed_pending=${failed_pending:-0}
 failed_pending=$((failed_pending + 0))
 
@@ -373,7 +376,9 @@ _handle_stale_worker() {
       task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
     fi
     if [ -n "$task_title" ]; then
-      # Acquire backlog lock for safe modification
+      # SQLite unclaim
+      db_unclaim_task_by_title "$task_title" 2>/dev/null || true
+      # Backward compat: also unclaim in file
       local backlog_lock="${SKYNET_LOCK_PREFIX}-backlog.lock"
       if mkdir "$backlog_lock" 2>/dev/null; then
         if [ -f "$BACKLOG" ]; then
@@ -396,7 +401,8 @@ _handle_stale_worker() {
       log "Removed worktree: $worktree"
     fi
 
-    # Reset current-task-N.md to idle
+    # Reset current-task-N.md and SQLite worker status to idle
+    db_set_worker_idle "$wid" "stale worker killed after ${age_min}m" 2>/dev/null || true
     cat > "$task_file" <<EOF
 # Current Task
 **Status:** idle
@@ -504,6 +510,12 @@ _auto_supersede_completed_tasks() {
 }
 
 # --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
+# SQLite auto-supersede (atomic, handles normalized root matching)
+_db_superseded=$(db_auto_supersede_completed 2>/dev/null || echo 0)
+if [ "$_db_superseded" -gt 0 ] 2>/dev/null; then
+  log "SQLite auto-superseded $_db_superseded failed task(s)"
+fi
+# Also run file-based auto-supersede for backward compat
 _auto_supersede_completed_tasks
 
 # --- Archive old completed tasks to prevent unbounded state file growth ---
@@ -634,7 +646,35 @@ _cleanup_stale_branches() {
   fi
 }
 
-# --- Run stale branch cleanup ---
+# --- Run stale branch cleanup (SQLite + file-based) ---
+# SQLite-based cleanup for branches with resolved statuses
+_db_cleanup_branches=$(db_get_cleanup_branches 2>/dev/null || true)
+if [ -n "$_db_cleanup_branches" ]; then
+  _current_branch=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+  _db_branch_deleted=0
+  while IFS= read -r _branch; do
+    [ -z "$_branch" ] && continue
+    [ "$_branch" = "$_current_branch" ] && continue
+    case "$_branch" in dev/*) ;; *) continue ;; esac
+    if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$_branch" 2>/dev/null; then
+      git -C "$PROJECT_DIR" branch -D "$_branch" 2>/dev/null && {
+        log "SQLite: Deleted stale branch: $_branch"
+        emit_event "branch_cleaned" "Cleaned $_branch"
+        _db_branch_deleted=$((_db_branch_deleted + 1))
+      }
+    fi
+    if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/remotes/origin/$_branch" 2>/dev/null; then
+      git -C "$PROJECT_DIR" push origin --delete "$_branch" 2>/dev/null && {
+        log "SQLite: Deleted stale remote branch: $_branch"
+      }
+    fi
+  done <<< "$_db_cleanup_branches"
+  if [ "$_db_branch_deleted" -gt 0 ]; then
+    git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+    log "SQLite branch cleanup: deleted $_db_branch_deleted branch(es)"
+  fi
+fi
+# Also run file-based cleanup for backward compat
 _cleanup_stale_branches
 
 # Refresh worker running state after potential kills
@@ -653,36 +693,40 @@ done
 #   Start at 100, -5 per pending failed task, -10 per active blocker, -2 per stale heartbeat.
 # Alerts once when score drops below threshold; clears sentinel when score recovers.
 _health_score_alert() {
-  local score=100
   local threshold="${SKYNET_HEALTH_ALERT_THRESHOLD:-50}"
   local sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-health-alert-sent"
 
-  # -5 per pending failed task
-  local pending_failed=0
-  if [ -f "$FAILED" ]; then
-    pending_failed=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
-    pending_failed=${pending_failed:-0}
-  fi
-  score=$((score - pending_failed * 5))
-
-  # -10 per active blocker (non-empty lines under ## Active in blockers.md)
-  local active_blockers=0
-  if [ -f "$BLOCKERS" ]; then
-    local active_section
-    active_section=$(awk '/^## Active/{found=1; next} /^## /{found=0} found{print}' "$BLOCKERS" 2>/dev/null || true)
-    if [ -n "$active_section" ]; then
-      active_blockers=$(echo "$active_section" | grep -c '^- ' 2>/dev/null || true)
-      active_blockers=${active_blockers:-0}
+  # Prefer SQLite health score, fallback to file-based calculation
+  local score
+  score=$(db_get_health_score 2>/dev/null || echo "")
+  if [ -z "$score" ]; then
+    score=100
+    # -5 per pending failed task
+    local pending_failed=0
+    if [ -f "$FAILED" ]; then
+      pending_failed=$(grep -c '| pending |' "$FAILED" 2>/dev/null || true)
+      pending_failed=${pending_failed:-0}
     fi
+    score=$((score - pending_failed * 5))
+
+    # -10 per active blocker
+    local active_blockers=0
+    if [ -f "$BLOCKERS" ]; then
+      local active_section
+      active_section=$(awk '/^## Active/{found=1; next} /^## /{found=0} found{print}' "$BLOCKERS" 2>/dev/null || true)
+      if [ -n "$active_section" ]; then
+        active_blockers=$(echo "$active_section" | grep -c '^- ' 2>/dev/null || true)
+        active_blockers=${active_blockers:-0}
+      fi
+    fi
+    score=$((score - active_blockers * 10))
+
+    # -2 per stale heartbeat
+    score=$((score - _stale_heartbeat_count * 2))
+
+    [ "$score" -lt 0 ] && score=0
+    [ "$score" -gt 100 ] && score=100
   fi
-  score=$((score - active_blockers * 10))
-
-  # -2 per stale heartbeat (counted earlier in the cycle)
-  score=$((score - _stale_heartbeat_count * 2))
-
-  # Clamp to 0-100
-  [ "$score" -lt 0 ] && score=0
-  [ "$score" -gt 100 ] && score=100
 
   if [ "$score" -lt "$threshold" ]; then
     # Only alert once per drop (sentinel prevents repeated alerts)
@@ -818,7 +862,11 @@ if $agent_auth_ok && ! $pipeline_paused; then
 fi
 
 # --- Fixer rolling stats (last 24h) ---
-if [ -f "$DEV_DIR/fixer-stats.log" ]; then
+# Prefer SQLite, fallback to file
+_db_fix_rate=$(db_get_fix_rate_24h 2>/dev/null || echo "")
+if [ -n "$_db_fix_rate" ]; then
+  log "Fixer stats (24h, SQLite): fix rate ${_db_fix_rate}%"
+elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   _24h_ago=$(( $(date +%s) - 86400 ))
   _total_24h=0
   _success_24h=0

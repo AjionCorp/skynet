@@ -122,6 +122,10 @@ source "$SKYNET_SCRIPTS_DIR/_skills.sh"
 # Source shared lock helpers (merge mutex, etc.)
 source "$SKYNET_SCRIPTS_DIR/_locks.sh"
 
+# Source SQLite database abstraction layer
+source "$SKYNET_SCRIPTS_DIR/_db.sh"
+db_init
+
 # --- Log rotation ---
 # Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.
 # Keeps max 2 rotated copies: $logfile.1 (newest) and $logfile.2 (oldest).

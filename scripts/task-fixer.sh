@@ -192,6 +192,7 @@ cleanup_on_exit() {
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were mid-fix (revert fixing-N back to pending)
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
+    db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
     if _acquire_failed_lock; then
       if [ -f "$FAILED" ]; then
         sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
@@ -231,57 +232,101 @@ if ! check_any_auth; then
 fi
 
 # --- Retry budget: check for consecutive failures before attempting a fix ---
-if [ -f "$FIXER_STATS" ]; then
+_consec_all_fail=false
+# Try SQLite first
+_db_last5=$(db_get_consecutive_failures 5 2>/dev/null || true)
+if [ -n "$_db_last5" ]; then
+  _fail_count=0; _total_count=0
+  while IFS='|' read -r _result; do
+    [ -z "$_result" ] && continue
+    _total_count=$((_total_count + 1))
+    [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
+  done <<< "$_db_last5"
+  [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
+fi
+# Fallback: file-based check
+if ! $_consec_all_fail && [ -f "$FIXER_STATS" ]; then
   _last5=$(tail -5 "$FIXER_STATS")
-  _fail_count=0
-  _total_count=0
+  _fail_count=0; _total_count=0
   while IFS='|' read -r _epoch _result _title; do
     [ -z "$_epoch" ] && continue
     _total_count=$((_total_count + 1))
     [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
   done <<< "$_last5"
-  if [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ]; then
-    date +%s > "$FIXER_COOLDOWN"
-    log "Fixer paused: 5 consecutive failures, cooling down 30min"
-    rm -rf "$LOCKFILE"
-    exit 0
-  fi
+  [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
+fi
+if $_consec_all_fail; then
+  date +%s > "$FIXER_COOLDOWN"
+  log "Fixer paused: 5 consecutive failures, cooling down 30min"
+  rm -rf "$LOCKFILE"
+  exit 0
 fi
 
 # --- Pre-flight: atomically claim next pending failed task ---
 
 pending_failure=""
-if _acquire_failed_lock; then
-  # Find first pending failure that isn't maxed out
-  while IFS= read -r _line; do
-    [ -z "$_line" ] && continue
-    _title=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
-    _branch=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
-    _error=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
-    _attempts=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
-    if ! echo "$_attempts" | grep -Eq '^[0-9]+$'; then
-      _attempts=0
-    fi
-    if [ "$_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
-      log "Task '$_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
-      update_failed_line "$_title" "| $(date '+%Y-%m-%d') | $_title | $_branch | $_error | $_attempts | blocked |"
-      echo "- **$(date '+%Y-%m-%d')**: Task '$_title' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_error" >> "$BLOCKERS"
-      tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $_title"
-      emit_event "task_blocked" "Fixer $FIXER_ID: $_title (max attempts)"
+_db_task_id=""
+
+# Try SQLite first for atomic claim
+_db_failures=$(db_get_pending_failures 2>/dev/null || true)
+if [ -n "$_db_failures" ]; then
+  while IFS='|' read -r _fid _ftitle _fbranch _ferror _fattempts _fstatus; do
+    [ -z "$_fid" ] && continue
+    if ! echo "$_fattempts" | grep -Eq '^[0-9]+$'; then _fattempts=0; fi
+    if [ "$_fattempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
+      log "Task '$_ftitle' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
+      db_block_task "$_fid" 2>/dev/null || true
+      db_add_blocker "Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" "$_ftitle" 2>/dev/null || true
+      # Backward compat: also update file
+      update_failed_line "$_ftitle" "| $(date '+%Y-%m-%d') | $_ftitle | $_fbranch | $_ferror | $_fattempts | blocked |"
+      echo "- **$(date '+%Y-%m-%d')**: Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" >> "$BLOCKERS"
+      tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $_ftitle"
+      emit_event "task_blocked" "Fixer $FIXER_ID: $_ftitle (max attempts)"
       continue
     fi
-    pending_failure="$_line"
-    break
-  done < <(grep '| pending |' "$FAILED" 2>/dev/null || true)
+    if db_claim_failure "$_fid" "$FIXER_ID" 2>/dev/null; then
+      _db_task_id="$_fid"
+      pending_failure="| $(date '+%Y-%m-%d') | $_ftitle | $_fbranch | $_ferror | $_fattempts | pending |"
+      # Backward compat: mark in file too
+      if _acquire_failed_lock; then
+        __AWK_TITLE="$_ftitle" __AWK_FID="$FIXER_ID" awk \
+          'BEGIN{title=ENVIRON["__AWK_TITLE"]; fid=ENVIRON["__AWK_FID"]} index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
+          "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
+        _release_failed_lock
+      fi
+      break
+    fi
+  done <<< "$_db_failures"
+fi
 
-  if [ -n "$pending_failure" ]; then
-    # Mark as claimed by this fixer instance (pending → fixing-N)
-    task_match_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
-    __AWK_TITLE="$task_match_title" __AWK_FID="$FIXER_ID" awk \
-      'BEGIN{title=ENVIRON["__AWK_TITLE"]; fid=ENVIRON["__AWK_FID"]} index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
-      "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
+# Fallback: file-based claim if SQLite claim didn't work
+if [ -z "$pending_failure" ] && [ -z "$_db_task_id" ]; then
+  if _acquire_failed_lock; then
+    while IFS= read -r _line; do
+      [ -z "$_line" ] && continue
+      _title=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+      _branch=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
+      _error=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
+      _attempts=$(echo "$_line" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
+      if ! echo "$_attempts" | grep -Eq '^[0-9]+$'; then _attempts=0; fi
+      if [ "$_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
+        continue
+      fi
+      pending_failure="$_line"
+      # Try to get DB task ID
+      _db_task_id=$(db_get_task_id_by_title "$_title" 2>/dev/null || true)
+      [ -n "$_db_task_id" ] && db_claim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+      break
+    done < <(grep '| pending |' "$FAILED" 2>/dev/null || true)
+
+    if [ -n "$pending_failure" ]; then
+      task_match_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
+      __AWK_TITLE="$task_match_title" __AWK_FID="$FIXER_ID" awk \
+        'BEGIN{title=ENVIRON["__AWK_TITLE"]; fid=ENVIRON["__AWK_FID"]} index($0, title) > 0 && /\| pending \|/ && !done {sub(/\| pending \|/, "| fixing-" fid " |"); done=1} {print}' \
+        "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
+    fi
+    _release_failed_lock
   fi
-  _release_failed_lock
 fi
 
 if [ -z "$pending_failure" ]; then
@@ -301,8 +346,9 @@ fi
 # Check if max attempts reached
 if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   log "Task '$task_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
+  [ -n "$_db_task_id" ] && db_block_task "$_db_task_id" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && db_add_blocker "Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Error: $error_summary" "$task_title" 2>/dev/null || true
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | blocked |"
-  # Add to blockers
   echo "- **$(date '+%Y-%m-%d')**: Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $error_summary" >> "$BLOCKERS"
   tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $task_title"
   emit_event "task_blocked" "Fixer $FIXER_ID: $task_title (max attempts)"
@@ -322,6 +368,7 @@ fix_start_epoch=$(date +%s)
 # --- Set up worktree for the failed branch ---
 _handle_worktree_failure() {
   log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
+  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" 2>/dev/null || true
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | pending |"
   _CURRENT_TASK_TITLE=""
   exit 0
@@ -457,6 +504,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
 # --- Graceful shutdown checkpoint (before fix attempt) ---
 if $SHUTDOWN_REQUESTED; then
   log "Shutdown requested before fix attempt — unclaiming and exiting cleanly"
+  [ -n "$_db_task_id" ] && db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
   if _acquire_failed_lock; then
     if [ -f "$FAILED" ]; then
       sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
@@ -526,8 +574,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
+    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" 2>/dev/null || true
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
+    db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
     echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
   else
     # --- Graceful shutdown checkpoint (before merge) ---
@@ -547,6 +597,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "Could not acquire merge lock — another worker is merging. Keeping as pending for retry."
       cleanup_worktree
       new_attempts=$((fix_attempts + 1))
+      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" 2>/dev/null || true
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       exit 0
@@ -590,9 +641,12 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     if $_merge_succeeded; then
       git branch -d "$branch_name"
 
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $((fix_attempts + 1)) | fixed |"
-      fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
-      echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
+      _fix_new_attempts=$((fix_attempts + 1))
+      fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
+      fix_duration=$(format_duration $fix_duration_secs)
+      [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" 2>/dev/null || true
+      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $_fix_new_attempts | fixed |"
+      echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $_fix_new_attempts) |" >> "$COMPLETED"
 
       # --- Post-merge smoke test (if enabled) ---
       if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
@@ -600,12 +654,14 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
           log "SMOKE TEST FAILED — reverting fix merge"
           git revert HEAD --no-edit 2>>"$LOG"
+          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" 2>/dev/null || true
           update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed after fix | $((fix_attempts + 1)) | pending |"
 
           _CURRENT_TASK_TITLE=""
           release_merge_lock
           tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
           emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
+          db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
           echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
           continue
         fi
@@ -617,15 +673,18 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       release_merge_lock
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
       emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
+      db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
       echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
     else
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
+      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" 2>/dev/null || true
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       release_merge_lock
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
       emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
+      db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
       echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
     fi
   fi
@@ -638,6 +697,7 @@ else
   if [ "${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-false}" = "true" ] && usage_limit_hit "$LOG"; then
     log "Usage limit detected — not counting failure toward cooldown/attempts."
     cleanup_worktree  # Keep branch for next attempt
+    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" 2>/dev/null || true
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | usage limit (no attempt recorded) | $fix_attempts | pending |"
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
@@ -650,9 +710,11 @@ else
 
   cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))
+  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" 2>/dev/null || true
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
   _CURRENT_TASK_TITLE=""
+  db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
   echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
 fi
 
