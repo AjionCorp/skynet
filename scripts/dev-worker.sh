@@ -133,7 +133,7 @@ is_task_blocked() {
     if [ -z "$dep" ]; then continue; fi
     # Check if this dependency is done (has [x] marker) in the backlog
     # Match: "- [x] [TAG] <dep>" or "- [x] <dep>" anywhere in the title portion
-    if ! grep -q "^\- \[x\] .*${dep}" "$BACKLOG" 2>/dev/null; then
+    if ! grep -F "$dep" "$BACKLOG" 2>/dev/null | grep -qF "- [x]"; then
       # Fallback: check completed.md (dependencies may have been archived)
       if [ -f "$COMPLETED" ] && grep -qF "$dep" "$COMPLETED" 2>/dev/null; then
         continue

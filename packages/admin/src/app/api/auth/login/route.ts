@@ -3,6 +3,10 @@ import { safeCompare } from "../../../../lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const contentLength = Number(request.headers.get("content-length") ?? 0);
+    if (contentLength > 1_000_000) {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
     const { apiKey } = (await request.json()) as { apiKey: string };
     const expected = process.env.SKYNET_DASHBOARD_API_KEY;
 

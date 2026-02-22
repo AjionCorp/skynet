@@ -603,9 +603,11 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // Mission progress — count handlers from this package
       const { readdirSync: readdir } = await import("fs");
+      const { fileURLToPath } = await import("url");
+      const { dirname } = await import("path");
       let handlerCount = 0;
       try {
-        const handlersDir = __dirname;
+        const handlersDir = dirname(fileURLToPath(import.meta.url));
         handlerCount = readdir(handlersDir).filter(
           (f: string) =>
             (f.endsWith(".ts") || f.endsWith(".js")) &&

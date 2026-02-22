@@ -1,12 +1,17 @@
 import { readFileSync } from "fs";
+import { resolve } from "path";
 import { spawnSync } from "child_process";
 
 /**
  * Read a file from the .dev/ directory. Returns empty string if file does not exist.
+ * Rejects path traversal attempts (../ sequences, absolute paths).
  */
 export function readDevFile(devDir: string, filename: string): string {
+  if (/\.\.[/\\]/.test(filename) || filename.startsWith("/")) return "";
+  const resolved = resolve(devDir, filename);
+  if (!resolved.startsWith(resolve(devDir))) return "";
   try {
-    return readFileSync(`${devDir}/${filename}`, "utf-8");
+    return readFileSync(resolved, "utf-8");
   } catch {
     return "";
   }

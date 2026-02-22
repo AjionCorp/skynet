@@ -28,6 +28,7 @@ export type {
   MissionProgress,
   SelfCorrectionStats,
   EventEntry,
+  CodexAuthStatus,
 } from "./types";
 
 // Config helpers
