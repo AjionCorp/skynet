@@ -294,6 +294,28 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 # --- Run crash recovery before dispatching ---
 crash_recovery
 
+# --- Reconcile orphaned 'claimed' tasks ---
+# If a task is 'claimed' in SQLite but the worker that claimed it is either dead
+# or working on a different task, unclaim it back to 'pending'.
+_orphaned_claimed=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
+  SELECT t.id, t.title, t.worker_id
+  FROM tasks t
+  WHERE t.status = 'claimed' AND t.worker_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM workers w
+      WHERE w.id = t.worker_id AND w.status = 'in_progress' AND w.current_task_id = t.id
+    );
+" 2>/dev/null || true)
+if [ -n "$_orphaned_claimed" ]; then
+  while IFS="$_DB_SEP" read -r _oc_id _oc_title _oc_wid; do
+    [ -z "$_oc_id" ] && continue
+    db_unclaim_task "$_oc_id" 2>/dev/null || true
+    unclaim_task "$_oc_title" 2>/dev/null || true
+    log "Reconciled orphaned claim: task '$_oc_title' (id=$_oc_id, worker=$_oc_wid)"
+    emit_event "orphaned_claim_reconciled" "Task '$_oc_title' (id=$_oc_id) unclaimed — worker $_oc_wid not actively working on it" 2>/dev/null || true
+  done <<< "$_orphaned_claimed"
+fi
+
 # --- Proactive merge lock cleanup ---
 # If the merge lock holder's PID is dead, remove the lock immediately rather
 # than waiting for the 120s stale timeout to expire.

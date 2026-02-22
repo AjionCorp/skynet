@@ -26,11 +26,29 @@ fi
 if [ -f "$DB_PATH" ]; then
   existing_tasks=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks;" 2>/dev/null || echo "0")
   if [ "$existing_tasks" != "0" ]; then
-    echo "WARNING: $DB_PATH already contains $existing_tasks tasks."
-    echo "If you want to re-migrate, remove $DB_PATH first: rm $DB_PATH"
-    exit 1
+    # Check for partial migration — allow resuming incomplete runs
+    _completed_sections=$(sqlite3 "$DB_PATH" "SELECT value FROM _metadata WHERE key='migration_sections';" 2>/dev/null || echo "")
+    if [ -n "$_completed_sections" ] && echo "$_completed_sections" | grep -qv "ALL"; then
+      log "Detected partial migration (completed: $_completed_sections). Resuming..."
+    else
+      echo "WARNING: $DB_PATH already contains $existing_tasks tasks."
+      echo "If you want to re-migrate, remove $DB_PATH first: rm $DB_PATH"
+      exit 1
+    fi
   fi
 fi
+
+# Helper: check if a migration section was already completed
+_section_done() { echo "${_completed_sections:-}" | grep -q "$1"; }
+# Helper: mark a migration section as completed
+_mark_section() {
+  local _cur; _cur=$(sqlite3 "$DB_PATH" "SELECT value FROM _metadata WHERE key='migration_sections';" 2>/dev/null || echo "")
+  if [ -z "$_cur" ]; then
+    sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO _metadata (key, value) VALUES ('migration_sections', '$1');"
+  else
+    sqlite3 "$DB_PATH" "UPDATE _metadata SET value='${_cur},$1' WHERE key='migration_sections';"
+  fi
+}
 
 log "Starting migration to SQLite..."
 log "  DB: $DB_PATH"
@@ -65,7 +83,10 @@ esc() { echo "$1" | sed "s/'/''/g"; }
 # ── Migrate backlog.md ────────────────────────────────────────────────
 
 backlog_count=0
-if [ -f "$DEV_DIR/backlog.md" ]; then
+if _section_done "backlog"; then
+  log "  Backlog: already migrated — skipping"
+  backlog_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE priority < 99999;" 2>/dev/null || echo 0)
+elif [ -f "$DEV_DIR/backlog.md" ]; then
   log "Migrating backlog.md..."
   priority=0
   while IFS= read -r line; do
@@ -126,12 +147,16 @@ if [ -f "$DEV_DIR/backlog.md" ]; then
     backlog_count=$((backlog_count + 1))
   done < "$DEV_DIR/backlog.md"
   log "  Backlog: $backlog_count items migrated"
+  _mark_section "backlog"
 fi
 
 # ── Migrate completed.md ─────────────────────────────────────────────
 
 completed_count=0
-if [ -f "$DEV_DIR/completed.md" ]; then
+if _section_done "completed"; then
+  log "  Completed: already migrated — skipping"
+  completed_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed';" 2>/dev/null || echo 0)
+elif [ -f "$DEV_DIR/completed.md" ]; then
   log "Migrating completed.md..."
   while IFS= read -r line; do
     # Skip header, separator, empty lines
@@ -207,12 +232,16 @@ if [ -f "$DEV_DIR/completed.md" ]; then
     completed_count=$((completed_count + 1))
   done < "$DEV_DIR/completed.md"
   log "  Completed: $completed_count tasks migrated"
+  _mark_section "completed"
 fi
 
 # ── Migrate failed-tasks.md ──────────────────────────────────────────
 
 failed_count=0
-if [ -f "$DEV_DIR/failed-tasks.md" ]; then
+if _section_done "failed"; then
+  log "  Failed: already migrated — skipping"
+  failed_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo 0)
+elif [ -f "$DEV_DIR/failed-tasks.md" ]; then
   log "Migrating failed-tasks.md..."
   while IFS= read -r line; do
     echo "$line" | grep -q '^|' || continue
@@ -264,12 +293,15 @@ if [ -f "$DEV_DIR/failed-tasks.md" ]; then
     failed_count=$((failed_count + 1))
   done < "$DEV_DIR/failed-tasks.md"
   log "  Failed: $failed_count tasks migrated"
+  _mark_section "failed"
 fi
 
 # ── Migrate blockers.md ──────────────────────────────────────────────
 
 blocker_count=0
-if [ -f "$DEV_DIR/blockers.md" ]; then
+if _section_done "blockers"; then
+  log "  Blockers: already migrated — skipping"
+elif [ -f "$DEV_DIR/blockers.md" ]; then
   log "Migrating blockers.md..."
   current_section=""
   while IFS= read -r line; do
@@ -295,12 +327,15 @@ if [ -f "$DEV_DIR/blockers.md" ]; then
     fi
   done < "$DEV_DIR/blockers.md"
   log "  Blockers: $blocker_count active blockers migrated"
+  _mark_section "blockers"
 fi
 
 # ── Migrate events.log ───────────────────────────────────────────────
 
 event_count=0
-if [ -f "$DEV_DIR/events.log" ]; then
+if _section_done "events"; then
+  log "  Events: already migrated — skipping"
+elif [ -f "$DEV_DIR/events.log" ]; then
   log "Migrating events.log..."
   while IFS= read -r line; do
     [ -z "$line" ] && continue
@@ -327,12 +362,15 @@ if [ -f "$DEV_DIR/events.log" ]; then
     event_count=$((event_count + 1))
   done < "$DEV_DIR/events.log"
   log "  Events: $event_count entries migrated"
+  _mark_section "events"
 fi
 
 # ── Migrate fixer-stats.log ──────────────────────────────────────────
 
 fixer_count=0
-if [ -f "$DEV_DIR/fixer-stats.log" ]; then
+if _section_done "fixer_stats"; then
+  log "  Fixer stats: already migrated — skipping"
+elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   log "Migrating fixer-stats.log..."
   while IFS= read -r line; do
     [ -z "$line" ] && continue
@@ -352,6 +390,7 @@ if [ -f "$DEV_DIR/fixer-stats.log" ]; then
     fixer_count=$((fixer_count + 1))
   done < "$DEV_DIR/fixer-stats.log"
   log "  Fixer stats: $fixer_count entries migrated"
+  _mark_section "fixer_stats"
 fi
 
 # ── Migrate current-task-N.md → workers table ────────────────────────
@@ -427,5 +466,6 @@ done
 log ""
 log "Database size: $(du -h "$DB_PATH" | cut -f1)"
 log ""
+_mark_section "ALL"
 log "Migration complete! Originals backed up to $BACKUP_DIR"
 log "Test with: sqlite3 $DB_PATH 'SELECT status, COUNT(*) FROM tasks GROUP BY status;'"

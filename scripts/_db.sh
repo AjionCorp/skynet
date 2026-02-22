@@ -384,11 +384,26 @@ db_block_task() {
 db_supersede_task() {
   local task_id; task_id=$(_sql_int "$1")
   _sql_exec "UPDATE tasks SET status='superseded', updated_at=datetime('now') WHERE id=$task_id;"
+  # Resolve any blockers associated with this task
+  local _title
+  _title=$(sqlite3 "$DB_PATH" "SELECT title FROM tasks WHERE id=$task_id;" 2>/dev/null || true)
+  if [ -n "$_title" ]; then
+    local _title_esc; _title_esc=$(_sql_escape "$_title")
+    sqlite3 "$DB_PATH" "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE task_title='$_title_esc' AND status='active';" 2>/dev/null || true
+  fi
 }
 
 # Auto-supersede failed tasks matching completed roots. Returns count of changes.
+# Also resolves orphaned blockers linked to newly-superseded tasks.
 db_auto_supersede_completed() {
   sqlite3 "$DB_PATH" "
+    UPDATE blockers SET status='resolved', resolved_at=datetime('now')
+    WHERE status='active' AND task_title IN (
+      SELECT title FROM tasks
+      WHERE status='failed' AND normalized_root != '' AND normalized_root IN (
+        SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
+      )
+    );
     UPDATE tasks SET status='superseded', updated_at=datetime('now')
     WHERE status='failed' AND normalized_root != '' AND normalized_root IN (
       SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
