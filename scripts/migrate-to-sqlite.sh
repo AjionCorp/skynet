@@ -132,16 +132,17 @@ elif [ -f "$DEV_DIR/backlog.md" ]; then
     title=$(echo "$title" | sed 's/ *_([^)]*)_ *$//')
 
     # Normalized root
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-50)
+    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     title_esc=$(esc "$title")
     desc_esc=$(esc "$description")
     blocked_esc=$(esc "$blocked_by")
     norm_esc=$(esc "$norm_root")
+    tag_esc=$(esc "$tag")
 
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, blocked_by, priority, normalized_root)
-      VALUES ('$title_esc', '$tag', '$desc_esc', '$status', '$blocked_esc', $priority, '$norm_esc');
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', '$status', '$blocked_esc', $priority, '$norm_esc');
     "
     priority=$((priority + 1))
     backlog_count=$((backlog_count + 1))
@@ -220,12 +221,12 @@ elif [ -f "$DEV_DIR/completed.md" ]; then
       title=$(echo "$title" | sed 's/ — .*//')
     fi
 
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-50)
+    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, branch, duration, duration_secs, notes,
         completed_at, normalized_root, priority)
-      VALUES ('$(esc "$title")', '$tag', '$(esc "$description")', 'completed',
+      VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', 'completed',
         '$(esc "$branch_val")', '$(esc "$duration_val")', $duration_secs, '$(esc "$notes_val")',
         '$(esc "$date_val")', '$(esc "$norm_root")', 99999);
     "
@@ -281,12 +282,12 @@ elif [ -f "$DEV_DIR/failed-tasks.md" ]; then
       title=$(echo "$title" | sed 's/ — .*//')
     fi
 
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-50)
+    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, branch, error, attempts,
         failed_at, normalized_root, priority)
-      VALUES ('$(esc "$title")', '$tag', '$(esc "$description")', '$(esc "$status_val")',
+      VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', '$(esc "$status_val")',
         '$(esc "$branch_val")', '$(esc "$error_val")', $attempts_val,
         '$(esc "$date_val")', '$(esc "$norm_root")', 99999);
     "
