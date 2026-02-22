@@ -750,3 +750,9 @@ db_export_state_files() {
   db_export_completed "$COMPLETED" 2>/dev/null || true
   db_export_failed "$FAILED" 2>/dev/null || true
 }
+
+# Regenerate markdown from SQLite if DB exists. Returns 1 if no DB (caller does fallback).
+_db_sync_state_files() {
+  [ -f "$DB_PATH" ] || return 1
+  db_export_state_files
+}

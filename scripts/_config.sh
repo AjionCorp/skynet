@@ -82,6 +82,9 @@ export SKYNET_SMOKE_TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
 # Post-merge typecheck gate (validates main still builds after merge; auto-reverts on failure)
 export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 
+# Timeout (seconds) for each git push attempt (prevents indefinite hang on network stalls)
+export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-30}"
+
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"
@@ -169,7 +172,7 @@ git_push_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
   while [ "$attempt" -le "$max_attempts" ]; do
-    if git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+    if run_with_timeout "$SKYNET_GIT_PUSH_TIMEOUT" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi
     log "git push failed (attempt $attempt/$max_attempts)"

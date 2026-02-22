@@ -278,7 +278,7 @@ if [ -n "$_db_failures" ]; then
       db_block_task "$_fid" 2>/dev/null || true
       db_add_blocker "Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" "$_ftitle" 2>/dev/null || true
       # Backward compat: also update file
-      update_failed_line "$_ftitle" "| $(date '+%Y-%m-%d') | $_ftitle | $_fbranch | $_ferror | $_fattempts | blocked |"
+      _db_sync_state_files || update_failed_line "$_ftitle" "| $(date '+%Y-%m-%d') | $_ftitle | $_fbranch | $_ferror | $_fattempts | blocked |"
       echo "- **$(date '+%Y-%m-%d')**: Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" >> "$BLOCKERS"
       tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $_ftitle"
       emit_event "task_blocked" "Fixer $FIXER_ID: $_ftitle (max attempts)"
@@ -348,7 +348,7 @@ if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   log "Task '$task_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
   [ -n "$_db_task_id" ] && db_block_task "$_db_task_id" 2>/dev/null || true
   [ -n "$_db_task_id" ] && db_add_blocker "Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Error: $error_summary" "$task_title" 2>/dev/null || true
-  update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | blocked |"
+  _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | blocked |"
   echo "- **$(date '+%Y-%m-%d')**: Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $error_summary" >> "$BLOCKERS"
   tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $task_title"
   emit_event "task_blocked" "Fixer $FIXER_ID: $task_title (max attempts)"
@@ -369,7 +369,7 @@ fix_start_epoch=$(date +%s)
 _handle_worktree_failure() {
   log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
   [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
-  update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | pending |"
+  _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | pending |"
   _CURRENT_TASK_TITLE=""
   exit 0
 }
@@ -575,7 +575,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
     [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" || true
-    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
+    _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
     db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
     echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
@@ -585,7 +585,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "Shutdown requested before merge — reverting claim and exiting cleanly"
       cleanup_worktree  # Keep branch for next attempt
       new_attempts=$((fix_attempts + 1))
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
+      _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       exit 0
     fi
@@ -601,11 +601,12 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       cleanup_worktree
       new_attempts=$((fix_attempts + 1))
       [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" || true
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
+      _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       exit 0
     fi
 
+    _do_merge_and_push() {
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"
     if ! git_pull_with_retry; then
@@ -617,7 +618,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       fi
       _CURRENT_TASK_TITLE=""
       release_merge_lock
-      continue
+      return
     fi
 
     _merge_succeeded=false
@@ -667,18 +668,24 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         fi
         if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
           log "POST-MERGE TYPECHECK FAILED — reverting fix merge"
-          git revert HEAD --no-edit 2>>"$LOG"
+          if ! git revert HEAD --no-edit 2>>"$LOG"; then
+            log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
+            tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+            emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after typecheck"
+            release_merge_lock
+            exit 1
+          fi
           git_push_with_retry || log "WARNING: push of revert commit failed"
           emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (typecheck failed post-merge)"
           tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (typecheck failed post-merge)"
           new_attempts=$((fix_attempts + 1))
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || true
-          update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | $new_attempts | pending |"
+          _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | $new_attempts | pending |"
           _CURRENT_TASK_TITLE=""
           release_merge_lock
           db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
           echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-          continue
+          return
         fi
         log "Post-merge typecheck passed."
       fi
@@ -702,8 +709,15 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
           log "SMOKE TEST FAILED — reverting fix merge and state commit"
           # HEAD is state commit, HEAD~1 is merge — revert both into one commit
-          git revert --no-commit HEAD HEAD~1 2>>"$LOG"
+          if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
+            log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
+            tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+            emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after smoke test"
+            release_merge_lock
+            exit 1
+          fi
           git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
+          git_push_with_retry || log "WARNING: push of smoke test revert failed"
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
 
           _CURRENT_TASK_TITLE=""
@@ -712,15 +726,41 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
           db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
           echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-          continue
+          return
         fi
         log "Post-merge smoke test passed."
       fi
 
       # Push merged changes to origin (while still holding merge lock)
       if ! git_push_with_retry; then
-        log "WARNING: git push failed — fix merged locally but not on remote"
-        tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER FIXER*: push failed for $task_title — merged locally only"
+        log "PUSH FAILED after merge — reverting to prevent split-brain"
+        # Revert state commit + merge
+        if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
+          log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
+          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+          emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after push failure"
+          release_merge_lock
+          exit 1
+        fi
+        git commit -m "revert: auto-revert $task_title (push failed)" --no-verify 2>/dev/null || true
+        # Try to push the revert
+        if ! git_push_with_retry; then
+          log "CRITICAL: revert push also failed — local main diverged from remote. Stopping fixer."
+          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: FIXER local main diverged — push failed for $task_title and revert push also failed"
+          emit_event "push_diverged" "Fixer $FIXER_ID: $task_title — local main diverged from remote"
+          release_merge_lock
+          exit 1
+        fi
+        tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (push failed)"
+        emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (push failed post-merge)"
+        new_attempts=$((fix_attempts + 1))
+        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || true
+        _db_sync_state_files || true
+        _CURRENT_TASK_TITLE=""
+        release_merge_lock
+        db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
+        echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
+        return
       fi
 
       _CURRENT_TASK_TITLE=""
@@ -734,7 +774,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
       [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || true
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
+      _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       release_merge_lock
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
@@ -742,6 +782,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
       echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
     fi
+    }
+    _do_merge_and_push
   fi
 else
   exit_code=$?
@@ -753,7 +795,7 @@ else
     log "Usage limit detected — not counting failure toward cooldown/attempts."
     cleanup_worktree  # Keep branch for next attempt
     [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || true
-    update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | usage limit (no attempt recorded) | $fix_attempts | pending |"
+    _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | usage limit (no attempt recorded) | $fix_attempts | pending |"
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
     log "Task-fixer finished."
@@ -766,7 +808,7 @@ else
   cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))
   [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" || true
-  update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
+  _db_sync_state_files || update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
   _CURRENT_TASK_TITLE=""
   db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true

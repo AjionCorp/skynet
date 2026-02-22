@@ -397,10 +397,12 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
     if [ -n "$_stale_id" ]; then
       db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
     fi
-    echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
-    remove_from_backlog "- [>] $task_title"
-    # Fallback: also try [x] in case another code path already marked it done
-    remove_from_backlog "- [x] $task_title"
+    _db_sync_state_files || {
+      echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
+      remove_from_backlog "- [>] $task_title"
+      # Fallback: also try [x] in case another code path already marked it done
+      remove_from_backlog "- [x] $task_title"
+    }
   fi
 fi
 
@@ -592,8 +594,10 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
-      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
+      _db_sync_state_files || {
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
+      }
     fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
@@ -619,8 +623,10 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
       if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | worktree missing before gates | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(worktree missing)_"
+        _db_sync_state_files || {
+          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | worktree missing before gates | 0 | pending |" >> "$FAILED"
+          mark_in_backlog "- [>] $task_title" "- [x] $task_title _(worktree missing)_"
+        }
       fi
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -676,8 +682,10 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
-      mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
+      _db_sync_state_files || {
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
+      }
     fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
@@ -722,8 +730,10 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | bash-n failed | 0 | pending |" >> "$FAILED"
-      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(bash-n failed)_"
+      _db_sync_state_files || {
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | bash-n failed | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(bash-n failed)_"
+      }
     fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
@@ -806,8 +816,10 @@ EOF
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
-      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
+      _db_sync_state_files || {
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
+      }
     fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
@@ -830,7 +842,13 @@ EOF
     fi
     if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
       log "POST-MERGE TYPECHECK FAILED — reverting merge"
-      git revert HEAD --no-edit 2>>"$LOG"
+      if ! git revert HEAD --no-edit 2>>"$LOG"; then
+        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after typecheck"
+        release_merge_lock
+        exit 1
+      fi
       git_push_with_retry || log "WARNING: push of revert commit failed"
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)"
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)"
@@ -838,8 +856,10 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
       if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed post-merge)_"
+        _db_sync_state_files || {
+          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | 0 | pending |" >> "$FAILED"
+          mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed post-merge)_"
+        }
       fi
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -892,15 +912,23 @@ EOF
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge and state commit"
       # HEAD is state commit, HEAD~1 is merge — revert both into one commit
-      git revert --no-commit HEAD HEAD~1 2>>"$LOG"
+      if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
+        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
+        release_merge_lock
+        exit 1
+      fi
       git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
 
-      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        mark_in_backlog "- [x] $task_title" "- [x] $task_title _(smoke failed)_"
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed | 0 | pending |" >> "$FAILED"
-      fi
-      # SQLite: revert from completed to failed
+      # SQLite: revert from completed to failed (BEFORE exporting state files)
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || true
+      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+        _db_sync_state_files || {
+          mark_in_backlog "- [x] $task_title" "- [x] $task_title _(smoke failed)_"
+          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed | 0 | pending |" >> "$FAILED"
+        }
+      fi
 
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -915,8 +943,42 @@ EOF
 
   # Push merged changes to origin (while still holding merge lock)
   if ! git_push_with_retry; then
-    log "WARNING: git push failed — changes are merged locally but not on remote"
-    tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: push failed for $task_title — merged locally only"
+    log "PUSH FAILED after merge — reverting to prevent split-brain"
+    # Revert state commit + merge (or just merge in one-shot mode)
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
+        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after push failure"
+        release_merge_lock
+        exit 1
+      fi
+    else
+      if ! git revert --no-commit HEAD 2>>"$LOG"; then
+        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after push failure"
+        release_merge_lock
+        exit 1
+      fi
+    fi
+    git commit -m "revert: auto-revert $task_title (push failed)" --no-verify 2>/dev/null || true
+    # Try to push the revert
+    if ! git_push_with_retry; then
+      log "CRITICAL: revert push also failed — local main diverged from remote. Stopping worker."
+      tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: W${WORKER_ID} local main diverged — push failed for $task_title and revert push also failed"
+      emit_event "push_diverged" "Worker $WORKER_ID: $task_title — local main diverged from remote"
+      release_merge_lock
+      exit 1
+    fi
+    tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (push failed)"
+    emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
+    tasks_failed=$((tasks_failed + 1))
+    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
+    _db_sync_state_files || true
+    _CURRENT_TASK_TITLE=""
+    release_merge_lock
+    continue
   fi
 
   release_merge_lock

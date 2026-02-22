@@ -132,7 +132,7 @@ elif [ -f "$DEV_DIR/backlog.md" ]; then
     title=$(echo "$title" | sed 's/ *_([^)]*)_ *$//')
 
     # Normalized root
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+    norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     title_esc=$(esc "$title")
     desc_esc=$(esc "$description")
@@ -221,7 +221,7 @@ elif [ -f "$DEV_DIR/completed.md" ]; then
       title=$(echo "$title" | sed 's/ — .*//')
     fi
 
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+    norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, branch, duration, duration_secs, notes,
@@ -282,7 +282,7 @@ elif [ -f "$DEV_DIR/failed-tasks.md" ]; then
       title=$(echo "$title" | sed 's/ — .*//')
     fi
 
-    norm_root=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+    norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, branch, error, attempts,
@@ -467,6 +467,18 @@ done
 log ""
 log "Database size: $(du -h "$DB_PATH" | cut -f1)"
 log ""
+
+# Remediation: recompute all normalized_roots to fix previously-migrated data
+# (earlier versions did not strip [TAG] prefix before normalizing)
+log "Recomputing normalized_root for all tasks..."
+_recomputed=0
+sqlite3 "$DB_PATH" "SELECT id, title FROM tasks;" | while IFS='|' read -r _id _title; do
+  _norm=$(echo "$_title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+  sqlite3 "$DB_PATH" "UPDATE tasks SET normalized_root='$(esc "$_norm")' WHERE id=$_id;"
+  _recomputed=$((_recomputed + 1))
+done
+log "Recomputed normalized_root for all tasks."
+
 _mark_section "ALL"
 log "Migration complete! Originals backed up to $BACKUP_DIR"
 log "Test with: sqlite3 $DB_PATH 'SELECT status, COUNT(*) FROM tasks GROUP BY status;'"

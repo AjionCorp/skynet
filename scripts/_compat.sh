@@ -57,6 +57,19 @@ to_upper() {
   echo "$1" | tr '[:lower:]' '[:upper:]'
 }
 
+# Portable command timeout (macOS lacks GNU timeout)
+run_with_timeout() {
+  local secs="$1"; shift
+  if command -v timeout >/dev/null 2>&1; then
+    timeout "$secs" "$@"
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$secs" "$@"
+  else
+    # perl fallback — available on all macOS
+    perl -e 'alarm shift @ARGV; exec @ARGV' "$secs" "$@"
+  fi
+}
+
 # Portable readlink -f (resolve symlinks)
 realpath_portable() {
   if command -v realpath >/dev/null 2>&1; then
