@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isProcessRunning } from "../utils/isProcessRunning";
 import { readFile } from "../utils/readFile";
-import { isSqliteReady, sqliteScalar, sqliteRows } from "../utils/sqliteQuery";
+import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery";
 
 interface StatusOptions {
   dir?: string;
@@ -167,11 +167,22 @@ export async function statusCommand(options: StatusOptions) {
 
   if (usingSqlite) {
     try {
-      pending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='pending';")) || 0;
-      claimed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='claimed';")) || 0;
-      completedCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','done');")) || 0;
-      failedPending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='failed';")) || 0;
-      failedFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
+      const countsRow = sqliteRows(devDir,
+        `SELECT
+          (SELECT COUNT(*) FROM tasks WHERE status='pending') as c0,
+          (SELECT COUNT(*) FROM tasks WHERE status='claimed') as c1,
+          (SELECT COUNT(*) FROM tasks WHERE status IN ('completed','done')) as c2,
+          (SELECT COUNT(*) FROM tasks WHERE status='failed') as c3,
+          (SELECT COUNT(*) FROM tasks WHERE status='fixed') as c4;`
+      );
+      if (countsRow.length > 0) {
+        const c = countsRow[0];
+        pending = Number(c[0]) || 0;
+        claimed = Number(c[1]) || 0;
+        completedCount = Number(c[2]) || 0;
+        failedPending = Number(c[3]) || 0;
+        failedFixed = Number(c[4]) || 0;
+      }
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite task counts: ${err instanceof Error ? err.message : String(err)}`);
     }
@@ -293,12 +304,15 @@ export async function statusCommand(options: StatusOptions) {
   if (usingSqlite) {
     try {
       const staleSecs = Math.floor(staleThresholdMs / 1000);
-      staleHeartbeatCount = Number(sqliteScalar(devDir,
-        `SELECT COUNT(*) FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs};`
-      )) || 0;
-      staleTasks24hCount = Number(sqliteScalar(devDir,
-        `SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now') - julianday(started_at)) > 1;`
-      )) || 0;
+      const hbRow = sqliteRows(devDir,
+        `SELECT
+          (SELECT COUNT(*) FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs}) as c0,
+          (SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now') - julianday(started_at)) > 1) as c1;`
+      );
+      if (hbRow.length > 0) {
+        staleHeartbeatCount = Number(hbRow[0][0]) || 0;
+        staleTasks24hCount = Number(hbRow[0][1]) || 0;
+      }
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite heartbeats: ${err instanceof Error ? err.message : String(err)}`);
       staleHeartbeatCount = 0;
@@ -409,14 +423,29 @@ export async function statusCommand(options: StatusOptions) {
   }
   print(`  ${getCodexAuthStatus(vars)}`);
 
-  // --- Blockers ---
+  // --- Blockers + Self-Correction (batched query) ---
   let blockerCount = 0;
+  let scrFixed = 0;
+  let scrBlocked = 0;
+  let scrSuperseded = 0;
 
   if (usingSqlite) {
     try {
-      blockerCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM blockers WHERE status='active';")) || 0;
+      const bRow = sqliteRows(devDir,
+        `SELECT
+          (SELECT COUNT(*) FROM blockers WHERE status='active') as c0,
+          (SELECT COUNT(*) FROM tasks WHERE status='fixed') as c1,
+          (SELECT COUNT(*) FROM tasks WHERE status='blocked') as c2,
+          (SELECT COUNT(*) FROM tasks WHERE status='superseded') as c3;`
+      );
+      if (bRow.length > 0) {
+        blockerCount = Number(bRow[0][0]) || 0;
+        scrFixed = Number(bRow[0][1]) || 0;
+        scrBlocked = Number(bRow[0][2]) || 0;
+        scrSuperseded = Number(bRow[0][3]) || 0;
+      }
     } catch (err) {
-      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite blockers: ${err instanceof Error ? err.message : String(err)}`);
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite blockers/scr: ${err instanceof Error ? err.message : String(err)}`);
       blockerCount = 0;
     }
   }
@@ -448,20 +477,7 @@ export async function statusCommand(options: StatusOptions) {
   print(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
   // --- Self-Correction Rate ---
-  let scrFixed = 0;
-  let scrBlocked = 0;
-  let scrSuperseded = 0;
-
-  if (usingSqlite) {
-    try {
-      scrFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
-      scrBlocked = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='blocked';")) || 0;
-      scrSuperseded = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='superseded';")) || 0;
-    } catch (err) {
-      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite self-correction: ${err instanceof Error ? err.message : String(err)}`);
-      scrFixed = 0;
-    }
-  }
+  // (scrFixed, scrBlocked, scrSuperseded already populated by batched blocker query above)
 
   if (!usingSqlite || (scrFixed === 0 && scrBlocked === 0 && scrSuperseded === 0)) {
     // Ensure we have failed content loaded

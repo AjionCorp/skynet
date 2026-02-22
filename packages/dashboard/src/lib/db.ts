@@ -319,14 +319,22 @@ export class SkynetDB {
     };
   }
 
-  /** Get all workers' current tasks. */
+  /** Get all workers' current tasks (single query instead of per-worker). */
   getAllCurrentTasks(maxWorkers: number): Record<string, ReturnType<SkynetDB["getCurrentTask"]>> {
     const result: Record<string, ReturnType<SkynetDB["getCurrentTask"]>> = {};
-    for (let wid = 1; wid <= maxWorkers; wid++) {
-      const task = this.getCurrentTask(wid);
-      if (task.status !== "unknown") {
-        result[`worker-${wid}`] = task;
-      }
+    const rows = this.db
+      .prepare("SELECT * FROM workers WHERE id <= ? ORDER BY id")
+      .all(maxWorkers) as WorkerRow[];
+
+    for (const row of rows) {
+      result[`worker-${row.id}`] = {
+        status: row.status,
+        title: row.task_title || null,
+        branch: row.branch || null,
+        started: row.started_at,
+        worker: `Worker ${row.id}`,
+        lastInfo: row.last_info || null,
+      };
     }
     return result;
   }
@@ -389,34 +397,27 @@ export class SkynetDB {
 
   // ── Health Score ───────────────────────────────────────────────────
 
-  /** Calculate pipeline health score (0-100). */
+  /** Calculate pipeline health score (0-100) in a single query. */
   calculateHealthScore(maxWorkers: number): number {
-    const failedPending = (
-      this.db
-        .prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status='failed'")
-        .get() as { cnt: number }
-    ).cnt;
+    const staleEpoch = Math.floor(Date.now() / 1000) - 45 * 60;
+    const row = this.db
+      .prepare(
+        `SELECT
+           (SELECT COUNT(*) FROM tasks WHERE status='failed') as failed_count,
+           (SELECT COUNT(*) FROM blockers WHERE status='active') as blocker_count,
+           (SELECT COUNT(*) FROM workers WHERE id <= ? AND heartbeat_epoch IS NOT NULL
+              AND heartbeat_epoch > 0 AND heartbeat_epoch < ?) as stale_hb_count,
+           (SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL
+              AND (julianday('now')-julianday(started_at))>1) as stale_task_count`
+      )
+      .get(maxWorkers, staleEpoch) as {
+        failed_count: number;
+        blocker_count: number;
+        stale_hb_count: number;
+        stale_task_count: number;
+      };
 
-    const blockerCount = this.getActiveBlockerCount();
-
-    const staleMs = 45 * 60 * 1000;
-    let staleHbs = 0;
-    const hbs = this.getHeartbeats(maxWorkers);
-    for (const hb of Object.values(hbs)) {
-      if (hb.isStale) staleHbs++;
-    }
-
-    const staleTasks = (
-      this.db
-        .prepare(
-          `SELECT COUNT(*) as cnt FROM workers
-           WHERE status='in_progress' AND started_at IS NOT NULL
-             AND (julianday('now')-julianday(started_at))>1`
-        )
-        .get() as { cnt: number }
-    ).cnt;
-
-    let score = 100 - failedPending * 5 - blockerCount * 10 - staleHbs * 2 - staleTasks;
+    const score = 100 - row.failed_count * 5 - row.blocker_count * 10 - row.stale_hb_count * 2 - row.stale_task_count;
     return Math.max(0, Math.min(100, score));
   }
 

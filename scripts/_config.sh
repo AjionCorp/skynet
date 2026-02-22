@@ -280,6 +280,12 @@ validate_backlog() {
   fi
 
   # (3) blockedBy references must point to existing tasks and not self-reference
+  # Pre-load lookup data once (avoids re-grepping files per dependency)
+  local _backlog_titles _completed_content
+  _backlog_titles=$(grep '^\- \[.\]' "$BACKLOG" 2>/dev/null | sed 's/ | [bB]locked[bB]y:.*//' || true)
+  _completed_content=""
+  [ -f "$COMPLETED" ] && _completed_content=$(cat "$COMPLETED" 2>/dev/null || true)
+
   while IFS= read -r line; do
     local deps
     deps=$(echo "$line" | sed -n 's/.*| *[bB]locked[bB]y: *\(.*\)$/\1/p')
@@ -300,11 +306,11 @@ validate_backlog() {
         continue
       fi
       local found=false
-      # Check backlog (any status line containing the dep as a task title, not in blockedBy metadata)
-      grep '^\- \[.\]' "$BACKLOG" 2>/dev/null | sed 's/ | [bB]locked[bB]y:.*//' | grep -qF "$dep" && found=true
-      # Check completed.md
-      if ! $found && [ -f "$COMPLETED" ]; then
-        grep -qF "$dep" "$COMPLETED" 2>/dev/null && found=true
+      # Check pre-loaded backlog titles (in-memory)
+      echo "$_backlog_titles" | grep -qF "$dep" && found=true
+      # Check pre-loaded completed content (in-memory)
+      if ! $found && [ -n "$_completed_content" ]; then
+        echo "$_completed_content" | grep -qF "$dep" && found=true
       fi
       if ! $found; then
         _vb_log "BACKLOG HEALTH: blockedBy ref not found: '$dep'"

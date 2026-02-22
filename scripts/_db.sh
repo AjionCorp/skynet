@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks(status, priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_normalized_root ON tasks(normalized_root);
 CREATE INDEX IF NOT EXISTS idx_tasks_branch ON tasks(branch);
 
@@ -156,9 +157,17 @@ db_count_by_status() {
 
 # Find + atomically claim the next unblocked pending task for a worker.
 # Output: id|title|tag|description|branch  or empty string if none available.
+# Optimized: fetches all pending tasks + all completed titles in 2 queries max,
+# then resolves blockers in-memory instead of spawning per-dep sqlite3 processes.
 db_claim_next_task() {
   local worker_id="$1"
   local result=""
+
+  # Build a lookup set of completed task titles (one query)
+  local _completed_titles
+  _completed_titles=$(sqlite3 "$DB_PATH" \
+    "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null) || true
+
   while IFS='|' read -r tid ttitle tblocked; do
     [ -z "$tid" ] && continue
     local blocked=false
@@ -168,11 +177,8 @@ db_claim_next_task() {
         IFS="$_old_ifs"
         dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')
         [ -z "$dep" ] && continue
-        local dep_esc; dep_esc=$(_sql_escape "$dep")
-        local dep_done
-        dep_done=$(sqlite3 "$DB_PATH" \
-          "SELECT COUNT(*) FROM tasks WHERE title='$dep_esc' AND status IN ('completed','done','fixed','superseded');")
-        if [ "$dep_done" = "0" ]; then
+        # Check in-memory lookup instead of spawning sqlite3
+        if ! echo "$_completed_titles" | grep -qxF "$dep"; then
           blocked=true; break
         fi
       done
@@ -512,25 +518,26 @@ db_get_health_score() {
 # ============================================================
 
 db_export_context() {
-  echo "## Backlog (pending tasks)"
-  sqlite3 "$DB_PATH" "SELECT '- [ ] [' || tag || '] ' || title FROM tasks WHERE status='pending' ORDER BY priority ASC;" 2>/dev/null || true
-  echo ""
-  echo "## Claimed tasks"
-  sqlite3 "$DB_PATH" "SELECT '- [>] [' || tag || '] ' || title FROM tasks WHERE status='claimed' ORDER BY priority ASC;" 2>/dev/null || true
-  echo ""
-  echo "## Recent completed (last 30)"
-  sqlite3 -separator ' | ' "$DB_PATH" \
-    "SELECT completed_at, title, branch, duration, notes FROM tasks WHERE status IN ('completed','fixed') ORDER BY completed_at DESC LIMIT 30;" 2>/dev/null || true
-  echo ""
-  echo "## Failed tasks (pending retry)"
-  sqlite3 -separator ' | ' "$DB_PATH" \
-    "SELECT title, branch, error, attempts, status FROM tasks WHERE status IN ('failed','blocked') OR status LIKE 'fixing-%' ORDER BY failed_at DESC;" 2>/dev/null || true
-  echo ""
-  echo "## Active blockers"
-  sqlite3 "$DB_PATH" "SELECT '- ' || description FROM blockers WHERE status='active';" 2>/dev/null || true
-  echo ""
-  echo "## Recent done (last 40)"
-  sqlite3 "$DB_PATH" "SELECT '- [x] [' || tag || '] ' || title FROM tasks WHERE status='done' ORDER BY updated_at DESC LIMIT 40;" 2>/dev/null || true
+  # Single sqlite3 call with section headers embedded as literal SELECT values
+  sqlite3 -separator ' | ' "$DB_PATH" "
+    SELECT '## Backlog (pending tasks)';
+    SELECT '- [ ] [' || tag || '] ' || title FROM tasks WHERE status='pending' ORDER BY priority ASC;
+    SELECT '';
+    SELECT '## Claimed tasks';
+    SELECT '- [>] [' || tag || '] ' || title FROM tasks WHERE status='claimed' ORDER BY priority ASC;
+    SELECT '';
+    SELECT '## Recent completed (last 30)';
+    SELECT completed_at, title, branch, duration, notes FROM tasks WHERE status IN ('completed','fixed') ORDER BY completed_at DESC LIMIT 30;
+    SELECT '';
+    SELECT '## Failed tasks (pending retry)';
+    SELECT title, branch, error, attempts, status FROM tasks WHERE status IN ('failed','blocked') OR status LIKE 'fixing-%' ORDER BY failed_at DESC;
+    SELECT '';
+    SELECT '## Active blockers';
+    SELECT '- ' || description FROM blockers WHERE status='active';
+    SELECT '';
+    SELECT '## Recent done (last 40)';
+    SELECT '- [x] [' || tag || '] ' || title FROM tasks WHERE status='done' ORDER BY updated_at DESC LIMIT 40;
+  " 2>/dev/null || true
 }
 
 # Get branches for stale cleanup (fixed/superseded/blocked tasks)
