@@ -433,6 +433,9 @@ EOF
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
 
+  # Load skills matching this task's tag
+  SKILL_CONTENT="$(get_skills_for_tag "${task_type:-}")"
+
   log "Starting task ($tasks_attempted/$MAX_TASKS_PER_RUN): $task_title"
   log "Branch: $branch_name"
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
@@ -497,7 +500,11 @@ EOF
 Your task: $task_title
 
 ${SKYNET_WORKER_CONTEXT:-}
+${SKILL_CONTENT:+
+## Project Skills
 
+$SKILL_CONTENT
+}
 Instructions:
 1. Read the codebase to understand existing patterns (check CLAUDE.md, existing sync code, API routes)
 2. Implement the task following existing conventions

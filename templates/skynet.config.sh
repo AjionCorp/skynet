@@ -105,6 +105,12 @@ export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH e
 # Use a project-local worktree base to keep Codex sandbox happy and avoid /tmp issues.
 export SKYNET_WORKTREE_BASE="$SKYNET_DEV_DIR/worktrees"
 
+# ---- Skills ----
+# Directory containing skill files (*.md with YAML frontmatter).
+# Skills are injected into worker prompts based on task tag matching.
+# Use `skynet add-skill <name>` to create new skills.
+export SKYNET_SKILLS_DIR="$SKYNET_DEV_DIR/skills"
+
 # ---- Server Error Scanning ----
 # Space-separated list of env vars to check in server logs
 export SKYNET_ERROR_ENV_KEYS=""  # Env var names whose absence triggers server error warnings (empty = skip)

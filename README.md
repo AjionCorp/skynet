@@ -21,6 +21,7 @@ Skynet is an autonomous AI development pipeline. It uses LLM agents (Claude Code
 - [Dashboard](#dashboard)
 - [Writing a Good Mission](#writing-a-good-mission)
 - [Worker Context and Conventions](#worker-context-and-conventions)
+- [Skills](#skills)
 - [Agent Plugins](#agent-plugins)
 - [State Files](#state-files)
 - [Architecture](#architecture)
@@ -313,6 +314,19 @@ skynet add-task "Fix login redirect loop" --tag FIX \
 skynet add-task "Critical security patch" --tag FIX --position 1
 ```
 
+### Manage skills
+
+```bash
+# Create a new skill
+skynet add-skill api-design --tags "FEAT" --description "REST API design conventions"
+
+# Create a universal skill (injected for all tasks)
+skynet add-skill code-review
+
+# List all skills and their tag bindings
+skynet list-skills
+```
+
 ### Run a one-shot task (no backlog)
 
 ```bash
@@ -464,6 +478,8 @@ skynet completions zsh >> ~/.zshrc
 | `skynet validate` | Run pre-flight project validation checks |
 | `skynet logs [type]` | View/tail worker logs (`worker`, `fixer`, `watchdog`, `health-check`) |
 | `skynet add-task <title>` | Adds a task to `backlog.md` with optional `--tag` and `--description` |
+| `skynet add-skill <name>` | Creates a new skill file in `.dev/skills/` with optional `--tags` and `--description` |
+| `skynet list-skills` | Lists all skill files and their tag bindings |
 | `skynet reset-task <title>` | Resets a failed task back to pending (clears attempts, optionally deletes branch) |
 | `skynet run <prompt>` | Execute a one-shot task without adding to backlog |
 | `skynet dashboard` | Launches the admin dashboard (Next.js app) and opens browser |
@@ -544,6 +560,12 @@ Contains local paths, ports, secrets, and tuning knobs. Not committed to git.
 | `SKYNET_CLAUDE_FLAGS` | `--print --dangerously-skip-permissions` | Claude CLI flags |
 | `SKYNET_CODEX_BIN` | `codex` | Path to Codex binary |
 | `SKYNET_CODEX_FLAGS` | `--full-auto` | Codex CLI flags |
+
+**Skills:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SKYNET_SKILLS_DIR` | `$DEV_DIR/skills` | Directory containing skill markdown files |
 
 **Notifications:**
 
@@ -754,6 +776,70 @@ SKYNET_WORKER_CONTEXT="
 - Repository pattern for database access
 "
 ```
+
+## Skills
+
+Skills are reusable instruction sets that get injected into worker prompts. They live as markdown files in `.dev/skills/` and are automatically loaded by the pipeline based on task tags.
+
+### How it works
+
+When a dev-worker or task-fixer picks up a task like `[FEAT] Add user auth`, the pipeline:
+1. Extracts the tag (`FEAT`)
+2. Scans `.dev/skills/*.md` for skills matching that tag
+3. Injects the matching skill content into the agent prompt
+
+Skills with no tags are **universal** — they load for every task. Skills with tags only load when the task tag matches.
+
+### Skill file format
+
+```markdown
+---
+name: api-design
+description: REST API design conventions
+tags: FEAT,FIX
+---
+
+## API Design
+
+- Use RESTful naming: plural nouns for collections, singular for resources
+- Return { data, error } shape from all endpoints
+- Use proper HTTP status codes (201 for created, 404 for not found)
+- Validate request bodies at the handler level
+```
+
+The YAML frontmatter fields:
+- `name` — skill identifier (matches filename)
+- `description` — one-line summary
+- `tags` — comma-separated uppercase tags. Empty = universal skill.
+
+### CLI commands
+
+```bash
+# Create a skill for specific task types
+skynet add-skill api-design --tags "FEAT,FIX" --description "REST API conventions"
+
+# Create a universal skill (loads for all tasks)
+skynet add-skill code-quality --description "General code standards"
+
+# List all skills
+skynet list-skills
+```
+
+### Template skills
+
+`skynet init` scaffolds three starter skills:
+
+| Skill | Tags | Description |
+|-------|------|-------------|
+| `code-quality` | *(all)* | General code quality standards |
+| `testing` | `TEST,FIX` | Testing conventions |
+| `infrastructure` | `INFRA` | Shell and infrastructure conventions |
+
+Edit these to match your project, or delete the ones you don't need.
+
+### Agent compatibility
+
+Skills work identically across all agents (Claude Code, Codex, custom plugins) because they're injected directly into the prompt — not through any agent-specific mechanism. The same skills produce the same behavior regardless of which agent runs the task.
 
 ## Agent Plugins
 

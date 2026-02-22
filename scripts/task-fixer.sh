@@ -409,6 +409,10 @@ fi
 # Get git diff of what was changed on the failed branch vs main
 previous_diff=$(cd "$PROJECT_DIR" && git diff "${SKYNET_MAIN_BRANCH}...${branch_name}" 2>/dev/null | head -500 || echo "No diff available (branch may have no changes yet)")
 
+# Load skills matching this task's tag
+_fixer_task_type="$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')"
+SKILL_CONTENT="$(get_skills_for_tag "${_fixer_task_type:-}")"
+
 PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
 A previous attempt to implement this task FAILED. Your job is to diagnose why and fix it.
@@ -441,7 +445,11 @@ $previous_diff
 If this task is genuinely impossible right now (missing API key, external dependency, etc.):
 - Write the specific blocker to $BLOCKERS with date and task name
 - Do NOT leave broken code committed
+${SKILL_CONTENT:+
+## Project Skills
 
+$SKILL_CONTENT
+}
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
 # --- Graceful shutdown checkpoint (before fix attempt) ---

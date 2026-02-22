@@ -222,6 +222,21 @@ export async function initCommand(options: InitOptions) {
     }
   }
 
+  // Copy skill templates
+  const skillsDir = join(devDir, "skills");
+  mkdirSync(skillsDir, { recursive: true });
+  const skillsTemplateDir = join(TEMPLATES_DIR, "skills");
+  if (existsSync(skillsTemplateDir)) {
+    const skillFiles = readdirSync(skillsTemplateDir).filter((f: string) => f.endsWith(".md"));
+    for (const file of skillFiles) {
+      const targetPath = join(skillsDir, file);
+      if (!existsSync(targetPath)) {
+        writeFileSync(targetPath, readFileSync(join(skillsTemplateDir, file), "utf-8"));
+        console.log(`    .dev/skills/${file}`);
+      }
+    }
+  }
+
   // Interactive mission template generator
   if (isInteractive()) {
     const defineMission = await prompt("Would you like to define your project's mission now? (Y/n)", "Y");

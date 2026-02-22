@@ -26,6 +26,8 @@ import { importCommand } from "./commands/import.js";
 import { completionsCommand } from "./commands/completions.js";
 import { testNotifyCommand } from "./commands/test-notify.js";
 import { changelogCommand } from "./commands/changelog.js";
+import { addSkillCommand } from "./commands/add-skill.js";
+import { listSkillsCommand } from "./commands/list-skills.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -114,6 +116,22 @@ program
   .option("--position <position>", "Insert position: top or bottom", "top")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(addTaskCommand);
+
+program
+  .command("add-skill")
+  .description("Create a new skill file for worker prompt injection")
+  .argument("<name>", "Skill name (e.g. testing, api-conventions)")
+  .option("--tags <tags>", "Comma-separated task tags this skill applies to (e.g. TEST,FIX)")
+  .option("--description <desc>", "Short description of the skill")
+  .option("--force", "Overwrite existing skill file")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(addSkillCommand);
+
+program
+  .command("list-skills")
+  .description("List all skill files and their tag bindings")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(listSkillsCommand);
 
 program
   .command("run")
