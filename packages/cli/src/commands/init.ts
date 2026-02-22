@@ -3,6 +3,7 @@ import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
+import { shellEscape } from "../utils/shellEscape";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -152,9 +153,6 @@ export async function initCommand(options: InitOptions) {
   // Create directories
   mkdirSync(join(devDir, "prompts"), { recursive: true });
   mkdirSync(scriptsTarget, { recursive: true });
-
-  // Shell-escape a value for safe embedding in bash double-quoted strings
-  const shellEscape = (s: string) => s.replace(/["\\$`!]/g, "\\$&");
 
   // Generate skynet.config.sh from template
   let configContent = readFileSync(join(TEMPLATES_DIR, "skynet.config.sh"), "utf-8");

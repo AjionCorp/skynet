@@ -8,6 +8,9 @@ interface CleanupOptions {
   force?: boolean;
 }
 
+function isValidBranchName(branch: string): boolean {
+  return /^[a-zA-Z0-9._\/-]+$/.test(branch);
+}
 
 function slugify(title: string): string {
   return title
@@ -35,6 +38,7 @@ function getDevBranches(projectDir: string): string[] {
 }
 
 function getMergedBranches(projectDir: string, mainBranch: string): Set<string> {
+  if (!isValidBranchName(mainBranch)) return new Set();
   try {
     const output = execSync(`git branch --merged ${mainBranch} --list 'dev/*'`, {
       cwd: projectDir,
@@ -148,7 +152,7 @@ export async function cleanupCommand(options: CleanupOptions) {
       continue;
     }
 
-    const slug = branch.replace(new RegExp(`^${branchPrefix.replace("/", "\\/")}`), "");
+    const slug = branch.replace(new RegExp(`^${branchPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`), "");
     if (claimedSlugs.has(slug)) {
       branches.push({ name: branch, status: "active", reason: "claimed [>] in backlog" });
       continue;
@@ -187,6 +191,7 @@ export async function cleanupCommand(options: CleanupOptions) {
   if (!dryRun && deletable.length > 0) {
     console.log("");
     for (const b of deletable) {
+      if (!isValidBranchName(b.name)) continue;
       try {
         execSync(`git branch -D ${b.name}`, {
           cwd: projectDir,

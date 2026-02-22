@@ -180,6 +180,8 @@ _release_failed_lock() {
 
 cleanup_on_exit() {
   local exit_code=$?
+  # Release merge lock if held
+  release_merge_lock 2>/dev/null || true
   # Abort any in-progress git merge on the main branch
   cd "$PROJECT_DIR" 2>/dev/null || true
   if [ -f "$PROJECT_DIR/.git/MERGE_HEAD" ]; then
@@ -497,6 +499,28 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     _gate_idx=$((_gate_idx + 1))
   done
 
+  # --- Shell syntax gate: bash -n on changed .sh files ---
+  if [ -z "$_gate_failed" ]; then
+    _sh_ok=true
+    if _changed_sh=$(cd "$WORKTREE_DIR" && git diff --name-only "$SKYNET_MAIN_BRANCH"..."$branch_name" -- '*.sh' 2>&1); then
+      if [ -n "$_changed_sh" ]; then
+        log "Checking shell syntax for changed .sh files..."
+        while IFS= read -r _sh_file; do
+          [ -z "$_sh_file" ] && continue
+          if [ -f "$WORKTREE_DIR/$_sh_file" ] && ! bash -n "$WORKTREE_DIR/$_sh_file" 2>>"$LOG"; then
+            log "Shell syntax error in $_sh_file"
+            _sh_ok=false
+          fi
+        done <<< "$_changed_sh"
+      fi
+    else
+      log "WARNING: git diff failed for bash -n gate — skipping"
+    fi
+    if ! $_sh_ok; then
+      _gate_failed="bash -n (shell syntax check)"
+    fi
+  fi
+
   if [ -n "$_gate_failed" ]; then
     _gate_label=$(echo "$_gate_failed" | awk '{print $NF}')
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
@@ -517,6 +541,17 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     fi
 
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
+
+    # Acquire merge mutex — prevents concurrent merge races between workers/fixers
+    if ! acquire_merge_lock; then
+      log "Could not acquire merge lock — another worker is merging. Keeping as pending for retry."
+      cleanup_worktree
+      new_attempts=$((fix_attempts + 1))
+      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
+      _CURRENT_TASK_TITLE=""
+      exit 0
+    fi
+
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"
     git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
@@ -561,6 +596,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
 
       _CURRENT_TASK_TITLE=""
       log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
+      release_merge_lock
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
       emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
       echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
@@ -569,6 +605,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       new_attempts=$((fix_attempts + 1))
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
+      release_merge_lock
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
       emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
       echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"

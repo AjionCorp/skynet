@@ -303,6 +303,8 @@ _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
   # Stop heartbeat writer
   _stop_heartbeat 2>/dev/null || true
+  # Release merge lock if held
+  release_merge_lock 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
@@ -632,6 +634,41 @@ EOF
 
   log "All quality gates passed."
 
+  # --- Shell syntax gate: bash -n on changed .sh files ---
+  _sh_ok=true
+  if _changed_sh=$(cd "$WORKTREE_DIR" && git diff --name-only "$SKYNET_MAIN_BRANCH"..."$branch_name" -- '*.sh' 2>&1); then
+    if [ -n "$_changed_sh" ]; then
+      log "Checking shell syntax for changed .sh files..."
+      while IFS= read -r _sh_file; do
+        [ -z "$_sh_file" ] && continue
+        if [ -f "$WORKTREE_DIR/$_sh_file" ] && ! bash -n "$WORKTREE_DIR/$_sh_file" 2>>"$LOG"; then
+          log "Shell syntax error in $_sh_file"
+          _sh_ok=false
+        fi
+      done <<< "$_changed_sh"
+    fi
+  else
+    log "WARNING: git diff failed for bash -n gate — skipping"
+  fi
+  if ! $_sh_ok; then
+    _gate_failed="bash -n (shell syntax check)"
+  fi
+
+  if [ -n "${_gate_failed:-}" ]; then
+    _gate_label="bash-n"
+    log "SHELL SYNTAX CHECK FAILED. Branch NOT merged."
+    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (shell syntax error)"
+    emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: bash-n)"
+    cleanup_worktree
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | bash-n failed | 0 | pending |" >> "$FAILED"
+      mark_in_backlog "- [>] $task_title" "- [x] $task_title _(bash-n failed)_"
+    fi
+    _CURRENT_TASK_TITLE=""
+    _one_shot_exit=1
+    continue
+  fi
+
   # --- Non-blocking: Check server logs for runtime errors ---
   if [ -f "$SERVER_LOG" ]; then
     log "Checking server logs for runtime errors..."
@@ -650,6 +687,15 @@ EOF
 
   # --- All gates passed -- merge to main ---
   log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
+
+  # Acquire merge mutex — prevents concurrent merge races between workers/fixers
+  if ! acquire_merge_lock; then
+    log "Could not acquire merge lock — another worker is merging. Retrying task later."
+    unclaim_task "$task_title"
+    _CURRENT_TASK_TITLE=""
+    cleanup_worktree "$branch_name"
+    continue
+  fi
 
   # Remove worktree first (branch stays), then merge from main repo
   cleanup_worktree
@@ -688,6 +734,7 @@ EOF
     fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
+    release_merge_lock
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
     continue
   fi
@@ -716,8 +763,10 @@ EOF
   # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
     git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
-    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
+    git commit -m "chore(${task_type:-pipeline}): $task_title" --no-verify 2>/dev/null || true
   fi
+
+  release_merge_lock
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)

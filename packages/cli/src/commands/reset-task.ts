@@ -26,7 +26,12 @@ function atomicWrite(filePath: string, content: string) {
   renameSync(tmpPath, filePath);
 }
 
+function isValidBranchName(branch: string): boolean {
+  return /^[a-zA-Z0-9._\/-]+$/.test(branch);
+}
+
 function branchExists(branch: string, projectDir: string): boolean {
+  if (!isValidBranchName(branch)) return false;
   try {
     execSync(`git show-ref --verify --quiet refs/heads/${branch}`, {
       cwd: projectDir,
@@ -39,6 +44,7 @@ function branchExists(branch: string, projectDir: string): boolean {
 }
 
 function deleteBranch(branch: string, projectDir: string) {
+  if (!isValidBranchName(branch)) return;
   execSync(`git branch -D ${branch}`, {
     cwd: projectDir,
     stdio: "inherit",

@@ -24,3 +24,11 @@ playwright-report/
 .dev/skynet.config.sh
 .dev/scripts/
 .dev/prompts/
+.dev/completed-archive.md
+.dev/events.log.*
+.dev/fixer-stats.log.bak-*
+.dev/*-telemetry.json
+.dev/worker-*.heartbeat
+.dev/pipeline-paused
+.dev/fixer-cooldown
+.dev/worktrees/

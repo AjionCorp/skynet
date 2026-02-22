@@ -18,6 +18,7 @@ export function getWorkerStatus(lockFile: string): {
     } catch {
       pid = readFileSync(lockFile, "utf-8").trim();
     }
+    if (!/^\d+$/.test(pid)) return { running: false, pid: null, ageMs: null };
     execSync(`kill -0 ${pid}`, { stdio: "ignore" });
     const age = Date.now() - statSync(lockFile).mtimeMs;
     return { running: true, pid: Number(pid), ageMs: age };

@@ -19,6 +19,7 @@ export function getLastLogLine(
   devDir: string,
   script: string
 ): string | null {
+  if (!/^[a-z0-9-]+$/i.test(script)) return null;
   try {
     const line = execSync(`tail -1 "${devDir}/scripts/${script}.log"`, {
       encoding: "utf-8",

@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } f
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
+import { shellEscape, validateShellValue } from "../utils/shellEscape";
 
 interface ConfigOptions {
   dir?: string;
@@ -256,6 +257,13 @@ export async function configSetCommand(key: string, value: string, options: Conf
     process.exit(1);
   }
 
+  // Reject values with obvious shell injection patterns
+  const shellError = validateShellValue(value);
+  if (shellError) {
+    console.error(`\n  Error: ${shellError}\n`);
+    process.exit(1);
+  }
+
   // Replace the value on the target line, preserving export prefix and comments
   const line = lines[targetLine];
   const hasExport = line.startsWith("export ");
@@ -265,7 +273,7 @@ export async function configSetCommand(key: string, value: string, options: Conf
   const commentMatch = line.match(/"[^"]*"\s*(#.*)$/);
   const inlineComment = commentMatch ? `  ${commentMatch[1]}` : "";
 
-  lines[targetLine] = `${prefix}${key}="${value}"${inlineComment}`;
+  lines[targetLine] = `${prefix}${key}="${shellEscape(value)}"${inlineComment}`;
 
   // Atomic write: write to .tmp then rename
   const tmpPath = configPath + ".tmp";

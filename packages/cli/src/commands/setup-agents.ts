@@ -144,7 +144,7 @@ function setupCron(
 
     entries.push(`# ${cronDef.description}`);
     entries.push(
-      `${cronDef.schedule} SKYNET_DEV_DIR=${devDir} /bin/bash ${scriptPath} >> ${logPath} 2>&1`,
+      `${cronDef.schedule} SKYNET_DEV_DIR="${devDir}" /bin/bash "${scriptPath}" >> "${logPath}" 2>&1`,
     );
   }
 
