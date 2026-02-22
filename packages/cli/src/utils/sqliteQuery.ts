@@ -12,7 +12,7 @@ export function sqliteQuery(devDir: string, sql: string): string {
   if (!existsSync(dbPath)) {
     throw new Error("skynet.db not found");
   }
-  const result = spawnSync("sqlite3", ["-separator", "|", dbPath, sql], {
+  const result = spawnSync("sqlite3", ["-separator", "\x1f", dbPath, sql], {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 5000,
@@ -25,12 +25,13 @@ export function sqliteQuery(devDir: string, sql: string): string {
 }
 
 /**
- * Run a SQLite query and return rows as arrays of strings (pipe-delimited).
+ * Run a SQLite query and return rows as arrays of strings.
+ * Uses ASCII Unit Separator (0x1F) to avoid field corruption from pipes in data.
  */
 export function sqliteRows(devDir: string, sql: string): string[][] {
   const raw = sqliteQuery(devDir, sql);
   if (!raw) return [];
-  return raw.split("\n").map((line) => line.split("|"));
+  return raw.split("\n").map((line) => line.split("\x1f"));
 }
 
 /**

@@ -135,10 +135,9 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
       );
     }
   } catch (err) {
-    // SQLite write failed — file write already succeeded; log for diagnostics
-    if (process.env.SKYNET_DEBUG) {
-      console.error(`  [debug] SQLite dual-write failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    // SQLite write failed — file write already succeeded; warn operator
+    console.error(`  WARNING: SQLite dual-write failed — task exists in backlog.md but not in skynet.db.`);
+    console.error(`           Workers using SQLite will not see this task. Error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   console.log(`\n  Added task to backlog (position: ${position}):\n`);

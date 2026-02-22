@@ -433,9 +433,9 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   else
     _db_result=$(db_claim_next_task "$WORKER_ID")
     if [ -n "$_db_result" ]; then
-      _db_task_id=$(echo "$_db_result" | cut -d'|' -f1)
-      _db_title=$(echo "$_db_result" | cut -d'|' -f2)
-      _db_tag=$(echo "$_db_result" | cut -d'|' -f3)
+      _db_task_id=$(echo "$_db_result" | cut -d$'\x1f' -f1)
+      _db_title=$(echo "$_db_result" | cut -d$'\x1f' -f2)
+      _db_tag=$(echo "$_db_result" | cut -d$'\x1f' -f3)
       next_task="- [ ] [${_db_tag}] ${_db_title}"
       # Backward compat: also mark [>] in backlog file
       acquire_lock && {

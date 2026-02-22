@@ -237,14 +237,14 @@ _consec_all_fail=false
 _db_last5=$(db_get_consecutive_failures 5 2>/dev/null || true)
 if [ -n "$_db_last5" ]; then
   _fail_count=0; _total_count=0
-  while IFS='|' read -r _result; do
+  while IFS=$'\x1f' read -r _result; do
     [ -z "$_result" ] && continue
     _total_count=$((_total_count + 1))
     [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
   done <<< "$_db_last5"
   [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
 fi
-# Fallback: file-based check
+# Fallback: file-based check (pipe-delimited file format — keep IFS='|')
 if ! $_consec_all_fail && [ -f "$FIXER_STATS" ]; then
   _last5=$(tail -5 "$FIXER_STATS")
   _fail_count=0; _total_count=0
@@ -270,7 +270,7 @@ _db_task_id=""
 # Try SQLite first for atomic claim
 _db_failures=$(db_get_pending_failures 2>/dev/null || true)
 if [ -n "$_db_failures" ]; then
-  while IFS='|' read -r _fid _ftitle _fbranch _ferror _fattempts _fstatus; do
+  while IFS=$'\x1f' read -r _fid _ftitle _fbranch _ferror _fattempts _fstatus; do
     [ -z "$_fid" ] && continue
     if ! echo "$_fattempts" | grep -Eq '^[0-9]+$'; then _fattempts=0; fi
     if [ "$_fattempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then

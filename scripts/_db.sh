@@ -5,6 +5,9 @@
 
 DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 
+# Unit Separator (0x1F) for sqlite3 output — safe for fields containing pipes.
+_DB_SEP=$'\x1f'
+
 # --- SQL injection prevention ---
 _sql_escape() { echo "$1" | sed "s/'/''/g"; }
 # Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
@@ -29,7 +32,7 @@ _sql_exec() {
 # Error-checked sqlite3 wrapper that returns pipe-delimited rows.
 _sql_query() {
   local _sql_err
-  _sql_err=$(sqlite3 -separator '|' "$DB_PATH" "$1" 2>&1)
+  _sql_err=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "$1" 2>&1)
   local _sql_rc=$?
   if [ $_sql_rc -ne 0 ]; then
     local _sql_ctx="${1:0:200}"
@@ -153,7 +156,7 @@ SCHEMA
 
 # Output: pipe-delimited rows: id|title|tag|description|blocked_by|priority
 db_get_pending_tasks() {
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, tag, description, blocked_by, priority FROM tasks WHERE status = 'pending' ORDER BY priority ASC;"
 }
 
@@ -186,7 +189,7 @@ db_claim_next_task() {
     _completed_titles=""
   fi
 
-  while IFS='|' read -r tid ttitle tblocked; do
+  while IFS="$_DB_SEP" read -r tid ttitle tblocked; do
     [ -z "$tid" ] && continue
     local blocked=false
     if [ -n "$tblocked" ]; then
@@ -213,12 +216,12 @@ db_claim_next_task() {
         SELECT changes();
       ")
       if [ "$changed" = "1" ]; then
-        result=$(sqlite3 -separator '|' "$DB_PATH" \
+        result=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
           "SELECT id, title, tag, description, branch FROM tasks WHERE id=$_int_tid;")
         break
       fi
     fi
-  done < <(sqlite3 -separator '|' "$DB_PATH" \
+  done < <(sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, blocked_by FROM tasks WHERE status='pending' ORDER BY priority ASC;")
   echo "$result"
 }
@@ -310,7 +313,7 @@ db_get_task_id_by_title() {
 # Get task row by ID. Output: id|title|tag|status|branch|error|attempts
 db_get_task() {
   local task_id; task_id=$(_sql_int "$1")
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, tag, status, branch, error, attempts FROM tasks WHERE id=$task_id;"
 }
 
@@ -320,7 +323,7 @@ db_get_task() {
 
 # Output: id|title|branch|error|attempts|status (oldest first)
 db_get_pending_failures() {
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, branch, error, attempts, status FROM tasks WHERE status='failed' ORDER BY failed_at ASC;"
 }
 
@@ -454,7 +457,7 @@ db_update_progress() {
 # Output: id|worker_type|status|current_task_id|task_title|branch|started_at|heartbeat_epoch|last_info
 db_get_worker_status() {
   local wid; wid=$(_sql_int "$1")
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, worker_type, status, current_task_id, task_title, branch, started_at, heartbeat_epoch, last_info
      FROM workers WHERE id=$wid;"
 }
@@ -463,7 +466,7 @@ db_get_worker_status() {
 db_get_stale_heartbeats() {
   local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, heartbeat_epoch, ($now - heartbeat_epoch) as age_secs
      FROM workers
      WHERE heartbeat_epoch IS NOT NULL AND heartbeat_epoch > 0
@@ -475,7 +478,7 @@ db_get_stale_heartbeats() {
 db_get_hung_workers() {
   local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, progress_epoch, ($now - progress_epoch) as age_secs
      FROM workers
      WHERE status = 'in_progress'
@@ -501,7 +504,7 @@ db_resolve_blocker() {
 }
 
 db_get_active_blockers() {
-  sqlite3 -separator '|' "$DB_PATH" "SELECT id, description, task_title, created_at FROM blockers WHERE status='active' ORDER BY created_at ASC;"
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT id, description, task_title, created_at FROM blockers WHERE status='active' ORDER BY created_at ASC;"
 }
 
 db_count_active_blockers() {
@@ -524,7 +527,7 @@ db_add_event() {
 
 db_get_recent_events() {
   local limit; limit=$(_sql_int "${1:-100}")
-  sqlite3 -separator '|' "$DB_PATH" "SELECT epoch, event, detail, worker_id FROM events ORDER BY epoch DESC LIMIT $limit;"
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT epoch, event, detail, worker_id FROM events ORDER BY epoch DESC LIMIT $limit;"
 }
 
 # ============================================================
@@ -544,7 +547,7 @@ db_add_fixer_stat() {
 # Get last N fixer results (for consecutive failure detection)
 db_get_consecutive_failures() {
   local count; count=$(_sql_int "${1:-5}")
-  sqlite3 -separator '|' "$DB_PATH" "SELECT result FROM fixer_stats ORDER BY epoch DESC LIMIT $count;"
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT result FROM fixer_stats ORDER BY epoch DESC LIMIT $count;"
 }
 
 db_get_fix_rate_24h() {
@@ -616,6 +619,6 @@ db_task_exists() {
 
 # Get all tasks for export (pipe-delimited)
 db_export_all_tasks() {
-  sqlite3 -separator '|' "$DB_PATH" \
+  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, tag, description, status, blocked_by, branch, worker_id, error, attempts, duration, notes, priority, created_at, updated_at, claimed_at, completed_at, failed_at FROM tasks ORDER BY id;"
 }

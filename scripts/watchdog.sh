@@ -470,7 +470,7 @@ done
 _hung_stale_secs=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
 _hung_workers=$(db_get_hung_workers "$_hung_stale_secs" 2>/dev/null || true)
 if [ -n "$_hung_workers" ]; then
-  while IFS='|' read -r _hwid _hprog _hage; do
+  while IFS=$'\x1f' read -r _hwid _hprog _hage; do
     [ -z "$_hwid" ] && continue
     _hw_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${_hwid}.lock"
     _hw_pid=""

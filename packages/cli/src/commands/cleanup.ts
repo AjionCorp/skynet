@@ -101,7 +101,9 @@ function getFailedBranches(devDir: string): Set<string> {
     if (!line.startsWith("|") || line.includes("| Date |") || line.includes("------")) continue;
     const cols = line.split("|").map((c) => c.trim());
     const branch = cols[3] || "";
-    const status = cols[6] || "";
+    // Status is always the second-to-last field (before trailing empty cell).
+    // Using a fixed index like cols[6] breaks if any field contains a pipe.
+    const status = cols.length >= 3 ? cols[cols.length - 2] : "";
     if (branch && status === "pending") {
       branches.add(branch);
     }
