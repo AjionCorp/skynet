@@ -670,6 +670,7 @@ db_export_backlog() {
     local _done_count
     _done_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='done';" 2>/dev/null || echo 0)
     if [ "${_done_count:-0}" -gt 0 ]; then
+      echo ""
       echo "# Recent checked history (last 30)"
       sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
         "SELECT tag, title, description, blocked_by, notes FROM tasks
@@ -694,6 +695,7 @@ db_export_completed() {
     echo "# Completed Tasks"
     echo ""
     echo "| Date | Task | Branch | Duration | Notes |"
+    echo "|------|------|--------|----------|-------|"
     sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
       "SELECT COALESCE(completed_at,''), tag, title, COALESCE(branch,''), COALESCE(duration,''), COALESCE(notes,'')
        FROM tasks

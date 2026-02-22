@@ -692,6 +692,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       # Regenerate state files from SQLite (authoritative source)
       db_export_state_files
 
+      # Commit pipeline status updates BEFORE smoke test so revert can undo both
+      git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
+      git commit -m "chore: update pipeline status after fixing $task_title" --no-verify 2>/dev/null || true
+
       # --- Post-merge smoke test (if enabled) ---
       if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
         log "Running post-merge smoke test..."
@@ -712,10 +716,6 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         fi
         log "Post-merge smoke test passed."
       fi
-
-      # Commit pipeline status updates
-      git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
-      git commit -m "chore: update pipeline status after fixing $task_title" --no-verify 2>/dev/null || true
 
       # Push merged changes to origin (while still holding merge lock)
       if ! git_push_with_retry; then
