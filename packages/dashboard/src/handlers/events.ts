@@ -13,8 +13,8 @@ export function createEventsHandler(config: SkynetConfig) {
         db.countPending(); // verify DB is initialized
         const entries = db.getRecentEvents(100);
         return Response.json({ data: entries, error: null });
-      } catch {
-        // SQLite unavailable or uninitialized — fall through to file-based parsing
+      } catch (sqliteErr) {
+        console.warn(`[events] SQLite fallback: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
       }
 
       let raw: string;

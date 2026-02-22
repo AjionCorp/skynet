@@ -337,9 +337,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         // Verify the DB is initialized (tables exist) with a cheap query
         db.countPending();
         usingSqlite = true;
-      } catch {
+      } catch (sqliteErr) {
         db = null;
-        // SQLite unavailable or uninitialized — fall through to file-based parsing
+        console.warn(`[pipeline-status] SQLite init failed, using files: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
       }
 
       const maxW = config.maxWorkers ?? 4;

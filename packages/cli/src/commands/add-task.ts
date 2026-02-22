@@ -124,8 +124,11 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
         `${position === "top" ? 0 : 999}, '${root}', '${now}', '${now}');`
       );
     }
-  } catch {
-    // SQLite write failed — file write already succeeded
+  } catch (err) {
+    // SQLite write failed — file write already succeeded; log for diagnostics
+    if (process.env.SKYNET_DEBUG) {
+      console.error(`  [debug] SQLite dual-write failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   console.log(`\n  Added task to backlog (position: ${position}):\n`);

@@ -149,8 +149,10 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
           `WHERE title='${safeTitle}' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
         );
       }
-    } catch {
-      // SQLite update failed — file already updated
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) {
+        console.error(`  [debug] SQLite reset failed: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
     // --- Step 3: Find and uncheck corresponding backlog entry ---

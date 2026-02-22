@@ -103,8 +103,8 @@ export function createTasksHandlers(config: SkynetConfig) {
           },
           error: null,
         });
-      } catch {
-        // SQLite unavailable — fall through to file-based parsing
+      } catch (sqliteErr) {
+        console.warn(`[tasks GET] SQLite fallback: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
       }
 
       const raw = readFileSync(backlogPath, "utf-8");
@@ -260,8 +260,8 @@ export function createTasksHandlers(config: SkynetConfig) {
           const db = getSkynetDB(devDir);
           db.countPending(); // verify DB is initialized
           db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
-        } catch {
-          // SQLite write failed — file write already succeeded, so continue
+        } catch (sqliteErr) {
+          console.warn(`[tasks POST] SQLite dual-write failed: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
         }
 
         return Response.json({

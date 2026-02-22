@@ -8,6 +8,34 @@ DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 # --- SQL injection prevention ---
 _sql_escape() { echo "$1" | sed "s/'/''/g"; }
 
+# --- Error-checked sqlite3 wrapper for mutations ---
+# Usage: _sql_exec "SQL statement"
+# Logs to stderr and returns 1 on failure.
+_sql_exec() {
+  local _sql_err
+  _sql_err=$(sqlite3 "$DB_PATH" "$1" 2>&1)
+  local _sql_rc=$?
+  if [ $_sql_rc -ne 0 ]; then
+    log "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err" 2>/dev/null || echo "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err" >&2
+    return 1
+  fi
+  echo "$_sql_err"
+  return 0
+}
+
+# Error-checked sqlite3 wrapper that returns pipe-delimited rows.
+_sql_query() {
+  local _sql_err
+  _sql_err=$(sqlite3 -separator '|' "$DB_PATH" "$1" 2>&1)
+  local _sql_rc=$?
+  if [ $_sql_rc -ne 0 ]; then
+    log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err" >&2
+    return 1
+  fi
+  echo "$_sql_err"
+  return 0
+}
+
 # ============================================================
 # INITIALIZATION
 # ============================================================
@@ -17,6 +45,7 @@ db_init() {
   sqlite3 "$DB_PATH" <<'SCHEMA'
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
+PRAGMA busy_timeout = 5000;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,7 +171,7 @@ db_claim_next_task() {
         local dep_esc; dep_esc=$(_sql_escape "$dep")
         local dep_done
         dep_done=$(sqlite3 "$DB_PATH" \
-          "SELECT COUNT(*) FROM tasks WHERE title LIKE '%$dep_esc%' AND status IN ('completed','done','fixed','superseded');")
+          "SELECT COUNT(*) FROM tasks WHERE title='$dep_esc' AND status IN ('completed','done','fixed','superseded');")
         if [ "$dep_done" = "0" ]; then
           blocked=true; break
         fi
@@ -170,7 +199,7 @@ db_claim_next_task() {
 
 db_unclaim_task() {
   local task_id="$1"
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
     WHERE id=$task_id AND status='claimed';
   "
@@ -178,7 +207,7 @@ db_unclaim_task() {
 
 db_unclaim_task_by_title() {
   local title; title=$(_sql_escape "$1")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
     WHERE title='$title' AND status='claimed';
   "
@@ -189,7 +218,7 @@ db_complete_task() {
   local task_id="$1" branch="$2" duration="$3" duration_secs="${4:-0}" notes="${5:-success}"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local notes_esc; notes_esc=$(_sql_escape "$notes")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='completed', branch='$branch_esc',
       duration='$duration', duration_secs=$duration_secs, notes='$notes_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
@@ -202,7 +231,7 @@ db_fail_task() {
   local task_id="$1" branch="$2" error="$3"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='failed', branch='$branch_esc', error='$error_esc',
       failed_at=datetime('now'), updated_at=datetime('now')
     WHERE id=$task_id;
@@ -213,6 +242,7 @@ db_fail_task() {
 db_add_task() {
   local title="$1" tag="${2:-FEAT}" desc="${3:-}" position="${4:-top}" blocked_by="${5:-}"
   local title_esc; title_esc=$(_sql_escape "$title")
+  local tag_esc; tag_esc=$(_sql_escape "$tag")
   local desc_esc; desc_esc=$(_sql_escape "$desc")
   local blocked_esc; blocked_esc=$(_sql_escape "$blocked_by")
   local norm_root
@@ -222,7 +252,7 @@ db_add_task() {
     sqlite3 "$DB_PATH" "UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');"
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
       SELECT last_insert_rowid();
     "
   else
@@ -230,7 +260,7 @@ db_add_task() {
     max_pri=$(sqlite3 "$DB_PATH" "SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed');")
     sqlite3 "$DB_PATH" "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', $max_pri);
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', $max_pri);
       SELECT last_insert_rowid();
     "
   fi
@@ -267,9 +297,10 @@ db_get_pending_failures() {
 
 db_claim_failure() {
   local task_id="$1" fixer_id="$2"
+  local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
   local changed
   changed=$(sqlite3 "$DB_PATH" "
-    UPDATE tasks SET status='fixing-$fixer_id', fixer_id=$fixer_id, updated_at=datetime('now')
+    UPDATE tasks SET status='fixing-$fixer_esc', fixer_id=$fixer_id, updated_at=datetime('now')
     WHERE id=$task_id AND status='failed';
     SELECT changes();
   ")
@@ -278,17 +309,19 @@ db_claim_failure() {
 
 db_unclaim_failure() {
   local fixer_id="$1"
+  local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
   sqlite3 "$DB_PATH" "
     UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
-    WHERE status='fixing-$fixer_id';
+    WHERE status='fixing-$fixer_esc';
   "
 }
 
 db_update_failure() {
   local task_id="$1" error="$2" attempts="$3" status="$4"
   local error_esc; error_esc=$(_sql_escape "$error")
-  sqlite3 "$DB_PATH" "
-    UPDATE tasks SET error='$error_esc', attempts=$attempts, status='$status', updated_at=datetime('now')
+  local status_esc; status_esc=$(_sql_escape "$status")
+  _sql_exec "
+    UPDATE tasks SET error='$error_esc', attempts=$attempts, status='$status_esc', updated_at=datetime('now')
     WHERE id=$task_id;
   "
 }
@@ -297,7 +330,7 @@ db_fix_task() {
   local task_id="$1" branch="$2" attempts="$3" error="${4:-}"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='fixed', branch='$branch_esc', attempts=$attempts, error='$error_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
     WHERE id=$task_id;
@@ -306,12 +339,12 @@ db_fix_task() {
 
 db_block_task() {
   local task_id="$1"
-  sqlite3 "$DB_PATH" "UPDATE tasks SET status='blocked', updated_at=datetime('now') WHERE id=$task_id;"
+  _sql_exec "UPDATE tasks SET status='blocked', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
 db_supersede_task() {
   local task_id="$1"
-  sqlite3 "$DB_PATH" "UPDATE tasks SET status='superseded', updated_at=datetime('now') WHERE id=$task_id;"
+  _sql_exec "UPDATE tasks SET status='superseded', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
 # Auto-supersede failed tasks matching completed roots. Returns count of changes.
@@ -331,15 +364,17 @@ db_auto_supersede_completed() {
 
 db_set_worker_status() {
   local wid="$1" wtype="$2" status="$3" task_id="${4:-}" title="${5:-}" branch="${6:-}"
+  local wtype_esc; wtype_esc=$(_sql_escape "$wtype")
+  local status_esc; status_esc=$(_sql_escape "$status")
   local title_esc; title_esc=$(_sql_escape "$title")
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local started_val="NULL"
   [ "$status" = "in_progress" ] && started_val="datetime('now')"
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     INSERT INTO workers (id, worker_type, status, current_task_id, task_title, branch, started_at, updated_at)
-    VALUES ($wid, '$wtype', '$status', ${task_id:-NULL}, '$title_esc', '$branch_esc', $started_val, datetime('now'))
+    VALUES ($wid, '$wtype_esc', '$status_esc', ${task_id:-NULL}, '$title_esc', '$branch_esc', $started_val, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
-      worker_type='$wtype', status='$status', current_task_id=${task_id:-NULL},
+      worker_type='$wtype_esc', status='$status_esc', current_task_id=${task_id:-NULL},
       task_title='$title_esc', branch='$branch_esc',
       started_at=$started_val, updated_at=datetime('now');
   "
@@ -348,7 +383,7 @@ db_set_worker_status() {
 db_set_worker_idle() {
   local wid="$1" info="${2:-}"
   local info_esc; info_esc=$(_sql_escape "$info")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     INSERT INTO workers (id, status, task_title, branch, started_at, last_info, updated_at)
     VALUES ($wid, 'idle', '', '', NULL, '$info_esc', datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
@@ -360,7 +395,7 @@ db_set_worker_idle() {
 db_update_heartbeat() {
   local wid="$1"
   local epoch; epoch=$(date +%s)
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     INSERT INTO workers (id, heartbeat_epoch, updated_at)
     VALUES ($wid, $epoch, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET heartbeat_epoch=$epoch, updated_at=datetime('now');
@@ -394,12 +429,12 @@ db_add_blocker() {
   local desc="$1" task="${2:-}"
   local desc_esc; desc_esc=$(_sql_escape "$desc")
   local task_esc; task_esc=$(_sql_escape "$task")
-  sqlite3 "$DB_PATH" "INSERT INTO blockers (description, task_title, status) VALUES ('$desc_esc', '$task_esc', 'active');"
+  _sql_exec "INSERT INTO blockers (description, task_title, status) VALUES ('$desc_esc', '$task_esc', 'active');"
 }
 
 db_resolve_blocker() {
   local bid="$1"
-  sqlite3 "$DB_PATH" "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE id=$bid;"
+  _sql_exec "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE id=$bid;"
 }
 
 db_get_active_blockers() {
@@ -419,7 +454,7 @@ db_add_event() {
   local detail_esc; detail_esc=$(_sql_escape "$detail")
   local event_esc; event_esc=$(_sql_escape "$event")
   local epoch; epoch=$(date +%s)
-  sqlite3 "$DB_PATH" "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$event_esc', '$detail_esc', ${wid:-NULL});"
+  _sql_exec "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$event_esc', '$detail_esc', ${wid:-NULL});"
 }
 
 db_get_recent_events() {
@@ -433,9 +468,10 @@ db_get_recent_events() {
 
 db_add_fixer_stat() {
   local result="$1" title="$2" fixer_id="${3:-}"
+  local result_esc; result_esc=$(_sql_escape "$result")
   local title_esc; title_esc=$(_sql_escape "$title")
   local epoch; epoch=$(date +%s)
-  sqlite3 "$DB_PATH" "INSERT INTO fixer_stats (epoch, result, task_title, fixer_id) VALUES ($epoch, '$result', '$title_esc', ${fixer_id:-NULL});"
+  _sql_exec "INSERT INTO fixer_stats (epoch, result, task_title, fixer_id) VALUES ($epoch, '$result_esc', '$title_esc', ${fixer_id:-NULL});"
 }
 
 # Get last N fixer results (for consecutive failure detection)

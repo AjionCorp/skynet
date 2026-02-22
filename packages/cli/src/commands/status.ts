@@ -172,8 +172,8 @@ export async function statusCommand(options: StatusOptions) {
       completedCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','done');")) || 0;
       failedPending = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='failed';")) || 0;
       failedFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
-    } catch {
-      // Fall through to file-based below
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite task counts: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -228,8 +228,8 @@ export async function statusCommand(options: StatusOptions) {
         const label = wtype === "fixer" ? `Fixer ${wid}` : `Worker ${wid}`;
         print(`    ${label}: [${wstatus}] ${shortTitle}${duration}`);
       }
-    } catch {
-      // Fall through to file-based
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite current tasks: ${err instanceof Error ? err.message : String(err)}`);
       hasActiveTasks = false;
     }
   }
@@ -299,8 +299,8 @@ export async function statusCommand(options: StatusOptions) {
       staleTasks24hCount = Number(sqliteScalar(devDir,
         `SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now') - julianday(started_at)) > 1;`
       )) || 0;
-    } catch {
-      // Fall through to file-based
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite heartbeats: ${err instanceof Error ? err.message : String(err)}`);
       staleHeartbeatCount = 0;
       staleTasks24hCount = 0;
     }
@@ -378,7 +378,8 @@ export async function statusCommand(options: StatusOptions) {
         const title = r[1] || "";
         return `${date}  ${title}`;
       });
-    } catch {
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite completions: ${err instanceof Error ? err.message : String(err)}`);
       recent = [];
     }
   }
@@ -414,7 +415,8 @@ export async function statusCommand(options: StatusOptions) {
   if (usingSqlite) {
     try {
       blockerCount = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM blockers WHERE status='active';")) || 0;
-    } catch {
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite blockers: ${err instanceof Error ? err.message : String(err)}`);
       blockerCount = 0;
     }
   }
@@ -455,7 +457,8 @@ export async function statusCommand(options: StatusOptions) {
       scrFixed = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='fixed';")) || 0;
       scrBlocked = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='blocked';")) || 0;
       scrSuperseded = Number(sqliteScalar(devDir, "SELECT COUNT(*) FROM tasks WHERE status='superseded';")) || 0;
-    } catch {
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite self-correction: ${err instanceof Error ? err.message : String(err)}`);
       scrFixed = 0;
     }
   }

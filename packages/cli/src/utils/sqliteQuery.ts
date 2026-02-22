@@ -1,9 +1,10 @@
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 
 /**
  * Run a SQLite query against the skynet.db database using the sqlite3 CLI.
+ * Uses spawnSync with array args to avoid shell metacharacter injection.
  * Returns raw stdout string. Throws on missing DB or query error.
  */
 export function sqliteQuery(devDir: string, sql: string): string {
@@ -11,11 +12,16 @@ export function sqliteQuery(devDir: string, sql: string): string {
   if (!existsSync(dbPath)) {
     throw new Error("skynet.db not found");
   }
-  return execSync(`sqlite3 -separator '|' "${dbPath}" "${sql.replace(/"/g, '\\"')}"`, {
+  const result = spawnSync("sqlite3", ["-separator", "|", dbPath, sql], {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 5000,
-  }).trim();
+  });
+  if (result.status !== 0) {
+    const stderr = (result.stderr || "").trim();
+    throw new Error(`sqlite3 query failed (exit ${result.status}): ${stderr}`);
+  }
+  return (result.stdout || "").trim();
 }
 
 /**

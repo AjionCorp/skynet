@@ -148,7 +148,8 @@ export async function cleanupCommand(options: CleanupOptions) {
       // Failed pending branches from SQLite
       const failedRows = sqliteRows(devDir, "SELECT branch FROM tasks WHERE status IN ('failed','fixing-1','fixing-2','fixing-3') AND branch IS NOT NULL AND branch != '';");
       failedPending = new Set(failedRows.map((r) => r[0]).filter(Boolean));
-    } catch {
+    } catch (err) {
+      if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite cleanup query: ${err instanceof Error ? err.message : String(err)}`);
       claimedSlugs = getClaimedSlugs(devDir);
       failedPending = getFailedBranches(devDir);
     }
