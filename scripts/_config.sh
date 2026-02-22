@@ -142,6 +142,41 @@ rotate_log_if_needed() {
   fi
 }
 
+# --- Git helpers ---
+# Pull from origin with retry. Returns 0 on success, 1 on failure.
+# Usage: git_pull_with_retry [max_attempts]
+git_pull_with_retry() {
+  local max_attempts="${1:-3}"
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if git pull origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+      return 0
+    fi
+    log "git pull failed (attempt $attempt/$max_attempts)"
+    attempt=$((attempt + 1))
+    [ "$attempt" -le "$max_attempts" ] && sleep "$((attempt * 2))"
+  done
+  log "ERROR: git pull failed after $max_attempts attempts"
+  return 1
+}
+
+# Push to origin with retry. Returns 0 on success, 1 on failure.
+# Usage: git_push_with_retry [max_attempts]
+git_push_with_retry() {
+  local max_attempts="${1:-3}"
+  local attempt=1
+  while [ "$attempt" -le "$max_attempts" ]; do
+    if git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+      return 0
+    fi
+    log "git push failed (attempt $attempt/$max_attempts)"
+    attempt=$((attempt + 1))
+    [ "$attempt" -le "$max_attempts" ] && sleep "$((attempt * 2))"
+  done
+  log "ERROR: git push failed after $max_attempts attempts"
+  return 1
+}
+
 # --- Backlog health validation ---
 # Checks: (1) no duplicate pending titles, (2) no orphaned [>] claims,
 # (3) blockedBy refs point to existing tasks. Auto-fixes orphaned claims.

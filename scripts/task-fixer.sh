@@ -605,7 +605,17 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
 
     cleanup_worktree  # Remove worktree, keep branch for merge
     cd "$PROJECT_DIR"
-    git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+    if ! git_pull_with_retry; then
+      log "Cannot pull main — skipping merge, unclaiming task."
+      [ -n "$_db_task_id" ] && db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+      if _acquire_failed_lock; then
+        sed_inplace "s/| fixing-${FIXER_ID} |/| pending |/g" "$FAILED"
+        _release_failed_lock
+      fi
+      _CURRENT_TASK_TITLE=""
+      release_merge_lock
+      continue
+    fi
 
     _merge_succeeded=false
     _err_trap=$(trap -p ERR || true)
@@ -617,7 +627,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       # Merge failed — attempt rebase recovery (max 1 attempt)
       log "Merge conflict — attempting rebase recovery..."
       git merge --abort 2>/dev/null || true
-      git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+      git_pull_with_retry 2 || true
       git checkout "$branch_name" 2>>"$LOG"
       if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
         log "Rebase succeeded — retrying merge."
@@ -666,6 +676,12 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           continue
         fi
         log "Post-merge smoke test passed."
+      fi
+
+      # Push merged changes to origin (while still holding merge lock)
+      if ! git_push_with_retry; then
+        log "WARNING: git push failed — fix merged locally but not on remote"
+        tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER FIXER*: push failed for $task_title — merged locally only"
       fi
 
       _CURRENT_TASK_TITLE=""

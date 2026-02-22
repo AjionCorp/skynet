@@ -748,7 +748,14 @@ EOF
   # Remove worktree first (branch stays), then merge from main repo
   cleanup_worktree
   cd "$PROJECT_DIR"
-  git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+  if ! git_pull_with_retry; then
+    log "Cannot pull main — skipping merge, unclaiming task."
+    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    unclaim_task "$task_title"
+    _CURRENT_TASK_TITLE=""
+    release_merge_lock
+    continue
+  fi
 
   _merge_succeeded=false
   if git merge "$branch_name" --no-edit 2>>"$LOG"; then
@@ -757,7 +764,7 @@ EOF
     # Merge failed — attempt rebase recovery (max 1 attempt)
     log "Merge conflict — attempting rebase recovery..."
     git merge --abort 2>/dev/null || true
-    git pull origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+    git_pull_with_retry 2 || true
     git checkout "$branch_name" 2>>"$LOG"
     if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
       log "Rebase succeeded — retrying merge."
@@ -846,6 +853,12 @@ EOF
       continue
     fi
     log "Post-merge smoke test passed."
+  fi
+
+  # Push merged changes to origin (while still holding merge lock)
+  if ! git_push_with_retry; then
+    log "WARNING: git push failed — changes are merged locally but not on remote"
+    tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: push failed for $task_title — merged locally only"
   fi
 
   release_merge_lock
