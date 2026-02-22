@@ -498,7 +498,7 @@ db_get_health_score() {
   failed_pending=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';")
   active_blockers=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM blockers WHERE status='active';")
   local stale_secs=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
-  stale_hbs=$(db_get_stale_heartbeats "$stale_secs" | grep -c '|' 2>/dev/null || echo 0)
+  stale_hbs=$(db_get_stale_heartbeats "$stale_secs" | grep -c '|') || stale_hbs=0
   stale_tasks=$(sqlite3 "$DB_PATH" \
     "SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now')-julianday(started_at))>1;")
   local score=$((100 - failed_pending * 5 - active_blockers * 10 - stale_hbs * 2 - stale_tasks))

@@ -300,8 +300,8 @@ validate_backlog() {
         continue
       fi
       local found=false
-      # Check backlog (any status line containing the dep as substring)
-      grep '^\- \[.\]' "$BACKLOG" 2>/dev/null | grep -qF "$dep" && found=true
+      # Check backlog (any status line containing the dep as a task title, not in blockedBy metadata)
+      grep '^\- \[.\]' "$BACKLOG" 2>/dev/null | sed 's/ | [bB]locked[bB]y:.*//' | grep -qF "$dep" && found=true
       # Check completed.md
       if ! $found && [ -f "$COMPLETED" ]; then
         grep -qF "$dep" "$COMPLETED" 2>/dev/null && found=true
