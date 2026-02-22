@@ -144,8 +144,9 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
     try {
       if (isSqliteReady(devDir)) {
         const safeTitle = sqlEscape(taskTitle);
+        const now = sqlEscape(new Date().toISOString());
         sqliteQuery(devDir,
-          `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${new Date().toISOString()}' ` +
+          `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${now}' ` +
           `WHERE title='${safeTitle}' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
         );
       }

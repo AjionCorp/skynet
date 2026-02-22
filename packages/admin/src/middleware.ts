@@ -5,9 +5,9 @@ import { safeCompare } from "./lib/auth";
 export function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
 
-  // No key configured: fail closed in production, allow in dev
+  // No key configured: allow only in explicit dev mode, fail closed otherwise
   if (!apiKey) {
-    if (process.env.NODE_ENV === "production") {
+    if (process.env.NODE_ENV !== "development") {
       const { pathname } = request.nextUrl;
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
