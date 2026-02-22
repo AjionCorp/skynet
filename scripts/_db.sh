@@ -16,7 +16,8 @@ _sql_exec() {
   _sql_err=$(sqlite3 "$DB_PATH" "$1" 2>&1)
   local _sql_rc=$?
   if [ $_sql_rc -ne 0 ]; then
-    log "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err" 2>/dev/null || echo "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err" >&2
+    local _sql_ctx="${1:0:200}"
+    log "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
     return 1
   fi
   echo "$_sql_err"
@@ -29,7 +30,8 @@ _sql_query() {
   _sql_err=$(sqlite3 -separator '|' "$DB_PATH" "$1" 2>&1)
   local _sql_rc=$?
   if [ $_sql_rc -ne 0 ]; then
-    log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err" >&2
+    local _sql_ctx="${1:0:200}"
+    log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
     return 1
   fi
   echo "$_sql_err"
@@ -42,7 +44,8 @@ _sql_query() {
 
 db_init() {
   [ -f "$DB_PATH" ] || true  # sqlite3 creates if missing
-  sqlite3 "$DB_PATH" <<'SCHEMA'
+  local _init_err
+  _init_err=$(sqlite3 "$DB_PATH" <<'SCHEMA' 2>&1
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 5000;
@@ -130,6 +133,12 @@ CREATE TABLE IF NOT EXISTS _metadata (
 
 INSERT OR IGNORE INTO _metadata (key, value) VALUES ('schema_version', '1');
 SCHEMA
+  )
+  local _init_rc=$?
+  if [ $_init_rc -ne 0 ]; then
+    echo "FATAL: db_init failed (rc=$_init_rc): $_init_err" >&2
+    exit 1
+  fi
 }
 
 # ============================================================
@@ -165,8 +174,11 @@ db_claim_next_task() {
 
   # Build a lookup set of completed task titles (one query)
   local _completed_titles
-  _completed_titles=$(sqlite3 "$DB_PATH" \
-    "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null) || true
+  if ! _completed_titles=$(sqlite3 "$DB_PATH" \
+    "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null); then
+    log "WARNING: db_claim_next_task: failed to load completed titles — all blocked tasks will stay blocked" 2>/dev/null || true
+    _completed_titles=""
+  fi
 
   while IFS='|' read -r tid ttitle tblocked; do
     [ -z "$tid" ] && continue

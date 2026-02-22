@@ -203,8 +203,9 @@ export async function doctorCommand(options: DoctorOptions) {
         console.log(`    Integrity: FAILED (${integrity})`);
         results.push({ name: "SQLite Database", status: "FAIL" });
       }
-    } catch {
-      console.log("    skynet.db: query error");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`    skynet.db: query error — ${msg}`);
       results.push({ name: "SQLite Database", status: "WARN" });
     }
   } else {

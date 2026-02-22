@@ -33,7 +33,9 @@ function getDevBranches(projectDir: string): string[] {
       .split("\n")
       .map((l) => l.replace(/^[*+\s]+/, "").trim())
       .filter(Boolean);
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Warning: failed to list dev branches — ${msg}`);
     return [];
   }
 }
@@ -52,7 +54,9 @@ function getMergedBranches(projectDir: string, mainBranch: string): Set<string> 
         .map((l) => l.replace(/^[*+\s]+/, "").trim())
         .filter(Boolean)
     );
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Warning: failed to list merged branches — ${msg}`);
     return new Set();
   }
 }
@@ -71,8 +75,9 @@ function getWorktreeBranches(projectDir: string): Set<string> {
         branches.add(match[1]);
       }
     }
-  } catch {
-    // ignore
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Warning: failed to list worktree branches — ${msg}`);
   }
   return branches;
 }
