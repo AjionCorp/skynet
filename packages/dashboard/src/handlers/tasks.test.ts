@@ -5,13 +5,15 @@ import type { SkynetConfig } from "../types";
 vi.mock("fs", () => ({
   readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
+  renameSync: vi.fn(),
   mkdirSync: vi.fn(),
   rmdirSync: vi.fn(),
 }));
 
-import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
+const mockRenameSync = vi.mocked(renameSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockRmdirSync = vi.mocked(rmdirSync);
 

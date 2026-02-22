@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { openSync, readFileSync, writeFileSync, unlinkSync, rmSync, constants } from "fs";
 import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
+import { parseBody } from "../lib/parse-body";
 
 const SCALABLE_TYPES = ["dev-worker", "task-fixer", "project-driver"] as const;
 
@@ -142,11 +143,14 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
 
   async function POST(request: Request): Promise<Response> {
     try {
-      const body = await request.json();
-      const { workerType, count } = body as {
+      const { data: body, error: parseError, status: parseStatus } = await parseBody<{
         workerType: string;
         count: number;
-      };
+      }>(request);
+      if (parseError || !body) {
+        return Response.json({ data: null, error: parseError }, { status: parseStatus ?? 400 });
+      }
+      const { workerType, count } = body;
 
       // Validate workerType (alphanumeric + hyphens only)
       if (

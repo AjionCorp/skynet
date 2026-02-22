@@ -558,7 +558,7 @@ describe("createWorkerScalingHandler", () => {
       }
     });
 
-    it("POST returns 500 on malformed JSON body", async () => {
+    it("POST returns 400 on malformed JSON body", async () => {
       const { POST } = createWorkerScalingHandler(makeConfig());
       const badRequest = new Request("http://localhost/api/workers/scale", {
         method: "POST",
@@ -568,7 +568,7 @@ describe("createWorkerScalingHandler", () => {
       const res = await POST(badRequest);
       const body = await res.json();
 
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
       expect(body.data).toBeNull();
       expect(typeof body.error).toBe("string");
     });

@@ -142,7 +142,7 @@ describe("createPipelineTriggerHandler", () => {
     expect(body.error).toBe("spawn failed");
   });
 
-  it("returns 500 when request body is not valid JSON", async () => {
+  it("returns 400 when request body is not valid JSON", async () => {
     const handler = createPipelineTriggerHandler(makeConfig());
     const req = new Request("http://localhost/api/pipeline/trigger", {
       method: "POST",
@@ -151,7 +151,7 @@ describe("createPipelineTriggerHandler", () => {
     });
     const res = await handler(req);
     const body = await res.json();
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(400);
     expect(body.data).toBeNull();
     expect(body.error).toBeTruthy();
   });

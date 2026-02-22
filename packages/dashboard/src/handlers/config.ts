@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
 import type { SkynetConfig } from "../types";
+import { parseBody } from "../lib/parse-body";
 
 /**
  * Parse a skynet.config.sh file into key-value pairs.
@@ -153,8 +154,11 @@ export function createConfigHandler(config: SkynetConfig) {
         );
       }
 
-      const body = await request.json();
-      const { updates } = body as { updates: Record<string, string> };
+      const { data: body, error: parseError, status: parseStatus } = await parseBody<{ updates: Record<string, string> }>(request);
+      if (parseError || !body) {
+        return Response.json({ data: null, error: parseError }, { status: parseStatus ?? 400 });
+      }
+      const { updates } = body;
 
       if (!updates || typeof updates !== "object") {
         return Response.json(

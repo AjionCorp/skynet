@@ -204,6 +204,7 @@ export async function initCommand(options: InitOptions) {
     "sync-health.md",
     "pipeline-status.md",
     "README.md",
+    "RUNBOOK.md",
   ];
 
   for (const file of stateFiles) {

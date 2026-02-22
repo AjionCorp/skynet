@@ -1,5 +1,6 @@
-import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
 import type { SkynetConfig } from "../types";
+import { parseBody } from "../lib/parse-body";
 
 /**
  * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
@@ -114,7 +115,16 @@ export function createTasksHandlers(config: SkynetConfig) {
 
   async function POST(request: Request): Promise<Response> {
     try {
-      const body = await request.json();
+      const { data: body, error: parseError, status: parseStatus } = await parseBody<{
+        tag: string;
+        title: string;
+        description?: string;
+        position?: "top" | "bottom";
+        blockedBy?: string;
+      }>(request);
+      if (parseError || !body) {
+        return Response.json({ data: null, error: parseError }, { status: parseStatus ?? 400 });
+      }
       const { tag, title, description, position, blockedBy } = body as {
         tag: string;
         title: string;
@@ -202,7 +212,9 @@ export function createTasksHandlers(config: SkynetConfig) {
           }
         }
 
-        writeFileSync(backlogPath, lines.join("\n"), "utf-8");
+        const tmpPath = backlogPath + ".tmp";
+        writeFileSync(tmpPath, lines.join("\n"), "utf-8");
+        renameSync(tmpPath, backlogPath);
 
         return Response.json({
           data: { inserted: taskLine, position: position ?? "top" },

@@ -37,6 +37,7 @@ export { createConfig, DEFAULT_WORKERS } from "./lib/config";
 export { readDevFile, getLastLogLine, extractTimestamp } from "./lib/file-reader";
 export { getWorkerStatus } from "./lib/worker-status";
 export { parseBacklog, backlogCounts } from "./lib/backlog-parser";
+export { parseBody } from "./lib/parse-body";
 export type { ParsedBacklogItem } from "./lib/backlog-parser";
 
 // Handler factories

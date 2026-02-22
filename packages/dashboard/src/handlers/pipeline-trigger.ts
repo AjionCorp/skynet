@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { openSync, constants } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
+import { parseBody } from "../lib/parse-body";
 
 /**
  * Create a POST handler for the pipeline/trigger endpoint.
@@ -13,9 +14,12 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
 
   return async function POST(request: Request): Promise<Response> {
     try {
-      const body = await request.json();
-      const script = body.script as string;
-      const args = (body.args as string[] | undefined) ?? [];
+      const { data: body, error: parseError, status: parseStatus } = await parseBody<{ script: string; args?: string[] }>(request);
+      if (parseError || !body) {
+        return Response.json({ data: null, error: parseError }, { status: parseStatus ?? 400 });
+      }
+      const script = body.script;
+      const args = body.args ?? [];
 
       if (!script || !triggerableScripts.includes(script)) {
         return Response.json(

@@ -114,3 +114,7 @@ export SKYNET_SKILLS_DIR="$SKYNET_DEV_DIR/skills"
 # ---- Server Error Scanning ----
 # Space-separated list of env vars to check in server logs
 export SKYNET_ERROR_ENV_KEYS=""  # Env var names whose absence triggers server error warnings (empty = skip)
+
+# ---- Dashboard Auth ----
+# Set an API key to protect the admin dashboard. Leave empty to disable auth (local dev only).
+export SKYNET_DASHBOARD_API_KEY=""
