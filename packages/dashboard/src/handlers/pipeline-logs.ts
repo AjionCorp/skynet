@@ -1,5 +1,5 @@
 import { spawnSync } from "child_process";
-import { readFileSync, statSync } from "fs";
+import { statSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 
@@ -92,9 +92,13 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
       let fileSizeBytes = 0;
       try {
         fileSizeBytes = statSync(logPath).size;
-        // Count lines by reading the file — avoids shell injection via wc
-        const content = readFileSync(logPath, "utf-8");
-        totalLines = content.split("\n").length;
+        // Count lines via wc -l (safe: logPath is validated via allowlist + regex)
+        const wcResult = spawnSync("wc", ["-l", logPath], {
+          encoding: "utf-8",
+          timeout: 5000,
+        });
+        const wcMatch = (wcResult.stdout || "").trim().match(/^(\d+)/);
+        totalLines = wcMatch ? Number(wcMatch[1]) : 0;
       } catch {
         /* ignore */
       }

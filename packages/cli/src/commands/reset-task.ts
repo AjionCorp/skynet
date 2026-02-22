@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
 import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
@@ -32,20 +32,16 @@ function isValidBranchName(branch: string): boolean {
 
 function branchExists(branch: string, projectDir: string): boolean {
   if (!isValidBranchName(branch)) return false;
-  try {
-    execSync(`git show-ref --verify --quiet refs/heads/${branch}`, {
-      cwd: projectDir,
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
-  }
+  const result = spawnSync("git", ["show-ref", "--verify", "--quiet", `refs/heads/${branch}`], {
+    cwd: projectDir,
+    stdio: "ignore",
+  });
+  return result.status === 0;
 }
 
 function deleteBranch(branch: string, projectDir: string) {
   if (!isValidBranchName(branch)) return;
-  execSync(`git branch -D ${branch}`, {
+  spawnSync("git", ["branch", "-D", branch], {
     cwd: projectDir,
     stdio: "inherit",
   });

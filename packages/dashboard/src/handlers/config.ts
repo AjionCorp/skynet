@@ -88,8 +88,8 @@ function validateUpdates(updates: Record<string, string>): string | null {
     if (typeof key !== "string" || typeof value !== "string") {
       return `Invalid type for key "${key}"`;
     }
-    // Block shell injection: no backticks, $(), ${}, semicolons, newlines, or unescaped quotes
-    if (/[`"']|\$[({]|;|\n|\r/.test(value)) {
+    // Block shell injection: no backticks, $(), ${}, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes
+    if (/[`"'|&><()]|\$[({]|;|\n|\r/.test(value)) {
       return `Unsafe characters in value for "${key}"`;
     }
     // Key must be a valid bash variable name

@@ -1,5 +1,5 @@
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { readFile } from "../utils/readFile";
 
@@ -23,12 +23,12 @@ function slugify(title: string): string {
 
 function getDevBranches(projectDir: string): string[] {
   try {
-    const output = execSync("git branch --list 'dev/*'", {
+    const result = spawnSync("git", ["branch", "--list", "dev/*"], {
       cwd: projectDir,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return output
+    return (result.stdout || "")
       .split("\n")
       .map((l) => l.replace(/^[*+\s]+/, "").trim())
       .filter(Boolean);
@@ -40,13 +40,13 @@ function getDevBranches(projectDir: string): string[] {
 function getMergedBranches(projectDir: string, mainBranch: string): Set<string> {
   if (!isValidBranchName(mainBranch)) return new Set();
   try {
-    const output = execSync(`git branch --merged ${mainBranch} --list 'dev/*'`, {
+    const result = spawnSync("git", ["branch", "--merged", mainBranch, "--list", "dev/*"], {
       cwd: projectDir,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
     return new Set(
-      output
+      (result.stdout || "")
         .split("\n")
         .map((l) => l.replace(/^[*+\s]+/, "").trim())
         .filter(Boolean)
@@ -59,12 +59,12 @@ function getMergedBranches(projectDir: string, mainBranch: string): Set<string> 
 function getWorktreeBranches(projectDir: string): Set<string> {
   const branches = new Set<string>();
   try {
-    const output = execSync("git worktree list --porcelain", {
+    const result = spawnSync("git", ["worktree", "list", "--porcelain"], {
       cwd: projectDir,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
-    for (const line of output.split("\n")) {
+    for (const line of (result.stdout || "").split("\n")) {
       const match = line.match(/^branch refs\/heads\/(.+)/);
       if (match) {
         branches.add(match[1]);
@@ -193,12 +193,17 @@ export async function cleanupCommand(options: CleanupOptions) {
     for (const b of deletable) {
       if (!isValidBranchName(b.name)) continue;
       try {
-        execSync(`git branch -D ${b.name}`, {
+        const result = spawnSync("git", ["branch", "-D", b.name], {
           cwd: projectDir,
+          encoding: "utf-8",
           stdio: ["pipe", "pipe", "pipe"],
         });
-        deletedCount++;
-        console.log(`  Deleted: ${b.name}`);
+        if (result.status === 0) {
+          deletedCount++;
+          console.log(`  Deleted: ${b.name}`);
+        } else {
+          console.error(`  Failed to delete ${b.name}: ${(result.stderr || "").trim()}`);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`  Failed to delete ${b.name}: ${msg}`);
@@ -207,7 +212,7 @@ export async function cleanupCommand(options: CleanupOptions) {
 
     // Prune worktrees
     try {
-      execSync("git worktree prune", {
+      spawnSync("git", ["worktree", "prune"], {
         cwd: projectDir,
         stdio: ["pipe", "pipe", "pipe"],
       });

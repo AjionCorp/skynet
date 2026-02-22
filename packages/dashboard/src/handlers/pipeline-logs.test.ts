@@ -7,15 +7,13 @@ vi.mock("child_process", () => ({
 }));
 vi.mock("fs", () => ({
   statSync: vi.fn(() => ({ size: 0 })),
-  readFileSync: vi.fn(() => ""),
 }));
 
 import { spawnSync } from "child_process";
-import { statSync, readFileSync } from "fs";
+import { statSync } from "fs";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 const mockStatSync = vi.mocked(statSync);
-const mockReadFileSync = vi.mocked(readFileSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -36,7 +34,6 @@ describe("createPipelineLogsHandler", () => {
     vi.clearAllMocks();
     mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
     mockStatSync.mockReturnValue({ size: 0 } as never);
-    mockReadFileSync.mockReturnValue("");
   });
 
   it("returns 400 when script param is missing", async () => {
@@ -142,15 +139,16 @@ describe("createPipelineLogsHandler", () => {
     expect(body.data.totalLines).toBe(0);
   });
 
-  it("populates totalLines and fileSizeBytes from stat/read", async () => {
-    mockSpawnSync.mockReturnValue({ stdout: "line1\n", stderr: "", status: 0 } as never);
+  it("populates totalLines and fileSizeBytes from stat/wc", async () => {
+    mockSpawnSync
+      .mockReturnValueOnce({ stdout: "line1\n", stderr: "", status: 0 } as never)  // tail
+      .mockReturnValueOnce({ stdout: "       3 /path/to/file.log\n", stderr: "", status: 0 } as never);  // wc -l
     mockStatSync.mockReturnValue({ size: 1024 } as never);
-    mockReadFileSync.mockReturnValue("line1\nline2\nline3\n");
     const handler = createPipelineLogsHandler(makeConfig());
     const res = await handler(makeRequest({ script: "dev-worker-1" }));
     const body = await res.json();
     expect(body.data.fileSizeBytes).toBe(1024);
-    expect(body.data.totalLines).toBe(4);
+    expect(body.data.totalLines).toBe(3);
   });
 
   it("returns empty data (not 500) when spawnSync throws", async () => {
