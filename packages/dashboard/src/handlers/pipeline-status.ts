@@ -349,11 +349,12 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       if (usingSqlite && db) {
         currentTasks = db.getAllCurrentTasks(maxW);
       }
-      // Also check per-worker files (file-based fallback or supplement)
-      if (Object.keys(currentTasks).length === 0) {
-        for (let wid = 1; wid <= maxW; wid++) {
+      // Fill in missing workers from files (per-worker fallback)
+      for (let wid = 1; wid <= maxW; wid++) {
+        const key = `worker-${wid}`;
+        if (!currentTasks[key]) {
           const raw = readDevFile(devDir, `current-task-${wid}.md`);
-          if (raw) currentTasks[`worker-${wid}`] = parseCurrentTask(raw);
+          if (raw) currentTasks[key] = parseCurrentTask(raw);
         }
       }
       // Legacy single file fallback

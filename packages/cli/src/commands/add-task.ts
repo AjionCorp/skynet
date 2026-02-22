@@ -45,6 +45,16 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     process.exit(1);
   }
 
+  // Length limits (matching dashboard validation)
+  if (title.trim().length > 500) {
+    console.error("Error: Title must be 500 characters or fewer.");
+    process.exit(1);
+  }
+  if (options.description && options.description.trim().length > 2000) {
+    console.error("Error: Description must be 2000 characters or fewer.");
+    process.exit(1);
+  }
+
   // Build the task line
   let taskLine = `- [ ] [${tag}] ${title.trim()}`;
   if (options.description) {
