@@ -719,6 +719,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
           git_push_with_retry || log "WARNING: push of smoke test revert failed"
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
+          _db_sync_state_files || true
 
           _CURRENT_TASK_TITLE=""
           release_merge_lock

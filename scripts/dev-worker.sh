@@ -911,13 +911,25 @@ EOF
     log "Running post-merge smoke test..."
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge and state commit"
-      # HEAD is state commit, HEAD~1 is merge — revert both into one commit
-      if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
-        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
-        release_merge_lock
-        exit 1
+      # In one-shot mode there's no state commit — revert only the merge
+      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+        # HEAD is state commit, HEAD~1 is merge — revert both
+        if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
+          log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+          emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
+          release_merge_lock
+          exit 1
+        fi
+      else
+        # HEAD is merge (no state commit in one-shot) — revert just the merge
+        if ! git revert --no-commit HEAD 2>>"$LOG"; then
+          log "CRITICAL: git revert failed — main may be broken. Stopping worker."
+          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+          emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
+          release_merge_lock
+          exit 1
+        fi
       fi
       git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
 

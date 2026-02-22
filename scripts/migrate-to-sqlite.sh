@@ -472,12 +472,12 @@ log ""
 # (earlier versions did not strip [TAG] prefix before normalizing)
 log "Recomputing normalized_root for all tasks..."
 _recomputed=0
-sqlite3 "$DB_PATH" "SELECT id, title FROM tasks;" | while IFS='|' read -r _id _title; do
+while IFS='|' read -r _id _title; do
   _norm=$(echo "$_title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
   sqlite3 "$DB_PATH" "UPDATE tasks SET normalized_root='$(esc "$_norm")' WHERE id=$_id;"
   _recomputed=$((_recomputed + 1))
-done
-log "Recomputed normalized_root for all tasks."
+done < <(sqlite3 "$DB_PATH" "SELECT id, title FROM tasks;")
+log "Recomputed normalized_root for $_recomputed tasks."
 
 _mark_section "ALL"
 log "Migration complete! Originals backed up to $BACKUP_DIR"
