@@ -815,6 +815,40 @@ EOF
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
     continue
   fi
+
+  # --- Post-merge typecheck gate (validates main still builds) ---
+  if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
+    log "Running post-merge typecheck on main..."
+    # Ensure deps are fresh if lock file changed in merge
+    if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
+      _lock_m=$(file_mtime "pnpm-lock.yaml")
+      _mods_m=$(file_mtime "node_modules/.modules.yaml")
+      if [ "$_lock_m" -gt "$_mods_m" ]; then
+        log "Lock file newer than node_modules — installing before typecheck"
+        eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$LOG" 2>&1 || true
+      fi
+    fi
+    if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
+      log "POST-MERGE TYPECHECK FAILED — reverting merge"
+      git revert HEAD --no-edit 2>>"$LOG"
+      git_push_with_retry || log "WARNING: push of revert commit failed"
+      emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)"
+      tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)"
+      tasks_failed=$((tasks_failed + 1))
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
+      db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
+      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | 0 | pending |" >> "$FAILED"
+        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed post-merge)_"
+      fi
+      _CURRENT_TASK_TITLE=""
+      _one_shot_exit=1
+      release_merge_lock
+      continue
+    fi
+    log "Post-merge typecheck passed."
+  fi
+
   git branch -d "$branch_name" 2>/dev/null || true
 
   task_duration_secs=$(( $(date +%s) - task_start_epoch ))
@@ -825,8 +859,8 @@ EOF
   fi
   db_set_worker_status "$WORKER_ID" "dev" "completed" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || true
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-    mark_in_backlog "- [>] $task_title" "- [x] $task_title"
-    echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $task_duration | success |" >> "$COMPLETED"
+    # Regenerate state files from SQLite (authoritative source)
+    db_export_state_files
   fi
 
   cat > "$WORKER_TASK_FILE" <<EOF
@@ -844,8 +878,8 @@ EOF
 
   # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-    git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
-    git commit -m "chore(${task_type:-pipeline}): $task_title" --no-verify 2>/dev/null || true
+    git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
+    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
   fi
 
   # Clear task title AFTER state is committed — ensures cleanup_on_exit can
@@ -856,9 +890,9 @@ EOF
   if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
     log "Running post-merge smoke test..."
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
-      log "SMOKE TEST FAILED — reverting merge"
-      git revert HEAD --no-edit 2>>"$LOG"
-      git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
+      log "SMOKE TEST FAILED — reverting merge and state commit"
+      # HEAD is state commit, HEAD~1 is merge — revert both into one commit
+      git revert --no-commit HEAD HEAD~1 2>>"$LOG"
       git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
 
       if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then

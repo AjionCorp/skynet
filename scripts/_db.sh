@@ -637,3 +637,114 @@ db_export_all_tasks() {
   sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
     "SELECT id, title, tag, description, status, blocked_by, branch, worker_id, error, attempts, duration, notes, priority, created_at, updated_at, claimed_at, completed_at, failed_at FROM tasks ORDER BY id;"
 }
+
+# ============================================================
+# STATE FILE EXPORT (regenerate markdown from SQLite)
+# ============================================================
+
+# Generate backlog.md from tasks table.
+# Atomic write via tmp+mv to prevent partial reads.
+db_export_backlog() {
+  [ ! -f "$DB_PATH" ] && return 0
+  local output="$1"
+  local tmpfile="${output}.export-tmp"
+  {
+    echo "# Backlog"
+    echo ""
+    echo "<!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->"
+    echo "<!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->"
+    echo ""
+    # Pending + claimed tasks ordered by priority
+    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+      "SELECT tag, title, description, status, blocked_by FROM tasks
+       WHERE status IN ('pending','claimed')
+       ORDER BY priority ASC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _status _blocked; do
+      _marker=" "
+      [ "$_status" = "claimed" ] && _marker=">"
+      _line="- [${_marker}] [${_tag}] ${_title}"
+      [ -n "$_desc" ] && _line="${_line} — ${_desc}"
+      [ -n "$_blocked" ] && _line="${_line} | blockedBy: ${_blocked}"
+      echo "$_line"
+    done
+    # Recent done history
+    local _done_count
+    _done_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='done';" 2>/dev/null || echo 0)
+    if [ "${_done_count:-0}" -gt 0 ]; then
+      echo "# Recent checked history (last 30)"
+      sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+        "SELECT tag, title, description, blocked_by, notes FROM tasks
+         WHERE status='done'
+         ORDER BY updated_at DESC LIMIT 30;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _blocked _notes; do
+        _line="- [x] [${_tag}] ${_title}"
+        [ -n "$_desc" ] && _line="${_line} — ${_desc}"
+        [ -n "$_notes" ] && [ "$_notes" != "success" ] && _line="${_line} _(${_notes})_"
+        echo "$_line"
+      done
+    fi
+  } > "$tmpfile"
+  mv "$tmpfile" "$output"
+}
+
+# Generate completed.md from tasks table.
+db_export_completed() {
+  [ ! -f "$DB_PATH" ] && return 0
+  local output="$1"
+  local tmpfile="${output}.export-tmp"
+  {
+    echo "# Completed Tasks"
+    echo ""
+    echo "| Date | Task | Branch | Duration | Notes |"
+    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+      "SELECT COALESCE(completed_at,''), tag, title, COALESCE(branch,''), COALESCE(duration,''), COALESCE(notes,'')
+       FROM tasks
+       WHERE status IN ('completed','fixed')
+       ORDER BY completed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
+      _datestr="${_date%% *}"
+      [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
+      _task="[${_tag}] ${_title}"
+      echo "| ${_datestr} | ${_task} | ${_branch:-merged to main} | ${_dur:-0m} | ${_notes:-success} |"
+    done
+  } > "$tmpfile"
+  mv "$tmpfile" "$output"
+}
+
+# Generate failed-tasks.md from tasks table.
+db_export_failed() {
+  [ ! -f "$DB_PATH" ] && return 0
+  local output="$1"
+  local tmpfile="${output}.export-tmp"
+  {
+    echo "# Failed Tasks"
+    echo ""
+    echo "| Date | Task | Branch | Error | Attempts | Status |"
+    echo "|------|------|--------|-------|----------|--------|"
+    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+      "SELECT COALESCE(failed_at,''), tag, title, COALESCE(branch,''), COALESCE(error,''), COALESCE(attempts,0), status
+       FROM tasks
+       WHERE status IN ('failed','blocked','fixed','superseded')
+          OR status LIKE 'fixing-%'
+       ORDER BY CASE
+         WHEN status='failed' THEN 0
+         WHEN status LIKE 'fixing-%' THEN 1
+         WHEN status='blocked' THEN 2
+         WHEN status='fixed' THEN 3
+         WHEN status='superseded' THEN 4
+         ELSE 5
+       END, failed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _error _attempts _status; do
+      _datestr="${_date%% *}"
+      [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
+      _task="[${_tag}] ${_title}"
+      echo "| ${_datestr} | ${_task} | ${_branch} | ${_error} | ${_attempts:-0} | ${_status} |"
+    done
+  } > "$tmpfile"
+  mv "$tmpfile" "$output"
+}
+
+# Regenerate all state markdown files from SQLite.
+# Call inside merge lock before git commit of state files.
+db_export_state_files() {
+  [ ! -f "$DB_PATH" ] && return 0
+  db_export_backlog "$BACKLOG" 2>/dev/null || true
+  db_export_completed "$COMPLETED" 2>/dev/null || true
+  db_export_failed "$FAILED" 2>/dev/null || true
+}

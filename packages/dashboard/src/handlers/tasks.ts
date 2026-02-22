@@ -215,53 +215,45 @@ export function createTasksHandlers(config: SkynetConfig) {
           : "";
         const taskLine = `- [ ] [${tag}] ${title.trim()}${desc}${blocked}`;
 
-        const raw = readFileSync(backlogPath, "utf-8");
-        const lines = raw.split("\n");
+        // Write to SQLite first (authoritative source)
+        const db = getSkynetDB(devDir);
+        db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
 
-        if (position === "bottom") {
-          let lastPendingIndex = -1;
-          for (let i = 0; i < lines.length; i++) {
-            if (
-              lines[i].startsWith("- [ ] ") ||
-              lines[i].startsWith("- [>] ")
-            ) {
-              lastPendingIndex = i;
+        // Regenerate backlog.md from SQLite
+        try {
+          db.exportBacklog(backlogPath);
+        } catch (exportErr) {
+          console.warn(`[tasks POST] backlog export failed, falling back to direct write: ${exportErr instanceof Error ? exportErr.message : String(exportErr)}`);
+          // Fallback: write the single line directly
+          const raw = readFileSync(backlogPath, "utf-8");
+          const lines = raw.split("\n");
+          if (position === "bottom") {
+            let lastPendingIndex = -1;
+            for (let i = 0; i < lines.length; i++) {
+              if (lines[i].startsWith("- [ ] ") || lines[i].startsWith("- [>] ")) {
+                lastPendingIndex = i;
+              }
+            }
+            if (lastPendingIndex === -1) {
+              const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
+              lines.splice(headerEnd + 1, 0, taskLine);
+            } else {
+              lines.splice(lastPendingIndex + 1, 0, taskLine);
+            }
+          } else {
+            const firstTaskIndex = lines.findIndex(
+              (l) => l.startsWith("- [ ] ") || l.startsWith("- [>] ")
+            );
+            if (firstTaskIndex === -1) {
+              const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
+              lines.splice(headerEnd + 1, 0, taskLine);
+            } else {
+              lines.splice(firstTaskIndex, 0, taskLine);
             }
           }
-          if (lastPendingIndex === -1) {
-            const headerEnd = lines.findIndex(
-              (l, i) => i > 0 && l.trim() === ""
-            );
-            lines.splice(headerEnd + 1, 0, taskLine);
-          } else {
-            lines.splice(lastPendingIndex + 1, 0, taskLine);
-          }
-        } else {
-          const firstTaskIndex = lines.findIndex(
-            (l) =>
-              l.startsWith("- [ ] ") || l.startsWith("- [>] ")
-          );
-          if (firstTaskIndex === -1) {
-            const headerEnd = lines.findIndex(
-              (l, i) => i > 0 && l.trim() === ""
-            );
-            lines.splice(headerEnd + 1, 0, taskLine);
-          } else {
-            lines.splice(firstTaskIndex, 0, taskLine);
-          }
-        }
-
-        const tmpPath = backlogPath + ".tmp";
-        writeFileSync(tmpPath, lines.join("\n"), "utf-8");
-        renameSync(tmpPath, backlogPath);
-
-        // Also write to SQLite (primary going forward)
-        try {
-          const db = getSkynetDB(devDir);
-          db.countPending(); // verify DB is initialized
-          db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
-        } catch (sqliteErr) {
-          console.warn(`[tasks POST] SQLite dual-write failed: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
+          const tmpPath = backlogPath + ".tmp";
+          writeFileSync(tmpPath, lines.join("\n"), "utf-8");
+          renameSync(tmpPath, backlogPath);
         }
 
         return Response.json({

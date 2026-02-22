@@ -71,18 +71,37 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     process.exit(1);
   }
 
+  // Write to SQLite first (authoritative source)
+  let sqliteOk = false;
+  try {
+    if (isSqliteReady(devDir)) {
+      const safeTitle = sqlEscape(title.trim());
+      const safeTag = sqlEscape(tag);
+      const safeDesc = sqlEscape(options.description?.trim() || "");
+      const root = sqlEscape(title.trim().replace(/\[[A-Z]*\]\s*/g, "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 120));
+      const now = sqlEscape(new Date().toISOString());
+      if (position === "top") {
+        sqliteQuery(devDir, `UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');`);
+      }
+      const pri = position === "top" ? 0 : 999;
+      sqliteQuery(devDir,
+        `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
+        `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
+        `${pri}, '${root}', '${now}', '${now}');`
+      );
+      sqliteOk = true;
+    }
+  } catch (err) {
+    console.error(`  WARNING: SQLite write failed — falling back to file-only. Error: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  // Update backlog.md (from SQLite if possible, otherwise direct manipulation)
   try {
     const content = readFileSync(backlogPath, "utf-8");
     const lines = content.split("\n");
 
-    // Find insertion point:
-    //   - After header comments (lines starting with # or <!-- or blank lines at top)
-    //   - position=top: insert before the first task entry (pending, claimed, or done)
-    //   - position=bottom: insert before the first [x] (done) block
     let insertIndex = -1;
-
     if (position === "top") {
-      // Insert before the first task line (any checkbox entry)
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].match(/^- \[[ >x]\] /)) {
           insertIndex = i;
@@ -90,7 +109,6 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
         }
       }
     } else {
-      // position=bottom: insert before the first [x] entry
       for (let i = 0; i < lines.length; i++) {
         if (lines[i].startsWith("- [x] ")) {
           insertIndex = i;
@@ -100,8 +118,6 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     }
 
     if (insertIndex === -1) {
-      // No existing entries found — append at end
-      // Ensure there's a trailing newline before appending
       if (lines.length > 0 && lines[lines.length - 1] !== "") {
         lines.push("");
       }
@@ -111,33 +127,11 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     }
 
     const newContent = lines.join("\n");
-
-    // Atomic write: write to .tmp then rename
     const tmpPath = backlogPath + ".tmp";
     writeFileSync(tmpPath, newContent, "utf-8");
     renameSync(tmpPath, backlogPath);
   } finally {
     releaseBacklogLock(lockPath);
-  }
-
-  // Dual-write: also INSERT into SQLite if available
-  try {
-    if (isSqliteReady(devDir)) {
-      const safeTitle = sqlEscape(title.trim());
-      const safeTag = sqlEscape(tag);
-      const safeDesc = sqlEscape(options.description?.trim() || "");
-      const root = sqlEscape(title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 120));
-      const now = sqlEscape(new Date().toISOString());
-      sqliteQuery(devDir,
-        `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
-        `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
-        `${position === "top" ? 0 : 999}, '${root}', '${now}', '${now}');`
-      );
-    }
-  } catch (err) {
-    // SQLite write failed — file write already succeeded; warn operator
-    console.error(`  WARNING: SQLite dual-write failed — task exists in backlog.md but not in skynet.db.`);
-    console.error(`           Workers using SQLite will not see this task. Error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   console.log(`\n  Added task to backlog (position: ${position}):\n`);

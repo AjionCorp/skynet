@@ -653,23 +653,54 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     fi
 
     if $_merge_succeeded; then
+
+      # --- Post-merge typecheck gate (validates main still builds) ---
+      if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
+        log "Running post-merge typecheck on main..."
+        if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
+          _lock_m=$(file_mtime "pnpm-lock.yaml")
+          _mods_m=$(file_mtime "node_modules/.modules.yaml")
+          if [ "$_lock_m" -gt "$_mods_m" ]; then
+            log "Lock file newer than node_modules — installing before typecheck"
+            eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$LOG" 2>&1 || true
+          fi
+        fi
+        if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
+          log "POST-MERGE TYPECHECK FAILED — reverting fix merge"
+          git revert HEAD --no-edit 2>>"$LOG"
+          git_push_with_retry || log "WARNING: push of revert commit failed"
+          emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (typecheck failed post-merge)"
+          tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (typecheck failed post-merge)"
+          new_attempts=$((fix_attempts + 1))
+          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || true
+          update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | $new_attempts | pending |"
+          _CURRENT_TASK_TITLE=""
+          release_merge_lock
+          db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
+          echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
+          continue
+        fi
+        log "Post-merge typecheck passed."
+      fi
+
       git branch -d "$branch_name"
 
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
       fix_duration=$(format_duration $fix_duration_secs)
       [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || true
-      update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $_fix_new_attempts | fixed |"
-      echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $_fix_new_attempts) |" >> "$COMPLETED"
+      # Regenerate state files from SQLite (authoritative source)
+      db_export_state_files
 
       # --- Post-merge smoke test (if enabled) ---
       if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
         log "Running post-merge smoke test..."
         if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
-          log "SMOKE TEST FAILED — reverting fix merge"
-          git revert HEAD --no-edit 2>>"$LOG"
+          log "SMOKE TEST FAILED — reverting fix merge and state commit"
+          # HEAD is state commit, HEAD~1 is merge — revert both into one commit
+          git revert --no-commit HEAD HEAD~1 2>>"$LOG"
+          git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
-          update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed after fix | $((fix_attempts + 1)) | pending |"
 
           _CURRENT_TASK_TITLE=""
           release_merge_lock
@@ -681,6 +712,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         fi
         log "Post-merge smoke test passed."
       fi
+
+      # Commit pipeline status updates
+      git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
+      git commit -m "chore: update pipeline status after fixing $task_title" --no-verify 2>/dev/null || true
 
       # Push merged changes to origin (while still holding merge lock)
       if ! git_push_with_retry; then

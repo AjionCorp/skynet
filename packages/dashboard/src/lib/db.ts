@@ -490,6 +490,57 @@ export class SkynetDB {
       .all() as BlockerRow[];
   }
 
+  /** Regenerate backlog.md from SQLite (authoritative source). */
+  exportBacklog(backlogPath: string): void {
+    const { writeFileSync, renameSync } = require("fs") as typeof import("fs");
+
+    const pending = this.db
+      .prepare(
+        `SELECT tag, title, description, status, blocked_by FROM tasks
+         WHERE status IN ('pending','claimed')
+         ORDER BY priority ASC`
+      )
+      .all() as { tag: string; title: string; description: string; status: string; blocked_by: string }[];
+
+    const done = this.db
+      .prepare(
+        `SELECT tag, title, description, blocked_by, notes FROM tasks
+         WHERE status = 'done'
+         ORDER BY updated_at DESC LIMIT 30`
+      )
+      .all() as { tag: string; title: string; description: string; blocked_by: string; notes: string }[];
+
+    const lines: string[] = [
+      "# Backlog",
+      "",
+      "<!-- Priority: top = highest. Format: - [ ] [TAG] Task title \u2014 description -->",
+      "<!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->",
+      "",
+    ];
+
+    for (const row of pending) {
+      const marker = row.status === "claimed" ? ">" : " ";
+      let line = `- [${marker}] [${row.tag}] ${row.title}`;
+      if (row.description) line += ` \u2014 ${row.description}`;
+      if (row.blocked_by) line += ` | blockedBy: ${row.blocked_by}`;
+      lines.push(line);
+    }
+
+    if (done.length > 0) {
+      lines.push("# Recent checked history (last 30)");
+      for (const row of done) {
+        let line = `- [x] [${row.tag}] ${row.title}`;
+        if (row.description) line += ` \u2014 ${row.description}`;
+        if (row.notes && row.notes !== "success") line += ` _(${row.notes})_`;
+        lines.push(line);
+      }
+    }
+
+    const tmpPath = backlogPath + ".tmp";
+    writeFileSync(tmpPath, lines.join("\n") + "\n", "utf-8");
+    renameSync(tmpPath, backlogPath);
+  }
+
   /** Export all events. */
   exportAllEvents(): EventRow[] {
     return this.db

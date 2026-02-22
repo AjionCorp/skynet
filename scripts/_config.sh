@@ -79,6 +79,9 @@ export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"
 export SKYNET_POST_MERGE_SMOKE="${SKYNET_POST_MERGE_SMOKE:-false}"
 export SKYNET_SMOKE_TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
 
+# Post-merge typecheck gate (validates main still builds after merge; auto-reverts on failure)
+export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
+
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"
