@@ -6,6 +6,7 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 LOG="$SCRIPTS_DIR/project-driver.log"
+BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 cd "$PROJECT_DIR"
 
@@ -293,7 +294,8 @@ fi
 
 if run_agent "$PROMPT" "$LOG"; then
   # --- Deduplicate newly added tasks against pre-existing entries ---
-  if [ -f "$BACKLOG" ] && [ -s "$_dedup_normalized" ]; then
+  # Acquire backlog lock to prevent races with dev-worker claiming tasks
+  if [ -f "$BACKLOG" ] && [ -s "$_dedup_normalized" ] && mkdir "$BACKLOG_LOCK" 2>/dev/null; then
     _dedup_cleaned=$(mktemp)
     _dedup_count=0
     while IFS= read -r _line; do
@@ -320,6 +322,7 @@ if run_agent "$PROMPT" "$LOG"; then
     else
       rm -f "$_dedup_cleaned"
     fi
+    rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
   fi
 
   new_remaining=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)

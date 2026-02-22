@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { shellEscape, validateShellValue } from "../utils/shellEscape";
 
 interface ConfigOptions {
@@ -135,12 +135,11 @@ function validateValue(key: string, value: string, projectDir: string): string |
       if (!value || value.trim().length === 0) {
         return `SKYNET_MAIN_BRANCH cannot be empty.`;
       }
-      try {
-        execSync(`git check-ref-format --allow-onelevel "${value}"`, {
-          cwd: projectDir,
-          stdio: "ignore",
-        });
-      } catch {
+      const result = spawnSync("git", ["check-ref-format", "--allow-onelevel", value], {
+        cwd: projectDir,
+        stdio: "ignore",
+      });
+      if (result.status !== 0) {
         return `SKYNET_MAIN_BRANCH "${value}" is not a valid git branch name.`;
       }
       return null;
