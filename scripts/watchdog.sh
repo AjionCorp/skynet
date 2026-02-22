@@ -115,6 +115,7 @@ unclaim_task() {
 # --- Crash recovery: detect stale locks, orphaned tasks, and zombie processes ---
 crash_recovery() {
   local recovered=0
+  local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
 
   # Phase 1: Check all known lock files for stale/zombie PIDs
   local all_locks=()
@@ -184,6 +185,7 @@ crash_recovery() {
     if $stale; then
       rm -rf "$lockfile"
       recovered=$((recovered + 1))
+      _cr_stale_pids=$((_cr_stale_pids + 1))
     fi
   done
 
@@ -204,6 +206,7 @@ crash_recovery() {
         unclaim_task "$stuck_title"
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
+        _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
       fi
       # Reset current-task file and SQLite worker status to idle
       db_set_worker_idle "$wid" "dead worker recovered by watchdog" 2>/dev/null || true
@@ -236,6 +239,7 @@ IDLE_EOF
           unclaim_task "$title"
           log "Unclaimed orphaned task (no workers alive): $title"
           recovered=$((recovered + 1))
+          _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
         done <<< "$claimed_lines"
       fi
     fi
@@ -278,11 +282,12 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     git worktree prune 2>/dev/null || true
     log "Cleaned orphan worktree: $wt_dir"
     recovered=$((recovered + 1))
+    _cr_cleaned_worktrees=$((_cr_cleaned_worktrees + 1))
   done
 
   if [ "$recovered" -gt 0 ]; then
-    log "Crash recovery complete: recovered $recovered item(s)"
-    tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — cleaned $recovered stale lock(s)/orphaned task(s)"
+    log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees cleaned"
+    tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees"
   fi
 }
 
@@ -747,9 +752,16 @@ _health_score_alert() {
   local sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-health-alert-sent"
 
   # Prefer SQLite health score, fallback to file-based calculation
-  local score
+  local score _score_source="sqlite"
+  local pending_failed=0 active_blockers=0
   score=$(db_get_health_score 2>/dev/null || echo "")
+  if [ -n "$score" ]; then
+    # Query component counts for logging when alert fires
+    pending_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';" 2>/dev/null || echo 0)
+    active_blockers=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM blockers WHERE status='active';" 2>/dev/null || echo 0)
+  fi
   if [ -z "$score" ]; then
+    _score_source="file"
     score=100
     # -5 per pending failed task
     local pending_failed=0
@@ -784,7 +796,7 @@ _health_score_alert() {
       emit_event "health_alert" "Health score: $score"
       tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Pipeline health alert: score $score/100 (threshold: $threshold)"
       date +%s > "$sentinel"
-      log "Health alert: score $score/100 (pending_failed=$pending_failed, blockers=$active_blockers, stale_hb=$_stale_heartbeat_count)"
+      log "Health alert: score $score/100 [${_score_source}] (pending_failed=$pending_failed, blockers=$active_blockers, stale_hb=$_stale_heartbeat_count)"
     fi
   else
     # Score recovered — clear sentinel so future drops will alert again

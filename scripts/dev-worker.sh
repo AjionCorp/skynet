@@ -406,6 +406,8 @@ fi
 
 # --- Task loop ---
 tasks_attempted=0
+tasks_completed=0
+tasks_failed=0
 _one_shot_exit=0
 
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
@@ -585,6 +587,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title"
+    tasks_failed=$((tasks_failed + 1))
     cleanup_worktree "$branch_name"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
@@ -611,6 +614,7 @@ EOF
       log "Failed to re-add worktree for $branch_name — recording failure."
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (worktree missing)"
       emit_event "task_failed" "Worker $WORKER_ID: $task_title (worktree missing)"
+      tasks_failed=$((tasks_failed + 1))
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
@@ -667,6 +671,7 @@ EOF
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title ($_gate_label failed)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"
+    tasks_failed=$((tasks_failed + 1))
     cleanup_worktree  # Keep branch for task-fixer
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
@@ -712,6 +717,7 @@ EOF
     log "SHELL SYNTAX CHECK FAILED. Branch NOT merged."
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (shell syntax error)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: bash-n)"
+    tasks_failed=$((tasks_failed + 1))
     cleanup_worktree
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
@@ -746,7 +752,10 @@ EOF
 
   # Acquire merge mutex — prevents concurrent merge races between workers/fixers
   if ! acquire_merge_lock; then
-    log "Could not acquire merge lock — another worker is merging. Retrying task later."
+    _ml_holder=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
+    log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Retrying task later."
+    emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
     unclaim_task "$task_title"
     _CURRENT_TASK_TITLE=""
@@ -781,10 +790,11 @@ EOF
       if git merge "$branch_name" --no-edit 2>>"$LOG"; then
         _merge_succeeded=true
       else
+        log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
         git merge --abort 2>/dev/null || true
       fi
     else
-      log "Rebase has conflicts — aborting rebase recovery."
+      log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
       git rebase --abort 2>/dev/null || true
       git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
     fi
@@ -792,6 +802,8 @@ EOF
 
   if ! $_merge_succeeded; then
     log "MERGE FAILED for $branch_name — moving to failed."
+    emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
+    tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
@@ -880,9 +892,11 @@ EOF
   remaining=${remaining:-0}
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
   emit_event "task_completed" "Worker $WORKER_ID: $task_title"
+  tasks_completed=$((tasks_completed + 1))
 done
 
-log "Dev worker $WORKER_ID finished. Attempted $tasks_attempted task(s)."
+log "Dev worker $WORKER_ID finished: $tasks_attempted attempted, $tasks_completed completed, $tasks_failed failed."
+emit_event "worker_session_end" "Worker $WORKER_ID: $tasks_completed completed, $tasks_failed failed of $tasks_attempted attempted"
 
 # In one-shot mode, propagate task failure as non-zero exit
 if [ "${SKYNET_ONE_SHOT:-}" = "true" ] && [ "$_one_shot_exit" -ne 0 ]; then

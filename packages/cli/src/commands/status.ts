@@ -610,11 +610,29 @@ export async function statusCommand(options: StatusOptions) {
 
   // --- JSON output mode ---
   if (options.json) {
+    // Check merge lock state
+    const mergeLockDir = `${lockPrefix}-merge.lock`;
+    let mergeLock: { held: boolean; pid?: number; ageSeconds?: number } = { held: false };
+    try {
+      const pidFile = join(mergeLockDir, "pid");
+      if (existsSync(mergeLockDir) && existsSync(pidFile)) {
+        const pid = parseInt(readFileSync(pidFile, "utf-8").trim(), 10);
+        const age = Math.floor((Date.now() - statSync(mergeLockDir).mtimeMs) / 1000);
+        mergeLock = { held: true, pid, ageSeconds: age };
+      } else if (existsSync(mergeLockDir)) {
+        const age = Math.floor((Date.now() - statSync(mergeLockDir).mtimeMs) / 1000);
+        mergeLock = { held: true, ageSeconds: age };
+      }
+    } catch {
+      // ignore — lock may have been released between checks
+    }
+
     const data = {
       project: projectName,
       paused: isPaused,
       tasks: { pending, claimed, completed: completedCount, failed: failedPending },
       workers: workerStatuses,
+      mergeLock,
       healthScore,
       selfCorrectionRate: scrRate,
       missionProgress,

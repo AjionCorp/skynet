@@ -594,7 +594,10 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
 
     # Acquire merge mutex — prevents concurrent merge races between workers/fixers
     if ! acquire_merge_lock; then
-      log "Could not acquire merge lock — another worker is merging. Keeping as pending for retry."
+      _ml_holder=""
+      [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
+      log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Keeping as pending for retry."
+      emit_event "merge_lock_contention" "Fixer $FIXER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
       cleanup_worktree
       new_attempts=$((fix_attempts + 1))
       [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" || true
@@ -635,10 +638,11 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         if git merge "$branch_name" --no-edit 2>>"$LOG"; then
           _merge_succeeded=true
         else
+          log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
           git merge --abort 2>/dev/null || true
         fi
       else
-        log "Rebase has conflicts — aborting rebase recovery."
+        log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
         git rebase --abort 2>/dev/null || true
         git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
       fi
