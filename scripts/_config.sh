@@ -75,6 +75,10 @@ export SKYNET_WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${SKYNET_DEV_DIR}/worktrees
 # Quality gates defaults (just typecheck by default)
 export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"
 
+# Post-merge smoke test (set to "true" to enable runtime validation after merge)
+export SKYNET_POST_MERGE_SMOKE="${SKYNET_POST_MERGE_SMOKE:-false}"
+export SKYNET_SMOKE_TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
+
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"

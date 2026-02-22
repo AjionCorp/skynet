@@ -73,6 +73,8 @@ The pipeline runs as a continuous loop with five core workers:
      │ 3. AI agent    │            │                │
      │ 4. gates       │            │                │
      │ 5. merge       │            │                │
+     │ 6. smoke test  │            │  auto-reverts  │
+     │    (optional)  │            │  on failure    │
      └────────┬───────┘            └───────┬────────┘
               │  on failure                │
      ┌────────▼────────┐                   │
@@ -219,6 +221,20 @@ export SKYNET_GATE_3="pnpm test --run"
 ```
 
 If any gate exits non-zero, the branch is **not** merged and the task moves to `failed-tasks.md` for retry.
+
+### Enable Post-Merge Smoke Tests
+
+Smoke tests validate that merged code doesn't break API routes at runtime:
+
+```bash
+skynet config set SKYNET_POST_MERGE_SMOKE true
+```
+
+After each merge, the smoke test hits all dashboard API endpoints, verifying HTTP 200 responses and valid `{ data, error }` JSON shape. If any endpoint fails, the merge is **automatically reverted** and the task moves to `failed-tasks.md` for retry.
+
+The watchdog also runs periodic smoke checks. If main fails 2 consecutive checks, the pipeline is auto-paused until the issue is resolved.
+
+**Requirements:** The Next.js dev server must be running (`skynet dashboard` or `pnpm dev:admin`). If the server is not reachable, smoke tests are skipped gracefully.
 
 ### Set Up Notifications
 
@@ -529,6 +545,8 @@ Contains local paths, ports, secrets, and tuning knobs. Not committed to git.
 | `SKYNET_GATE_1` | `pnpm typecheck` | Quality gate 1 (required, runs before merge) |
 | `SKYNET_GATE_2` | *(disabled)* | Quality gate 2 (optional) |
 | `SKYNET_GATE_3` | *(disabled)* | Quality gate 3 (optional) |
+| `SKYNET_POST_MERGE_SMOKE` | `false` | Enable post-merge smoke tests and auto-revert |
+| `SKYNET_SMOKE_TIMEOUT` | `10` | Per-endpoint timeout in seconds for smoke tests |
 
 **Git:**
 
@@ -900,6 +918,7 @@ All pipeline state lives in `.dev/` as plain markdown. These files are managed e
 | `current-task-N.md` | Yes | Per-worker current task status |
 | `events.log` | No (gitignored) | Structured event log |
 | `sync-health.md` | Yes | Data sync endpoint health |
+| `scripts/post-merge-smoke.log` | No (gitignored) | Smoke test results |
 
 ### Backlog format
 
@@ -948,6 +967,7 @@ skynet/
 │   ├── dev-worker.sh      Coding worker (worktree -> agent -> gates -> merge)
 │   ├── task-fixer.sh      Failed task retry with error context
 │   ├── project-driver.sh  Mission-driven task generator
+│   ├── post-merge-smoke.sh Post-merge API smoke test + auto-revert trigger
 │   ├── agents/            Agent plugins (claude, codex, echo)
 │   └── notify/            Notification plugins (telegram, slack, discord)
 └── templates/             Scaffolded by `skynet init`
@@ -1039,6 +1059,33 @@ Check pipeline analytics:
 
 ```bash
 skynet metrics
+```
+
+### Merge keeps getting reverted
+
+If smoke tests are enabled (`SKYNET_POST_MERGE_SMOKE=true`), merges that break API routes are automatically reverted. Check the smoke test log:
+
+```bash
+skynet logs post-merge-smoke --tail 50
+```
+
+Common causes:
+- Missing environment variables (check `.env`)
+- Import path errors in newly merged code
+- API handler returning wrong response shape
+
+To temporarily disable smoke tests while debugging:
+
+```bash
+skynet config set SKYNET_POST_MERGE_SMOKE false
+```
+
+### Pipeline auto-paused
+
+The watchdog pauses the pipeline if main fails 2 consecutive smoke tests. Fix the underlying issue, then resume:
+
+```bash
+skynet resume
 ```
 
 ## License

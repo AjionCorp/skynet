@@ -766,6 +766,31 @@ EOF
     git commit -m "chore(${task_type:-pipeline}): $task_title" --no-verify 2>/dev/null || true
   fi
 
+  # --- Post-merge smoke test (if enabled) ---
+  if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
+    log "Running post-merge smoke test..."
+    if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
+      log "SMOKE TEST FAILED — reverting merge"
+      git revert HEAD --no-edit 2>>"$LOG"
+      git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" 2>/dev/null || true
+      git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
+
+      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+        mark_in_backlog "- [x] $task_title" "- [x] $task_title _(smoke failed)_"
+        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed | 0 | pending |" >> "$FAILED"
+      fi
+
+      _CURRENT_TASK_TITLE=""
+      _one_shot_exit=1
+      release_merge_lock
+      tg "🔄 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} REVERTED*: $task_title (smoke test failed)"
+      emit_event "task_reverted" "Worker $WORKER_ID: $task_title (smoke test failed)"
+      log "Merge reverted. Task moved to failed-tasks."
+      continue
+    fi
+    log "Post-merge smoke test passed."
+  fi
+
   release_merge_lock
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"

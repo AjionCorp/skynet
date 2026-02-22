@@ -702,6 +702,41 @@ _health_score_alert() {
 }
 _health_score_alert
 
+# --- Periodic smoke check (if enabled) ---
+# If main is broken (server returns errors), pause pipeline to prevent cascading failures.
+# Uses 2-strike rule: first failure sets sentinel, second consecutive failure pauses.
+if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
+  _smoke_fail_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-smoke-fail"
+  _smoke_auto_pause_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-smoke-auto-paused"
+  if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
+    if [ -f "$_smoke_fail_sentinel" ]; then
+      # Second consecutive failure — pause pipeline
+      if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
+        log "SMOKE CHECK: 2 consecutive failures — pausing pipeline"
+        touch "$DEV_DIR/pipeline-paused"
+        touch "$_smoke_auto_pause_sentinel"
+        tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Pipeline auto-paused — main branch failing smoke tests"
+        emit_event "pipeline_paused" "Auto-paused: smoke test failing on main"
+      fi
+    else
+      log "SMOKE CHECK: first failure — will pause on next failure"
+      date +%s > "$_smoke_fail_sentinel"
+    fi
+  else
+    # Smoke passed — clear sentinel and auto-unpause if we were the ones who paused
+    if [ -f "$_smoke_fail_sentinel" ]; then
+      rm -f "$_smoke_fail_sentinel"
+      log "SMOKE CHECK: passed — cleared failure sentinel"
+    fi
+    if [ -f "$_smoke_auto_pause_sentinel" ] && [ -f "$DEV_DIR/pipeline-paused" ]; then
+      rm -f "$DEV_DIR/pipeline-paused" "$_smoke_auto_pause_sentinel"
+      log "SMOKE CHECK: pipeline auto-unpaused — smoke tests passing again"
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Pipeline auto-unpaused — smoke tests passing"
+      emit_event "pipeline_resumed" "Auto-unpaused: smoke tests passing"
+    fi
+  fi
+fi
+
 # --- Pipeline pause check (skip dispatch but still run health checks above) ---
 pipeline_paused=false
 if [ -f "$DEV_DIR/pipeline-paused" ]; then

@@ -594,6 +594,24 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       fix_duration=$(format_duration $(( $(date +%s) - fix_start_epoch )))
       echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $((fix_attempts + 1))) |" >> "$COMPLETED"
 
+      # --- Post-merge smoke test (if enabled) ---
+      if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
+        log "Running post-merge smoke test..."
+        if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
+          log "SMOKE TEST FAILED — reverting fix merge"
+          git revert HEAD --no-edit 2>>"$LOG"
+          update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed after fix | $((fix_attempts + 1)) | pending |"
+
+          _CURRENT_TASK_TITLE=""
+          release_merge_lock
+          tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
+          emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
+          echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
+          continue
+        fi
+        log "Post-merge smoke test passed."
+      fi
+
       _CURRENT_TASK_TITLE=""
       log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
       release_merge_lock
