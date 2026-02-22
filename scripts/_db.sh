@@ -7,6 +7,8 @@ DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 
 # --- SQL injection prevention ---
 _sql_escape() { echo "$1" | sed "s/'/''/g"; }
+# Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
+_sql_int() { echo "${1%%[^0-9]*}"; }
 
 # --- Error-checked sqlite3 wrapper for mutations ---
 # Usage: _sql_exec "SQL statement"
@@ -202,15 +204,17 @@ db_claim_next_task() {
     fi
     if ! $blocked; then
       local changed
+      local _int_wid; _int_wid=$(_sql_int "$worker_id")
+      local _int_tid; _int_tid=$(_sql_int "$tid")
       changed=$(sqlite3 "$DB_PATH" "
-        UPDATE tasks SET status='claimed', worker_id=$worker_id,
+        UPDATE tasks SET status='claimed', worker_id=$_int_wid,
           claimed_at=datetime('now'), updated_at=datetime('now')
-        WHERE id=$tid AND status='pending';
+        WHERE id=$_int_tid AND status='pending';
         SELECT changes();
       ")
       if [ "$changed" = "1" ]; then
         result=$(sqlite3 -separator '|' "$DB_PATH" \
-          "SELECT id, title, tag, description, branch FROM tasks WHERE id=$tid;")
+          "SELECT id, title, tag, description, branch FROM tasks WHERE id=$_int_tid;")
         break
       fi
     fi
@@ -220,7 +224,7 @@ db_claim_next_task() {
 }
 
 db_unclaim_task() {
-  local task_id="$1"
+  local task_id; task_id=$(_sql_int "$1")
   _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
     WHERE id=$task_id AND status='claimed';
@@ -237,7 +241,9 @@ db_unclaim_task_by_title() {
 
 # Complete a task (successful merge)
 db_complete_task() {
-  local task_id="$1" branch="$2" duration="$3" duration_secs="${4:-0}" notes="${5:-success}"
+  local task_id; task_id=$(_sql_int "$1")
+  local branch="$2" duration="$3" duration_secs; duration_secs=$(_sql_int "${4:-0}")
+  local notes="${5:-success}"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local notes_esc; notes_esc=$(_sql_escape "$notes")
   _sql_exec "
@@ -250,7 +256,8 @@ db_complete_task() {
 
 # Record task failure
 db_fail_task() {
-  local task_id="$1" branch="$2" error="$3"
+  local task_id; task_id=$(_sql_int "$1")
+  local branch="$2" error="$3"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
   _sql_exec "
@@ -290,7 +297,7 @@ db_add_task() {
 
 # Mark a backlog task as done (the [x] equivalent — task was completed elsewhere)
 db_mark_done() {
-  local task_id="$1"
+  local task_id; task_id=$(_sql_int "$1")
   sqlite3 "$DB_PATH" "UPDATE tasks SET status='done', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
@@ -302,7 +309,7 @@ db_get_task_id_by_title() {
 
 # Get task row by ID. Output: id|title|tag|status|branch|error|attempts
 db_get_task() {
-  local task_id="$1"
+  local task_id; task_id=$(_sql_int "$1")
   sqlite3 -separator '|' "$DB_PATH" \
     "SELECT id, title, tag, status, branch, error, attempts FROM tasks WHERE id=$task_id;"
 }
@@ -318,7 +325,8 @@ db_get_pending_failures() {
 }
 
 db_claim_failure() {
-  local task_id="$1" fixer_id="$2"
+  local task_id; task_id=$(_sql_int "$1")
+  local fixer_id; fixer_id=$(_sql_int "$2")
   local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
   local changed
   changed=$(sqlite3 "$DB_PATH" "
@@ -339,7 +347,10 @@ db_unclaim_failure() {
 }
 
 db_update_failure() {
-  local task_id="$1" error="$2" attempts="$3" status="$4"
+  local task_id; task_id=$(_sql_int "$1")
+  local error="$2"
+  local attempts; attempts=$(_sql_int "$3")
+  local status="$4"
   local error_esc; error_esc=$(_sql_escape "$error")
   local status_esc; status_esc=$(_sql_escape "$status")
   _sql_exec "
@@ -349,7 +360,10 @@ db_update_failure() {
 }
 
 db_fix_task() {
-  local task_id="$1" branch="$2" attempts="$3" error="${4:-}"
+  local task_id; task_id=$(_sql_int "$1")
+  local branch="$2"
+  local attempts; attempts=$(_sql_int "$3")
+  local error="${4:-}"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
   _sql_exec "
@@ -360,12 +374,12 @@ db_fix_task() {
 }
 
 db_block_task() {
-  local task_id="$1"
+  local task_id; task_id=$(_sql_int "$1")
   _sql_exec "UPDATE tasks SET status='blocked', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
 db_supersede_task() {
-  local task_id="$1"
+  local task_id; task_id=$(_sql_int "$1")
   _sql_exec "UPDATE tasks SET status='superseded', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
@@ -385,7 +399,11 @@ db_auto_supersede_completed() {
 # ============================================================
 
 db_set_worker_status() {
-  local wid="$1" wtype="$2" status="$3" task_id="${4:-}" title="${5:-}" branch="${6:-}"
+  local wid; wid=$(_sql_int "$1")
+  local wtype="$2" status="$3"
+  local task_id_val="NULL"
+  [ -n "${4:-}" ] && task_id_val=$(_sql_int "$4")
+  local title="${5:-}" branch="${6:-}"
   local wtype_esc; wtype_esc=$(_sql_escape "$wtype")
   local status_esc; status_esc=$(_sql_escape "$status")
   local title_esc; title_esc=$(_sql_escape "$title")
@@ -394,16 +412,17 @@ db_set_worker_status() {
   [ "$status" = "in_progress" ] && started_val="datetime('now')"
   _sql_exec "
     INSERT INTO workers (id, worker_type, status, current_task_id, task_title, branch, started_at, updated_at)
-    VALUES ($wid, '$wtype_esc', '$status_esc', ${task_id:-NULL}, '$title_esc', '$branch_esc', $started_val, datetime('now'))
+    VALUES ($wid, '$wtype_esc', '$status_esc', $task_id_val, '$title_esc', '$branch_esc', $started_val, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
-      worker_type='$wtype_esc', status='$status_esc', current_task_id=${task_id:-NULL},
+      worker_type='$wtype_esc', status='$status_esc', current_task_id=$task_id_val,
       task_title='$title_esc', branch='$branch_esc',
       started_at=$started_val, updated_at=datetime('now');
   "
 }
 
 db_set_worker_idle() {
-  local wid="$1" info="${2:-}"
+  local wid; wid=$(_sql_int "$1")
+  local info="${2:-}"
   local info_esc; info_esc=$(_sql_escape "$info")
   _sql_exec "
     INSERT INTO workers (id, status, task_title, branch, started_at, last_info, updated_at)
@@ -415,7 +434,7 @@ db_set_worker_idle() {
 }
 
 db_update_heartbeat() {
-  local wid="$1"
+  local wid; wid=$(_sql_int "$1")
   local epoch; epoch=$(date +%s)
   _sql_exec "
     INSERT INTO workers (id, heartbeat_epoch, updated_at)
@@ -427,14 +446,14 @@ db_update_heartbeat() {
 # Update progress epoch — called from the main worker loop (not the heartbeat
 # subshell) to prove the worker is making forward progress, not hung.
 db_update_progress() {
-  local wid="$1"
+  local wid; wid=$(_sql_int "$1")
   local epoch; epoch=$(date +%s)
   sqlite3 "$DB_PATH" "UPDATE workers SET progress_epoch=$epoch WHERE id=$wid;" 2>/dev/null || true
 }
 
 # Output: id|worker_type|status|current_task_id|task_title|branch|started_at|heartbeat_epoch|last_info
 db_get_worker_status() {
-  local wid="$1"
+  local wid; wid=$(_sql_int "$1")
   sqlite3 -separator '|' "$DB_PATH" \
     "SELECT id, worker_type, status, current_task_id, task_title, branch, started_at, heartbeat_epoch, last_info
      FROM workers WHERE id=$wid;"
@@ -442,7 +461,7 @@ db_get_worker_status() {
 
 # Output: id|heartbeat_epoch|age_secs (one per stale worker)
 db_get_stale_heartbeats() {
-  local stale_secs="$1"
+  local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
   sqlite3 -separator '|' "$DB_PATH" \
     "SELECT id, heartbeat_epoch, ($now - heartbeat_epoch) as age_secs
@@ -454,7 +473,7 @@ db_get_stale_heartbeats() {
 # Detect hung workers: heartbeat is fresh (subshell alive) but progress is stale
 # (main loop stuck). Returns id|progress_epoch|age_secs for hung workers.
 db_get_hung_workers() {
-  local stale_secs="$1"
+  local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
   sqlite3 -separator '|' "$DB_PATH" \
     "SELECT id, progress_epoch, ($now - progress_epoch) as age_secs
@@ -477,7 +496,7 @@ db_add_blocker() {
 }
 
 db_resolve_blocker() {
-  local bid="$1"
+  local bid; bid=$(_sql_int "$1")
   _sql_exec "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE id=$bid;"
 }
 
@@ -498,11 +517,13 @@ db_add_event() {
   local detail_esc; detail_esc=$(_sql_escape "$detail")
   local event_esc; event_esc=$(_sql_escape "$event")
   local epoch; epoch=$(date +%s)
-  _sql_exec "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$event_esc', '$detail_esc', ${wid:-NULL});"
+  local wid_val="NULL"
+  [ -n "$wid" ] && wid_val=$(_sql_int "$wid")
+  _sql_exec "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$event_esc', '$detail_esc', $wid_val);"
 }
 
 db_get_recent_events() {
-  local limit="${1:-100}"
+  local limit; limit=$(_sql_int "${1:-100}")
   sqlite3 -separator '|' "$DB_PATH" "SELECT epoch, event, detail, worker_id FROM events ORDER BY epoch DESC LIMIT $limit;"
 }
 
@@ -515,12 +536,14 @@ db_add_fixer_stat() {
   local result_esc; result_esc=$(_sql_escape "$result")
   local title_esc; title_esc=$(_sql_escape "$title")
   local epoch; epoch=$(date +%s)
-  _sql_exec "INSERT INTO fixer_stats (epoch, result, task_title, fixer_id) VALUES ($epoch, '$result_esc', '$title_esc', ${fixer_id:-NULL});"
+  local fid_val="NULL"
+  [ -n "$fixer_id" ] && fid_val=$(_sql_int "$fixer_id")
+  _sql_exec "INSERT INTO fixer_stats (epoch, result, task_title, fixer_id) VALUES ($epoch, '$result_esc', '$title_esc', $fid_val);"
 }
 
 # Get last N fixer results (for consecutive failure detection)
 db_get_consecutive_failures() {
-  local count="${1:-5}"
+  local count; count=$(_sql_int "${1:-5}")
   sqlite3 -separator '|' "$DB_PATH" "SELECT result FROM fixer_stats ORDER BY epoch DESC LIMIT $count;"
 }
 

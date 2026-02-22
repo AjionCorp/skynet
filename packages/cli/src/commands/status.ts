@@ -320,7 +320,7 @@ export async function statusCommand(options: StatusOptions) {
     }
   }
 
-  if (!usingSqlite || (staleHeartbeatCount === 0 && staleTasks24hCount === 0)) {
+  if (!usingSqlite) {
     for (let wid = 1; wid <= maxWorkers; wid++) {
       const hbPath = join(devDir, `worker-${wid}.heartbeat`);
       if (existsSync(hbPath)) {
