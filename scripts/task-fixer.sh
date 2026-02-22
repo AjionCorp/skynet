@@ -368,7 +368,7 @@ fix_start_epoch=$(date +%s)
 # --- Set up worktree for the failed branch ---
 _handle_worktree_failure() {
   log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
-  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $fix_attempts | pending |"
   _CURRENT_TASK_TITLE=""
   exit 0
@@ -574,7 +574,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
-    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" 2>/dev/null || true
+    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" || true
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed after fix attempt $new_attempts | $new_attempts | pending |"
     _CURRENT_TASK_TITLE=""
     db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
@@ -597,7 +597,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "Could not acquire merge lock — another worker is merging. Keeping as pending for retry."
       cleanup_worktree
       new_attempts=$((fix_attempts + 1))
-      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" 2>/dev/null || true
+      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" || true
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       exit 0
@@ -654,7 +654,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
       fix_duration=$(format_duration $fix_duration_secs)
-      [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" 2>/dev/null || true
+      [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || true
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $error_summary | $_fix_new_attempts | fixed |"
       echo "| $(date '+%Y-%m-%d') | $task_title | merged to $SKYNET_MAIN_BRANCH | $fix_duration | fixed (attempt $_fix_new_attempts) |" >> "$COMPLETED"
 
@@ -664,7 +664,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
           log "SMOKE TEST FAILED — reverting fix merge"
           git revert HEAD --no-edit 2>>"$LOG"
-          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" 2>/dev/null || true
+          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
           update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed after fix | $((fix_attempts + 1)) | pending |"
 
           _CURRENT_TASK_TITLE=""
@@ -694,7 +694,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     else
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
-      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" 2>/dev/null || true
+      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || true
       update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict after fix attempt $new_attempts | $new_attempts | pending |"
       _CURRENT_TASK_TITLE=""
       release_merge_lock
@@ -713,7 +713,7 @@ else
   if [ "${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-false}" = "true" ] && usage_limit_hit "$LOG"; then
     log "Usage limit detected — not counting failure toward cooldown/attempts."
     cleanup_worktree  # Keep branch for next attempt
-    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" 2>/dev/null || true
+    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || true
     update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | usage limit (no attempt recorded) | $fix_attempts | pending |"
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
@@ -726,7 +726,7 @@ else
 
   cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))
-  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" || true
   update_failed_line "$task_title" "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $error_summary (fix attempt $new_attempts failed) | $new_attempts | pending |"
 
   _CURRENT_TASK_TITLE=""

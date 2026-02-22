@@ -5,6 +5,7 @@
 MERGE_LOCK="${SKYNET_LOCK_PREFIX}-merge.lock"
 
 # Acquire merge lock (mkdir-based mutex).
+# Writes owning PID so watchdog can proactively detect dead holders.
 # Waits up to ~30s (60 retries x 0.5s). Stale lock timeout: 120s.
 # Returns 0 on success, 1 on failure.
 acquire_merge_lock() {
@@ -12,24 +13,40 @@ acquire_merge_lock() {
   while ! mkdir "$MERGE_LOCK" 2>/dev/null; do
     attempts=$((attempts + 1))
     if [ "$attempts" -ge 60 ]; then
-      # Check for stale lock (older than 120s — merges can be slow)
+      # Check for stale lock — first by PID liveness, then by age
       if [ -d "$MERGE_LOCK" ]; then
+        local _ml_pid=""
+        [ -f "$MERGE_LOCK/pid" ] && _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+        # If PID is recorded and dead, reclaim immediately
+        if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
+          rm -rf "$MERGE_LOCK" 2>/dev/null || true
+          if mkdir "$MERGE_LOCK" 2>/dev/null; then
+            echo $$ > "$MERGE_LOCK/pid"
+            return 0
+          fi
+        fi
+        # Fallback: check age (covers case where PID file is missing)
         local lock_mtime
         lock_mtime=$(file_mtime "$MERGE_LOCK")
         local lock_age=$(( $(date +%s) - lock_mtime ))
         if [ "$lock_age" -gt 120 ]; then
           rm -rf "$MERGE_LOCK" 2>/dev/null || true
-          mkdir "$MERGE_LOCK" 2>/dev/null && return 0
+          if mkdir "$MERGE_LOCK" 2>/dev/null; then
+            echo $$ > "$MERGE_LOCK/pid"
+            return 0
+          fi
         fi
       fi
       return 1
     fi
     sleep 0.5
   done
+  # Lock acquired — write our PID
+  echo $$ > "$MERGE_LOCK/pid"
   return 0
 }
 
 # Release merge lock.
 release_merge_lock() {
-  rmdir "$MERGE_LOCK" 2>/dev/null || rm -rf "$MERGE_LOCK" 2>/dev/null || true
+  rm -rf "$MERGE_LOCK" 2>/dev/null || true
 }

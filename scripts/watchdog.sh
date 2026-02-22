@@ -174,9 +174,9 @@ crash_recovery() {
         fi
         stale=true
         log "Zombie worker: $lockfile (PID $lock_pid, ${lock_age_secs}s old > ${stale_secs}s limit)"
-        # Graceful kill first, then force
+        # Graceful kill first, then force — allow 10s for EXIT trap cleanup
         kill -TERM "$lock_pid" 2>/dev/null || true
-        sleep 2
+        sleep 10
         kill -0 "$lock_pid" 2>/dev/null && kill -9 "$lock_pid" 2>/dev/null || true
       fi
     fi
@@ -288,6 +288,17 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 
 # --- Run crash recovery before dispatching ---
 crash_recovery
+
+# --- Proactive merge lock cleanup ---
+# If the merge lock holder's PID is dead, remove the lock immediately rather
+# than waiting for the 120s stale timeout to expire.
+if [ -d "$MERGE_LOCK" ] && [ -f "$MERGE_LOCK/pid" ]; then
+  _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+  if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
+    log "Merge lock held by dead PID $_ml_pid — removing proactively"
+    rm -rf "$MERGE_LOCK" 2>/dev/null || true
+  fi
+fi
 
 # --- SQLite integrity check ---
 # Quick check that the database is not corrupted. If it is, alert the operator
@@ -447,6 +458,29 @@ for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   fi
   _handle_stale_worker "$_wid"
 done
+
+# Detect hung workers: heartbeat is fresh (subshell alive) but main loop
+# hasn't made progress in SKYNET_STALE_MINUTES. Kill these workers so
+# watchdog crash recovery can unclaim their tasks.
+_hung_stale_secs=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
+_hung_workers=$(db_get_hung_workers "$_hung_stale_secs" 2>/dev/null || true)
+if [ -n "$_hung_workers" ]; then
+  while IFS='|' read -r _hwid _hprog _hage; do
+    [ -z "$_hwid" ] && continue
+    _hw_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${_hwid}.lock"
+    _hw_pid=""
+    if [ -d "$_hw_lock" ] && [ -f "$_hw_lock/pid" ]; then
+      _hw_pid=$(cat "$_hw_lock/pid" 2>/dev/null || echo "")
+    fi
+    if [ -n "$_hw_pid" ] && kill -0 "$_hw_pid" 2>/dev/null; then
+      log "Hung worker $_hwid detected (heartbeat OK, progress stale ${_hage}s) — killing PID $_hw_pid"
+      kill -TERM "$_hw_pid" 2>/dev/null || true
+      sleep 10
+      kill -0 "$_hw_pid" 2>/dev/null && kill -9 "$_hw_pid" 2>/dev/null || true
+      tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Killed hung worker $_hwid (no progress for ${_hage}s)"
+    fi
+  done <<< "$_hung_workers"
+fi
 
 # --- Normalize a task title for fuzzy matching ---
 # Strips tags ([FIX], [FEAT], etc.), strips "FRESH implementation" suffix,

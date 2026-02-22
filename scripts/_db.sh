@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS workers (
   branch          TEXT DEFAULT '',
   started_at      TEXT,
   heartbeat_epoch INTEGER,
+  progress_epoch  INTEGER,
   last_info       TEXT DEFAULT '',
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -139,6 +140,9 @@ SCHEMA
     echo "FATAL: db_init failed (rc=$_init_rc): $_init_err" >&2
     exit 1
   fi
+
+  # Schema migrations — add columns that may not exist in older databases
+  sqlite3 "$DB_PATH" "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
 }
 
 # ============================================================
@@ -420,6 +424,14 @@ db_update_heartbeat() {
   "
 }
 
+# Update progress epoch — called from the main worker loop (not the heartbeat
+# subshell) to prove the worker is making forward progress, not hung.
+db_update_progress() {
+  local wid="$1"
+  local epoch; epoch=$(date +%s)
+  sqlite3 "$DB_PATH" "UPDATE workers SET progress_epoch=$epoch WHERE id=$wid;" 2>/dev/null || true
+}
+
 # Output: id|worker_type|status|current_task_id|task_title|branch|started_at|heartbeat_epoch|last_info
 db_get_worker_status() {
   local wid="$1"
@@ -437,6 +449,20 @@ db_get_stale_heartbeats() {
      FROM workers
      WHERE heartbeat_epoch IS NOT NULL AND heartbeat_epoch > 0
        AND ($now - heartbeat_epoch) > $stale_secs;"
+}
+
+# Detect hung workers: heartbeat is fresh (subshell alive) but progress is stale
+# (main loop stuck). Returns id|progress_epoch|age_secs for hung workers.
+db_get_hung_workers() {
+  local stale_secs="$1"
+  local now; now=$(date +%s)
+  sqlite3 -separator '|' "$DB_PATH" \
+    "SELECT id, progress_epoch, ($now - progress_epoch) as age_secs
+     FROM workers
+     WHERE status = 'in_progress'
+       AND heartbeat_epoch IS NOT NULL AND ($now - heartbeat_epoch) <= $stale_secs
+       AND progress_epoch IS NOT NULL AND progress_epoch > 0
+       AND ($now - progress_epoch) > $stale_secs;"
 }
 
 # ============================================================
