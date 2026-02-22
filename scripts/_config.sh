@@ -279,17 +279,26 @@ validate_backlog() {
     done <<< "$claimed_lines"
   fi
 
-  # (3) blockedBy references must point to existing tasks in backlog or completed
+  # (3) blockedBy references must point to existing tasks and not self-reference
   while IFS= read -r line; do
     local deps
     deps=$(echo "$line" | sed -n 's/.*| *[bB]locked[bB]y: *\(.*\)$/\1/p')
     [ -z "$deps" ] && continue
+    # Extract own title for self-reference detection
+    local _own_title
+    _own_title=$(echo "$line" | sed 's/^- \[.\] //;s/^\[[^]]*\] //;s/ | [bB]locked[bB]y:.*//;s/ —.*//')
     local _old_ifs="$IFS"
     IFS=','
     # shellcheck disable=SC2086
     for dep in $deps; do
       dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')
       [ -z "$dep" ] && continue
+      # Detect self-reference (task blocking itself)
+      if [ "$dep" = "$_own_title" ]; then
+        _vb_log "BACKLOG HEALTH: task blocks itself: '$dep'"
+        warnings=$((warnings + 1))
+        continue
+      fi
       local found=false
       # Check backlog (any status line containing the dep as substring)
       grep '^\- \[.\]' "$BACKLOG" 2>/dev/null | grep -qF "$dep" && found=true

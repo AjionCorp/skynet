@@ -127,11 +127,16 @@ is_task_blocked() {
   if [ -z "$blocked_by" ]; then
     return 1  # no dependencies — not blocked
   fi
+  # Extract own title (strip checkbox, tag, description, and blockedBy metadata)
+  local own_title
+  own_title=$(echo "$task_line" | sed 's/^- \[.\] //;s/^\[[^]]*\] //;s/ | [bB]locked[bB]y:.*//;s/ —.*//')
   # Split on comma and check each dependency
   local IFS=','
   for dep in $blocked_by; do
     dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')  # trim whitespace
     if [ -z "$dep" ]; then continue; fi
+    # Skip self-references (task cannot block itself)
+    if [ "$dep" = "$own_title" ]; then continue; fi
     # Check if this dependency is done (has [x] marker) in the backlog
     # Match: "- [x] [TAG] <dep>" or "- [x] <dep>" anywhere in the title portion
     if ! grep -F "$dep" "$BACKLOG" 2>/dev/null | grep -qF "- [x]"; then

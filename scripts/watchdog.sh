@@ -289,6 +289,19 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 # --- Run crash recovery before dispatching ---
 crash_recovery
 
+# --- SQLite integrity check ---
+# Quick check that the database is not corrupted. If it is, alert the operator
+# and continue in file-fallback mode (db functions will fail gracefully).
+_db_healthy=true
+if [ -f "$DB_PATH" ]; then
+  _db_check=$(sqlite3 "$DB_PATH" "PRAGMA quick_check;" 2>&1)
+  if [ "$_db_check" != "ok" ]; then
+    _db_healthy=false
+    log "ERROR: SQLite database failed integrity check: $_db_check"
+    tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite database corrupted — operating in file-fallback mode. Run 'skynet doctor' for details."
+  fi
+fi
+
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
 

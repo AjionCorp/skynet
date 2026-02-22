@@ -246,7 +246,7 @@ db_add_task() {
   local desc_esc; desc_esc=$(_sql_escape "$desc")
   local blocked_esc; blocked_esc=$(_sql_escape "$blocked_by")
   local norm_root
-  norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-50)
+  norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
   if [ "$position" = "top" ]; then
     sqlite3 "$DB_PATH" "UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');"

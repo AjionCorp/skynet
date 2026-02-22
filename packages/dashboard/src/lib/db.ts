@@ -266,7 +266,7 @@ export class SkynetDB {
       .toLowerCase()
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 50);
+      .slice(0, 120);
 
     if (position === "top") {
       this.db.prepare("UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed')").run();

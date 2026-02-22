@@ -126,7 +126,7 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
       const safeTitle = sqlEscape(title.trim());
       const safeTag = sqlEscape(tag);
       const safeDesc = sqlEscape(options.description?.trim() || "");
-      const root = sqlEscape(title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 50));
+      const root = sqlEscape(title.trim().toLowerCase().replace(/[^a-z0-9 ]/g, "").slice(0, 120));
       const now = new Date().toISOString();
       sqliteQuery(devDir,
         `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
