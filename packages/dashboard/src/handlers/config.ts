@@ -64,7 +64,11 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
     const exportMatch = trimmed.match(/^export\s+([A-Z_][A-Z0-9_]*)=(.*)$/);
     if (exportMatch && exportMatch[1] in updates) {
       const key = exportMatch[1];
-      const newValue = updates[key];
+      const newValue = updates[key].replace(/["\\$`!\n\r]/g, (ch) => {
+        if (ch === "\n") return "\\n";
+        if (ch === "\r") return "\\r";
+        return "\\" + ch;
+      });
       result.push(`export ${key}="${newValue}"`);
     } else {
       result.push(line);

@@ -5,6 +5,7 @@ export async function POST() {
   response.cookies.set("skynet-api-key", "", {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: 0,
   });

@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
-import { resolve, join } from "path";
+import { resolve, join, normalize } from "path";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
 
@@ -80,7 +80,13 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
   }> = [];
 
   for (const filename of snapshotKeys) {
-    const targetPath = join(devDir, filename);
+    // Reject path traversal attempts
+    const resolved = resolve(devDir, filename);
+    if (!resolved.startsWith(resolve(devDir) + "/") && resolved !== resolve(devDir)) {
+      console.error(`  Skipping unsafe filename: ${filename}`);
+      continue;
+    }
+    const targetPath = resolved;
     const exists = existsSync(targetPath);
     const currentSize = exists ? statSync(targetPath).size : 0;
     const isMd = MD_FILES.has(filename);

@@ -359,7 +359,10 @@ export async function initCommand(options: InitOptions) {
     for (const [filename, content] of Object.entries(snapshot)) {
       if (filename === "skynet.config.sh") continue;
       if (typeof content !== "string") continue;
-      writeFileSync(join(devDir, filename), content, "utf-8");
+      // Reject path traversal attempts
+      const resolvedTarget = resolve(devDir, filename);
+      if (!resolvedTarget.startsWith(resolve(devDir) + "/") && resolvedTarget !== resolve(devDir)) continue;
+      writeFileSync(resolvedTarget, content, "utf-8");
       restored++;
     }
 

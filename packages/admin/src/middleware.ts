@@ -5,8 +5,20 @@ import { safeCompare } from "./lib/auth";
 export function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
 
-  // No key configured = auth disabled (backward compat for local dev)
-  if (!apiKey) return NextResponse.next();
+  // No key configured: fail closed in production, allow in dev
+  if (!apiKey) {
+    if (process.env.NODE_ENV === "production") {
+      const { pathname } = request.nextUrl;
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json(
+          { data: null, error: "Auth not configured" },
+          { status: 500 }
+        );
+      }
+      return new NextResponse("SKYNET_DASHBOARD_API_KEY not set", { status: 500 });
+    }
+    return NextResponse.next();
+  }
 
   const { pathname } = request.nextUrl;
 

@@ -3,16 +3,16 @@ import { safeCompare } from "../../../../lib/auth";
 
 export async function POST(request: Request) {
   try {
-    const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength > 1_000_000) {
+    const text = await request.text();
+    if (text.length > 1_000_000) {
       return NextResponse.json({ error: "Request body too large" }, { status: 413 });
     }
-    const { apiKey } = (await request.json()) as { apiKey: string };
+    const { apiKey } = JSON.parse(text) as { apiKey: string };
     const expected = process.env.SKYNET_DASHBOARD_API_KEY;
 
     if (!expected) {
       return NextResponse.json(
-        { error: "Auth not configured. Set SKYNET_DASHBOARD_API_KEY." },
+        { error: "Authentication error" },
         { status: 500 }
       );
     }

@@ -160,6 +160,13 @@ export function createTasksHandlers(config: SkynetConfig) {
           { status: 400 }
         );
       }
+      // Reject newlines to prevent markdown injection into backlog
+      if (/[\n\r]/.test(title) || (description && /[\n\r]/.test(description)) || (blockedBy && /[\n\r]/.test(blockedBy))) {
+        return Response.json(
+          { data: null, error: "Fields must not contain newlines" },
+          { status: 400 }
+        );
+      }
 
       // Atomic lock acquisition using mkdir with retry (mirrors shell script pattern)
       let lockAcquired = false;
