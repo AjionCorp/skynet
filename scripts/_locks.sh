@@ -17,6 +17,15 @@ acquire_merge_lock() {
       if [ -d "$MERGE_LOCK" ]; then
         local _ml_pid=""
         [ -f "$MERGE_LOCK/pid" ] && _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+        # If PID file is missing, the holder crashed between mkdir and PID write —
+        # treat as immediately stale (no live process to race with).
+        if [ -z "$_ml_pid" ]; then
+          rm -rf "$MERGE_LOCK" 2>/dev/null || true
+          if mkdir "$MERGE_LOCK" 2>/dev/null; then
+            echo $$ > "$MERGE_LOCK/pid"
+            return 0
+          fi
+        fi
         # If PID is recorded and dead, reclaim immediately
         if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
           rm -rf "$MERGE_LOCK" 2>/dev/null || true
@@ -25,7 +34,7 @@ acquire_merge_lock() {
             return 0
           fi
         fi
-        # Fallback: check age (covers case where PID file is missing)
+        # Fallback: check age (covers case where PID is alive but lock is ancient)
         local lock_mtime
         lock_mtime=$(file_mtime "$MERGE_LOCK")
         local lock_age=$(( $(date +%s) - lock_mtime ))

@@ -297,10 +297,13 @@ crash_recovery
 # --- Reconcile orphaned 'claimed' tasks ---
 # If a task is 'claimed' in SQLite but the worker that claimed it is either dead
 # or working on a different task, unclaim it back to 'pending'.
+# Time guard: only reconcile claims older than 120s to avoid racing with the
+# ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
 _orphaned_claimed=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
   SELECT t.id, t.title, t.worker_id
   FROM tasks t
   WHERE t.status = 'claimed' AND t.worker_id IS NOT NULL
+    AND t.claimed_at < datetime('now', '-120 seconds')
     AND NOT EXISTS (
       SELECT 1 FROM workers w
       WHERE w.id = t.worker_id AND w.status = 'in_progress' AND w.current_task_id = t.id
@@ -317,11 +320,17 @@ if [ -n "$_orphaned_claimed" ]; then
 fi
 
 # --- Proactive merge lock cleanup ---
-# If the merge lock holder's PID is dead, remove the lock immediately rather
-# than waiting for the 120s stale timeout to expire.
-if [ -d "$MERGE_LOCK" ] && [ -f "$MERGE_LOCK/pid" ]; then
-  _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
-  if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
+# If the merge lock holder's PID is dead (or PID file is missing, indicating a
+# crash between mkdir and PID write), remove the lock immediately rather than
+# waiting for the 120s stale timeout to expire.
+if [ -d "$MERGE_LOCK" ]; then
+  _ml_pid=""
+  [ -f "$MERGE_LOCK/pid" ] && _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+  if [ -z "$_ml_pid" ]; then
+    # No PID file — process crashed between mkdir and PID write; reclaim
+    log "Merge lock has no PID file — removing stale lock proactively"
+    rm -rf "$MERGE_LOCK" 2>/dev/null || true
+  elif ! kill -0 "$_ml_pid" 2>/dev/null; then
     log "Merge lock held by dead PID $_ml_pid — removing proactively"
     rm -rf "$MERGE_LOCK" 2>/dev/null || true
   fi
