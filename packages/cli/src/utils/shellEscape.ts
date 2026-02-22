@@ -1,9 +1,13 @@
 /**
  * Shell-escape a value for safe embedding in bash double-quoted strings.
- * Escapes: " \ $ ` !
+ * Escapes: " \ $ ` ! \n \r
  */
 export function shellEscape(s: string): string {
-  return s.replace(/["\\$`!]/g, "\\$&");
+  return s.replace(/["\\$`!\n\r]/g, (ch) => {
+    if (ch === "\n") return "\\n";
+    if (ch === "\r") return "\\r";
+    return "\\" + ch;
+  });
 }
 
 /**
@@ -11,8 +15,8 @@ export function shellEscape(s: string): string {
  * Returns an error message or null if the value looks safe.
  */
 export function validateShellValue(value: string): string | null {
-  if (/[`]|\$\(|;/.test(value)) {
-    return `Value contains disallowed shell characters: ${value}`;
+  if (/[`]|\$\(|;|\n|\r/.test(value)) {
+    return "Value contains disallowed shell characters";
   }
   return null;
 }

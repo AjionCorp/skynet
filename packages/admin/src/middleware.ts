@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { safeCompare } from "./lib/auth";
 
 export function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
@@ -23,7 +24,7 @@ export function middleware(request: NextRequest) {
   const cookie = request.cookies.get("skynet-api-key");
   const token = authHeader?.replace("Bearer ", "") || cookie?.value;
 
-  if (token === apiKey) return NextResponse.next();
+  if (token && safeCompare(token, apiKey)) return NextResponse.next();
 
   // API routes return 401 JSON
   if (pathname.startsWith("/api/")) {

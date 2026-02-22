@@ -1,5 +1,5 @@
 import { readFileSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 
 /**
  * Read a file from the .dev/ directory. Returns empty string if file does not exist.
@@ -21,10 +21,11 @@ export function getLastLogLine(
 ): string | null {
   if (!/^[a-z0-9-]+$/i.test(script)) return null;
   try {
-    const line = execSync(`tail -1 "${devDir}/scripts/${script}.log"`, {
+    const result = spawnSync("tail", ["-1", `${devDir}/scripts/${script}.log`], {
       encoding: "utf-8",
       timeout: 2000,
-    }).trim();
+    });
+    const line = (result.stdout || "").trim();
     return line || null;
   } catch {
     return null;

@@ -86,6 +86,14 @@ _load_plugin_as() {
     return
   fi
 
+  # Validate plugin syntax before sourcing (catches parse errors safely)
+  if ! bash -n "$plugin_path" 2>/dev/null; then
+    log "ERROR: Agent plugin has syntax errors: $plugin_path"
+    eval "${prefix}_agent_check() { return 1; }"
+    eval "${prefix}_agent_run() { echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Plugin syntax invalid: $plugin_path\" >> \"\${2:-/dev/null}\"; return 1; }"
+    return
+  fi
+
   # Source the plugin (defines agent_run + agent_check)
   # shellcheck source=/dev/null
   source "$plugin_path"

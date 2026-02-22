@@ -148,6 +148,18 @@ export function createTasksHandlers(config: SkynetConfig) {
           { status: 400 }
         );
       }
+      if (title.length > 500) {
+        return Response.json(
+          { data: null, error: "Title must be 500 characters or fewer" },
+          { status: 400 }
+        );
+      }
+      if (description && description.length > 2000) {
+        return Response.json(
+          { data: null, error: "Description must be 2000 characters or fewer" },
+          { status: 400 }
+        );
+      }
 
       // Atomic lock acquisition using mkdir with retry (mirrors shell script pattern)
       let lockAcquired = false;

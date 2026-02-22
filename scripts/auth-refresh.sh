@@ -73,9 +73,8 @@ print(d.get('rateLimitTier', ''))
   now_ms=$(python3 -c "import time; print(int(time.time() * 1000))")
   local remaining_secs=$(( (expires_at - now_ms) / 1000 ))
 
-  # Always export current token to cache file for cron scripts
-  echo "$access_token" > "$TOKEN_CACHE"
-  chmod 600 "$TOKEN_CACHE"
+  # Always export current token to cache file for cron scripts (secure permissions)
+  (umask 077; echo "$access_token" > "$TOKEN_CACHE")
 
   if [ "$remaining_secs" -gt "$REFRESH_BUFFER_SECS" ]; then
     log "Token still valid for ${remaining_secs}s ($(( remaining_secs / 60 ))m). No refresh needed."
@@ -161,9 +160,8 @@ print(json.dumps(creds))
   # Write back to Keychain
   write_keychain "$new_creds"
 
-  # Export new token to cache file for cron scripts
-  echo "$new_access" > "$TOKEN_CACHE"
-  chmod 600 "$TOKEN_CACHE"
+  # Export new token to cache file for cron scripts (secure permissions)
+  (umask 077; echo "$new_access" > "$TOKEN_CACHE")
 
   local now_after
   now_after=$(python3 -c "import time; print(int(time.time() * 1000))")
