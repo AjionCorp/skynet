@@ -8,9 +8,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 SERVER_LOG="${1:-$SCRIPTS_DIR/next-dev.log}"
 LOG="$SCRIPTS_DIR/server-errors.log"
-# shellcheck disable=SC2034
-MINUTES="${2:-5}"
-
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 if [ ! -f "$SERVER_LOG" ]; then

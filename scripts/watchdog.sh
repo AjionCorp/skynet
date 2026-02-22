@@ -263,11 +263,14 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     local orphan_pids
     orphan_pids=$(pgrep -f "$wt_dir" 2>/dev/null || true)
     if [ -n "$orphan_pids" ]; then
-      log "Killing orphan processes in $wt_dir: $(echo $orphan_pids | tr '\n' ' ')"
+      log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
       echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
       sleep 1
       echo "$orphan_pids" | xargs kill -9 2>/dev/null || true
     fi
+
+    # Re-check: worker may have started between initial check and now
+    is_running "$wt_lock" && continue
 
     # Remove the orphan worktree
     cd "$PROJECT_DIR"
@@ -512,7 +515,7 @@ _auto_supersede_completed_tasks() {
 # --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
 # SQLite auto-supersede (atomic, handles normalized root matching)
 _db_superseded=$(db_auto_supersede_completed 2>/dev/null || echo 0)
-if [ "$_db_superseded" -gt 0 ] 2>/dev/null; then
+if [ "${_db_superseded:-0}" -gt 0 ] 2>/dev/null; then
   log "SQLite auto-superseded $_db_superseded failed task(s)"
 fi
 # Also run file-based auto-supersede for backward compat

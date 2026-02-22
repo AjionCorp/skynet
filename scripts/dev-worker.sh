@@ -258,7 +258,11 @@ setup_worktree() {
 
   # Install dependencies (fast — pnpm content-addressable store is cached)
   log "Installing deps in worktree..."
-  (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
+  if ! (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1; then
+    log "ERROR: Dependency install failed in worktree"
+    WORKTREE_LAST_ERROR="install_failed"
+    return 1
+  fi
 }
 
 # Remove worktree. Optionally delete the branch too.

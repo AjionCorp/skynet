@@ -542,8 +542,8 @@ db_get_cleanup_branches() {
 db_task_exists() {
   local title; title=$(_sql_escape "$1")
   local count
-  count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE title='$title';")
-  [ "$count" != "0" ] && return 0 || return 1
+  count=$(_sql_query "SELECT COUNT(*) FROM tasks WHERE title='$title';")
+  [ "${count:-0}" != "0" ] && return 0 || return 1
 }
 
 # Get all tasks for export (pipe-delimited)
