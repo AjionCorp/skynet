@@ -122,6 +122,7 @@ jobs:
         run: |
           git config --global user.email "ci@ajioncorp.com"
           git config --global user.name "CI"
+          git config --global init.defaultBranch main
       - run: bash tests/integration/pipeline-cycle.test.sh
 
   security-audit:

@@ -74,17 +74,20 @@ echo ""
 _tlog "=== Setup: creating isolated git environment ==="
 
 # Step 1-3: Create bare remote and clone as project
+# Force 'main' as default branch — CI (Ubuntu) may default to 'master'
 git init --bare "$TMPDIR_ROOT/remote.git" >/dev/null 2>&1
+git -C "$TMPDIR_ROOT/remote.git" symbolic-ref HEAD refs/heads/main
 git clone "$TMPDIR_ROOT/remote.git" "$TMPDIR_ROOT/project" >/dev/null 2>&1
 
 # Step 4: Create initial commit and push
 cd "$TMPDIR_ROOT/project"
+git checkout -b main 2>/dev/null || true
 git config user.email "test@integration.test"
 git config user.name "Integration Test"
 echo "# Test Project" > README.md
 git add README.md
 git commit -m "Initial commit" >/dev/null 2>&1
-git push origin main >/dev/null 2>&1
+git push -u origin main >/dev/null 2>&1
 
 # Step 5-6: Create .dev/ and config
 mkdir -p "$TMPDIR_ROOT/project/.dev"
