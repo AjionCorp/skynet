@@ -143,6 +143,7 @@ else
 fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
+_db_task_id=""
 
 cleanup_on_exit() {
   local exit_code=$?
@@ -175,6 +176,8 @@ cleanup_on_exit() {
     db_export_state_files 2>/dev/null || true
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
+  # Ensure fixer status is idle on exit (normal or abnormal)
+  db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
   # Release PID lock
   rm -rf "$LOCKFILE"
   # Log crash event (only on abnormal exit)
@@ -660,7 +663,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
           git_push_with_retry || log "WARNING: push of smoke test revert failed"
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
-      
+          db_export_state_files
 
           _CURRENT_TASK_TITLE=""
           release_merge_lock
@@ -710,6 +713,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
       emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
       db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
+      db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
     else
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
@@ -750,4 +754,6 @@ else
   db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
 fi
 
+# Ensure fixer is idle before exit (cleanup_on_exit also does this as a safety net)
+db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
 log "Task-fixer finished."

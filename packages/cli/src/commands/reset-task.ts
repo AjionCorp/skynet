@@ -92,6 +92,10 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
   console.log(`    Status:   ${status}`);
 
   // Reset the task in SQLite
+  if (!taskId || isNaN(Number(taskId))) {
+    console.error("Invalid task ID");
+    process.exit(1);
+  }
   const now = sqlEscape(new Date().toISOString());
   sqliteQuery(devDir,
     `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${now}' ` +

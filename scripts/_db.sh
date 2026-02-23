@@ -213,7 +213,6 @@ db_claim_next_task() {
     if [ -n "$tblocked" ]; then
       local _old_ifs="$IFS"; IFS=','
       for dep in $tblocked; do
-        IFS="$_old_ifs"
         dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')
         [ -z "$dep" ] && continue
         # Check in-memory lookup instead of spawning sqlite3

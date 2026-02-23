@@ -119,6 +119,9 @@ export async function recoverGitCommand(options: RecoverOptions) {
   // Reset incorrectly-completed tasks in SQLite to 'failed'
   if (isSqliteReady(devDir) && taskTitles.length > 0) {
     console.log("\n  Resetting affected tasks to 'failed' in SQLite...");
+    // Safety: sqlEscape handles quotes, backslashes, newlines, and NUL bytes.
+    // The escaped value is always embedded in SQL single-quoted string literals.
+    // See sqliteQuery.ts JSDoc for the full security model.
     for (const title of taskTitles) {
       try {
         const escaped = sqlEscape(title);

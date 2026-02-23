@@ -880,7 +880,15 @@ EOF
   tg "✅ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} MERGED*: $task_title ($remaining tasks remaining)"
   emit_event "task_completed" "Worker $WORKER_ID: $task_title"
   tasks_completed=$((tasks_completed + 1))
+
+  # Reset worker to idle between tasks so dashboard shows accurate status
+  db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || true
+  # Reset progress epoch so next task starts fresh (prevents false hung-worker detection)
+  db_update_progress "$WORKER_ID" 2>/dev/null || true
 done
+
+# Worker loop finished — ensure status is idle before exit
+db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || true
 
 log "Dev worker $WORKER_ID finished: $tasks_attempted attempted, $tasks_completed completed, $tasks_failed failed."
 emit_event "worker_session_end" "Worker $WORKER_ID: $tasks_completed completed, $tasks_failed failed of $tasks_attempted attempted"
