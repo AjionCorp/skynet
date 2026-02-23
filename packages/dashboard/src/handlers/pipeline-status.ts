@@ -1,8 +1,13 @@
+import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { spawnSync } from "child_process";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
 import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
+import { decodeJwtExp } from "../lib/jwt";
 
 /**
  * Parse current-task.md into a structured object.
@@ -29,7 +34,7 @@ function parseCurrentTask(raw: string) {
  * Parse a human-readable duration string (e.g., "23m", "1h 12m") into minutes.
  * Returns null if the string cannot be parsed.
  */
-// NOTE: duration parsing duplicated in pipeline-status.ts, status.ts, and db.ts
+// NOTE: duration parsing also exists in packages/cli/src/commands/metrics.ts
 function parseDurationMinutes(s: string): number | null {
   const hm = s.match(/^(\d+)h\s+(\d+)m$/);
   if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
@@ -50,20 +55,7 @@ function formatDuration(minutes: number): string {
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
 }
 
-// NOTE: duplicated in packages/cli/src/commands/status.ts
-// Kept separate to avoid cross-package dependency for a 10-line function
-function decodeJwtExp(token: string): number | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
-  try {
-    const json = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
-    return typeof json.exp === "number" ? json.exp : null;
-  } catch {
-    return null;
-  }
-}
+
 
 function readCodexAuthStatus(
   readFile: (path: string, encoding: BufferEncoding) => string,
@@ -192,8 +184,6 @@ function evaluateCriterion(
     handlerCount: number;
   }
 ): { status: MissionProgress["status"]; evidence: string } {
-  const { existsSync, readdirSync } = require("fs") as typeof import("fs");
-
   switch (id) {
     case 1: {
       // "Any project can go from zero to autonomous AI development in under 5 minutes"
@@ -466,7 +456,6 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         });
 
       // Auth status
-      const { existsSync, readFileSync, statSync } = await import("fs");
       const tokenCachePath = config.authTokenCache ?? `${lockPrefix}-claude-token`;
       const authFailPath = config.authFailFlag ?? `${lockPrefix}-auth-failed`;
 
@@ -517,35 +506,34 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const backlogLocked = existsSync(backlogLockPath);
 
       // Git status — run in project root (parent of devDir)
-      const { execSync } = await import("child_process");
       const projectRoot = devDir.replace(/\/?\.dev\/?$/, "");
       let gitBranch = "unknown";
       let commitsAhead = 0;
       let dirtyFiles = 0;
       let lastGitCommit: string | null = null;
       try {
-        gitBranch = execSync("git rev-parse --abbrev-ref HEAD", {
-          encoding: "utf-8",
-          timeout: 3000,
-          cwd: projectRoot,
-        }).trim();
-        const aheadMatch = execSync(
-          "git rev-list --count origin/main..HEAD 2>/dev/null || echo 0",
-          { encoding: "utf-8", timeout: 3000, cwd: projectRoot }
-        ).trim();
-        commitsAhead = Number(aheadMatch) || 0;
-        const dirtyOutput = execSync("git status --porcelain", {
-          encoding: "utf-8",
-          timeout: 3000,
-          cwd: projectRoot,
-        }).trim();
-        dirtyFiles = dirtyOutput ? dirtyOutput.split("\n").length : 0;
-        lastGitCommit =
-          execSync('git log -1 --format="%H %s" 2>/dev/null', {
-            encoding: "utf-8",
-            timeout: 3000,
-            cwd: projectRoot,
-          }).trim() || null;
+        const branchResult = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+          cwd: projectRoot, encoding: "utf-8", timeout: 5000,
+        });
+        if (branchResult.status === 0) gitBranch = (branchResult.stdout?.trim()) || "unknown";
+
+        const aheadResult = spawnSync("git", ["rev-list", "--count", "origin/main..HEAD"], {
+          cwd: projectRoot, encoding: "utf-8", timeout: 5000,
+        });
+        commitsAhead = aheadResult.status === 0 ? (Number(aheadResult.stdout?.trim()) || 0) : 0;
+
+        const dirtyResult = spawnSync("git", ["status", "--porcelain"], {
+          cwd: projectRoot, encoding: "utf-8", timeout: 5000,
+        });
+        if (dirtyResult.status === 0) {
+          const dirtyOutput = dirtyResult.stdout?.trim() || "";
+          dirtyFiles = dirtyOutput ? dirtyOutput.split("\n").length : 0;
+        }
+
+        const logResult = spawnSync("git", ["log", "-1", "--format=%H %s"], {
+          cwd: projectRoot, encoding: "utf-8", timeout: 5000,
+        });
+        lastGitCommit = logResult.status === 0 ? (logResult.stdout?.trim() || null) : null;
       } catch {
         /* ignore */
       }
@@ -624,13 +612,10 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       }
 
       // Mission progress — count handlers from this package
-      const { readdirSync: readdir } = await import("fs");
-      const { fileURLToPath } = await import("url");
-      const { dirname } = await import("path");
       let handlerCount = 0;
       try {
         const handlersDir = dirname(fileURLToPath(import.meta.url));
-        handlerCount = readdir(handlersDir).filter(
+        handlerCount = readdirSync(handlersDir).filter(
           (f: string) =>
             (f.endsWith(".ts") || f.endsWith(".js")) &&
             !f.includes(".test.") &&

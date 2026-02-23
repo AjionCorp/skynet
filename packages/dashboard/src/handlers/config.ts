@@ -80,6 +80,46 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
   renameSync(tmpPath, configPath);
 }
 
+const MUTABLE_KEYS = new Set([
+  "SKYNET_MAX_WORKERS",
+  "SKYNET_MAX_FIXERS",
+  "SKYNET_MAX_TASKS_PER_RUN",
+  "SKYNET_STALE_MINUTES",
+  "SKYNET_AGENT_TIMEOUT_MINUTES",
+  "SKYNET_MAX_FIX_ATTEMPTS",
+  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
+  "SKYNET_DRIVER_BACKLOG_THRESHOLD",
+  "SKYNET_HEALTH_ALERT_THRESHOLD",
+  "SKYNET_MAX_LOG_SIZE_KB",
+  "SKYNET_MAX_EVENTS_LOG_KB",
+  "SKYNET_WATCHDOG_INTERVAL",
+  "SKYNET_ONE_SHOT",
+  "SKYNET_POST_MERGE_SMOKE",
+  "SKYNET_SMOKE_TIMEOUT",
+  "SKYNET_POST_MERGE_TYPECHECK",
+  "SKYNET_GIT_PUSH_TIMEOUT",
+  "SKYNET_TG_ENABLED",
+  "SKYNET_TG_BOT_TOKEN",
+  "SKYNET_TG_CHAT_ID",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+  "SKYNET_NOTIFY_CHANNELS",
+  "SKYNET_DEV_SERVER_CMD",
+  "SKYNET_DEV_SERVER_URL",
+  "SKYNET_DEV_PORT",
+  "SKYNET_TYPECHECK_CMD",
+  "SKYNET_LINT_CMD",
+  "SKYNET_INSTALL_CMD",
+  "SKYNET_GATE_1",
+  "SKYNET_GATE_2",
+  "SKYNET_GATE_3",
+  "SKYNET_BRANCH_PREFIX",
+  "SKYNET_CLAUDE_FLAGS",
+  "SKYNET_CODEX_FLAGS",
+  "SKYNET_CODEX_MODEL",
+  "SKYNET_AGENT_PLUGIN",
+]);
+
 /**
  * Validate config updates — reject dangerous values.
  */
@@ -88,13 +128,19 @@ function validateUpdates(updates: Record<string, string>): string | null {
     if (typeof key !== "string" || typeof value !== "string") {
       return `Invalid type for key "${key}"`;
     }
-    // Block shell injection: no backticks, $(), ${}, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes
+    // Block shell injection: no backticks, $(), ${}, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
+    // Note: bare $VAR references are intentionally allowed — bash will expand them when sourcing.
+    // Only $() and ${} command/brace expansion are blocked for security.
     if (/[`"'|&><()]|\$[({]|;|\n|\r/.test(value)) {
       return `Unsafe characters in value for "${key}"`;
     }
     // Key must be a valid bash variable name
     if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
       return `Invalid config key "${key}"`;
+    }
+    // Only allow known mutable config keys
+    if (!MUTABLE_KEYS.has(key)) {
+      return `Key '${key}' is not in the list of updatable configuration keys`;
     }
     // Key-specific validation
     if (key === "SKYNET_MAX_WORKERS") {

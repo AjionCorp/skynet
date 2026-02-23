@@ -16,6 +16,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
     let watcher: FSWatcher | null = null;
     let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+    let lifetimeTimeout: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
 
     function cleanup() {
@@ -31,6 +32,10 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
         debounceTimer = null;
+      }
+      if (lifetimeTimeout) {
+        clearTimeout(lifetimeTimeout);
+        lifetimeTimeout = null;
       }
     }
 
@@ -102,6 +107,14 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
             cleanup();
           });
         }, 10_000);
+
+        // Close stream after 5 minutes to prevent indefinite connections.
+        // Clients using EventSource will automatically reconnect.
+        const MAX_LIFETIME_MS = 5 * 60 * 1000;
+        lifetimeTimeout = setTimeout(() => {
+          cleanup();
+          try { controller.close(); } catch { /* already closed */ }
+        }, MAX_LIFETIME_MS);
       },
       cancel() {
         cleanup();

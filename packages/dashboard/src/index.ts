@@ -40,6 +40,7 @@ export { getWorkerStatus } from "./lib/worker-status";
 export { parseBacklog, backlogCounts } from "./lib/backlog-parser";
 export { parseBody } from "./lib/parse-body";
 export type { ParsedBacklogItem } from "./lib/backlog-parser";
+export { decodeJwtExp } from "./lib/jwt";
 
 // Handler factories
 export {

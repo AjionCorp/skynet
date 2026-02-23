@@ -37,6 +37,7 @@ function parsePlist(content: string) {
   const logMatch = content.match(
     /<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/
   );
+  // logPath is read from the plist file; React auto-escapes in JSX so no XSS risk in the dashboard.
   const logPath = logMatch?.[1] ?? null;
 
   return { interval, runAtLoad, scriptPath, logPath };

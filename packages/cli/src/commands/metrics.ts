@@ -12,7 +12,7 @@ interface MetricsOptions {
  * Parse duration string ("Nm" or "Nh Mm") to minutes.
  * Returns NaN if unparseable.
  */
-// NOTE: duration parsing duplicated in pipeline-status.ts, status.ts, and db.ts
+// NOTE: duration parsing also exists in packages/dashboard/src/handlers/pipeline-status.ts
 function parseDurationMinutes(dur: string): number {
   const trimmed = dur.trim();
 

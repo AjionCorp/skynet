@@ -1,6 +1,6 @@
 import { existsSync, readdirSync } from "fs";
 import { resolve, join } from "path";
-import { execSync, spawn } from "child_process";
+import { spawnSync, spawn } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isProcessRunning } from "../utils/isProcessRunning";
 
@@ -44,7 +44,7 @@ export async function startCommand(options: StartOptions) {
       for (const plist of plists) {
         const plistPath = join(launchAgentsDir, plist);
         try {
-          execSync(`launchctl load "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
+          spawnSync("launchctl", ["load", plistPath], { stdio: "ignore" });
           agentsLoaded.push(plist);
           console.log(`    Loaded: ${plist}`);
         } catch {
@@ -72,7 +72,6 @@ export async function startCommand(options: StartOptions) {
     } else {
       console.log("  No launchd agents found. Launching watchdog.sh directly...\n");
 
-      const logFile = join(scriptsDir, "watchdog.log");
       const child = spawn("bash", [watchdogScript], {
         cwd: projectDir,
         detached: true,
@@ -82,7 +81,7 @@ export async function startCommand(options: StartOptions) {
 
       child.unref();
       console.log(`    Watchdog launched (PID: ${child.pid})`);
-      console.log(`    Log: ${logFile}`);
+      console.log(`    Log: ${scriptsDir}/watchdog.log`);
     }
   }
 

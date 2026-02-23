@@ -18,12 +18,17 @@ _sql_escape() { echo "$1" | sed "s/'/''/g"; }
 # Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
 _sql_int() { local v="${1%%[^0-9]*}"; echo "${v:-0}"; }
 
+# --- sqlite3 with automatic busy_timeout (no output pollution) ---
+# .timeout is a dot-command that sets busy_timeout without producing output.
+_db() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH"; }
+_db_sep() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"; }
+
 # --- Error-checked sqlite3 wrapper for mutations ---
 # Usage: _sql_exec "SQL statement"
 # Logs to stderr and returns 1 on failure.
 _sql_exec() {
   local _sql_err
-  _sql_err=$(sqlite3 "$DB_PATH" "$1" 2>&1)
+  _sql_err=$(_db "$1" 2>&1)
   local _sql_rc=$?
   if [ $_sql_rc -ne 0 ]; then
     local _sql_ctx="${1:0:200}"
@@ -37,7 +42,7 @@ _sql_exec() {
 # Error-checked sqlite3 wrapper that returns pipe-delimited rows.
 _sql_query() {
   local _sql_err
-  _sql_err=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "$1" 2>&1)
+  _sql_err=$(_db_sep "$1" 2>&1)
   local _sql_rc=$?
   if [ $_sql_rc -ne 0 ]; then
     local _sql_ctx="${1:0:200}"
@@ -152,7 +157,7 @@ SCHEMA
   fi
 
   # Schema migrations — add columns that may not exist in older databases
-  sqlite3 "$DB_PATH" "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
+  _db "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
 }
 
 # ============================================================
@@ -162,21 +167,21 @@ SCHEMA
 # Used by tests; production uses db_claim_next_task() instead
 # Output: pipe-delimited rows: id|title|tag|description|blocked_by|priority
 db_get_pending_tasks() {
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, title, tag, description, blocked_by, priority FROM tasks WHERE status = 'pending' ORDER BY priority ASC;"
 }
 
 db_count_pending() {
-  sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status = 'pending';"
+  _db "SELECT COUNT(*) FROM tasks WHERE status = 'pending';"
 }
 
 db_count_claimed() {
-  sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status = 'claimed';"
+  _db "SELECT COUNT(*) FROM tasks WHERE status = 'claimed';"
 }
 
 db_count_by_status() {
   local status; status=$(_sql_escape "$1")
-  sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status = '$status';"
+  _db "SELECT COUNT(*) FROM tasks WHERE status = '$status';"
 }
 
 # Find + atomically claim the next unblocked pending task for a worker.
@@ -189,7 +194,7 @@ db_claim_next_task() {
 
   # Build a lookup set of completed task titles (one query)
   local _completed_titles
-  if ! _completed_titles=$(sqlite3 "$DB_PATH" \
+  if ! _completed_titles=$(_db \
     "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null); then
     log "WARNING: db_claim_next_task: failed to load completed titles — all blocked tasks will stay blocked" 2>/dev/null || true
     _completed_titles=""
@@ -215,19 +220,19 @@ db_claim_next_task() {
       local changed
       local _int_wid; _int_wid=$(_sql_int "$worker_id")
       local _int_tid; _int_tid=$(_sql_int "$tid")
-      changed=$(sqlite3 "$DB_PATH" "
+      changed=$(_db "
         UPDATE tasks SET status='claimed', worker_id=$_int_wid,
           claimed_at=datetime('now'), updated_at=datetime('now')
         WHERE id=$_int_tid AND status='pending';
         SELECT changes();
       ")
       if [ "$changed" = "1" ]; then
-        result=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+        result=$(_db_sep \
           "SELECT id, title, tag, description, branch FROM tasks WHERE id=$_int_tid;")
         break
       fi
     fi
-  done < <(sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  done < <(_db_sep \
     "SELECT id, title, blocked_by FROM tasks WHERE status='pending' ORDER BY priority ASC;")
   echo "$result"
 }
@@ -287,16 +292,16 @@ db_add_task() {
   norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
   if [ "$position" = "top" ]; then
-    sqlite3 "$DB_PATH" "UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');"
-    sqlite3 "$DB_PATH" "
+    _db "UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');"
+    _db "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
       VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
       SELECT last_insert_rowid();
     "
   else
     local max_pri
-    max_pri=$(sqlite3 "$DB_PATH" "SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed');")
-    sqlite3 "$DB_PATH" "
+    max_pri=$(_db "SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed');")
+    _db "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
       VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', $max_pri);
       SELECT last_insert_rowid();
@@ -307,19 +312,19 @@ db_add_task() {
 # Mark a backlog task as done (the [x] equivalent — task was completed elsewhere)
 db_mark_done() {
   local task_id; task_id=$(_sql_int "$1")
-  sqlite3 "$DB_PATH" "UPDATE tasks SET status='done', updated_at=datetime('now') WHERE id=$task_id;"
+  _db "UPDATE tasks SET status='done', updated_at=datetime('now') WHERE id=$task_id;"
 }
 
 # Get task ID by title (exact match). Returns id or empty.
 db_get_task_id_by_title() {
   local title; title=$(_sql_escape "$1")
-  sqlite3 "$DB_PATH" "SELECT id FROM tasks WHERE title='$title' ORDER BY id DESC LIMIT 1;"
+  _db "SELECT id FROM tasks WHERE title='$title' ORDER BY id DESC LIMIT 1;"
 }
 
 # Get task row by ID. Output: id|title|tag|status|branch|error|attempts
 db_get_task() {
   local task_id; task_id=$(_sql_int "$1")
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, title, tag, status, branch, error, attempts FROM tasks WHERE id=$task_id;"
 }
 
@@ -329,7 +334,7 @@ db_get_task() {
 
 # Output: id|title|branch|error|attempts|status (oldest first)
 db_get_pending_failures() {
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, title, branch, error, attempts, status FROM tasks WHERE status='failed' ORDER BY failed_at ASC;"
 }
 
@@ -338,7 +343,7 @@ db_claim_failure() {
   local fixer_id; fixer_id=$(_sql_int "$2")
   local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
   local changed
-  changed=$(sqlite3 "$DB_PATH" "
+  changed=$(_db "
     UPDATE tasks SET status='fixing-$fixer_esc', fixer_id=$fixer_id, updated_at=datetime('now')
     WHERE id=$task_id AND status='failed';
     SELECT changes();
@@ -349,7 +354,7 @@ db_claim_failure() {
 db_unclaim_failure() {
   local fixer_id="$1"
   local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
-  sqlite3 "$DB_PATH" "
+  _sql_exec "
     UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
     WHERE status='fixing-$fixer_esc';
   "
@@ -392,17 +397,17 @@ db_supersede_task() {
   _sql_exec "UPDATE tasks SET status='superseded', updated_at=datetime('now') WHERE id=$task_id;"
   # Resolve any blockers associated with this task
   local _title
-  _title=$(sqlite3 "$DB_PATH" "SELECT title FROM tasks WHERE id=$task_id;" 2>/dev/null || true)
+  _title=$(_db "SELECT title FROM tasks WHERE id=$task_id;" 2>/dev/null || true)
   if [ -n "$_title" ]; then
     local _title_esc; _title_esc=$(_sql_escape "$_title")
-    sqlite3 "$DB_PATH" "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE task_title='$_title_esc' AND status='active';" 2>/dev/null || true
+    _db "UPDATE blockers SET status='resolved', resolved_at=datetime('now') WHERE task_title='$_title_esc' AND status='active';" 2>/dev/null || true
   fi
 }
 
 # Auto-supersede failed tasks matching completed roots. Returns count of changes.
 # Also resolves orphaned blockers linked to newly-superseded tasks.
 db_auto_supersede_completed() {
-  sqlite3 "$DB_PATH" "
+  _db "
     UPDATE blockers SET status='resolved', resolved_at=datetime('now')
     WHERE status='active' AND task_title IN (
       SELECT title FROM tasks
@@ -472,13 +477,13 @@ db_update_heartbeat() {
 db_update_progress() {
   local wid; wid=$(_sql_int "$1")
   local epoch; epoch=$(date +%s)
-  sqlite3 "$DB_PATH" "UPDATE workers SET progress_epoch=$epoch WHERE id=$wid;" 2>/dev/null || true
+  _db "UPDATE workers SET progress_epoch=$epoch WHERE id=$wid;" 2>/dev/null || true
 }
 
 # Output: id|worker_type|status|current_task_id|task_title|branch|started_at|heartbeat_epoch|last_info
 db_get_worker_status() {
   local wid; wid=$(_sql_int "$1")
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, worker_type, status, current_task_id, task_title, branch, started_at, heartbeat_epoch, last_info
      FROM workers WHERE id=$wid;"
 }
@@ -487,7 +492,7 @@ db_get_worker_status() {
 db_get_stale_heartbeats() {
   local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, heartbeat_epoch, ($now - heartbeat_epoch) as age_secs
      FROM workers
      WHERE heartbeat_epoch IS NOT NULL AND heartbeat_epoch > 0
@@ -499,7 +504,7 @@ db_get_stale_heartbeats() {
 db_get_hung_workers() {
   local stale_secs; stale_secs=$(_sql_int "$1")
   local now; now=$(date +%s)
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, progress_epoch, ($now - progress_epoch) as age_secs
      FROM workers
      WHERE status = 'in_progress'
@@ -525,11 +530,11 @@ db_resolve_blocker() {
 }
 
 db_get_active_blockers() {
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT id, description, task_title, created_at FROM blockers WHERE status='active' ORDER BY created_at ASC;"
+  _db_sep "SELECT id, description, task_title, created_at FROM blockers WHERE status='active' ORDER BY created_at ASC;"
 }
 
 db_count_active_blockers() {
-  sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM blockers WHERE status='active';"
+  _db "SELECT COUNT(*) FROM blockers WHERE status='active';"
 }
 
 # ============================================================
@@ -548,7 +553,7 @@ db_add_event() {
 
 db_get_recent_events() {
   local limit; limit=$(_sql_int "${1:-100}")
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT epoch, event, detail, worker_id FROM events ORDER BY epoch DESC LIMIT $limit;"
+  _db_sep "SELECT epoch, event, detail, worker_id FROM events ORDER BY epoch DESC LIMIT $limit;"
 }
 
 # ============================================================
@@ -568,12 +573,12 @@ db_add_fixer_stat() {
 # Get last N fixer results (for consecutive failure detection)
 db_get_consecutive_failures() {
   local count; count=$(_sql_int "${1:-5}")
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" "SELECT result FROM fixer_stats ORDER BY epoch DESC LIMIT $count;"
+  _db_sep "SELECT result FROM fixer_stats ORDER BY epoch DESC LIMIT $count;"
 }
 
 db_get_fix_rate_24h() {
   local cutoff; cutoff=$(( $(date +%s) - 86400 ))
-  sqlite3 "$DB_PATH" "
+  _db "
     SELECT CASE WHEN COUNT(*)=0 THEN 0
       ELSE CAST(ROUND(100.0*SUM(CASE WHEN result='success' THEN 1 ELSE 0 END)/COUNT(*)) AS INTEGER)
     END FROM fixer_stats WHERE epoch > $cutoff;
@@ -586,12 +591,11 @@ db_get_fix_rate_24h() {
 
 db_get_health_score() {
   local failed_pending active_blockers stale_hbs stale_tasks
-  failed_pending=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';")
-  active_blockers=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM blockers WHERE status='active';")
+  failed_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='failed';")
+  active_blockers=$(_db "SELECT COUNT(*) FROM blockers WHERE status='active';")
   local stale_secs=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
   stale_hbs=$(db_get_stale_heartbeats "$stale_secs" | grep -c '|') || stale_hbs=0
-  stale_tasks=$(sqlite3 "$DB_PATH" \
-    "SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now')-julianday(started_at))>1;")
+  stale_tasks=$(_db "SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now')-julianday(started_at))>1;")
   local score=$((100 - failed_pending * 5 - active_blockers * 10 - stale_hbs * 2 - stale_tasks))
   [ "$score" -lt 0 ] && score=0
   [ "$score" -gt 100 ] && score=100
@@ -604,7 +608,7 @@ db_get_health_score() {
 
 db_export_context() {
   # Single sqlite3 call with section headers embedded as literal SELECT values
-  sqlite3 -separator ' | ' "$DB_PATH" "
+  printf '.timeout 5000\n%s\n' "
     SELECT '## Backlog (pending tasks)';
     SELECT '- [ ] [' || tag || '] ' || title FROM tasks WHERE status='pending' ORDER BY priority ASC;
     SELECT '';
@@ -622,12 +626,12 @@ db_export_context() {
     SELECT '';
     SELECT '## Recent done (last 40)';
     SELECT '- [x] [' || tag || '] ' || title FROM tasks WHERE status='done' ORDER BY updated_at DESC LIMIT 40;
-  " 2>/dev/null || true
+  " | sqlite3 -separator ' | ' "$DB_PATH" 2>/dev/null || true
 }
 
 # Get branches for stale cleanup (fixed/superseded/blocked tasks)
 db_get_cleanup_branches() {
-  sqlite3 "$DB_PATH" "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded','blocked') AND branch != '' AND branch NOT LIKE 'merged%';"
+  _db "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded','blocked') AND branch != '' AND branch NOT LIKE 'merged%';"
 }
 
 # Check if a task title already exists (for dedup)
@@ -640,7 +644,7 @@ db_task_exists() {
 
 # Get all tasks for export (pipe-delimited)
 db_export_all_tasks() {
-  sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+  _db_sep \
     "SELECT id, title, tag, description, status, blocked_by, branch, worker_id, error, attempts, duration, notes, priority, created_at, updated_at, claimed_at, completed_at, failed_at FROM tasks ORDER BY id;"
 }
 
@@ -661,7 +665,7 @@ db_export_backlog() {
     echo "<!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->"
     echo ""
     # Pending + claimed tasks ordered by priority
-    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+    _db_sep \
       "SELECT tag, title, description, status, blocked_by FROM tasks
        WHERE status IN ('pending','claimed')
        ORDER BY priority ASC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _status _blocked; do
@@ -674,11 +678,11 @@ db_export_backlog() {
     done
     # Recent done history
     local _done_count
-    _done_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='done';" 2>/dev/null || echo 0)
+    _done_count=$(_db "SELECT COUNT(*) FROM tasks WHERE status='done';" 2>/dev/null || echo 0)
     if [ "${_done_count:-0}" -gt 0 ]; then
       echo ""
       echo "# Recent checked history (last 30)"
-      sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+      _db_sep \
         "SELECT tag, title, description, blocked_by, notes FROM tasks
          WHERE status='done'
          ORDER BY updated_at DESC LIMIT 30;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _blocked _notes; do
@@ -702,7 +706,7 @@ db_export_completed() {
     echo ""
     echo "| Date | Task | Branch | Duration | Notes |"
     echo "|------|------|--------|----------|-------|"
-    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+    _db_sep \
       "SELECT COALESCE(completed_at,''), tag, title, COALESCE(branch,''), COALESCE(duration,''), COALESCE(notes,'')
        FROM tasks
        WHERE status IN ('completed','fixed')
@@ -726,7 +730,7 @@ db_export_failed() {
     echo ""
     echo "| Date | Task | Branch | Error | Attempts | Status |"
     echo "|------|------|--------|-------|----------|--------|"
-    sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
+    _db_sep \
       "SELECT COALESCE(failed_at,''), tag, title, COALESCE(branch,''), COALESCE(error,''), COALESCE(attempts,0), status
        FROM tasks
        WHERE status IN ('failed','blocked','fixed','superseded')

@@ -1,6 +1,5 @@
 import { readFileSync } from "fs";
 import { join } from "path";
-import { execSync } from "child_process";
 
 export function isProcessRunning(lockPath: string): { running: boolean; pid: string } {
   try {
@@ -11,9 +10,8 @@ export function isProcessRunning(lockPath: string): { running: boolean; pid: str
     } catch {
       pid = readFileSync(lockPath, "utf-8").trim();
     }
-    // Validate PID is numeric to prevent shell injection
     if (!/^\d+$/.test(pid)) return { running: false, pid: "" };
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
+    process.kill(Number(pid), 0);
     return { running: true, pid };
   } catch {
     return { running: false, pid: "" };

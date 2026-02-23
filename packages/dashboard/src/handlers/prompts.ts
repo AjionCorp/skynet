@@ -36,6 +36,7 @@ export function createPromptsHandler(config: SkynetConfig) {
       const prompts: PromptTemplate[] = [];
 
       for (const scriptName of PROMPT_SCRIPTS) {
+        // scriptName is from hardcoded PROMPT_SCRIPTS array — not user input. Path traversal not applicable.
         const filePath = `${scriptsDir}/${scriptName}.sh`;
         let content: string;
         try {

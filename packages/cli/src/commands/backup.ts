@@ -30,12 +30,13 @@ export async function backupCommand(options: BackupOptions) {
   const backupFile = join(backupDir, `skynet.db.${timestamp}`);
 
   try {
-    const result = spawnSync("sqlite3", [dbPath, `.backup '${backupFile}'`], {
-      stdio: ["ignore", "pipe", "pipe"],
+    const result = spawnSync("sqlite3", [dbPath], {
+      input: `.backup '${backupFile.replace(/'/g, "''")}'`,
+      encoding: "utf-8",
       timeout: 30000,
     });
     if (result.status !== 0) {
-      const stderr = result.stderr ? result.stderr.toString().trim() : "";
+      const stderr = result.stderr ? result.stderr.trim() : "";
       throw new Error(`sqlite3 backup failed (exit ${result.status}): ${stderr}`);
     }
 

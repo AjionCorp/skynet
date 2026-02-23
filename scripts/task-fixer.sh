@@ -481,8 +481,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     if $SHUTDOWN_REQUESTED; then
       log "Shutdown requested before merge — reverting claim and exiting cleanly"
       cleanup_worktree  # Keep branch for next attempt
-      new_attempts=$((fix_attempts + 1))
-
+      db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       exit 0
     fi

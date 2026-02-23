@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
-import { resolve, join, normalize } from "path";
+import { resolve, join } from "path";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
 
@@ -144,6 +144,7 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
   let written = 0;
   for (const entry of plan) {
     const content = snapshot[entry.filename];
+    if (typeof content !== "string") continue;
 
     if (entry.action === "merge") {
       const existing = readFileSync(entry.targetPath, "utf-8");

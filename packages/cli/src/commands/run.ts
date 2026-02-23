@@ -17,6 +17,11 @@ export async function runCommand(task: string, options: RunOptions) {
     process.exit(1);
   }
 
+  if (task.length > 500) {
+    console.error("Task description must be 500 characters or fewer");
+    process.exit(1);
+  }
+
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
   if (!vars) {

@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, readFileSync, writeFileSync, unlinkSync, rmSync, constants } from "fs";
+import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, rmSync, constants } from "fs";
 import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
@@ -214,15 +214,19 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             logPath,
             constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND
           );
-          // All worker types accept an instance ID as first arg
-          const args = [scriptPath, String(newId)];
-          // Always pass SKYNET_DEV_DIR so scripts can find config
-          const child = spawn("bash", args, {
-            detached: true,
-            stdio: ["ignore", logFd, logFd],
-            env: { ...process.env, SKYNET_DEV_DIR: devDir },
-          });
-          child.unref();
+          try {
+            // All worker types accept an instance ID as first arg
+            const args = [scriptPath, String(newId)];
+            // Always pass SKYNET_DEV_DIR so scripts can find config
+            const child = spawn("bash", args, {
+              detached: true,
+              stdio: ["ignore", logFd, logFd],
+              env: { ...process.env, SKYNET_DEV_DIR: devDir },
+            });
+            child.unref();
+          } finally {
+            closeSync(logFd);
+          }
         }
       } else if (delta < 0) {
         // Scale down — kill highest-numbered workers first, clean up PID + heartbeat files

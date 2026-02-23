@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { safeCompare } from "../../../../lib/auth";
+import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 
 export async function POST(request: Request) {
   try {
@@ -21,9 +21,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
     }
 
-    // TODO: Store a session token or HMAC instead of the raw API key
+    const sessionToken = deriveSessionToken(expected);
     const response = NextResponse.json({ ok: true });
-    response.cookies.set("skynet-api-key", apiKey, {
+    response.cookies.set("skynet-api-key", sessionToken, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

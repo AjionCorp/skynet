@@ -559,13 +559,12 @@ export class SkynetDB {
 // ─── Singleton factory ───────────────────────────────────────────────
 
 let _instance: SkynetDB | null = null;
-let _instanceDevDir: string | null = null;
 
 export function getSkynetDB(devDir: string): SkynetDB {
-  if (!_instance || _instanceDevDir !== devDir) {
-    _instance?.close();
+  if (!_instance) {
     _instance = new SkynetDB(`${devDir}/skynet.db`);
-    _instanceDevDir = devDir;
   }
   return _instance;
 }
+
+process.on("exit", () => { _instance?.close(); _instance = null; });

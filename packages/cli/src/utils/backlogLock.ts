@@ -6,11 +6,11 @@ import { mkdirSync, rmSync, statSync } from "fs";
  *
  * @returns true if lock acquired, false if timed out
  */
-export function acquireBacklogLock(
+export async function acquireBacklogLock(
   lockPath: string,
   retries = 50,
   intervalMs = 100,
-): boolean {
+): Promise<boolean> {
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
       mkdirSync(lockPath);
@@ -45,10 +45,8 @@ export function acquireBacklogLock(
       return false;
     }
 
-    // Busy-wait (sync sleep via Atomics for sub-second precision)
-    const buf = new SharedArrayBuffer(4);
-    const arr = new Int32Array(buf);
-    Atomics.wait(arr, 0, 0, intervalMs);
+    // Async sleep between retries
+    await new Promise(r => setTimeout(r, intervalMs));
   }
   return false;
 }

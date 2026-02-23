@@ -185,6 +185,11 @@ _CURRENT_TASK_TITLE=""
 cleanup_on_exit() {
   # Stop heartbeat writer
   _stop_heartbeat 2>/dev/null || true
+  # Ensure we're on main branch (may be on feature branch if killed during merge recovery)
+  cd "$PROJECT_DIR" 2>/dev/null || true
+  git rebase --abort 2>/dev/null || true
+  git merge --abort 2>/dev/null || true
+  git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
   # Release merge lock if held
   release_merge_lock 2>/dev/null || true
   # Clean up worktree if it exists

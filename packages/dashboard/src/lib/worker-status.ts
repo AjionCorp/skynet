@@ -1,5 +1,4 @@
 import { readFileSync, statSync } from "fs";
-import { execSync } from "child_process";
 import { join } from "path";
 
 /**
@@ -19,7 +18,7 @@ export function getWorkerStatus(lockFile: string): {
       pid = readFileSync(lockFile, "utf-8").trim();
     }
     if (!/^\d+$/.test(pid)) return { running: false, pid: null, ageMs: null };
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
+    process.kill(Number(pid), 0);
     const age = Date.now() - statSync(lockFile).mtimeMs;
     return { running: true, pid: Number(pid), ageMs: age };
   } catch {

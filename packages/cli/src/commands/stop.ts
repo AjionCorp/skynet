@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, readdirSync, rmSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 
 interface StopOptions {
@@ -34,7 +34,7 @@ function stopProcess(lockFile: string, name: string): boolean {
 
   try {
     // Check if process is actually running
-    execSync(`kill -0 ${pid}`, { stdio: "ignore" });
+    process.kill(Number(pid), 0);
 
     // Send SIGTERM for graceful shutdown
     process.kill(Number(pid), "SIGTERM");
@@ -82,7 +82,7 @@ export async function stopCommand(options: StopOptions) {
       for (const plist of plists) {
         const plistPath = join(launchAgentsDir, plist);
         try {
-          execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
+          spawnSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
           agentsUnloaded++;
           console.log(`    Unloaded: ${plist}`);
         } catch {

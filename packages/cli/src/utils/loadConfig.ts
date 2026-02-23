@@ -14,7 +14,8 @@ export function loadConfig(projectDir: string): Record<string, string> | null {
     const match = line.match(/^export\s+(\w+)=(?:"(.*)"|(\S+))/);
     if (match) {
       let value = match[2] ?? match[3];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || process.env[key] || "");
+      const ALLOWED_ENV = new Set(["HOME", "USER", "PATH"]);
+      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => vars[key] || (ALLOWED_ENV.has(key) ? process.env[key] || "" : ""));
       vars[match[1]] = value;
     }
   }

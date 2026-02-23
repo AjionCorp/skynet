@@ -268,7 +268,7 @@ crash_recovery
 # or working on a different task, unclaim it back to 'pending'.
 # Time guard: only reconcile claims older than 120s to avoid racing with the
 # ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
-_orphaned_claimed=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
+_orphaned_claimed=$(_db_sep "
   SELECT t.id, t.title, t.worker_id
   FROM tasks t
   WHERE t.status = 'claimed' AND t.worker_id IS NOT NULL
@@ -291,7 +291,7 @@ fi
 # If a fixer crashes, the task stays in 'fixing-N' status forever because
 # db_get_pending_failures() only queries status='failed'. Detect stale fixing
 # tasks where the fixer is dead and reset them to 'failed' for retry.
-_stale_fixing=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
+_stale_fixing=$(_db_sep "
   SELECT id, title, fixer_id
   FROM tasks
   WHERE status LIKE 'fixing-%'
@@ -312,7 +312,7 @@ if [ -n "$_stale_fixing" ]; then
     fi
     # Fixer is dead — reset task to 'failed' for retry
     _sf_int_id=$(_sql_int "$_sf_id")
-    sqlite3 "$DB_PATH" "
+    _db "
       UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
       WHERE id=$_sf_int_id AND status LIKE 'fixing-%';
     " 2>/dev/null || true
@@ -343,11 +343,37 @@ fi
 # and continue in file-fallback mode (db functions will fail gracefully).
 _db_healthy=true
 if [ -f "$DB_PATH" ]; then
-  _db_check=$(sqlite3 "$DB_PATH" "PRAGMA quick_check;" 2>&1)
+  _db_check=$(_db "PRAGMA quick_check;" 2>&1)
   if [ "$_db_check" != "ok" ]; then
     _db_healthy=false
     log "ERROR: SQLite database failed integrity check: $_db_check"
-    tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite database corrupted — operating in file-fallback mode. Run 'skynet doctor' for details."
+    tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite database corrupted — attempting automatic restore."
+
+    # --- Automatic DB restore from most recent daily backup ---
+    _restore_backup=$(ls -1t "$DEV_DIR/db-backups"/skynet.db.2* 2>/dev/null | head -1)
+    if [ -n "$_restore_backup" ]; then
+      log "Attempting automatic DB restore from $_restore_backup"
+      _backup_check=$(sqlite3 "$_restore_backup" "PRAGMA quick_check;" 2>/dev/null | head -1)
+      if [ "$_backup_check" = "ok" ]; then
+        cp "$DB_PATH" "$DB_PATH.corrupted.$(date +%s)"
+        sqlite3 "$_restore_backup" ".backup '$DB_PATH'"
+        _restore_check=$(sqlite3 "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | head -1)
+        if [ "$_restore_check" = "ok" ]; then
+          _db_healthy=true
+          log "DB restore succeeded from $_restore_backup"
+          tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite auto-restored from backup $_restore_backup"
+        else
+          log "CRITICAL: DB restore verification failed"
+          tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: DB restore failed verification. Manual intervention required."
+        fi
+      else
+        log "CRITICAL: Backup file $_restore_backup is also corrupted"
+        tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Backup also corrupted. Manual intervention required."
+      fi
+    else
+      log "CRITICAL: No backup files found — cannot auto-restore"
+      tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: No backups available for restore. Manual intervention required."
+    fi
   fi
 fi
 
@@ -753,8 +779,8 @@ _health_score_alert() {
   score=$(db_get_health_score 2>/dev/null || echo "")
   if [ -n "$score" ]; then
     # Query component counts for logging when alert fires
-    pending_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';" 2>/dev/null || echo 0)
-    active_blockers=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM blockers WHERE status='active';" 2>/dev/null || echo 0)
+    pending_failed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='failed';" 2>/dev/null || echo 0)
+    active_blockers=$(_db "SELECT COUNT(*) FROM blockers WHERE status='active';" 2>/dev/null || echo 0)
   fi
   if [ -z "$score" ]; then
     _score_source="file"
@@ -849,8 +875,10 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
   log "Pipeline is paused. Skipping worker dispatch."
 fi
 
-# --- Only kick Claude-dependent workers if auth is OK ---
-if $agent_auth_ok && ! $pipeline_paused; then
+# --- Only kick Claude-dependent workers if auth is OK and DB is healthy ---
+if ! $_db_healthy; then
+  log "Skipping dispatch — DB unhealthy"
+elif $agent_auth_ok && ! $pipeline_paused; then
   # Rule 1: Kick dev-workers proportional to backlog size
   # Worker N starts when backlog has >= N tasks and worker N is idle
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do

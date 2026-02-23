@@ -121,7 +121,14 @@ export async function testNotifyCommand(options: TestNotifyOptions) {
     return;
   }
 
-  // Validate --channel flag
+  // Validate channel name against hardcoded whitelist
+  const VALID_CHANNELS = ["telegram", "slack", "discord"];
+  if (options.channel && !VALID_CHANNELS.includes(options.channel)) {
+    console.error(`Unknown channel: ${options.channel}. Valid channels: ${VALID_CHANNELS.join(", ")}`);
+    process.exit(1);
+  }
+
+  // Validate --channel flag against configured channels
   if (options.channel && !allChannels.includes(options.channel)) {
     console.error(
       `Channel "${options.channel}" is not in SKYNET_NOTIFY_CHANNELS (${channelsStr})`

@@ -173,7 +173,8 @@ export function createTasksHandlers(config: SkynetConfig) {
         const db = getSkynetDB(devDir);
         db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
 
-        // Regenerate backlog.md from SQLite
+        // SQLite is authoritative — backlog.md is a best-effort regeneration for legacy compatibility.
+        // If exportBacklog fails, the task is still safely in SQLite.
         try {
           db.exportBacklog(backlogPath);
         } catch (exportErr) {

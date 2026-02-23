@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { safeCompare } from "./lib/auth";
+import { safeCompare, deriveSessionToken } from "./lib/auth";
 
 export function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
@@ -36,7 +36,11 @@ export function middleware(request: NextRequest) {
   const cookie = request.cookies.get("skynet-api-key");
   const token = authHeader?.replace("Bearer ", "") || cookie?.value;
 
-  if (token && safeCompare(token, apiKey)) return NextResponse.next();
+  // Accept either the raw API key (Bearer header) or HMAC-derived session token (cookie)
+  const expectedSessionToken = deriveSessionToken(apiKey);
+  if (token && (safeCompare(token, apiKey) || safeCompare(token, expectedSessionToken))) {
+    return NextResponse.next();
+  }
 
   // API routes return 401 JSON
   if (pathname.startsWith("/api/")) {

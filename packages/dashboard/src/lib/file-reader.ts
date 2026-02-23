@@ -9,7 +9,8 @@ import { spawnSync } from "child_process";
 export function readDevFile(devDir: string, filename: string): string {
   if (/\.\.[/\\]/.test(filename) || filename.startsWith("/")) return "";
   const resolved = resolve(devDir, filename);
-  if (!resolved.startsWith(resolve(devDir))) return "";
+  const resolvedDevDir = resolve(devDir);
+  if (!resolved.startsWith(resolvedDevDir + "/") && resolved !== resolvedDevDir) return "";
   try {
     // Resolve symlinks to prevent escaping devDir via symlink targets
     const real = realpathSync(resolved);

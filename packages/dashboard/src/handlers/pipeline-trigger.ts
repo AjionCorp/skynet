@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, constants } from "fs";
+import { openSync, closeSync, constants } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
@@ -57,12 +57,16 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
 
       // Fire and forget using spawn with explicit argv (no shell injection)
       const logFd = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
-      const child = spawn("bash", [scriptPath, ...args], {
-        detached: true,
-        stdio: ["ignore", logFd, logFd],
-        env: { ...process.env, SKYNET_DEV_DIR: devDir },
-      });
-      child.unref();
+      try {
+        const child = spawn("bash", [scriptPath, ...args], {
+          detached: true,
+          stdio: ["ignore", logFd, logFd],
+          env: { ...process.env, SKYNET_DEV_DIR: devDir },
+        });
+        child.unref();
+      } finally {
+        closeSync(logFd);
+      }
 
       return Response.json({
         data: { triggered: true, script },
