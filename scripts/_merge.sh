@@ -1,0 +1,237 @@
+#!/usr/bin/env bash
+# _merge.sh — Shared merge-to-main logic for dev-worker and task-fixer
+# Sourced by _config.sh after _locks.sh.
+#
+# Provides do_merge_to_main() which encapsulates:
+#   1. Acquire merge lock
+#   2. Pull latest main
+#   3. Merge branch (ff-first, then regular, then rebase recovery)
+#   4. Post-merge typecheck with auto-revert on failure
+#   5. Push to origin with auto-revert on failure
+#   6. Release merge lock
+#
+# Return codes:
+#   0 = success (merged + pushed)
+#   1 = merge conflict (branch not merged)
+#   2 = typecheck failed post-merge (reverted + pushed)
+#   3 = critical failure (revert failed, main may be broken)
+#   4 = merge lock contention (could not acquire)
+#   5 = pull failed (could not update main)
+#   6 = push failed post-merge (reverted + pushed)
+#   7 = smoke test failed (reverted + pushed)
+
+# do_merge_to_main — Merge a feature branch into main, typecheck, push.
+#
+# Arguments:
+#   $1 = branch_name       — The feature branch to merge
+#   $2 = worktree_dir      — The worktree dir to clean up (can be empty if already cleaned)
+#   $3 = log_file          — Log file path (for git output redirection)
+#   $4 = pre_lock_rebased  — "true" if pre-lock rebase succeeded, "false" otherwise
+#
+# Expects these globals from the sourcing script:
+#   PROJECT_DIR, SKYNET_MAIN_BRANCH, SKYNET_POST_MERGE_TYPECHECK,
+#   SKYNET_TYPECHECK_CMD, SKYNET_INSTALL_CMD, SKYNET_POST_MERGE_SMOKE,
+#   SKYNET_SCRIPTS_DIR, MERGE_LOCK
+#   Functions: log(), cleanup_worktree(), git_pull_with_retry(),
+#              git_push_with_retry(), acquire_merge_lock(), release_merge_lock(),
+#              file_mtime()
+#
+# On return, the caller is on $SKYNET_MAIN_BRANCH in $PROJECT_DIR.
+# The merge lock is RELEASED before return in all cases.
+# The branch is deleted on successful merge+push.
+#
+# The caller is responsible for:
+#   - Pre-merge bookkeeping (state files, notifications)
+#   - Post-merge bookkeeping based on the return code
+#   - Script-specific state commits (git add/commit of state files)
+#     must happen AFTER this function returns 0 (success) but before
+#     the push — see _MERGE_NEEDS_PUSH flag.
+#
+# Advanced: State commit hook
+#   If _MERGE_STATE_COMMIT_FN is set to a function name, do_merge_to_main()
+#   will call it after a successful merge+typecheck but BEFORE pushing.
+#   The function should return 0 on success. Its return value is stored in
+#   _MERGE_STATE_COMMITTED (true/false) for revert accounting.
+
+# Internal state shared with caller after return
+_MERGE_STATE_COMMITTED=false
+
+do_merge_to_main() {
+  local branch_name="$1"
+  local worktree_dir="$2"
+  local log_file="$3"
+  local pre_lock_rebased="${4:-false}"
+
+  _MERGE_STATE_COMMITTED=false
+
+  # --- Acquire merge mutex ---
+  if ! acquire_merge_lock; then
+    local _ml_holder=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
+    log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}."
+    return 4
+  fi
+
+  # --- Clean up worktree (keep branch for merge from main repo) ---
+  if [ -n "$worktree_dir" ] && [ -d "$worktree_dir" ]; then
+    cleanup_worktree
+  fi
+  cd "$PROJECT_DIR"
+
+  # --- Pull latest main ---
+  if ! git_pull_with_retry; then
+    log "Cannot pull main — skipping merge."
+    release_merge_lock
+    return 5
+  fi
+
+  # --- Merge branch into main ---
+  local _merge_succeeded=false
+
+  # Save and disable ERR trap during merge attempts (merge failures are expected)
+  local _saved_err_trap
+  _saved_err_trap=$(trap -p ERR || true)
+  trap - ERR
+  set +e
+
+  # Try fast-forward merge first (instant if pre-lock rebase succeeded)
+  if [ "$pre_lock_rebased" = "true" ] && git merge "$branch_name" --ff-only 2>>"$log_file"; then
+    _merge_succeeded=true
+    log "Fast-forward merge succeeded (lock hold time minimized)."
+  elif git merge "$branch_name" --no-edit 2>>"$log_file"; then
+    _merge_succeeded=true
+  else
+    # Merge failed — attempt rebase recovery (max 1 attempt)
+    log "Merge conflict — attempting rebase recovery..."
+    git merge --abort 2>/dev/null || true
+    git_pull_with_retry 2 || true
+    if git checkout "$branch_name" 2>>"$log_file"; then
+      if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
+        log "Rebase succeeded — retrying merge."
+        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
+        if git merge "$branch_name" --no-edit 2>>"$log_file"; then
+          _merge_succeeded=true
+        else
+          log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+          git merge --abort 2>/dev/null || true
+        fi
+      else
+        log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+        git rebase --abort 2>/dev/null || true
+        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
+      fi
+    else
+      log "ERROR: Failed to checkout $branch_name for rebase recovery"
+    fi
+  fi
+
+  set -e
+  if [ -n "$_saved_err_trap" ]; then
+    eval "$_saved_err_trap"
+  fi
+
+  if ! $_merge_succeeded; then
+    log "MERGE FAILED for $branch_name."
+    release_merge_lock
+    return 1
+  fi
+
+  # --- Post-merge typecheck gate (validates main still builds) ---
+  if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
+    log "Running post-merge typecheck on main..."
+    # Ensure deps are fresh if lock file changed in merge
+    if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
+      local _lock_m _mods_m
+      _lock_m=$(file_mtime "pnpm-lock.yaml")
+      _mods_m=$(file_mtime "node_modules/.modules.yaml")
+      if [ "$_lock_m" -gt "$_mods_m" ]; then
+        log "Lock file newer than node_modules — installing before typecheck"
+        eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$log_file" 2>&1 || true
+      fi
+    fi
+    if ! eval "$SKYNET_TYPECHECK_CMD" >> "$log_file" 2>&1; then
+      log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
+      if ! git revert HEAD --no-edit 2>>"$log_file"; then
+        log "CRITICAL: git revert failed — main may be broken."
+        release_merge_lock
+        return 3
+      fi
+      git_push_with_retry || log "WARNING: push of revert commit failed"
+      release_merge_lock
+      return 2
+    fi
+    log "Post-merge typecheck passed."
+  fi
+
+  # --- Delete merged branch ---
+  git branch -d "$branch_name" 2>/dev/null || git branch -D "$branch_name" 2>/dev/null || true
+
+  # --- State commit hook (caller-defined) ---
+  if [ -n "${_MERGE_STATE_COMMIT_FN:-}" ] && declare -f "$_MERGE_STATE_COMMIT_FN" >/dev/null 2>&1; then
+    if "$_MERGE_STATE_COMMIT_FN"; then
+      _MERGE_STATE_COMMITTED=true
+    else
+      log "WARNING: State commit function failed — code merge will push without state update"
+    fi
+  fi
+
+  # --- Post-merge smoke test (if enabled) ---
+  if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
+    log "Running post-merge smoke test..."
+    if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$log_file" 2>&1; then
+      log "SMOKE TEST FAILED — reverting merge"
+      if $_MERGE_STATE_COMMITTED; then
+        # HEAD is state commit, HEAD~1 is merge — revert both
+        if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
+          log "CRITICAL: git revert failed — main may be broken."
+          release_merge_lock
+          return 3
+        fi
+      else
+        if ! git revert --no-commit HEAD 2>>"$log_file"; then
+          log "CRITICAL: git revert failed — main may be broken."
+          release_merge_lock
+          return 3
+        fi
+      fi
+      git commit -m "revert: auto-revert (smoke test failed)" --no-verify 2>/dev/null || true
+      git_push_with_retry || log "WARNING: push of smoke test revert failed"
+      release_merge_lock
+      return 7
+    fi
+    log "Post-merge smoke test passed."
+  fi
+
+  # --- Push merged changes to origin (while still holding merge lock) ---
+  if ! git_push_with_retry; then
+    log "PUSH FAILED after merge — reverting to prevent split-brain"
+    if $_MERGE_STATE_COMMITTED; then
+      if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
+        log "CRITICAL: git revert failed — main may be broken."
+        release_merge_lock
+        return 3
+      fi
+    else
+      if ! git revert --no-commit HEAD 2>>"$log_file"; then
+        log "CRITICAL: git revert failed — main may be broken."
+        release_merge_lock
+        return 3
+      fi
+    fi
+    git commit -m "revert: auto-revert (push failed)" --no-verify 2>/dev/null || true
+    # Try to push the revert
+    if ! git_push_with_retry; then
+      log "CRITICAL: revert push also failed — local main diverged from remote."
+      emit_event "push_diverged" "Force-syncing to origin/main after push failure" || true
+      log "CRITICAL: Push failed after revert — force-syncing local main to origin"
+      git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
+      release_merge_lock
+      return 3
+    fi
+    release_merge_lock
+    return 6
+  fi
+
+  release_merge_lock
+  return 0
+}

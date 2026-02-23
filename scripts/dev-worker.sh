@@ -652,104 +652,74 @@ EOF
   # --- All gates passed -- merge to main ---
   log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
 
-  # Acquire merge mutex — prevents concurrent merge races between workers/fixers
-  if ! acquire_merge_lock; then
-    _ml_holder=""
-    [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
-    log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Retrying task later."
-    emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
-    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-    db_export_state_files 2>/dev/null || true
+  # Define state commit hook for do_merge_to_main
+  task_duration_secs=$(( $(date +%s) - task_start_epoch ))
+  task_duration=$(format_duration $task_duration_secs)
 
-    _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
-    cleanup_worktree "$branch_name"
-    continue
-  fi
+  _worker_state_commit() {
+    # SQLite: mark task completed
+    if [ -n "${_db_task_id:-}" ]; then
+      db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || true
+    fi
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      # Regenerate state files from SQLite (authoritative source)
+      db_export_state_files
+    fi
 
-  # Remove worktree first (branch stays), then merge from main repo
-  cleanup_worktree
-  cd "$PROJECT_DIR"
-  if ! git_pull_with_retry; then
-    log "Cannot pull main — skipping merge, unclaiming task."
-    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    cat > "$WORKER_TASK_FILE" <<WEOF
+# Current Task
+## $task_title
+**Status:** completed
+**Started:** $(date '+%Y-%m-%d %H:%M')
+**Completed:** $(date '+%Y-%m-%d')
+**Branch:** $branch_name
+**Worker:** $WORKER_ID
 
-    _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
-    release_merge_lock
-    continue
-  fi
+### Changes
+-- See git log for details
+WEOF
 
-  _merge_succeeded=false
-  # Try fast-forward merge first (instant if pre-lock rebase succeeded)
-  if $_pre_lock_rebased && git merge "$branch_name" --ff-only 2>>"$LOG"; then
-    _merge_succeeded=true
-    log "Fast-forward merge succeeded (lock hold time minimized)."
-  elif git merge "$branch_name" --no-edit 2>>"$LOG"; then
-    _merge_succeeded=true
-  else
-    # Merge failed — attempt rebase recovery (max 1 attempt)
-    log "Merge conflict — attempting rebase recovery..."
-    git merge --abort 2>/dev/null || true
-    git_pull_with_retry 2 || true
-    git checkout "$branch_name" 2>>"$LOG"
-    if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
-      log "Rebase succeeded — retrying merge."
-      git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-      if git merge "$branch_name" --no-edit 2>>"$LOG"; then
-        _merge_succeeded=true
+    # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
+    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
+      if git commit -m "chore: update pipeline status after $task_title" --no-verify 2>>"$LOG"; then
+        return 0
       else
-        log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-        git merge --abort 2>/dev/null || true
-      fi
-    else
-      log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-      git rebase --abort 2>/dev/null || true
-      git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-    fi
-  fi
-
-  if ! $_merge_succeeded; then
-    log "MERGE FAILED for $branch_name — moving to failed."
-    emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
-    tasks_failed=$((tasks_failed + 1))
-    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
-    db_export_state_files
-    _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
-    _one_shot_exit=1
-    release_merge_lock
-    tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
-    continue
-  fi
-
-  # --- Post-merge typecheck gate (validates main still builds) ---
-  if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
-    log "Running post-merge typecheck on main..."
-    # Ensure deps are fresh if lock file changed in merge
-    if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
-      _lock_m=$(file_mtime "pnpm-lock.yaml")
-      _mods_m=$(file_mtime "node_modules/.modules.yaml")
-      if [ "$_lock_m" -gt "$_mods_m" ]; then
-        log "Lock file newer than node_modules — installing before typecheck"
-        eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$LOG" 2>&1 || true
+        log "WARNING: State file commit failed — code merge will push without state update"
+        return 1
       fi
     fi
-    if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
-      log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
-      if ! git revert HEAD --no-edit 2>>"$LOG"; then
-        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken" || true
-        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after typecheck" || true
-        release_merge_lock
-        exit 1
-      fi
-      git_push_with_retry || log "WARNING: push of revert commit failed"
-      # Revert confirmed on main — NOW release the merge lock so other workers
-      # never see a broken main between the failed merge and the revert commit.
-      release_merge_lock
-      # Bookkeeping below is non-critical — guard every call so ERR trap cannot
-      # fire and cause cleanup_on_exit to double-release the (already freed) lock.
+    return 1  # no state commit in one-shot mode
+  }
+  _MERGE_STATE_COMMIT_FN="_worker_state_commit"
+
+  # Call shared merge function
+  _merge_rc=0
+  do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
+
+  # Clear task title AFTER merge — ensures cleanup_on_exit can
+  # properly unclaim if worker crashes between merge and state commit
+  case $_merge_rc in
+    0)
+      # Success — merged + pushed
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      ;;
+    1)
+      # Merge conflict
+      log "MERGE FAILED for $branch_name — moving to failed."
+      emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
+      tasks_failed=$((tasks_failed + 1))
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
+      db_export_state_files
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      _one_shot_exit=1
+      tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
+      continue
+      ;;
+    2)
+      # Typecheck failed post-merge (already reverted + pushed)
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)" || true
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)" || true
       tasks_failed=$((tasks_failed + 1))
@@ -761,142 +731,57 @@ EOF
       _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
       continue
-    fi
-    log "Post-merge typecheck passed."
-  fi
-
-  git branch -d "$branch_name" 2>/dev/null || true
-
-  task_duration_secs=$(( $(date +%s) - task_start_epoch ))
-  task_duration=$(format_duration $task_duration_secs)
-  # SQLite: mark task completed
-  if [ -n "${_db_task_id:-}" ]; then
-    db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || true
-  fi
-  if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-    # Regenerate state files from SQLite (authoritative source)
-    db_export_state_files
-  fi
-
-  cat > "$WORKER_TASK_FILE" <<EOF
-# Current Task
-## $task_title
-**Status:** completed
-**Started:** $(date '+%Y-%m-%d %H:%M')
-**Completed:** $(date '+%Y-%m-%d')
-**Branch:** $branch_name
-**Worker:** $WORKER_ID
-
-### Changes
--- See git log for details
-EOF
-
-  # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
-  _state_commit_succeeded=false
-  if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-    git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
-    if git commit -m "chore: update pipeline status after $task_title" --no-verify 2>>"$LOG"; then
-      _state_commit_succeeded=true
-    else
-      log "WARNING: State file commit failed — code merge will push without state update"
-    fi
-  fi
-
-  # Clear task title AFTER state is committed — ensures cleanup_on_exit can
-  # properly unclaim if worker crashes between merge and state commit
-  _CURRENT_TASK_TITLE=""
-  _CURRENT_TASK_DB_TITLE=""
-
-  # --- Post-merge smoke test (if enabled) ---
-  if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
-    log "Running post-merge smoke test..."
-    if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
-      log "SMOKE TEST FAILED — reverting merge and state commit"
-      # Revert merge + state commit (if it succeeded), or just merge otherwise
-      if $_state_commit_succeeded; then
-        # HEAD is state commit, HEAD~1 is merge — revert both
-        if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
-          log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-          emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
-          release_merge_lock
-          exit 1
-        fi
-      else
-        # HEAD is merge (state commit failed or one-shot mode) — revert just the merge
-        if ! git revert --no-commit HEAD 2>>"$LOG"; then
-          log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-          emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after smoke test"
-          release_merge_lock
-          exit 1
-        fi
-      fi
-      git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
-
-      # SQLite: revert from completed to failed (BEFORE exporting state files)
+      ;;
+    3)
+      # Critical failure (revert failed, main may be broken)
+      tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken" || true
+      emit_event "revert_failed" "Worker $WORKER_ID: $task_title — critical merge failure" || true
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" || true
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      exit 1
+      ;;
+    4)
+      # Merge lock contention
+      emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title"
+      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      db_export_state_files 2>/dev/null || true
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      cleanup_worktree "$branch_name"
+      continue
+      ;;
+    5)
+      # Pull failed
+      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      continue
+      ;;
+    6)
+      # Push failed (reverted + pushed revert)
+      tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (push failed)"
+      emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
+      tasks_failed=$((tasks_failed + 1))
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
+      db_export_state_files
+      _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
+      continue
+      ;;
+    7)
+      # Smoke test failed (reverted + pushed)
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || true
       db_export_state_files
-
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
-      release_merge_lock
       tg "🔄 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} REVERTED*: $task_title (smoke test failed)"
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (smoke test failed)"
       log "Merge reverted. Task moved to failed-tasks."
       continue
-    fi
-    log "Post-merge smoke test passed."
-  fi
-
-  # Push merged changes to origin (while still holding merge lock)
-  if ! git_push_with_retry; then
-    log "PUSH FAILED after merge — reverting to prevent split-brain"
-    # Revert merge + state commit (if it succeeded), or just merge otherwise
-    if $_state_commit_succeeded; then
-      if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
-        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after push failure"
-        release_merge_lock
-        exit 1
-      fi
-    else
-      if ! git revert --no-commit HEAD 2>>"$LOG"; then
-        log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after push failure"
-        release_merge_lock
-        exit 1
-      fi
-    fi
-    git commit -m "revert: auto-revert $task_title (push failed)" --no-verify 2>/dev/null || true
-    # Try to push the revert
-    if ! git_push_with_retry; then
-      log "CRITICAL: revert push also failed — local main diverged from remote. Stopping worker."
-      tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: W${WORKER_ID} local main diverged — push failed for $task_title and revert push also failed"
-      emit_event "push_diverged" "Force-syncing to origin/main after push failure"
-      log "CRITICAL: Push failed after revert — force-syncing local main to origin"
-      git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push diverged — revert push also failed" || true
-      _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
-      release_merge_lock
-      exit 1
-    fi
-    tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (push failed)"
-    emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
-    tasks_failed=$((tasks_failed + 1))
-    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
-    db_export_state_files
-    _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
-    release_merge_lock
-    continue
-  fi
-
-  release_merge_lock
+      ;;
+  esac
 
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)

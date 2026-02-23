@@ -34,7 +34,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test
+      - run: pnpm test -- --coverage
 
   lint-sh:
     runs-on: ubuntu-latest
@@ -91,6 +91,20 @@ jobs:
       - run: pnpm --filter @ajioncorp/skynet-cli build
       - run: bash tests/e2e/init-smoke.test.sh
       - run: bash tests/e2e/cli-commands.test.sh
+
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=moderate
 
   e2e-admin:
     needs: [typecheck, build]

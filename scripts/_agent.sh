@@ -128,6 +128,19 @@ if [ "$_plugin_resolved" = "auto" ]; then
 
   # Public API: run_agent "prompt" "log_file"
   # Returns the exit code of whichever agent ran.
+  # Log agent usage to metrics file (auto-mode only)
+  _log_agent_metric() {
+    local agent_name="$1"
+    local fallback_from="${2:-}"
+    local _ts
+    _ts=$(date '+%Y-%m-%d %H:%M:%S')
+    if [ -n "$fallback_from" ]; then
+      echo "$_ts agent=$agent_name fallback_from=$fallback_from task=${_CURRENT_TASK_TITLE:-unknown}" >> "$DEV_DIR/agent-metrics.log"
+    else
+      echo "$_ts agent=$agent_name task=${_CURRENT_TASK_TITLE:-unknown}" >> "$DEV_DIR/agent-metrics.log"
+    fi
+  }
+
   run_agent() {
     local prompt="$1"
     local log_file="${2:-/dev/null}"
@@ -137,6 +150,7 @@ if [ "$_plugin_resolved" = "auto" ]; then
       _claude_agent_run "$prompt" "$log_file"
       local exit_code=$?
       if [ "$exit_code" -eq 0 ]; then
+        _log_agent_metric "claude"
         return 0
       fi
       # Claude failed — try Codex as fallback
@@ -144,14 +158,22 @@ if [ "$_plugin_resolved" = "auto" ]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code) — falling back to Codex CLI" >> "$log_file"
         tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed — switching to Codex" 2>/dev/null || true
         _codex_agent_run "$prompt" "$log_file"
-        return $?
+        local codex_rc=$?
+        if [ "$codex_rc" -eq 0 ]; then
+          _log_agent_metric "codex" "claude"
+        fi
+        return $codex_rc
       fi
       # Codex unavailable — try Gemini
       if _gemini_agent_check; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code), Codex unavailable — falling back to Gemini CLI" >> "$log_file"
         tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed, Codex down — switching to Gemini" 2>/dev/null || true
         _gemini_agent_run "$prompt" "$log_file"
-        return $?
+        local gemini_rc=$?
+        if [ "$gemini_rc" -eq 0 ]; then
+          _log_agent_metric "gemini" "claude"
+        fi
+        return $gemini_rc
       fi
       return $exit_code
     fi
@@ -161,7 +183,11 @@ if [ "$_plugin_resolved" = "auto" ]; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude unavailable — falling back to Codex CLI" >> "$log_file"
       tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude down — switching to Codex" 2>/dev/null || true
       _codex_agent_run "$prompt" "$log_file"
-      return $?
+      local codex_rc=$?
+      if [ "$codex_rc" -eq 0 ]; then
+        _log_agent_metric "codex" "claude"
+      fi
+      return $codex_rc
     fi
 
     # Codex unavailable — try Gemini
@@ -169,7 +195,11 @@ if [ "$_plugin_resolved" = "auto" ]; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude + Codex unavailable — falling back to Gemini CLI" >> "$log_file"
       tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude + Codex down — switching to Gemini" 2>/dev/null || true
       _gemini_agent_run "$prompt" "$log_file"
-      return $?
+      local gemini_rc=$?
+      if [ "$gemini_rc" -eq 0 ]; then
+        _log_agent_metric "gemini" "claude+codex"
+      fi
+      return $gemini_rc
     fi
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: No AI agent available (Claude, Codex, Gemini all unavailable)" >> "$log_file"

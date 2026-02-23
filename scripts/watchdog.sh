@@ -832,6 +832,23 @@ for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
   is_running "${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock" && fixers_running=$((fixers_running + 1))
 done
 
+# --- Disk space monitoring ---
+# Alert if disk usage exceeds threshold (default 90%). Prevents silent failures
+# when logs or SQLite fill the disk.
+_check_disk_space() {
+  local dev_dir="$1"
+  local threshold_pct="${2:-90}"  # Alert if usage > 90%
+  local usage_pct
+  usage_pct=$(df -P "$dev_dir" | awk 'NR==2 {gsub(/%/,""); print $5}')
+  if [ -n "$usage_pct" ] && [ "$usage_pct" -ge "$threshold_pct" ]; then
+    log "WARNING: Disk usage at ${usage_pct}% (threshold: ${threshold_pct}%)"
+    tg "⚠️ *${SKYNET_PROJECT_NAME_UPPER}* Disk usage at ${usage_pct}% — consider running \`skynet cleanup\`" 2>/dev/null || true
+    return 1
+  fi
+  return 0
+}
+_check_disk_space "$DEV_DIR"
+
 # --- Health score alert ---
 # Mirrors the pipeline-status handler logic:
 #   Start at 100, -5 per pending failed task, -10 per active blocker, -2 per stale heartbeat.

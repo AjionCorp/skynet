@@ -554,109 +554,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
 
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
 
-    # Acquire merge mutex — prevents concurrent merge races between workers/fixers
-    if ! acquire_merge_lock; then
-      _ml_holder=""
-      [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
-      log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Keeping as pending for retry."
-      emit_event "merge_lock_contention" "Fixer $FIXER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
-      cleanup_worktree
-      # Lock contention is infra, not a fix failure — do not increment attempts
-      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
-
-      _CURRENT_TASK_TITLE=""
-      emit_event "fixer_idle" "Fixer $FIXER_ID: merge lock contention"
-      exit 0
-    fi
-
-    _do_merge_and_push() {
-    cleanup_worktree  # Remove worktree, keep branch for merge
-    cd "$PROJECT_DIR"
-    if ! git_pull_with_retry; then
-      log "Cannot pull main — skipping merge, unclaiming task."
-      [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
-      _CURRENT_TASK_TITLE=""
-      release_merge_lock
-      return
-    fi
-
-    _merge_succeeded=false
-    _err_trap=$(trap -p ERR || true)
-    trap - ERR
-    set +e
-    # Try fast-forward merge first (instant if pre-lock rebase succeeded)
-    if $_pre_lock_rebased && git merge "$branch_name" --ff-only 2>>"$LOG"; then
-      _merge_succeeded=true
-      log "Fast-forward merge succeeded (lock hold time minimized)."
-    elif git merge "$branch_name" --no-edit 2>>"$LOG"; then
-      _merge_succeeded=true
-    else
-      # Merge failed — attempt rebase recovery (max 1 attempt)
-      log "Merge conflict — attempting rebase recovery..."
-      git merge --abort 2>/dev/null || true
-      git_pull_with_retry 2 || true
-      if ! git checkout "$branch_name" 2>>"$LOG"; then
-        log "ERROR: Failed to checkout $branch_name for rebase recovery"
-        # Skip rebase — just report the merge failure
-      else
-        if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
-          log "Rebase succeeded — retrying merge."
-          git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-          if git merge "$branch_name" --no-edit 2>>"$LOG"; then
-            _merge_succeeded=true
-          else
-            log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-            git merge --abort 2>/dev/null || true
-          fi
-        else
-          log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-          git rebase --abort 2>/dev/null || true
-          git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-        fi
-      fi
-    fi
-    set -e
-    if [ -n "$_err_trap" ]; then
-      eval "$_err_trap"
-    fi
-
-    if $_merge_succeeded; then
-
-      # --- Post-merge typecheck gate (validates main still builds) ---
-      if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
-        log "Running post-merge typecheck on main..."
-        if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
-          _lock_m=$(file_mtime "pnpm-lock.yaml")
-          _mods_m=$(file_mtime "node_modules/.modules.yaml")
-          if [ "$_lock_m" -gt "$_mods_m" ]; then
-            log "Lock file newer than node_modules — installing before typecheck"
-            eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$LOG" 2>&1 || true
-          fi
-        fi
-        if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
-          log "POST-MERGE TYPECHECK FAILED — reverting fix merge"
-          if ! git revert HEAD --no-edit 2>>"$LOG"; then
-            log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
-            tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-            emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after typecheck"
-            release_merge_lock
-            exit 1
-          fi
-          git_push_with_retry || log "WARNING: push of revert commit failed"
-          emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (typecheck failed post-merge)"
-          tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (typecheck failed post-merge)"
-          new_attempts=$((fix_attempts + 1))
-          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || true
-          _CURRENT_TASK_TITLE=""
-          release_merge_lock
-          db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-                return
-        fi
-        log "Post-merge typecheck passed."
-      fi
-
-      git branch -d "$branch_name" 2>/dev/null || git branch -D "$branch_name" 2>/dev/null || true
-
+    # Define state commit hook for do_merge_to_main
+    _fixer_state_commit() {
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
       _fix_duration=$(format_duration $fix_duration_secs)
@@ -667,86 +566,82 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       # Commit pipeline status updates BEFORE smoke test so revert can undo both
       git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
       git commit -m "chore: update pipeline status after fixing $task_title" --no-verify 2>/dev/null || true
+      return 0
+    }
+    _MERGE_STATE_COMMIT_FN="_fixer_state_commit"
 
-      # --- Post-merge smoke test (if enabled) ---
-      if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
-        log "Running post-merge smoke test..."
-        if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
-          log "SMOKE TEST FAILED — reverting fix merge and state commit"
-          # HEAD is state commit, HEAD~1 is merge — revert both into one commit
-          if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
-            log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
-            tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-            emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after smoke test"
-            release_merge_lock
-            exit 1
-          fi
-          git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
-          git_push_with_retry || log "WARNING: push of smoke test revert failed"
-          [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
-          db_export_state_files 2>/dev/null || true
+    # Call shared merge function
+    _merge_rc=0
+    do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
 
-          _CURRENT_TASK_TITLE=""
-          release_merge_lock
-          tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
-          emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
-          db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-                return
-        fi
-        log "Post-merge smoke test passed."
-      fi
+    new_attempts=$((fix_attempts + 1))
 
-      # Push merged changes to origin (while still holding merge lock)
-      if ! git_push_with_retry; then
-        log "PUSH FAILED after merge — reverting to prevent split-brain"
-        # Revert state commit + merge
-        if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
-          log "CRITICAL: git revert failed — main may be broken. Stopping fixer."
-          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-          emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — git revert failed after push failure"
-          release_merge_lock
-          exit 1
-        fi
-        git commit -m "revert: auto-revert $task_title (push failed)" --no-verify 2>/dev/null || true
-        # Try to push the revert
-        if ! git_push_with_retry; then
-          log "CRITICAL: revert push also failed — local main diverged from remote. Stopping fixer."
-          tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: FIXER local main diverged — push failed for $task_title and revert push also failed"
-          emit_event "push_diverged" "Fixer $FIXER_ID: $task_title — local main diverged from remote"
-          release_merge_lock
-          exit 1
-        fi
+    case $_merge_rc in
+      0)
+        # Success — merged + pushed
+        _CURRENT_TASK_TITLE=""
+        log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
+        tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $new_attempts)"
+        emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
+        db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
+        db_set_worker_idle "$FIXER_ID" "Fixer session ended — fixed $task_title" 2>/dev/null || true
+        ;;
+      1)
+        # Merge conflict
+        log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
+        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || true
+        _CURRENT_TASK_TITLE=""
+        tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
+        emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
+        db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
+        ;;
+      2)
+        # Typecheck failed post-merge (already reverted + pushed)
+        emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (typecheck failed post-merge)"
+        tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (typecheck failed post-merge)"
+        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || true
+        _CURRENT_TASK_TITLE=""
+        db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
+        ;;
+      3)
+        # Critical failure (revert failed, main may be broken)
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
+        emit_event "revert_failed" "Fixer $FIXER_ID: $task_title — critical merge failure"
+        exit 1
+        ;;
+      4)
+        # Merge lock contention — do not increment attempts (infra issue, not fix failure)
+        emit_event "merge_lock_contention" "Fixer $FIXER_ID: $task_title"
+        cleanup_worktree
+        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
+        _CURRENT_TASK_TITLE=""
+        emit_event "fixer_idle" "Fixer $FIXER_ID: merge lock contention"
+        exit 0
+        ;;
+      5)
+        # Pull failed
+        [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+        _CURRENT_TASK_TITLE=""
+        ;;
+      6)
+        # Push failed (reverted + pushed revert)
         tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (push failed)"
         emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (push failed post-merge)"
-        new_attempts=$((fix_attempts + 1))
         [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || true
         db_export_state_files 2>/dev/null || true
-
         _CURRENT_TASK_TITLE=""
-        release_merge_lock
         db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-            return
-      fi
-
-      _CURRENT_TASK_TITLE=""
-      log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
-      release_merge_lock
-      tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
-      emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
-      db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
-      db_set_worker_idle "$FIXER_ID" "Fixer session ended — fixed $task_title" 2>/dev/null || true
-    else
-      log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
-      new_attempts=$((fix_attempts + 1))
-      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || true
-      _CURRENT_TASK_TITLE=""
-      release_merge_lock
-      tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
-      emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
-      db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-      fi
-    }
-    _do_merge_and_push
+        ;;
+      7)
+        # Smoke test failed (reverted + pushed)
+        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$new_attempts" "failed" || true
+        db_export_state_files 2>/dev/null || true
+        _CURRENT_TASK_TITLE=""
+        tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
+        emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
+        db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
+        ;;
+    esac
   fi
 else
   exit_code=$?

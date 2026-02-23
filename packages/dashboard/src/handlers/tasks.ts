@@ -4,6 +4,11 @@ import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
+// In-memory rate limiting for POST requests: max 30 per 60 seconds
+const RATE_LIMIT_MAX = 30;
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const _postTimestamps: number[] = [];
+
 /**
  * Create GET and POST handlers for the tasks endpoint.
  *
@@ -62,6 +67,19 @@ export function createTasksHandlers(config: SkynetConfig) {
   }
 
   async function POST(request: Request): Promise<Response> {
+    // Rate limiting: prune old timestamps and check threshold
+    const now = Date.now();
+    while (_postTimestamps.length > 0 && _postTimestamps[0] <= now - RATE_LIMIT_WINDOW_MS) {
+      _postTimestamps.shift();
+    }
+    if (_postTimestamps.length >= RATE_LIMIT_MAX) {
+      return Response.json(
+        { data: null, error: "Rate limit exceeded. Max 30 tasks per minute." },
+        { status: 429 }
+      );
+    }
+    _postTimestamps.push(now);
+
     try {
       const { data: body, error: parseError, status: parseStatus } = await parseBody<{
         tag: string;

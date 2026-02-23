@@ -61,6 +61,89 @@ _sql_query() {
 }
 
 # ============================================================
+# STATUS TRANSITION VALIDATION
+# ============================================================
+
+# Valid status transitions (state machine):
+#   pending    → claimed, superseded
+#   claimed    → active, pending (unclaim), failed
+#   active     → completed, failed
+#   failed     → fixing-N, pending (reset), superseded, blocked
+#   fixing-N   → failed, completed
+#   blocked    → pending (unblock), superseded
+#   completed  → (terminal)
+#   superseded → (terminal)
+#
+# This is an audit-only guard: logs a WARNING on unexpected transitions
+# but does NOT block the operation. Non-breaking by design.
+
+_validate_status_transition() {
+  local task_id="$1"
+  local from_status="$2"
+  local to_status="$3"
+  local caller="${4:-unknown}"
+
+  # Empty from_status means we couldn't determine it — skip validation
+  [ -z "$from_status" ] && return 0
+
+  local valid=false
+
+  case "$from_status" in
+    pending)
+      case "$to_status" in
+        claimed|superseded) valid=true ;;
+      esac
+      ;;
+    claimed)
+      case "$to_status" in
+        active|pending|failed) valid=true ;;
+      esac
+      ;;
+    active)
+      case "$to_status" in
+        completed|failed) valid=true ;;
+      esac
+      ;;
+    failed)
+      case "$to_status" in
+        pending|superseded|blocked) valid=true ;;
+        fixing-*) valid=true ;;
+      esac
+      ;;
+    fixing-*)
+      case "$to_status" in
+        failed|completed) valid=true ;;
+      esac
+      ;;
+    blocked)
+      case "$to_status" in
+        pending|superseded) valid=true ;;
+      esac
+      ;;
+    completed|superseded)
+      # Terminal states — no valid transitions out
+      # Exception: completed → failed is used by smoke test revert (post-merge)
+      case "$to_status" in
+        failed) valid=true ;;
+      esac
+      ;;
+  esac
+
+  if ! $valid; then
+    log "WARNING: Unexpected status transition for task $task_id: '$from_status' → '$to_status' (caller: $caller)" 2>/dev/null || true
+  fi
+
+  return 0
+}
+
+# Helper: look up current status of a task by ID for transition validation.
+# Returns the status string or empty if not found.
+_get_task_status() {
+  local task_id; task_id=$(_sql_int "$1")
+  _db "SELECT status FROM tasks WHERE id=$task_id;" 2>/dev/null || true
+}
+
+# ============================================================
 # INITIALIZATION
 # ============================================================
 
@@ -226,6 +309,7 @@ db_claim_next_task() {
       local changed
       local _int_wid; _int_wid=$(_sql_int "$worker_id")
       local _int_tid; _int_tid=$(_sql_int "$tid")
+      _validate_status_transition "$_int_tid" "pending" "claimed" "db_claim_next_task"
       changed=$(_db "
         UPDATE tasks SET status='claimed', worker_id=$_int_wid,
           claimed_at=datetime('now'), updated_at=datetime('now')
@@ -245,6 +329,8 @@ db_claim_next_task() {
 
 db_unclaim_task() {
   local task_id; task_id=$(_sql_int "$1")
+  local _cur_status; _cur_status=$(_get_task_status "$task_id")
+  _validate_status_transition "$task_id" "$_cur_status" "pending" "db_unclaim_task"
   _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
     WHERE id=$task_id AND status='claimed';
@@ -264,6 +350,8 @@ db_complete_task() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" duration="$3" duration_secs; duration_secs=$(_sql_int "${4:-0}")
   local notes="${5:-success}"
+  local _cur_status; _cur_status=$(_get_task_status "$task_id")
+  _validate_status_transition "$task_id" "$_cur_status" "completed" "db_complete_task"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local duration_esc; duration_esc=$(_sql_escape "$duration")
   local notes_esc; notes_esc=$(_sql_escape "$notes")
@@ -279,6 +367,8 @@ db_complete_task() {
 db_fail_task() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" error="$3"
+  local _cur_status; _cur_status=$(_get_task_status "$task_id")
+  _validate_status_transition "$task_id" "$_cur_status" "failed" "db_fail_task"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
   _sql_exec "

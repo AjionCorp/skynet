@@ -134,6 +134,9 @@ source "$SKYNET_SCRIPTS_DIR/_skills.sh"
 # Source shared lock helpers (merge mutex, etc.)
 source "$SKYNET_SCRIPTS_DIR/_locks.sh"
 
+# Source shared merge-to-main logic (needs _locks.sh for merge mutex)
+source "$SKYNET_SCRIPTS_DIR/_merge.sh"
+
 # Source SQLite database abstraction layer
 source "$SKYNET_SCRIPTS_DIR/_db.sh"
 if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
