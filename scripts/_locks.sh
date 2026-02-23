@@ -35,7 +35,7 @@ acquire_merge_lock() {
         # If PID is recorded and dead, double-check after brief sleep to
         # narrow the PID reuse race window before reclaiming.
         if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
-          sleep 0.1  # Narrow PID reuse race window
+          sleep 0.5  # Narrow PID reuse race window
           if ! kill -0 "$_ml_pid" 2>/dev/null; then
             mv "$MERGE_LOCK" "$MERGE_LOCK.stale.$$" 2>/dev/null || true
             rm -rf "$MERGE_LOCK.stale.$$" &

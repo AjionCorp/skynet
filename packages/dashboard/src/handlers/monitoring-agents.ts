@@ -71,7 +71,7 @@ function cronToIntervalSeconds(schedule: string): number | null {
   // Specific hours with comma: 0 8,20 * * * → count gaps
   if (minute === "0" && hour.includes(",")) {
     const hours = hour.split(",").map(Number);
-    if (hours.some(isNaN)) return null;
+    if (hours.some((h) => isNaN(h) || h < 0 || h > 23)) return null;
     return Math.round((24 / hours.length) * 3600);
   }
 

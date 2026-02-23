@@ -748,7 +748,6 @@ EOF
   if [ -n "${_db_task_id:-}" ]; then
     db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || true
   fi
-  db_set_worker_status "$WORKER_ID" "dev" "completed" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || true
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
     # Regenerate state files from SQLite (authoritative source)
     db_export_state_files

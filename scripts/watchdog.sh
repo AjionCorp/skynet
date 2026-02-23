@@ -409,6 +409,11 @@ if [ -f "$DB_PATH" ]; then
           sqlite3 "$_restore_backup" ".backup '$_restore_tmp'" 2>/dev/null
           _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA quick_check;" 2>/dev/null | head -1)
           if [ "$_restore_check" = "ok" ]; then
+            if [ -f "$DB_PATH" ]; then
+              log "DB recreated by another process during restore — skipping"
+              rm -f "$_restore_tmp"
+              return
+            fi
             mv "$_restore_tmp" "$DB_PATH"
             _db_healthy=true
             log "DB restore succeeded from $_restore_backup"
