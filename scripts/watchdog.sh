@@ -319,6 +319,40 @@ if [ -n "$_orphaned_claimed" ]; then
   done <<< "$_orphaned_claimed"
 fi
 
+# --- Reconcile stale 'fixing-N' tasks ---
+# If a fixer crashes, the task stays in 'fixing-N' status forever because
+# db_get_pending_failures() only queries status='failed'. Detect stale fixing
+# tasks where the fixer is dead and reset them to 'failed' for retry.
+_stale_fixing=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
+  SELECT id, title, fixer_id
+  FROM tasks
+  WHERE status LIKE 'fixing-%'
+    AND updated_at < datetime('now', '-120 seconds');
+" 2>/dev/null || true)
+if [ -n "$_stale_fixing" ]; then
+  while IFS="$_DB_SEP" read -r _sf_id _sf_title _sf_fid; do
+    [ -z "$_sf_id" ] && continue
+    _sf_fid="${_sf_fid:-1}"
+    # Determine fixer lock path (fixer 1 uses task-fixer.lock, 2+ use task-fixer-N.lock)
+    if [ "$_sf_fid" = "1" ]; then
+      _sf_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
+    else
+      _sf_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_sf_fid}.lock"
+    fi
+    if is_running "$_sf_lock"; then
+      continue  # Fixer is alive — task is legitimately being worked on
+    fi
+    # Fixer is dead — reset task to 'failed' for retry
+    _sf_int_id=$(_sql_int "$_sf_id")
+    sqlite3 "$DB_PATH" "
+      UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
+      WHERE id=$_sf_int_id AND status LIKE 'fixing-%';
+    " 2>/dev/null || true
+    log "Reconciled stale fixing task: '$_sf_title' (id=$_sf_id, fixer=$_sf_fid) — reset to failed"
+    emit_event "stale_fixing_reconciled" "Task '$_sf_title' (id=$_sf_id) reset to failed — fixer $_sf_fid is dead" 2>/dev/null || true
+  done <<< "$_stale_fixing"
+fi
+
 # --- Proactive merge lock cleanup ---
 # If the merge lock holder's PID is dead (or PID file is missing, indicating a
 # crash between mkdir and PID write), remove the lock immediately rather than
