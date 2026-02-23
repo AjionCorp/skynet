@@ -268,7 +268,7 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     local resolved_wt_dir
     resolved_wt_dir=$(cd "$wt_dir" 2>/dev/null && pwd -P || echo "$wt_dir")
     local orphan_pids
-    orphan_pids=$(pgrep -f "$resolved_wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
+    orphan_pids=$(ps ax -o pid,command 2>/dev/null | grep -F "$resolved_wt_dir" | grep -v grep | grep -v "^[[:space:]]*$$[[:space:]]" | awk '{print $1}' || true)
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
       echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
@@ -405,19 +405,20 @@ if [ -f "$DB_PATH" ]; then
         }
         if [ ! -f "$DB_PATH" ]; then
           # Restore to a temp file first, verify integrity, then atomically rename into place
+          # $_restore_tmp is built from DB_PATH + .restore-tmp.$$ — no special chars possible.
           _restore_tmp="$DB_PATH.restore-tmp.$$"
-          sqlite3 "$_restore_backup" ".backup '$_restore_tmp'" 2>/dev/null
+          sqlite3 "$_restore_backup" ".backup $_restore_tmp" 2>/dev/null
           _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA quick_check;" 2>/dev/null | head -1)
           if [ "$_restore_check" = "ok" ]; then
             if [ -f "$DB_PATH" ]; then
               log "DB recreated by another process during restore — skipping"
               rm -f "$_restore_tmp"
-              return
+            else
+              mv "$_restore_tmp" "$DB_PATH"
+              _db_healthy=true
+              log "DB restore succeeded from $_restore_backup"
+              tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite auto-restored from backup $_restore_backup"
             fi
-            mv "$_restore_tmp" "$DB_PATH"
-            _db_healthy=true
-            log "DB restore succeeded from $_restore_backup"
-            tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite auto-restored from backup $_restore_backup"
           else
             rm -f "$_restore_tmp" 2>/dev/null || true
             # Restore the corrupted copy back so at least we have a DB file

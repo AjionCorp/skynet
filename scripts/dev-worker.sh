@@ -204,6 +204,7 @@ cleanup_on_exit() {
       db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || true
     fi
     db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || true
+    emit_event "worker_idle" "Worker $WORKER_ID: unexpected exit — $_CURRENT_TASK_TITLE"
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   rm -rf "$LOCKFILE"
@@ -331,6 +332,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   if [ -z "$next_task" ]; then
     log "Backlog empty. Kicking off project-driver to refill."
     db_set_worker_idle "$WORKER_ID" "Backlog empty — project-driver kicked off" 2>/dev/null || true
+    emit_event "worker_idle" "Worker $WORKER_ID: backlog empty"
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 **Status:** idle
@@ -390,6 +392,7 @@ EOF
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+        db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
         _CURRENT_TASK_DB_TITLE=""
@@ -399,6 +402,7 @@ EOF
       _stop_heartbeat
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -412,6 +416,7 @@ EOF
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+        db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
         _CURRENT_TASK_DB_TITLE=""
@@ -421,6 +426,7 @@ EOF
       _stop_heartbeat
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -475,6 +481,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     cleanup_worktree "$branch_name"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
+    emit_event "worker_idle" "Worker $WORKER_ID: claude failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
@@ -501,6 +508,7 @@ EOF
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
+      emit_event "worker_idle" "Worker $WORKER_ID: worktree missing — $task_title"
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
@@ -556,6 +564,7 @@ EOF
     cleanup_worktree  # Keep branch for task-fixer
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
+    emit_event "worker_idle" "Worker $WORKER_ID: gate failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
@@ -599,6 +608,7 @@ EOF
     cleanup_worktree
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
+    emit_event "worker_idle" "Worker $WORKER_ID: bash-n failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
@@ -649,6 +659,7 @@ EOF
     log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Retrying task later."
     emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    db_export_state_files 2>/dev/null || true
 
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
@@ -740,6 +751,7 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
       db_export_state_files
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
+      emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title"
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1

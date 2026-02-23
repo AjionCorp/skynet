@@ -35,10 +35,10 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
   return async function GET(request: Request): Promise<Response> {
     const url = new URL(request.url);
     const script = url.searchParams.get("script");
-    const lines = Math.min(
-      Math.max(Number(url.searchParams.get("lines") ?? "200"), 1),
-      1000
-    );
+    const rawLines = Number(url.searchParams.get("lines") ?? "200");
+    const lines = Number.isFinite(rawLines)
+      ? Math.min(Math.max(rawLines, 1), 1000)
+      : 200;
     const search = url.searchParams.get("search");
 
     if (!script || !allowedScripts.has(script)) {

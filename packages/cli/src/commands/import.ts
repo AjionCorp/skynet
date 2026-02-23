@@ -57,8 +57,9 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
   try {
     const raw = readFileSync(resolvedPath, "utf-8");
     snapshot = JSON.parse(raw);
-  } catch {
-    console.error(`Error: Failed to parse snapshot file as JSON.`);
+  } catch (err) {
+    const detail = err instanceof SyntaxError ? `: ${err.message}` : "";
+    console.error(`Error: Failed to parse snapshot file as JSON${detail}`);
     process.exit(1);
   }
 
@@ -76,6 +77,7 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
 
   // Build file plan
   const snapshotKeys = Object.keys(snapshot);
+  const skipped: Array<{ filename: string; reason: string }> = [];
   const plan: Array<{
     filename: string;
     targetPath: string;
@@ -88,12 +90,19 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
     // Reject path traversal attempts
     const resolved = resolve(devDir, filename);
     if (!resolved.startsWith(resolve(devDir) + "/") && resolved !== resolve(devDir)) {
+      skipped.push({ filename, reason: "unsafe path" });
       console.error(`  Skipping unsafe filename: ${filename}`);
+      continue;
+    }
+    // Skip entries whose value is not a string (type mismatch)
+    if (typeof snapshot[filename] !== "string") {
+      skipped.push({ filename, reason: "value is not a string" });
       continue;
     }
     const targetPath = resolved;
     const exists = existsSync(targetPath);
-    const currentSize = exists ? statSync(targetPath).size : 0;
+    const rawSize = exists ? statSync(targetPath).size : 0;
+    const currentSize = Number.isFinite(rawSize) ? rawSize : 0;
     const isMd = MD_FILES.has(filename);
     const action = !exists ? "create" : options.merge && isMd ? "merge" : "overwrite";
     const newContent = snapshot[filename];
@@ -160,5 +169,12 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
     written++;
   }
 
-  console.log(`  Imported ${written} files into ${devDir}\n`);
+  console.log(`  Imported ${written} files into ${devDir}`);
+  if (skipped.length > 0) {
+    console.log(`  Skipped ${skipped.length} file(s):`);
+    for (const s of skipped) {
+      console.log(`    - ${s.filename}: ${s.reason}`);
+    }
+  }
+  console.log("");
 }

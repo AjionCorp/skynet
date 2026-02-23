@@ -177,7 +177,7 @@ cleanup_on_exit() {
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   # Ensure fixer status is idle on exit (normal or abnormal)
-  db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
+  db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || true
   # Release PID lock
   rm -rf "$LOCKFILE"
   # Log crash event (only on abnormal exit)
@@ -283,6 +283,10 @@ fi
 _CURRENT_TASK_TITLE="$task_title"
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
+
+# Track fixer status in SQLite so dashboard/watchdog can see what we're doing
+db_set_worker_status "$FIXER_ID" "fixer" "in_progress" "$_db_task_id" "$task_title" "$branch_name" 2>/dev/null || true
+db_update_progress "$FIXER_ID" 2>/dev/null || true
 
 # Rotate log if it exceeds max size (prevents unbounded growth)
 rotate_log_if_needed "$LOG"
@@ -449,6 +453,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     _CURRENT_TASK_TITLE=""
     exit 0
   fi
+  # Update progress epoch after agent finishes — long runs may have staled it
+  db_update_progress "$FIXER_ID" 2>/dev/null || true
   log "Task-fixer succeeded. Running quality gates before merge..."
 
   if [ ! -d "$WORKTREE_DIR" ]; then
@@ -475,6 +481,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       break
     fi
     log "Gate $_gate_idx passed."
+    db_update_progress "$FIXER_ID" 2>/dev/null || true
     _gate_idx=$((_gate_idx + 1))
   done
 
@@ -641,7 +648,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       fix_duration=$(format_duration $fix_duration_secs)
       [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || true
       # Regenerate state files from SQLite (authoritative source)
-      db_export_state_files
+      db_export_state_files 2>/dev/null || true
 
       # Commit pipeline status updates BEFORE smoke test so revert can undo both
       git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
@@ -663,7 +670,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           git commit -m "revert: auto-revert $task_title (smoke test failed)" --no-verify 2>/dev/null || true
           git_push_with_retry || log "WARNING: push of smoke test revert failed"
           [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$((fix_attempts + 1))" "failed" || true
-          db_export_state_files
+          db_export_state_files 2>/dev/null || true
 
           _CURRENT_TASK_TITLE=""
           release_merge_lock
@@ -699,7 +706,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (push failed post-merge)"
         new_attempts=$((fix_attempts + 1))
         [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || true
-        db_export_state_files
+        db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
         release_merge_lock
@@ -713,7 +720,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
       emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
       db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
-      db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
+      db_set_worker_idle "$FIXER_ID" "Fixer session ended — fixed $task_title" 2>/dev/null || true
     else
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
@@ -755,5 +762,5 @@ else
 fi
 
 # Ensure fixer is idle before exit (cleanup_on_exit also does this as a safety net)
-db_set_worker_status "$FIXER_ID" "fixer" "idle" "" "" "" 2>/dev/null || true
+db_set_worker_idle "$FIXER_ID" "Fixer session ended" 2>/dev/null || true
 log "Task-fixer finished."

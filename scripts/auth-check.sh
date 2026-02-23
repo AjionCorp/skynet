@@ -158,7 +158,8 @@ print(exp)
 print(1 if refresh else 0)
 PY
 )
-    _line_count=$(echo "$parsed" | wc -l)
+    _line_count=$(echo "$parsed" | wc -l | tr -d ' ')
+    if ! echo "$_line_count" | grep -Eq '^[0-9]+$'; then _line_count=0; fi
     if [ "$_line_count" -lt 2 ]; then
       log "WARNING: Failed to parse auth file"
       return 1
@@ -273,11 +274,13 @@ p=sys.stdin.read().strip()
 p+='='*(-len(p)%4)
 try: print(json.loads(base64.urlsafe_b64decode(p)).get('exp',0))
 except: print(0)" 2>/dev/null)
+  exp=${exp:-0}
 
   [ -z "$exp" ] || [ "$exp" = "0" ] && { echo "unknown"; return; }
 
   local now
   now=$(date +%s)
+  now=${now:-0}
   local remaining=$(( exp - now ))
 
   if [ "$remaining" -le 0 ]; then

@@ -32,7 +32,8 @@ function parsePlist(content: string) {
   const runAtLoad = runAtLoadMatch?.[1] === "true";
 
   const scriptMatch = content.match(/\.dev\/scripts\/([^<]+\.sh)/);
-  const scriptPath = scriptMatch?.[1] ?? null;
+  let scriptPath = scriptMatch?.[1] ?? null;
+  if (scriptPath && !/^[a-zA-Z0-9._-]+$/.test(scriptPath)) scriptPath = null;
 
   const logMatch = content.match(
     /<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/
@@ -185,6 +186,7 @@ function parseCrontab(
     if (!nameMatch) continue;
 
     const agentName = nameMatch[1];
+    if (!/^[a-zA-Z0-9_-]+$/.test(agentName)) continue;
     // scriptPath relative to .dev/scripts/ (matching plist handler output)
     const relScript = fullScriptPath.match(/\.dev\/scripts\/(.+\.sh)$/);
 
@@ -246,16 +248,19 @@ function getDarwinAgents(
   >();
   try {
     const output = spawnSync("launchctl", ["list"], { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).stdout || "";
-    const prefix = agentPrefix + ".";
-    for (const line of output.split("\n")) {
-      const match = line.match(
-        /^(-|\d+)\t(-?\d+)\t(\S+)/
-      );
-      if (match && match[3].startsWith(prefix)) {
-        loadedAgents.set(match[3], {
-          pid: match[1],
-          exitStatus: Number(match[2]),
-        });
+    // Skip parsing if output is unreasonably large (> 1 MB)
+    if (output.length <= 1_048_576) {
+      const prefix = agentPrefix + ".";
+      for (const line of output.split("\n")) {
+        const match = line.match(
+          /^(-|\d+)\t(-?\d+)\t(\S+)/
+        );
+        if (match && match[3].startsWith(prefix)) {
+          loadedAgents.set(match[3], {
+            pid: match[1],
+            exitStatus: Number(match[2]),
+          });
+        }
       }
     }
   } catch {
