@@ -13,6 +13,9 @@ WORKER_ID="${1:-1}"
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
+# SQLite is the sole source of truth — fail fast if missing
+_require_db
+
 # Per-worker port offset to prevent dev-server collisions in multi-worker mode
 WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
 export PORT="$WORKER_PORT"
@@ -28,7 +31,7 @@ if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
 fi
 
 # Shared lock dir for atomic backlog access (mkdir is atomic on all Unix)
-BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
+
 
 # Per-worker task file (worker 1 → current-task-1.md, worker 2 → current-task-2.md)
 WORKER_TASK_FILE="$DEV_DIR/current-task-${WORKER_ID}.md"
@@ -87,137 +90,6 @@ _stop_heartbeat() {
     _heartbeat_pid=""
   fi
   rm -f "$HEARTBEAT_FILE"
-}
-
-# --- Mutex helpers using mkdir (works on macOS + Linux) ---
-acquire_lock() {
-  local attempts=0
-  while ! mkdir "$BACKLOG_LOCK" 2>/dev/null; do
-    attempts=$((attempts + 1))
-    if [ "$attempts" -ge 50 ]; then
-      # Check for stale lock (older than 30s)
-      if [ -d "$BACKLOG_LOCK" ]; then
-        local lock_mtime
-        lock_mtime=$(file_mtime "$BACKLOG_LOCK")
-        local lock_age=$(( $(date +%s) - lock_mtime ))
-        if [ "$lock_age" -gt 30 ]; then
-          rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
-          mkdir "$BACKLOG_LOCK" 2>/dev/null && return 0
-        fi
-      fi
-      return 1
-    fi
-    sleep 0.1
-  done
-  return 0
-}
-
-release_lock() {
-  rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
-}
-
-# --- Helper: check if a task's blockedBy dependencies are all done ---
-# Usage: is_task_blocked "- [ ] [TAG] Title | blockedBy: Dep1, Dep2"
-# Returns 0 (true) if blocked, 1 (false) if unblocked.
-is_task_blocked() {
-  local task_line="$1"
-  # Extract blockedBy metadata (case-insensitive match after " | blockedBy: ")
-  local blocked_by
-  blocked_by=$(echo "$task_line" | sed -n 's/.*| *[bB]locked[bB]y: *\(.*\)$/\1/p')
-  if [ -z "$blocked_by" ]; then
-    return 1  # no dependencies — not blocked
-  fi
-  # Extract own title (strip checkbox, tag, description, and blockedBy metadata)
-  local own_title
-  own_title=$(echo "$task_line" | sed 's/^- \[.\] //;s/^\[[^]]*\] //;s/ | [bB]locked[bB]y:.*//;s/ —.*//')
-  # Split on comma and check each dependency
-  local IFS=','
-  for dep in $blocked_by; do
-    dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')  # trim whitespace
-    if [ -z "$dep" ]; then continue; fi
-    # Skip self-references (task cannot block itself)
-    if [ "$dep" = "$own_title" ]; then continue; fi
-    # Check if this dependency is done (has [x] marker) in the backlog
-    # Match: "- [x] [TAG] <dep>" or "- [x] <dep>" anywhere in the title portion
-    if ! grep -F "$dep" "$BACKLOG" 2>/dev/null | grep -qF "- [x]"; then
-      # Fallback: check completed.md (dependencies may have been archived)
-      if [ -f "$COMPLETED" ] && grep -qF "$dep" "$COMPLETED" 2>/dev/null; then
-        continue
-      fi
-      return 0  # dependency not done — task is blocked
-    fi
-  done
-  return 1  # all dependencies done — not blocked
-}
-
-# --- Helper: atomically claim the next unchecked task from backlog ---
-# Uses mkdir lock to prevent two workers from grabbing the same task.
-# Changes "- [ ]" to "- [>]" (claimed) so the other worker skips it.
-# Skips tasks whose blockedBy dependencies are not yet completed.
-# Outputs the claimed task line (original "- [ ] ..." form) or empty string.
-claim_next_task() {
-  if ! acquire_lock; then echo ""; return; fi
-  local task=""
-  # Iterate through all pending tasks, skip blocked ones
-  while IFS= read -r candidate; do
-    if ! is_task_blocked "$candidate"; then
-      task="$candidate"
-      break
-    fi
-  done < <(grep '^\- \[ \]' "$BACKLOG" 2>/dev/null || true)
-  if [ -n "$task" ]; then
-    if ! __AWK_TARGET="$task" awk 'BEGIN{target=ENVIRON["__AWK_TARGET"]} found == 0 && $0 == target {sub(/- \[ \]/, "- [>]"); found=1} {print}' \
-      "$BACKLOG" > "$BACKLOG.tmp" || ! mv "$BACKLOG.tmp" "$BACKLOG"; then
-      release_lock
-      echo ""
-      return
-    fi
-    release_lock
-    echo "$task"
-  else
-    release_lock
-  fi
-}
-
-# --- Helper: safely remove a line from backlog by exact match ---
-remove_from_backlog() {
-  local line_to_remove="$1"
-  acquire_lock || return
-  if [ -f "$BACKLOG" ]; then
-    grep -Fxv -- "$line_to_remove" "$BACKLOG" > "$BACKLOG.tmp" || true
-    mv "$BACKLOG.tmp" "$BACKLOG"
-  fi
-  release_lock
-}
-
-# --- Helper: mark a backlog item as checked (completed/failed) ---
-mark_in_backlog() {
-  local old_line="$1"
-  local new_line="$2"
-  local title="${old_line#- \[>\] }"
-  acquire_lock || return
-  if [ -f "$BACKLOG" ]; then
-    __AWK_TITLE="$title" __AWK_NEW="$new_line" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]; new=ENVIRON["__AWK_NEW"]} {
-      if ($0 == "- [>] " title || $0 == "- [ ] " title) print new
-      else print
-    }' "$BACKLOG" > "$BACKLOG.tmp"
-    mv "$BACKLOG.tmp" "$BACKLOG"
-  fi
-  release_lock
-}
-
-# --- Helper: unclaim a task (revert [>] back to [ ]) ---
-unclaim_task() {
-  local task_title="$1"
-  acquire_lock || return
-  if [ -f "$BACKLOG" ]; then
-    __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
-      if ($0 == "- [>] " title) print "- [ ] " title
-      else print
-    }' "$BACKLOG" > "$BACKLOG.tmp"
-    mv "$BACKLOG.tmp" "$BACKLOG"
-  fi
-  release_lock
 }
 
 # --- Worktree helpers ---
@@ -321,7 +193,6 @@ cleanup_on_exit() {
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       db_unclaim_task_by_title "$_CURRENT_TASK_TITLE" 2>/dev/null || true
-      unclaim_task "$_CURRENT_TASK_TITLE" 2>/dev/null || true
     fi
     db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || true
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
@@ -397,12 +268,7 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
     if [ -n "$_stale_id" ]; then
       db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
     fi
-    _db_sync_state_files || {
-      echo "| $(date '+%Y-%m-%d') | $task_title | -- | Stale lock after ${age_minutes}m | 0 | pending |" >> "$FAILED"
-      remove_from_backlog "- [>] $task_title"
-      # Fallback: also try [x] in case another code path already marked it done
-      remove_from_backlog "- [x] $task_title"
-    }
+    db_export_state_files
   fi
 fi
 
@@ -439,16 +305,6 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
       _db_title=$(echo "$_db_result" | cut -d$'\x1f' -f2)
       _db_tag=$(echo "$_db_result" | cut -d$'\x1f' -f3)
       next_task="- [ ] [${_db_tag}] ${_db_title}"
-      # Backward compat: also mark [>] in backlog file
-      acquire_lock && {
-        if [ -f "$BACKLOG" ]; then
-          __AWK_TITLE="$_db_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
-            if (index($0, title) > 0 && index($0, "- [ ]") == 1) sub(/- \[ \]/, "- [>]")
-            print
-          }' "$BACKLOG" > "$BACKLOG.tmp" && mv "$BACKLOG.tmp" "$BACKLOG"
-        fi
-        release_lock
-      }
     else
       next_task=""
       _db_task_id=""
@@ -512,7 +368,7 @@ EOF
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-        unclaim_task "$task_title"
+
         _CURRENT_TASK_TITLE=""
         break
       fi
@@ -520,7 +376,7 @@ EOF
       _stop_heartbeat
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-      unclaim_task "$task_title"
+
       _CURRENT_TASK_TITLE=""
       continue
     fi
@@ -532,7 +388,7 @@ EOF
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-        unclaim_task "$task_title"
+
         _CURRENT_TASK_TITLE=""
         break
       fi
@@ -540,7 +396,7 @@ EOF
       _stop_heartbeat
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-      unclaim_task "$task_title"
+
       _CURRENT_TASK_TITLE=""
       continue
     fi
@@ -593,12 +449,6 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     cleanup_worktree "$branch_name"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
-    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      _db_sync_state_files || {
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | claude exit code $exit_code | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(claude failed)_"
-      }
-    fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
@@ -622,12 +472,6 @@ EOF
       cleanup_worktree "$branch_name"
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
-      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        _db_sync_state_files || {
-          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | worktree missing before gates | 0 | pending |" >> "$FAILED"
-          mark_in_backlog "- [>] $task_title" "- [x] $task_title _(worktree missing)_"
-        }
-      fi
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
       cat > "$WORKER_TASK_FILE" <<EOF
@@ -681,12 +525,6 @@ EOF
     cleanup_worktree  # Keep branch for task-fixer
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
-    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      _db_sync_state_files || {
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | $_gate_label failed | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _($_gate_label failed)_"
-      }
-    fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
@@ -729,12 +567,6 @@ EOF
     cleanup_worktree
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
-    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      _db_sync_state_files || {
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | bash-n failed | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(bash-n failed)_"
-      }
-    fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
     continue
@@ -751,10 +583,26 @@ EOF
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested before merge — unclaiming task and exiting cleanly"
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-    unclaim_task "$task_title"
+
     _CURRENT_TASK_TITLE=""
     cleanup_worktree "$branch_name"
     break
+  fi
+
+  # --- Pre-lock rebase: reduce merge lock hold time ---
+  # Rebase feature branch onto latest main while still in worktree.
+  # If successful, the subsequent merge will be a fast-forward (instant).
+  _pre_lock_rebased=false
+  if [ -d "$WORKTREE_DIR" ]; then
+    log "Pre-lock rebase: updating $branch_name onto latest $SKYNET_MAIN_BRANCH..."
+    if (cd "$WORKTREE_DIR" && git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" && \
+        git rebase "origin/$SKYNET_MAIN_BRANCH" 2>>"$LOG"); then
+      _pre_lock_rebased=true
+      log "Pre-lock rebase succeeded — merge should be fast-forward."
+    else
+      (cd "$WORKTREE_DIR" && git rebase --abort 2>/dev/null || true)
+      log "Pre-lock rebase had conflicts — will use regular merge."
+    fi
   fi
 
   # --- All gates passed -- merge to main ---
@@ -767,7 +615,7 @@ EOF
     log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Retrying task later."
     emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-    unclaim_task "$task_title"
+
     _CURRENT_TASK_TITLE=""
     cleanup_worktree "$branch_name"
     continue
@@ -779,14 +627,18 @@ EOF
   if ! git_pull_with_retry; then
     log "Cannot pull main — skipping merge, unclaiming task."
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
-    unclaim_task "$task_title"
+
     _CURRENT_TASK_TITLE=""
     release_merge_lock
     continue
   fi
 
   _merge_succeeded=false
-  if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+  # Try fast-forward merge first (instant if pre-lock rebase succeeded)
+  if $_pre_lock_rebased && git merge "$branch_name" --ff-only 2>>"$LOG"; then
+    _merge_succeeded=true
+    log "Fast-forward merge succeeded (lock hold time minimized)."
+  elif git merge "$branch_name" --no-edit 2>>"$LOG"; then
     _merge_succeeded=true
   else
     # Merge failed — attempt rebase recovery (max 1 attempt)
@@ -815,12 +667,6 @@ EOF
     emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
-    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      _db_sync_state_files || {
-        echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | merge conflict | 0 | pending |" >> "$FAILED"
-        mark_in_backlog "- [>] $task_title" "- [x] $task_title _(merge failed)_"
-      }
-    fi
     _CURRENT_TASK_TITLE=""
     _one_shot_exit=1
     release_merge_lock
@@ -855,12 +701,6 @@ EOF
       tasks_failed=$((tasks_failed + 1))
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
-      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        _db_sync_state_files || {
-          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | typecheck failed post-merge | 0 | pending |" >> "$FAILED"
-          mark_in_backlog "- [>] $task_title" "- [x] $task_title _(typecheck failed post-merge)_"
-        }
-      fi
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
       release_merge_lock
@@ -935,12 +775,6 @@ EOF
 
       # SQLite: revert from completed to failed (BEFORE exporting state files)
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || true
-      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-        _db_sync_state_files || {
-          mark_in_backlog "- [x] $task_title" "- [x] $task_title _(smoke failed)_"
-          echo "| $(date '+%Y-%m-%d') | $task_title | $branch_name | smoke test failed | 0 | pending |" >> "$FAILED"
-        }
-      fi
 
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -987,7 +821,6 @@ EOF
     emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
-    _db_sync_state_files || true
     _CURRENT_TASK_TITLE=""
     release_merge_lock
     continue

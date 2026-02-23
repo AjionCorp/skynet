@@ -5,6 +5,11 @@
 
 DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 
+# Fail-fast guard: call at worker/fixer startup to ensure SQLite is available.
+_require_db() {
+  [ -f "$DB_PATH" ] || { log "FATAL: SQLite database missing at $DB_PATH — run 'skynet init' first"; exit 1; }
+}
+
 # Unit Separator (0x1F) for sqlite3 output — safe for fields containing pipes.
 _DB_SEP=$'\x1f'
 

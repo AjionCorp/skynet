@@ -28,6 +28,9 @@ import { testNotifyCommand } from "./commands/test-notify.js";
 import { changelogCommand } from "./commands/changelog.js";
 import { addSkillCommand } from "./commands/add-skill.js";
 import { listSkillsCommand } from "./commands/list-skills.js";
+import { backupCommand } from "./commands/backup.js";
+import { restoreDbCommand } from "./commands/restore-db.js";
+import { recoverGitCommand } from "./commands/recover-git.js";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json");
@@ -231,6 +234,28 @@ program
   .option("--channel <name>", "Test a single channel (e.g. telegram, slack, discord)")
   .option("--dir <dir>", "Project directory (default: cwd)")
   .action(testNotifyCommand);
+
+program
+  .command("backup")
+  .description("Create a backup of the SQLite database")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .action(backupCommand);
+
+program
+  .command("restore-db")
+  .description("Restore the SQLite database from a backup file")
+  .argument("<file>", "Path to the backup file")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--force", "Restore even if workers are running")
+  .action(restoreDbCommand);
+
+program
+  .command("recover-git")
+  .description("Recover from push divergence (local ahead of origin)")
+  .option("--dir <dir>", "Project directory (default: cwd)")
+  .option("--dry-run", "Show what would happen without making changes")
+  .option("--force", "Actually perform the git reset")
+  .action(recoverGitCommand);
 
 const configCmd = program
   .command("config")

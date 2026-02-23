@@ -72,45 +72,7 @@ is_running() {
 }
 
 # --- Backlog mutex helpers (same pattern as dev-worker.sh) ---
-BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
-acquire_lock() {
-  local attempts=0
-  while ! mkdir "$BACKLOG_LOCK" 2>/dev/null; do
-    attempts=$((attempts + 1))
-    if [ "$attempts" -ge 50 ]; then
-      if [ -d "$BACKLOG_LOCK" ]; then
-        local lock_mtime
-        lock_mtime=$(file_mtime "$BACKLOG_LOCK")
-        local lock_age=$(( $(date +%s) - lock_mtime ))
-        if [ "$lock_age" -gt 30 ]; then
-          rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
-          mkdir "$BACKLOG_LOCK" 2>/dev/null && return 0
-        fi
-      fi
-      return 1
-    fi
-    sleep 0.1
-  done
-  return 0
-}
-
-release_lock() {
-  rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
-}
-
-unclaim_task() {
-  local task_title="$1"
-  acquire_lock || return
-  if [ -f "$BACKLOG" ]; then
-    __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
-      if ($0 == "- [>] " title) print "- [ ] " title
-      else print
-    }' "$BACKLOG" > "$BACKLOG.tmp"
-    mv "$BACKLOG.tmp" "$BACKLOG"
-  fi
-  release_lock
-}
 
 # --- Crash recovery: detect stale locks, orphaned tasks, and zombie processes ---
 crash_recovery() {
@@ -203,7 +165,6 @@ crash_recovery() {
       stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
       if [ -n "$stuck_title" ]; then
         db_unclaim_task_by_title "$stuck_title" 2>/dev/null || true
-        unclaim_task "$stuck_title"
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -236,7 +197,6 @@ IDLE_EOF
         while IFS= read -r line; do
           local title="${line#- \[>\] }"
           db_unclaim_task_by_title "$title" 2>/dev/null || true
-          unclaim_task "$title"
           log "Unclaimed orphaned task (no workers alive): $title"
           recovered=$((recovered + 1))
           _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -313,7 +273,6 @@ if [ -n "$_orphaned_claimed" ]; then
   while IFS="$_DB_SEP" read -r _oc_id _oc_title _oc_wid; do
     [ -z "$_oc_id" ] && continue
     db_unclaim_task "$_oc_id" 2>/dev/null || true
-    unclaim_task "$_oc_title" 2>/dev/null || true
     log "Reconciled orphaned claim: task '$_oc_title' (id=$_oc_id, worker=$_oc_wid)"
     emit_event "orphaned_claim_reconciled" "Task '$_oc_title' (id=$_oc_id) unclaimed — worker $_oc_wid not actively working on it" 2>/dev/null || true
   done <<< "$_orphaned_claimed"
@@ -383,6 +342,24 @@ if [ -f "$DB_PATH" ]; then
   fi
 fi
 
+# --- Daily SQLite backup ---
+# Uses sqlite3 .backup (safe during WAL writes). Keeps 7 days, rotates daily.
+_backup_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-db-backup-$(date +%Y%m%d)"
+if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
+  mkdir -p "$DEV_DIR/db-backups"
+  _backup_file="$DEV_DIR/db-backups/skynet.db.$(date +%Y%m%d)"
+  if sqlite3 "$DB_PATH" ".backup '$_backup_file'" 2>/dev/null; then
+    touch "$_backup_sentinel"
+    log "Daily DB backup created: $_backup_file"
+    # Rotate: keep 7 days
+    ls -1t "$DEV_DIR/db-backups"/skynet.db.* 2>/dev/null | tail -n +8 | while read -r _old; do
+      rm -f "$_old"
+    done
+  else
+    log "WARNING: Daily DB backup failed"
+  fi
+fi
+
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
 
@@ -401,6 +378,29 @@ codex_auth_ok=false
 if check_codex_auth; then
   codex_auth_ok=true
   agent_auth_ok=true
+fi
+
+# --- Token expiry pre-warning ---
+# Check Claude token and Codex token expiry. Alert once if within 24h.
+_expiry_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-token-expiry-alert"
+if $claude_auth_ok && [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
+  _claude_expiry=$(_check_token_expiry "$SKYNET_AUTH_TOKEN_CACHE" 86400)
+  case "$_claude_expiry" in
+    expired)
+      log "Claude token expired (detected via JWT exp)"
+      ;;
+    warning:*)
+      _hours="${_claude_expiry#warning:}"
+      if [ ! -f "$_expiry_sentinel" ]; then
+        log "Claude token expires in ${_hours}h — consider refreshing"
+        tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Claude token expires in ${_hours}h. Run auth-refresh soon."
+        touch "$_expiry_sentinel"
+      fi
+      ;;
+    ok:*)
+      rm -f "$_expiry_sentinel" 2>/dev/null || true
+      ;;
+  esac
 fi
 
 # Count backlog tasks (prefer SQLite, fallback to grep)
@@ -1010,9 +1010,22 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   fi
 fi
 
+# --- Adaptive interval: shorter when work is available, longer when idle ---
+_adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
+if [ "${backlog_count:-0}" -gt 0 ] || [ "${failed_pending:-0}" -gt 0 ]; then
+  echo 30 > "$_adaptive_file"
+elif [ "${dev_workers_running:-0}" -gt 0 ] || [ "${fixers_running:-0}" -gt 0 ]; then
+  echo "$WATCHDOG_INTERVAL" > "$_adaptive_file"
+else
+  echo 300 > "$_adaptive_file"
+fi
+
 ) || log "Watchdog cycle failed (exit $?) — will retry next cycle"
 
-# --- End of cycle — sleep before next iteration ---
-sleep "$WATCHDOG_INTERVAL"
+# Read adaptive interval from subshell output (falls back to default)
+_adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
+_cycle_interval="$WATCHDOG_INTERVAL"
+[ -f "$_adaptive_file" ] && _cycle_interval=$(cat "$_adaptive_file" 2>/dev/null || echo "$WATCHDOG_INTERVAL")
+sleep "$_cycle_interval"
 
 done  # end main loop

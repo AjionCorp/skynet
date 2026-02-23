@@ -1,10 +1,8 @@
-import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
-import { resolve, join } from "path";
+import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
-import { acquireBacklogLock, releaseBacklogLock } from "../utils/backlogLock";
-import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery";
+import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape } from "../utils/sqliteQuery";
 
 interface ResetTaskOptions {
   dir?: string;
@@ -19,12 +17,6 @@ function prompt(question: string): Promise<string> {
       resolve(answer.trim().toLowerCase());
     });
   });
-}
-
-function atomicWrite(filePath: string, content: string) {
-  const tmpPath = filePath + ".tmp";
-  writeFileSync(tmpPath, content, "utf-8");
-  renameSync(tmpPath, filePath);
 }
 
 function isValidBranchName(branch: string): boolean {
@@ -61,134 +53,62 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
     process.exit(1);
   }
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
-  const failedPath = join(devDir, "failed-tasks.md");
-  const backlogPath = join(devDir, "backlog.md");
 
-  if (!existsSync(failedPath)) {
-    console.error(`Error: failed-tasks.md not found at ${failedPath}. Run 'skynet init' first.`);
+  if (!isSqliteReady(devDir)) {
+    console.error("Error: SQLite database not found. Run 'skynet init' first.");
     process.exit(1);
   }
 
-  if (!existsSync(backlogPath)) {
-    console.error(`Error: backlog.md not found at ${backlogPath}. Run 'skynet init' first.`);
+  const searchTerm = titleSubstring.trim();
+  const safeTerm = sqlEscape(searchTerm);
+
+  // Find matching tasks in SQLite
+  const rows = sqliteRows(devDir,
+    `SELECT id, title, branch, error, attempts, status FROM tasks ` +
+    `WHERE title LIKE '%${safeTerm}%' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
+  );
+
+  if (rows.length === 0) {
+    console.error(`\n  Error: No matching failed/blocked task found for "${titleSubstring}".\n`);
     process.exit(1);
   }
 
-  // Derive lock path from config (same as shell: ${SKYNET_LOCK_PREFIX}-backlog.lock)
-  const projectName = vars.SKYNET_PROJECT_NAME || "unknown";
-  const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
-  const lockPath = `${lockPrefix}-backlog.lock`;
-
-  if (!acquireBacklogLock(lockPath)) {
-    console.error("Error: Could not acquire backlog lock. Another process may be modifying backlog.md.");
+  if (rows.length > 1) {
+    console.error(`\n  Error: Multiple tasks match "${titleSubstring}":\n`);
+    for (const row of rows) {
+      console.error(`    - ${row[1]}`);
+    }
+    console.error(`\n  Please use a more specific substring.\n`);
     process.exit(1);
   }
 
-  let branchName = "";
-  try {
-    // --- Step 1: Find matching entry in failed-tasks.md ---
-    const failedContent = readFileSync(failedPath, "utf-8");
-    const failedLines = failedContent.split("\n");
-    const searchTerm = titleSubstring.trim().toLowerCase();
+  const [taskId, taskTitle, branchName, taskError, attempts, status] = rows[0];
 
-    const matchingIndices: number[] = [];
-    for (let i = 0; i < failedLines.length; i++) {
-      const line = failedLines[i];
-      // Skip header, separator, and empty lines
-      if (!line.startsWith("|") || line.includes("| Date |") || line.includes("------")) continue;
-      const cols = line.split("|").map((c) => c.trim());
-      // cols[0]="" (before first |), cols[1]=date, cols[2]=title, cols[3]=branch, ...
-      const title = cols[2] || "";
-      if (title.toLowerCase().includes(searchTerm)) {
-        matchingIndices.push(i);
-      }
-    }
+  console.log(`\n  Found failed task:\n`);
+  console.log(`    Title:    ${taskTitle}`);
+  console.log(`    Branch:   ${branchName}`);
+  console.log(`    Error:    ${taskError}`);
+  console.log(`    Attempts: ${attempts}`);
+  console.log(`    Status:   ${status}`);
 
-    if (matchingIndices.length === 0) {
-      console.error(`\n  Error: No matching task found in failed-tasks.md for "${titleSubstring}".\n`);
-      process.exit(1);
-    }
+  // Reset the task in SQLite
+  const now = sqlEscape(new Date().toISOString());
+  sqliteQuery(devDir,
+    `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${now}' ` +
+    `WHERE id=${taskId};`
+  );
+  console.log(`\n  Reset task: attempts → 0, status → pending`);
 
-    if (matchingIndices.length > 1) {
-      console.error(`\n  Error: Multiple tasks match "${titleSubstring}":\n`);
-      for (const idx of matchingIndices) {
-        const cols = failedLines[idx].split("|").map((c) => c.trim());
-        console.error(`    - ${cols[2]}`);
-      }
-      console.error(`\n  Please use a more specific substring.\n`);
-      process.exit(1);
-    }
-
-    const matchIdx = matchingIndices[0];
-    const matchLine = failedLines[matchIdx];
-    const cols = matchLine.split("|").map((c) => c.trim());
-    // cols: ["", date, title, branch, error, attempts, status, ""]
-    const taskTitle = cols[2];
-    branchName = cols[3];
-    const taskError = cols[4];
-    const taskDate = cols[1];
-
-    console.log(`\n  Found failed task:\n`);
-    console.log(`    Title:    ${taskTitle}`);
-    console.log(`    Branch:   ${branchName}`);
-    console.log(`    Error:    ${taskError}`);
-    console.log(`    Attempts: ${cols[5]}`);
-    console.log(`    Status:   ${cols[6]}`);
-
-    // --- Step 2: Reset status to pending and attempts to 0 ---
-    failedLines[matchIdx] = `| ${taskDate} | ${taskTitle} | ${branchName} | ${taskError} | 0 | pending |`;
-    atomicWrite(failedPath, failedLines.join("\n"));
-    console.log(`\n  Reset failed-tasks.md entry: attempts → 0, status → pending`);
-
-    // Also reset in SQLite if available
-    try {
-      if (isSqliteReady(devDir)) {
-        const safeTitle = sqlEscape(taskTitle);
-        const now = sqlEscape(new Date().toISOString());
-        sqliteQuery(devDir,
-          `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${now}' ` +
-          `WHERE title='${safeTitle}' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
-        );
-      }
-    } catch (err) {
-      if (process.env.SKYNET_DEBUG) {
-        console.error(`  [debug] SQLite reset failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-
-    // --- Step 3: Find and uncheck corresponding backlog entry ---
-    const backlogContent = readFileSync(backlogPath, "utf-8");
-    const backlogLines = backlogContent.split("\n");
-    let backlogUpdated = false;
-
-    for (let i = 0; i < backlogLines.length; i++) {
-      if (backlogLines[i].startsWith("- [x] ") && backlogLines[i].toLowerCase().includes(searchTerm)) {
-        backlogLines[i] = backlogLines[i].replace(/^- \[x\] /, "- [ ] ");
-        backlogUpdated = true;
-        console.log(`  Reset backlog.md entry: [x] → [ ]`);
-        break;
-      }
-    }
-
-    if (backlogUpdated) {
-      atomicWrite(backlogPath, backlogLines.join("\n"));
-    } else {
-      console.log(`  Warning: No matching [x] entry found in backlog.md (skipped)`);
-    }
-  } finally {
-    releaseBacklogLock(lockPath);
-  }
-
-  // --- Step 4: Optionally delete the failed branch ---
-  if (branchName && branchExists(branchName, projectDir)) {
+  // Optionally delete the failed branch
+  if (branchName && isValidBranchName(String(branchName)) && branchExists(String(branchName), projectDir)) {
     if (options.force) {
       console.log(`  Deleting branch: ${branchName}`);
-      deleteBranch(branchName, projectDir);
+      deleteBranch(String(branchName), projectDir);
       console.log(`  Branch deleted.`);
     } else {
       const answer = await prompt(`Delete branch "${branchName}"? (y/N)`);
       if (answer === "y" || answer === "yes") {
-        deleteBranch(branchName, projectDir);
+        deleteBranch(String(branchName), projectDir);
         console.log(`  Branch deleted.`);
       } else {
         console.log(`  Branch kept.`);

@@ -1,6 +1,5 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isProcessRunning } from "../utils/isProcessRunning";
 import { readFile } from "../utils/readFile";
@@ -103,20 +102,6 @@ function getLastActivityTimestamp(devDir: string): Date | null {
   return latest;
 }
 
-function parseRecentCompletions(completedContent: string, count: number): string[] {
-  const lines = completedContent.split("\n").filter(
-    (l) => l.startsWith("|") && !l.includes("| Date |") && !l.includes("---")
-  );
-
-  return lines.slice(-count).reverse().map((line) => {
-    const cols = line.split("|").map((c) => c.trim()).filter(Boolean);
-    // Format: Date | Task | Branch | Notes
-    const date = cols[0] || "";
-    const task = cols[1] || "";
-    return `${date}  ${task}`;
-  });
-}
-
 export async function statusCommand(options: StatusOptions) {
   const projectDir = resolve(options.dir || process.cwd());
   const vars = loadConfig(projectDir);
@@ -133,6 +118,11 @@ export async function statusCommand(options: StatusOptions) {
   const print = (msg: string) => {
     if (!options.json && !options.quiet) console.log(msg);
   };
+
+  const usingSqlite = isSqliteReady(devDir);
+  if (!usingSqlite) {
+    print("\n  WARNING: SQLite database not found. Run 'skynet init' to set up the pipeline.\n");
+  }
 
   // --- Health Score Inputs ---
   let staleHeartbeatCount = 0;
@@ -155,15 +145,12 @@ export async function statusCommand(options: StatusOptions) {
     print(`\n  Skynet Pipeline Status (${projectName})\n`);
   }
 
-  // --- Task Counts ---
-  const usingSqlite = isSqliteReady(devDir);
+  // --- Task Counts (SQLite only) ---
   let pending = 0;
   let claimed = 0;
   let completedCount = 0;
   let failedPending = 0;
   let failedFixed = 0;
-  let completedContent = "";
-  let failed = "";
 
   if (usingSqlite) {
     try {
@@ -188,29 +175,13 @@ export async function statusCommand(options: StatusOptions) {
     }
   }
 
-  if (!usingSqlite || (pending === 0 && claimed === 0 && completedCount === 0)) {
-    const backlog = readFile(join(devDir, "backlog.md"));
-    pending = (backlog.match(/^- \[ \] /gm) || []).length;
-    claimed = (backlog.match(/^- \[>\] /gm) || []).length;
-
-    completedContent = readFile(join(devDir, "completed.md"));
-    const completedLines = completedContent
-      .split("\n")
-      .filter((l) => l.startsWith("|") && !l.includes("| Date |") && !l.includes("---"));
-    completedCount = completedLines.length;
-
-    failed = readFile(join(devDir, "failed-tasks.md"));
-    failedPending = (failed.match(/\| pending \|/g) || []).length;
-    failedFixed = (failed.match(/\| fixed \|/g) || []).length;
-  }
-
   print("  Tasks:");
   print(`    Pending:    ${pending}`);
   print(`    Claimed:    ${claimed}`);
   print(`    Completed:  ${completedCount}`);
   print(`    Failed:     ${failedPending} pending, ${failedFixed} fixed`);
 
-  // --- Current Tasks (per-worker) ---
+  // --- Current Tasks (SQLite only) ---
   print("\n  Current Tasks:");
 
   let hasActiveTasks = false;
@@ -241,65 +212,16 @@ export async function statusCommand(options: StatusOptions) {
       }
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite current tasks: ${err instanceof Error ? err.message : String(err)}`);
-      hasActiveTasks = false;
     }
   }
 
   if (!hasActiveTasks) {
-    // File-based current tasks
-    const taskFiles = ["current-task.md"];
-    try {
-      const entries = readdirSync(devDir);
-      for (const entry of entries) {
-        if (entry.match(/^current-task-\d+\.md$/)) {
-          taskFiles.push(entry);
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    for (const file of taskFiles) {
-      const content = readFile(join(devDir, file));
-      if (!content) continue;
-
-      const titleMatch = content.match(/^## (.+)/m);
-      const statusMatch = content.match(/\*\*Status:\*\* (\w+)/);
-      const startedMatch = content.match(/\*\*Started:\*\* (.+)/);
-      const workerMatch = content.match(/\*\*Worker:\*\* (\w+)/);
-
-      const taskStatus = statusMatch?.[1] || "unknown";
-      const taskTitle = titleMatch?.[1] || "Unknown";
-      const fileLabel = workerMatch?.[1] ? `Worker ${workerMatch[1]}` : file.replace(".md", "");
-
-      if (taskStatus === "in_progress" || taskStatus === "completed") {
-        hasActiveTasks = true;
-        let duration = "";
-        if (startedMatch?.[1]) {
-          const started = new Date(startedMatch[1]);
-          if (!isNaN(started.getTime())) {
-            duration = ` (${formatDuration(Date.now() - started.getTime())})`;
-          }
-        }
-
-        const maxLen = 60;
-        const shortTitle = taskTitle.length > maxLen
-          ? taskTitle.substring(0, maxLen) + "..."
-          : taskTitle;
-
-        print(`    ${fileLabel}: [${taskStatus}] ${shortTitle}${duration}`);
-      }
-    }
-
-    if (!hasActiveTasks) {
-      print("    Idle — no active tasks");
-    }
+    print("    Idle — no active tasks");
   }
 
-  // --- Heartbeat staleness + task age for health score ---
+  // --- Heartbeat staleness (SQLite only) ---
   const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
   const staleThresholdMs = 45 * 60 * 1000;
-  const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
   if (usingSqlite) {
     try {
@@ -315,31 +237,6 @@ export async function statusCommand(options: StatusOptions) {
       }
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite heartbeats: ${err instanceof Error ? err.message : String(err)}`);
-      staleHeartbeatCount = 0;
-      staleTasks24hCount = 0;
-    }
-  }
-
-  if (!usingSqlite) {
-    for (let wid = 1; wid <= maxWorkers; wid++) {
-      const hbPath = join(devDir, `worker-${wid}.heartbeat`);
-      if (existsSync(hbPath)) {
-        const epoch = Number(readFile(hbPath).trim());
-        if (epoch && Date.now() - epoch * 1000 > staleThresholdMs) {
-          staleHeartbeatCount++;
-        }
-      }
-      const taskPath = join(devDir, `current-task-${wid}.md`);
-      const taskContent = readFile(taskPath);
-      if (taskContent) {
-        const startedMatch = taskContent.match(/\*\*Started:\*\* (.+)/);
-        if (startedMatch?.[1]) {
-          const started = new Date(startedMatch[1]);
-          if (!isNaN(started.getTime()) && Date.now() - started.getTime() > twentyFourHoursMs) {
-            staleTasks24hCount++;
-          }
-        }
-      }
     }
   }
 
@@ -381,7 +278,7 @@ export async function statusCommand(options: StatusOptions) {
     print(`\n  Last Activity: ${ago} ago`);
   }
 
-  // --- Recent Completions ---
+  // --- Recent Completions (SQLite only) ---
   let recent: string[] = [];
 
   if (usingSqlite) {
@@ -394,15 +291,7 @@ export async function statusCommand(options: StatusOptions) {
       });
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite completions: ${err instanceof Error ? err.message : String(err)}`);
-      recent = [];
     }
-  }
-
-  if (recent.length === 0) {
-    if (!completedContent) {
-      completedContent = readFile(join(devDir, "completed.md"));
-    }
-    recent = parseRecentCompletions(completedContent, 3);
   }
 
   if (recent.length > 0) {
@@ -417,13 +306,32 @@ export async function statusCommand(options: StatusOptions) {
   if (existsSync(tokenCache)) {
     const age = Date.now() - statSync(tokenCache).mtimeMs;
     const mins = Math.floor(age / 60000);
-    print(`\n  Auth: OK (token cached ${mins}m ago)`);
+    // Check Claude token JWT expiry
+    try {
+      const tokenContent = readFileSync(tokenCache, "utf-8").trim();
+      const claudeExp = decodeJwtExp(tokenContent);
+      if (claudeExp) {
+        const remainingSecs = claudeExp - Math.floor(Date.now() / 1000);
+        const remainingHrs = Math.floor(Math.max(0, remainingSecs) / 3600);
+        if (remainingSecs <= 0) {
+          print(`\n  Claude Auth: EXPIRED (token cached ${mins}m ago)`);
+        } else if (remainingSecs <= 86400) {
+          print(`\n  Claude Auth: WARNING (expires in ${remainingHrs}h, cached ${mins}m ago)`);
+        } else {
+          print(`\n  Claude Auth: OK (expires in ${remainingHrs}h)`);
+        }
+      } else {
+        print(`\n  Claude Auth: OK (token cached ${mins}m ago)`);
+      }
+    } catch {
+      print(`\n  Claude Auth: OK (token cached ${mins}m ago)`);
+    }
   } else {
-    print("\n  Auth: No token cached");
+    print("\n  Claude Auth: No token cached");
   }
   print(`  ${getCodexAuthStatus(vars)}`);
 
-  // --- Blockers + Self-Correction (batched query) ---
+  // --- Blockers + Self-Correction (SQLite only) ---
   let blockerCount = 0;
   let scrFixed = 0;
   let scrBlocked = 0;
@@ -446,16 +354,6 @@ export async function statusCommand(options: StatusOptions) {
       }
     } catch (err) {
       if (process.env.SKYNET_DEBUG) console.error(`  [debug] SQLite blockers/scr: ${err instanceof Error ? err.message : String(err)}`);
-      blockerCount = 0;
-    }
-  }
-
-  if (!usingSqlite || blockerCount === 0) {
-    const blockers = readFile(join(devDir, "blockers.md"));
-    if (blockers.includes("No active blockers")) {
-      // keep 0
-    } else {
-      blockerCount = (blockers.match(/^- /gm) || []).length;
     }
   }
 
@@ -477,21 +375,6 @@ export async function statusCommand(options: StatusOptions) {
   print(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
 
   // --- Self-Correction Rate ---
-  // (scrFixed, scrBlocked, scrSuperseded already populated by batched blocker query above)
-
-  if (!usingSqlite || (scrFixed === 0 && scrBlocked === 0 && scrSuperseded === 0)) {
-    // Ensure we have failed content loaded
-    if (!failed) {
-      failed = readFile(join(devDir, "failed-tasks.md"));
-    }
-    const failedLines = failed
-      .split("\n")
-      .filter((l) => l.startsWith("|") && !l.includes("Date") && !l.includes("---"));
-    scrFixed = failedLines.filter((l) => l.includes("| fixed |")).length;
-    scrBlocked = failedLines.filter((l) => l.includes("| blocked |")).length;
-    scrSuperseded = failedLines.filter((l) => l.includes("| superseded |")).length;
-  }
-
   const scrSelfCorrected = scrFixed + scrSuperseded;
   const scrResolved = scrSelfCorrected + scrBlocked;
   const scrRate = scrResolved > 0 ? Math.round((scrSelfCorrected / scrResolved) * 100) : 0;

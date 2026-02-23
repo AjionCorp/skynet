@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, unlinkSync, writeFileSync, rmSync } from "fs";
+import { existsSync, readdirSync, unlinkSync, writeFileSync, rmSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
@@ -216,6 +216,45 @@ export async function doctorCommand(options: DoctorOptions) {
     } else {
       console.log("    skynet.db: not found (run migration or start pipeline)");
       results.push({ name: "SQLite Database", status: "WARN" });
+    }
+  }
+
+  // --- (5c) Database Backup Freshness ---
+  console.log("\n  Database Backups:");
+
+  const backupDir = join(devDir, "db-backups");
+  if (!existsSync(backupDir)) {
+    console.log("    No backups found (run 'skynet backup' to create one)");
+    results.push({ name: "Database Backups", status: "WARN" });
+  } else {
+    try {
+      const backups = readdirSync(backupDir)
+        .filter((f) => f.startsWith("skynet.db."))
+        .sort()
+        .reverse();
+
+      if (backups.length === 0) {
+        console.log("    No backup files found");
+        results.push({ name: "Database Backups", status: "WARN" });
+      } else {
+        const newestBackup = backups[0];
+        const newestPath = join(backupDir, newestBackup);
+        const backupAge = Date.now() - statSync(newestPath).mtimeMs;
+        const backupHours = Math.round(backupAge / 3600000);
+
+        console.log(`    Latest: ${newestBackup} (${backupHours}h old)`);
+        console.log(`    Total backups: ${backups.length}`);
+
+        if (backupHours > 48) {
+          console.log("    WARNING: newest backup is older than 48 hours");
+          results.push({ name: "Database Backups", status: "WARN" });
+        } else {
+          results.push({ name: "Database Backups", status: "PASS" });
+        }
+      }
+    } catch {
+      console.log("    Could not read backup directory");
+      results.push({ name: "Database Backups", status: "WARN" });
     }
   }
 

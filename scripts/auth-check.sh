@@ -244,3 +244,38 @@ check_any_auth() {
   fi
   return 1
 }
+
+# Check token expiry for a JWT-based token file.
+# Echoes: "expired", "warning:Nh" (within warn threshold), or "ok:Nh"
+# Usage: _check_token_expiry <token_or_file> [warn_secs]
+_check_token_expiry() {
+  local token="$1"
+  local warn_secs="${2:-86400}"
+
+  # If argument is a file, read its content
+  [ -f "$token" ] && token=$(cat "$token" 2>/dev/null || echo "")
+  [ -z "$token" ] && { echo "missing"; return; }
+
+  # Decode JWT exp claim via python3 (available on macOS + most Linux)
+  local exp
+  exp=$(echo "$token" | cut -d. -f2 | python3 -c "
+import base64,json,sys
+p=sys.stdin.read().strip()
+p+='='*(-len(p)%4)
+try: print(json.loads(base64.urlsafe_b64decode(p)).get('exp',0))
+except: print(0)" 2>/dev/null)
+
+  [ -z "$exp" ] || [ "$exp" = "0" ] && { echo "unknown"; return; }
+
+  local now
+  now=$(date +%s)
+  local remaining=$(( exp - now ))
+
+  if [ "$remaining" -le 0 ]; then
+    echo "expired"
+  elif [ "$remaining" -le "$warn_secs" ]; then
+    echo "warning:$((remaining / 3600))"
+  else
+    echo "ok:$((remaining / 3600))"
+  fi
+}
