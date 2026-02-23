@@ -39,9 +39,15 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         );
       }
 
-      // Validate args are safe (alphanumeric + hyphens only)
+      // Validate args: bounded count, bounded length, safe characters
+      if (!Array.isArray(args) || args.length > 10) {
+        return Response.json(
+          { data: null, error: "Too many arguments (max 10)" },
+          { status: 400 }
+        );
+      }
       for (const arg of args) {
-        if (!/^[a-z0-9-]+$/.test(arg)) {
+        if (typeof arg !== "string" || arg.length > 64 || !/^[a-z0-9-]+$/.test(arg)) {
           return Response.json(
             { data: null, error: "Invalid argument" },
             { status: 400 }
@@ -76,10 +82,9 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to trigger script",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Failed to trigger script")
+            : "Failed to trigger script",
         },
         { status: 500 }
       );
