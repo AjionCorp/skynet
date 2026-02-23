@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/image/logogithub.png" alt="Skynet" width="300" />
+</p>
+
 # Skynet
 
 An autonomous AI development pipeline. Skynet uses LLM agents (Claude Code, OpenAI Codex) as coding workers and bash scripts as the orchestration engine. It claims tasks from a backlog, implements them in isolated git worktrees, runs quality gates, merges on success, and retries failures — shipping code around the clock with zero human intervention.
