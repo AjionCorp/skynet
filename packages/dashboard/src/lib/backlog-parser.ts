@@ -5,7 +5,8 @@ export function extractTitle(text: string): string {
   const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
   const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
   const dashIdx = withoutTag.indexOf(" \u2014 ");
-  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+  const title = (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+  return title.slice(0, 60);
 }
 
 /**

@@ -49,6 +49,10 @@ function getCodexAuthStatus(vars: Record<string, string>): string {
   }
 
   try {
+    const fileSize = statSync(authFile).size;
+    if (fileSize > 1_048_576) {
+      return "Codex Auth: Invalid (auth file too large)";
+    }
     const raw = readFileSync(authFile, "utf-8");
     const data = JSON.parse(raw);
     const tokens = data?.tokens || {};

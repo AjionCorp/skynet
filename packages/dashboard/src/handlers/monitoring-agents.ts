@@ -39,7 +39,8 @@ function parsePlist(content: string) {
     /<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/
   );
   // logPath is read from the plist file; React auto-escapes in JSX so no XSS risk in the dashboard.
-  const logPath = logMatch?.[1] ?? null;
+  const rawLogPath = logMatch?.[1] ?? null;
+  const logPath = rawLogPath && !rawLogPath.includes('..') ? rawLogPath : null;
 
   return { interval, runAtLoad, scriptPath, logPath };
 }
@@ -193,7 +194,7 @@ function parseCrontab(
     entries.set(agentName, {
       schedule,
       scriptPath: relScript ? relScript[1] : `${agentName}.sh`,
-      logPath: fullLogPath,
+      logPath: fullLogPath && !fullLogPath.includes('..') ? fullLogPath : null,
     });
   }
 
