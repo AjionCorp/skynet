@@ -4,7 +4,13 @@ import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
-// In-memory rate limiting for POST requests: max 30 per 60 seconds
+// In-memory rate limiting for POST requests: max 30 per 60 seconds.
+// NOTE: This rate limit is per-process, not global across cluster workers.
+// Each Node.js process maintains its own _postTimestamps array, so the
+// effective limit scales linearly with the number of processes. This is
+// acceptable under the single-threaded assumption (one Next.js server process).
+// If the dashboard is ever clustered or load-balanced, this should be replaced
+// with a shared store (e.g. SQLite, Redis) for accurate cross-process limiting.
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const _postTimestamps: number[] = [];

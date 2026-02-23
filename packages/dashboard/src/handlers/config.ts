@@ -38,7 +38,10 @@ function parseConfigFile(raw: string): { key: string; value: string; comment: st
       // Strip surrounding quotes
       if (value.startsWith('"') && value.endsWith('"')) {
         value = value.slice(1, -1);
-        // Unescape bash double-quote escape sequences
+        // Unescape bash double-quote escape sequences.
+        // LIMITATION: Only \" and \\ are handled. Multi-line values and special
+        // escape sequences (\t, \a, \b, \f, \v) are not supported — each export
+        // must be a single line with simple quoting.
         value = value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
       } else if (value.startsWith("'") && value.endsWith("'")) {
         value = value.slice(1, -1);

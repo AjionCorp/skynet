@@ -269,7 +269,9 @@ export class SkynetDB {
       .trim()
       .slice(0, 120);
 
-    if (position === "top") {
+    // Wrap UPDATE + INSERT in a transaction so a failed INSERT cannot leave
+    // priorities shifted without the new row (corrupting priority order).
+    const insertAtTop = this.db.transaction(() => {
       this.db.prepare("UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed')").run();
       const info = this.db
         .prepare(
@@ -278,18 +280,22 @@ export class SkynetDB {
         )
         .run(title, tag, description, blockedBy, normalizedRoot);
       return Number(info.lastInsertRowid);
-    }
+    });
 
-    const row = this.db
-      .prepare("SELECT COALESCE(MAX(priority),0)+1 as next FROM tasks WHERE status IN ('pending','claimed')")
-      .get() as { next: number };
-    const info = this.db
-      .prepare(
-        `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-         VALUES (?, ?, ?, 'pending', ?, ?, ?)`
-      )
-      .run(title, tag, description, blockedBy, normalizedRoot, row.next);
-    return Number(info.lastInsertRowid);
+    const insertAtBottom = this.db.transaction(() => {
+      const row = this.db
+        .prepare("SELECT COALESCE(MAX(priority),0)+1 as next FROM tasks WHERE status IN ('pending','claimed')")
+        .get() as { next: number };
+      const info = this.db
+        .prepare(
+          `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
+           VALUES (?, ?, ?, 'pending', ?, ?, ?)`
+        )
+        .run(title, tag, description, blockedBy, normalizedRoot, row.next);
+      return Number(info.lastInsertRowid);
+    });
+
+    return position === "top" ? insertAtTop() : insertAtBottom();
   }
 
   // ── Current Tasks / Workers ────────────────────────────────────────

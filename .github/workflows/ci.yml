@@ -36,6 +36,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
 
+  unit-test-sh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - run: bash tests/unit/db.test.sh
+      - run: bash tests/unit/crash-recovery.test.sh
+      - run: bash tests/unit/watchdog-reconciliation.test.sh
+
   lint-sh:
     runs-on: ubuntu-latest
     timeout-minutes: 5

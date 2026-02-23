@@ -25,8 +25,8 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMins}m`;
 }
 
-// NOTE: canonical implementation is packages/dashboard/src/lib/jwt.ts
-// Kept separate — CLI does not depend on @ajioncorp/skynet
+// NOTE: Duplicated from @ajioncorp/skynet/lib/jwt.ts — keep in sync
+// Kept separate to avoid pulling the full dashboard package into the lightweight CLI
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;

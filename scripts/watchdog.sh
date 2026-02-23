@@ -98,6 +98,9 @@ crash_recovery() {
   for lockfile in "${all_locks[@]}"; do
     # Handle orphaned lock dirs (mkdir succeeded but process died before writing pid file)
     if [ -d "$lockfile" ] && [ ! -f "$lockfile/pid" ]; then
+      # Guard: if the lock dir vanished between the -d check above and now,
+      # file_mtime returns 0 → lock_age_secs ≈ 1.7B → false positive cleanup.
+      [ -d "$lockfile" ] || continue
       local lock_age_secs=$(( $(date +%s) - $(file_mtime "$lockfile") ))
       if [ "$lock_age_secs" -gt 60 ]; then
         log "Removing orphaned lock dir (no pid file, ${lock_age_secs}s old): $lockfile"
@@ -366,16 +369,31 @@ fi
 # If the merge lock holder's PID is dead (or PID file is missing, indicating a
 # crash between mkdir and PID write), remove the lock immediately rather than
 # waiting for the 120s stale timeout to expire.
+# TOCTOU guard: re-read the PID right before removal. If it changed between the
+# first and second read, a new worker legitimately acquired the lock — skip.
 if [ -d "$MERGE_LOCK" ]; then
   _ml_pid=""
   [ -f "$MERGE_LOCK/pid" ] && _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
   if [ -z "$_ml_pid" ]; then
-    # No PID file — process crashed between mkdir and PID write; reclaim
-    log "Merge lock has no PID file — removing stale lock proactively"
-    rm -rf "$MERGE_LOCK" 2>/dev/null || true
+    # No PID file — process crashed between mkdir and PID write; reclaim.
+    # Re-check: if a PID file appeared in the meantime, another worker took over.
+    _ml_pid_recheck=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_recheck=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+    if [ -z "$_ml_pid_recheck" ]; then
+      log "Merge lock has no PID file — removing stale lock proactively"
+      rm -rf "$MERGE_LOCK" 2>/dev/null || true
+    fi
   elif ! kill -0 "$_ml_pid" 2>/dev/null; then
-    log "Merge lock held by dead PID $_ml_pid — removing proactively"
-    rm -rf "$MERGE_LOCK" 2>/dev/null || true
+    # PID appears dead — re-read to guard against TOCTOU race where a new
+    # worker acquired the lock between our first read and this removal.
+    _ml_pid_recheck=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_recheck=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+    if [ "$_ml_pid_recheck" = "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
+      log "Merge lock held by dead PID $_ml_pid — removing proactively"
+      rm -rf "$MERGE_LOCK" 2>/dev/null || true
+    else
+      log "Merge lock PID changed ($_ml_pid -> $_ml_pid_recheck) — skipping removal"
+    fi
   fi
 fi
 
@@ -734,6 +752,52 @@ _archive_old_completions() {
 
 # --- Run archival before branch cleanup ---
 _archive_old_completions
+
+# --- Cleanup merged dev/* branches older than 7 days ---
+# Periodically removes dev/* branches that have been fully merged into the main
+# branch and are older than 7 days. Uses `git branch -d` (not -D) for safety —
+# only deletes branches whose tips are reachable from SKYNET_MAIN_BRANCH.
+_cleanup_merged_dev_branches() {
+  local cutoff_epoch merged_branches deleted=0
+  cutoff_epoch=$(( $(date +%s) - 7 * 86400 ))  # 7 days ago
+
+  # List local branches fully merged into the main branch, filter to dev/*
+  merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null \
+    | grep 'dev/' \
+    | sed 's/^[* ]*//' || true)
+  [ -z "$merged_branches" ] && return 0
+
+  local current_branch
+  current_branch=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  while IFS= read -r branch; do
+    branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+    [ -z "$branch" ] && continue
+    # Never delete the current branch
+    [ "$branch" = "$current_branch" ] && continue
+
+    # Check branch age via last commit timestamp
+    local branch_epoch
+    branch_epoch=$(git -C "$PROJECT_DIR" log -1 --format=%ct "$branch" 2>/dev/null || echo "")
+    [ -z "$branch_epoch" ] && continue
+
+    if [ "$branch_epoch" -lt "$cutoff_epoch" ] 2>/dev/null; then
+      if git -C "$PROJECT_DIR" branch -d "$branch" 2>/dev/null; then
+        log "Deleted merged dev branch: $branch (older than 7 days)"
+        emit_event "merged_branch_cleaned" "Cleaned merged $branch"
+        deleted=$((deleted + 1))
+      fi
+    fi
+  done <<< "$merged_branches"
+
+  if [ "$deleted" -gt 0 ]; then
+    git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+    log "Merged dev branch cleanup: deleted $deleted branch(es)"
+  fi
+}
+
+# --- Run merged dev branch cleanup ---
+_cleanup_merged_dev_branches
 
 # --- Cleanup stale branches for resolved failed tasks ---
 # Deletes local (and remote) dev/* branches for tasks in failed-tasks.md

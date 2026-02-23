@@ -9,7 +9,7 @@ notify_telegram() {
   [ -n "${SKYNET_TG_BOT_TOKEN:-}" ] || return 0
   [ -n "${SKYNET_TG_CHAT_ID:-}" ] || return 0
 
-  msg=$(echo "$msg" | sed 's/\\/\\\\/g; s/_/\\_/g; s/\*/\\*/g; s/\[/\\[/g; s/\]/\\]/g; s/`/\\`/g')
+  msg=$(echo "$msg" | sed 's/\\/\\\\/g; s/_/\\_/g; s/\*/\\*/g; s/\[/\\[/g; s/\]/\\]/g; s/`/\\`/g; s/|/\\|/g; s/>/\\>/g')
   if ! curl -sf -X POST \
     "https://api.telegram.org/bot${SKYNET_TG_BOT_TOKEN}/sendMessage" \
     -d chat_id="$SKYNET_TG_CHAT_ID" \

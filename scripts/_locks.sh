@@ -44,15 +44,36 @@ acquire_merge_lock() {
         fi
         # If PID is recorded and dead, double-check after brief sleep to
         # narrow the PID reuse race window before reclaiming.
+        # Additionally verify the process command to detect PID reuse by
+        # unrelated processes (a reused PID running e.g. "node" is not ours).
         if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
           sleep 0.5  # Narrow PID reuse race window
           if ! kill -0 "$_ml_pid" 2>/dev/null; then
+            # PID is truly dead — safe to reclaim
             mv "$MERGE_LOCK" "$MERGE_LOCK.stale.$$" 2>/dev/null || true
             rm -rf "$MERGE_LOCK.stale.$$" 2>/dev/null || true
             if mkdir "$MERGE_LOCK" 2>/dev/null; then
               echo $$ > "$MERGE_LOCK/pid"
               return 0
             fi
+          else
+            # PID came back alive (reuse race). Check if it's actually a
+            # pipeline process. If the command is not bash/skynet, the PID
+            # was reused by an unrelated process — treat lock as stale.
+            local _cmd
+            _cmd=$(ps -o comm= -p "$_ml_pid" 2>/dev/null || echo "")
+            case "$_cmd" in
+              bash*|*skynet*) ;; # Plausibly ours — leave lock alone
+              *)
+                # PID reused by unrelated process — reclaim stale lock
+                mv "$MERGE_LOCK" "$MERGE_LOCK.stale.$$" 2>/dev/null || true
+                rm -rf "$MERGE_LOCK.stale.$$" 2>/dev/null || true
+                if mkdir "$MERGE_LOCK" 2>/dev/null; then
+                  echo $$ > "$MERGE_LOCK/pid"
+                  return 0
+                fi
+                ;;
+            esac
           fi
         fi
         # Fallback: check age (covers case where PID is alive but lock is ancient)

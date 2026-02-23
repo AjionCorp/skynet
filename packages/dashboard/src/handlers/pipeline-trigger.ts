@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, closeSync, constants } from "fs";
+import { openSync, closeSync, constants, existsSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
@@ -56,6 +56,15 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
       }
 
       const scriptPath = resolve(scriptsDir, `${script}.sh`);
+
+      // Verify the script file actually exists before attempting to spawn it
+      if (!existsSync(scriptPath)) {
+        return Response.json(
+          { data: null, error: "Script not found" },
+          { status: 404 }
+        );
+      }
+
       // Logs go to devDir/scripts/ (e.g. .dev/scripts/), not the source scriptsDir
       const logDir = resolve(devDir, "scripts");
       const logSuffix = args.length > 0 ? `${script}-${args[0]}` : script;

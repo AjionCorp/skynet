@@ -144,6 +144,8 @@ if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
   _SKYNET_DB_INITIALIZED=1
 fi
 
+# TODO: Add SKYNET_LOG_FORMAT=json option for structured logging (machine-parseable output)
+
 # --- Log rotation ---
 # Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.
 # Keeps max 2 rotated copies: $logfile.1 (newest) and $logfile.2 (oldest).

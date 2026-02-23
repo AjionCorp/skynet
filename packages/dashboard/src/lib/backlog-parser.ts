@@ -124,6 +124,11 @@ export interface BacklogItemWithBlocked {
 /**
  * Parse backlog.md into items with resolved blocked status and counts.
  * This is the canonical "parse + resolve dependencies" wrapper used by handlers.
+ *
+ * Includes cycle detection: if resolving blockedBy for a task leads back to
+ * itself (e.g. A blocks B blocks A), the task is marked as blocked to prevent
+ * infinite resolution loops. Cycles are detected via a visited-set approach
+ * during transitive dependency resolution.
  */
 export function parseBacklogWithBlocked(raw: string): {
   items: BacklogItemWithBlocked[];
@@ -134,10 +139,39 @@ export function parseBacklogWithBlocked(raw: string): {
   const parsed = parseBacklog(raw);
   const counts = backlogCounts(parsed);
 
-  // Resolve blocked status (blocked if any dependency is not done)
+  // Build lookup maps for dependency resolution
   const titleToStatus = new Map<string, string>();
+  const titleToBlockedBy = new Map<string, string[]>();
   for (const item of parsed) {
     titleToStatus.set(item.title, item.status);
+    titleToBlockedBy.set(item.title, item.blockedBy);
+  }
+
+  // Detect whether a task is blocked, including transitive dependency cycles.
+  // Uses a visited set to break cycles: if we encounter a task already being
+  // resolved, that means we have a circular dependency (A -> B -> A), so the
+  // task is blocked.
+  function isBlocked(title: string, visiting: Set<string>): boolean {
+    const deps = titleToBlockedBy.get(title);
+    if (!deps || deps.length === 0) return false;
+
+    visiting.add(title);
+
+    for (const dep of deps) {
+      // Cycle detected — dependency leads back to a task we're already resolving
+      if (visiting.has(dep)) return true;
+
+      const depStatus = titleToStatus.get(dep);
+      // Dependency not done and not in the backlog (external/unknown) — blocked
+      if (depStatus === undefined) return true;
+      // Dependency is done — this path is clear
+      if (depStatus === "done") continue;
+      // Dependency is not done — blocked
+      return true;
+    }
+
+    visiting.delete(title);
+    return false;
   }
 
   const items: BacklogItemWithBlocked[] = parsed.map((item) => ({
@@ -146,8 +180,7 @@ export function parseBacklogWithBlocked(raw: string): {
     status: item.status,
     blockedBy: item.blockedBy,
     blocked:
-      item.blockedBy.length > 0 &&
-      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
+      item.blockedBy.length > 0 && isBlocked(item.title, new Set<string>()),
   }));
 
   return { items, ...counts };

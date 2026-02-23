@@ -166,9 +166,11 @@ export function PipelineDashboard() {
       document.removeEventListener('visibilitychange', handleVisibility);
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
       if (esRef.current) {
         esRef.current.close();
+        esRef.current = null;
       }
     };
   }, [apiPrefix]);
