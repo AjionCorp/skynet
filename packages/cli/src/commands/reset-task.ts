@@ -20,7 +20,7 @@ function prompt(question: string): Promise<string> {
 }
 
 function isValidBranchName(branch: string): boolean {
-  return /^[a-zA-Z0-9._\/-]+$/.test(branch);
+  return /^[a-zA-Z0-9._/-]+$/.test(branch);
 }
 
 function branchExists(branch: string, projectDir: string): boolean {

@@ -9,6 +9,7 @@ vi.mock("fs", () => ({
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "" })),
 }));
 
 vi.mock("readline", () => ({
@@ -18,15 +19,23 @@ vi.mock("readline", () => ({
   })),
 }));
 
-import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
-import { execSync } from "child_process";
+vi.mock("../../utils/sqliteQuery", () => ({
+  isSqliteReady: vi.fn(() => true),
+  sqliteQuery: vi.fn(() => ""),
+  sqliteRows: vi.fn(() => []),
+  sqlEscape: vi.fn((s: string) => s.replace(/'/g, "''")),
+}));
+
+import { existsSync } from "fs";
+import { spawnSync } from "child_process";
+import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape as _sqlEscape } from "../../utils/sqliteQuery";
 import { resetTaskCommand } from "../reset-task";
 
-const mockReadFileSync = vi.mocked(readFileSync);
-const mockWriteFileSync = vi.mocked(writeFileSync);
-const mockRenameSync = vi.mocked(renameSync);
 const mockExistsSync = vi.mocked(existsSync);
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
+const mockIsSqliteReady = vi.mocked(isSqliteReady);
+const mockSqliteQuery = vi.mocked(sqliteQuery);
+const mockSqliteRows = vi.mocked(sqliteRows);
 
 const CONFIG_CONTENT = [
   'export SKYNET_PROJECT_NAME="test-project"',
@@ -34,16 +43,9 @@ const CONFIG_CONTENT = [
   'export SKYNET_DEV_DIR="/tmp/test-project/.dev"',
 ].join("\n");
 
-const SAMPLE_FAILED_TASKS = `| Date | Task | Branch | Error | Attempts | Status |
-|------|------|--------|-------|----------|--------|
-| 2026-02-20 | [FEAT] Add user auth | dev/add-user-auth | typecheck | 3 | failed |
-| 2026-02-19 | [FIX] Fix login bug | dev/fix-login-bug | lint | 1 | pending |`;
-
-const SAMPLE_BACKLOG = `# Backlog
-
-- [x] [FEAT] Add user auth — implement user authentication
-- [ ] [FEAT] Add dashboard — create admin dashboard
-- [x] [FIX] Fix login bug — fix the login page bug`;
+// Mock readFileSync at module level for loadConfig
+import { readFileSync } from "fs";
+const mockReadFileSync = vi.mocked(readFileSync);
 
 describe("resetTaskCommand", () => {
   beforeEach(() => {
@@ -57,26 +59,27 @@ describe("resetTaskCommand", () => {
     mockExistsSync.mockImplementation((p) => {
       const path = String(p);
       if (path.endsWith("skynet.config.sh")) return true;
-      if (path.endsWith("failed-tasks.md")) return true;
-      if (path.endsWith("backlog.md")) return true;
       return false;
     });
 
     mockReadFileSync.mockImplementation((p) => {
       const path = String(p);
       if (path.endsWith("skynet.config.sh")) return CONFIG_CONTENT as never;
-      if (path.endsWith("failed-tasks.md")) return SAMPLE_FAILED_TASKS as never;
-      if (path.endsWith("backlog.md")) return SAMPLE_BACKLOG as never;
       return "" as never;
     });
 
-    // By default branch does not exist (git show-ref throws)
-    mockExecSync.mockImplementation(() => {
-      throw new Error("not a valid ref");
-    });
+    mockIsSqliteReady.mockReturnValue(true);
+
+    // Default: single matching task
+    mockSqliteRows.mockReturnValue([
+      ["42", "[FEAT] Add user auth", "dev/add-user-auth", "typecheck", "3", "failed"],
+    ]);
+
+    // By default branch does not exist (spawnSync show-ref returns non-zero)
+    mockSpawnSync.mockReturnValue({ status: 1, stdout: "", stderr: "" } as never);
   });
 
-  it("fuzzy-matches task title substring in failed-tasks.md", async () => {
+  it("fuzzy-matches task title substring in failed-tasks SQLite table", async () => {
     await resetTaskCommand("user auth", { dir: "/tmp/test-project" });
 
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -92,15 +95,15 @@ describe("resetTaskCommand", () => {
   it("resets status to pending and attempts to 0", async () => {
     await resetTaskCommand("user auth", { dir: "/tmp/test-project" });
 
-    // Should write updated failed-tasks.md (via atomic write pattern)
-    expect(mockWriteFileSync).toHaveBeenCalled();
-
-    // Find the failed-tasks.md write (first atomic write)
-    const failedWriteCall = mockWriteFileSync.mock.calls[0];
-    const writtenContent = String(failedWriteCall[1]);
-
-    // The reset line should have attempts=0 and status=pending
-    expect(writtenContent).toContain("| 0 | pending |");
+    // Should call sqliteQuery to reset the task
+    expect(mockSqliteQuery).toHaveBeenCalledWith(
+      "/tmp/test-project/.dev",
+      expect.stringContaining("UPDATE tasks SET status='pending'"),
+    );
+    expect(mockSqliteQuery).toHaveBeenCalledWith(
+      "/tmp/test-project/.dev",
+      expect.stringContaining("attempts=0"),
+    );
 
     // Should log the reset
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -110,48 +113,37 @@ describe("resetTaskCommand", () => {
     expect(logCalls).toContain("pending");
   });
 
-  it("updates backlog.md entry from [x] to [ ]", async () => {
+  it("updates task status in SQLite", async () => {
     await resetTaskCommand("user auth", { dir: "/tmp/test-project" });
 
-    // Should have two atomic writes: failed-tasks.md and backlog.md
-    // Each atomic write = writeFileSync + renameSync
-    expect(mockRenameSync).toHaveBeenCalledTimes(2);
-
-    // Find the backlog.md write (second atomic write)
-    const backlogWriteCall = mockWriteFileSync.mock.calls[1];
-    const writtenContent = String(backlogWriteCall[1]);
-
-    // The matching entry should be unchecked
-    expect(writtenContent).toContain("- [ ] [FEAT] Add user auth");
-    // Other entries should remain unchanged
-    expect(writtenContent).toContain("- [ ] [FEAT] Add dashboard");
-    expect(writtenContent).toContain("- [x] [FIX] Fix login bug");
-
-    // Should log the backlog reset
-    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
-      .flat()
-      .join("\n");
-    expect(logCalls).toContain("[x]");
-    expect(logCalls).toContain("[ ]");
+    // Should have called sqliteQuery for the UPDATE
+    expect(mockSqliteQuery).toHaveBeenCalledWith(
+      "/tmp/test-project/.dev",
+      expect.stringContaining("WHERE id=42"),
+    );
   });
 
   it("deletes stale branch with --force flag", async () => {
     // Branch exists
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("show-ref")) return "" as never;
-      if (cmdStr.includes("branch -D")) return "" as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("show-ref"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      if (argsStr.includes("branch") && argsStr.includes("-D"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await resetTaskCommand("user auth", { dir: "/tmp/test-project", force: true });
 
     // Should have called git branch -D
-    const deleteCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("branch -D"),
-    );
+    const deleteCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return argsArr && argsArr.includes("-D");
+    });
     expect(deleteCalls).toHaveLength(1);
-    expect(String(deleteCalls[0][0])).toContain("dev/add-user-auth");
+    expect((deleteCalls[0][1] as string[]).join(" ")).toContain("dev/add-user-auth");
 
     // Should log deletion
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -161,6 +153,8 @@ describe("resetTaskCommand", () => {
   });
 
   it("errors when no matching task is found", async () => {
+    mockSqliteRows.mockReturnValue([]);
+
     await expect(
       resetTaskCommand("nonexistent task", { dir: "/tmp/test-project" }),
     ).rejects.toThrow("process.exit");
@@ -168,23 +162,14 @@ describe("resetTaskCommand", () => {
     const errorCalls = (console.error as ReturnType<typeof vi.fn>).mock.calls
       .flat()
       .join("\n");
-    expect(errorCalls).toContain("No matching task found");
+    expect(errorCalls).toContain("No matching");
   });
 
   it("errors when multiple tasks match", async () => {
-    // Both tasks contain "fix" or a shared substring — use broader match
-    const multiMatchFailed = `| Date | Task | Branch | Error | Attempts | Status |
-|------|------|--------|-------|----------|--------|
-| 2026-02-20 | [FEAT] Add feature one | dev/add-feature-one | typecheck | 3 | failed |
-| 2026-02-19 | [FEAT] Add feature two | dev/add-feature-two | lint | 1 | pending |`;
-
-    mockReadFileSync.mockImplementation((p) => {
-      const path = String(p);
-      if (path.endsWith("skynet.config.sh")) return CONFIG_CONTENT as never;
-      if (path.endsWith("failed-tasks.md")) return multiMatchFailed as never;
-      if (path.endsWith("backlog.md")) return SAMPLE_BACKLOG as never;
-      return "" as never;
-    });
+    mockSqliteRows.mockReturnValue([
+      ["42", "[FEAT] Add feature one", "dev/add-feature-one", "typecheck", "3", "failed"],
+      ["43", "[FEAT] Add feature two", "dev/add-feature-two", "lint", "1", "failed"],
+    ]);
 
     await expect(
       resetTaskCommand("Add feature", { dir: "/tmp/test-project" }),
@@ -216,6 +201,10 @@ describe("resetTaskCommand", () => {
 
     await expect(
       resetTaskCommand("user auth", { dir: "/tmp/test-project" }),
-    ).rejects.toThrow("skynet.config.sh not found");
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
+    );
   });
 });

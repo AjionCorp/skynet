@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
-import { resolve, join } from "path";
+import { resolve } from "path";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig";
 

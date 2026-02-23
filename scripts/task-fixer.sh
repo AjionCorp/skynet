@@ -659,7 +659,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
 
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
-      fix_duration=$(format_duration $fix_duration_secs)
+      _fix_duration=$(format_duration $fix_duration_secs)
       [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || true
       # Regenerate state files from SQLite (authoritative source)
       db_export_state_files 2>/dev/null || true

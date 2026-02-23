@@ -10,6 +10,7 @@ vi.mock("fs", () => ({
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "" })),
 }));
 
 vi.mock("os", () => ({
@@ -17,7 +18,7 @@ vi.mock("os", () => ({
 }));
 
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { platform } from "os";
 import { setupAgentsCommand } from "../setup-agents";
 
@@ -26,7 +27,7 @@ const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockUnlinkSync = vi.mocked(unlinkSync);
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 const mockPlatform = vi.mocked(platform);
 
 const CONFIG_CONTENT = [
@@ -85,7 +86,7 @@ describe("setupAgentsCommand", () => {
       return [] as never;
     });
 
-    mockExecSync.mockImplementation(() => "" as never);
+    mockSpawnSync.mockImplementation(() => ({ status: 0, stdout: "", stderr: "" }) as never);
   });
 
   it("generates launchd plist files on darwin", async () => {
@@ -102,10 +103,11 @@ describe("setupAgentsCommand", () => {
     expect(writtenContent).toContain("test-project");
     expect(writtenContent).not.toContain("SKYNET_PROJECT_NAME");
 
-    // Should call launchctl load
-    const loadCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("launchctl load"),
-    );
+    // Should call launchctl load via spawnSync
+    const loadCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const args = c[1] as string[];
+      return c[0] === "launchctl" && args && args[0] === "load";
+    });
     expect(loadCalls.length).toBeGreaterThan(0);
 
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -118,24 +120,26 @@ describe("setupAgentsCommand", () => {
     mockPlatform.mockReturnValue("linux");
 
     // crontab -l returns empty (no existing crontab)
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("crontab -l")) throw new Error("no crontab") as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((cmd, args) => {
+      const argsArr = args as string[];
+      if (cmd === "crontab" && argsArr && argsArr[0] === "-l")
+        return { status: 1, stdout: "", stderr: "no crontab" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await setupAgentsCommand({ dir: "/tmp/test-project" });
 
-    // Should install crontab via `crontab -`
-    const crontabCalls = mockExecSync.mock.calls.filter((c) => {
-      const cmdStr = String(c[0]);
-      return cmdStr === "crontab -";
+    // Should install crontab via spawnSync("crontab", ["-"], { input: ... })
+    const crontabCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return c[0] === "crontab" && argsArr && argsArr[0] === "-";
     });
     expect(crontabCalls).toHaveLength(1);
 
     // Verify input contains skynet markers and schedule entries
     const installCall = crontabCalls[0];
-    const input = String((installCall[1] as { input?: string })?.input || "");
+    const opts = installCall[2] as { input?: string };
+    const input = opts?.input || "";
     expect(input).toContain("# BEGIN skynet:test-project");
     expect(input).toContain("# END skynet:test-project");
     expect(input).toContain("watchdog");
@@ -143,7 +147,7 @@ describe("setupAgentsCommand", () => {
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
       .flat()
       .join("\n");
-    expect(logCalls).toContain("crontab");
+    expect(logCalls).toMatch(/cron(tab)?/);
   });
 
   it("removes agents with --uninstall on darwin (launchd)", async () => {
@@ -163,10 +167,11 @@ describe("setupAgentsCommand", () => {
 
     await setupAgentsCommand({ uninstall: true });
 
-    // Should call launchctl unload for each plist
-    const unloadCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("launchctl unload"),
-    );
+    // Should call launchctl unload for each plist via spawnSync
+    const unloadCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return c[0] === "launchctl" && argsArr && argsArr[0] === "unload";
+    });
     expect(unloadCalls).toHaveLength(2);
 
     // Should delete plist files
@@ -190,18 +195,19 @@ describe("setupAgentsCommand", () => {
       "",
     ].join("\n");
 
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("crontab -l")) return existingCrontab as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((cmd, args) => {
+      const argsArr = args as string[];
+      if (cmd === "crontab" && argsArr && argsArr[0] === "-l")
+        return { status: 0, stdout: existingCrontab, stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await setupAgentsCommand({ uninstall: true, cron: true });
 
-    // Should reinstall cleaned crontab
-    const crontabCalls = mockExecSync.mock.calls.filter((c) => {
-      const cmdStr = String(c[0]);
-      return cmdStr === "crontab -";
+    // Should reinstall cleaned crontab via spawnSync("crontab", ["-"], ...)
+    const crontabCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return c[0] === "crontab" && argsArr && argsArr[0] === "-";
     });
     expect(crontabCalls).toHaveLength(1);
 
@@ -220,9 +226,10 @@ describe("setupAgentsCommand", () => {
     expect(mockWriteFileSync).not.toHaveBeenCalled();
 
     // Should NOT call launchctl load
-    const loadCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("launchctl load"),
-    );
+    const loadCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return c[0] === "launchctl" && argsArr && argsArr[0] === "load";
+    });
     expect(loadCalls).toHaveLength(0);
 
     // Should show dry-run output
@@ -239,9 +246,9 @@ describe("setupAgentsCommand", () => {
     await setupAgentsCommand({ dir: "/tmp/test-project", dryRun: true, cron: true });
 
     // Should NOT install crontab
-    const crontabInstallCalls = mockExecSync.mock.calls.filter((c) => {
-      const cmdStr = String(c[0]);
-      return cmdStr === "crontab -";
+    const crontabInstallCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const argsArr = c[1] as string[];
+      return c[0] === "crontab" && argsArr && argsArr[0] === "-";
     });
     expect(crontabInstallCalls).toHaveLength(0);
 
@@ -262,6 +269,10 @@ describe("setupAgentsCommand", () => {
 
     await expect(
       setupAgentsCommand({ dir: "/tmp/test-project" }),
-    ).rejects.toThrow("skynet.config.sh not found");
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
+    );
   });
 });

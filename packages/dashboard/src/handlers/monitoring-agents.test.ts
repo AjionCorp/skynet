@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMonitoringAgentsHandler } from "./monitoring-agents";
 import type { SkynetConfig } from "../types";
 
@@ -8,19 +8,20 @@ vi.mock("fs", () => ({
 }));
 
 vi.mock("child_process", () => ({
-  execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
 }));
 
 vi.mock("os", () => ({
   homedir: vi.fn(() => "/Users/testuser"),
+  platform: vi.fn(() => "darwin"),
 }));
 
 import { readFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -82,10 +83,17 @@ function makePlist(opts: {
 }
 
 describe("createMonitoringAgentsHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
-    mockExecSync.mockReturnValue("" as never);
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
     mockExistsSync.mockReturnValue(false);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns { data: { agents }, error: null } envelope", async () => {
@@ -112,7 +120,7 @@ describe("createMonitoringAgentsHandler", () => {
   });
 
   it("marks agents as not loaded when not in launchctl output", async () => {
-    mockExecSync.mockReturnValue("PID\tStatus\tLabel\n" as never);
+    mockSpawnSync.mockReturnValue({ stdout: "PID\tStatus\tLabel\n", stderr: "", status: 0 } as never);
 
     const handler = createMonitoringAgentsHandler(makeConfig());
     const res = await handler();
@@ -126,13 +134,15 @@ describe("createMonitoringAgentsHandler", () => {
   });
 
   it("parses launchctl output for loaded agents", async () => {
-    mockExecSync.mockReturnValue(
-      [
+    mockSpawnSync.mockReturnValue({
+      stdout: [
         "PID\tStatus\tLabel",
         "1234\t0\tcom.test-project.dev-worker-1",
         "-\t78\tcom.test-project.health-check",
-      ].join("\n") as never
-    );
+      ].join("\n"),
+      stderr: "",
+      status: 0,
+    } as never);
 
     const handler = createMonitoringAgentsHandler(makeConfig());
     const res = await handler();
@@ -202,7 +212,7 @@ describe("createMonitoringAgentsHandler", () => {
     for (const tc of testCases) {
       vi.clearAllMocks();
       mockExistsSync.mockReturnValue(true);
-      mockExecSync.mockReturnValue("" as never);
+      mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
       mockReadFileSync.mockReturnValue(
         makePlist({ interval: tc.interval }) as never
       );
@@ -235,9 +245,11 @@ describe("createMonitoringAgentsHandler", () => {
   });
 
   it("response agents match AgentInfo interface shape", async () => {
-    mockExecSync.mockReturnValue(
-      "1234\t0\tcom.test-project.dev-worker-1\n" as never
-    );
+    mockSpawnSync.mockReturnValue({
+      stdout: "1234\t0\tcom.test-project.dev-worker-1\n",
+      stderr: "",
+      status: 0,
+    } as never);
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
       makePlist({ interval: 300, runAtLoad: true }) as never
@@ -274,7 +286,7 @@ describe("createMonitoringAgentsHandler", () => {
 
   it("returns 500 with error when handler throws", async () => {
     const config = makeConfig();
-    mockExecSync.mockImplementation(() => {
+    mockSpawnSync.mockImplementation(() => {
       throw new Error("launchctl not found");
     });
     mockExistsSync.mockImplementation(() => {
@@ -291,7 +303,7 @@ describe("createMonitoringAgentsHandler", () => {
   });
 
   it("gracefully handles launchctl failure", async () => {
-    mockExecSync.mockImplementation(() => {
+    mockSpawnSync.mockImplementation(() => {
       throw new Error("launchctl: operation not permitted");
     });
 
@@ -378,14 +390,16 @@ describe("createMonitoringAgentsHandler", () => {
   });
 
   it("filters launchctl output to only matching agent prefix", async () => {
-    mockExecSync.mockReturnValue(
-      [
+    mockSpawnSync.mockReturnValue({
+      stdout: [
         "PID\tStatus\tLabel",
         "1234\t0\tcom.test-project.dev-worker-1",
         "5678\t0\tcom.other-project.dev-worker-1",
         "-\t0\tcom.apple.something",
-      ].join("\n") as never
-    );
+      ].join("\n"),
+      stderr: "",
+      status: 0,
+    } as never);
 
     const handler = createMonitoringAgentsHandler(makeConfig());
     const res = await handler();

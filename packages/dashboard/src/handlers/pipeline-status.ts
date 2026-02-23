@@ -7,7 +7,7 @@ import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reade
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
-import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
+import { parseBacklog as parseBacklogItems, backlogCounts } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 
 /**
@@ -279,7 +279,6 @@ function handlerCountCheck(count: number, threshold: number): boolean {
  */
 export function createPipelineStatusHandler(config: SkynetConfig) {
   const { devDir, lockPrefix, workers: workerDefs } = config;
-  const scriptsDir = config.scriptsDir ?? `${devDir}/scripts`;
 
   return async function GET(): Promise<Response> {
     try {

@@ -82,7 +82,7 @@ _db_context=$(db_export_context 2>/dev/null || true)
 
 # File-based fallback for data not yet in SQLite
 if [ -f "$BACKLOG" ]; then
-  backlog_content=$(cat "$BACKLOG")
+  _backlog_content=$(cat "$BACKLOG")
   backlog_unchecked_content=$(grep '^\- \[[ >]\]' "$BACKLOG" 2>/dev/null || true)
   backlog_recent_done_content=$(grep '^\- \[x\]' "$BACKLOG" 2>/dev/null | tail -40 || true)
   backlog_prompt_content="$backlog_unchecked_content"
@@ -93,7 +93,7 @@ if [ -f "$BACKLOG" ]; then
 $backlog_recent_done_content"
   fi
 else
-  backlog_content="(file not found)"
+  _backlog_content="(file not found)"
   backlog_prompt_content="(file not found)"
 fi
 if [ -f "$COMPLETED" ]; then completed_content=$(head -2 "$COMPLETED"; tail -30 "$COMPLETED"); else completed_content="(file not found)"; fi

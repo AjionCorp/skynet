@@ -16,7 +16,7 @@ export default tseslint.config(
       // Start with warn severity to avoid blocking existing code
       "prefer-const": "warn",
       "no-useless-assignment": "warn",
-      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
       "@typescript-eslint/no-explicit-any": "warn",
       "@typescript-eslint/no-require-imports": "warn",
     },

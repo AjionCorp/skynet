@@ -76,8 +76,7 @@ describe("PipelineDashboard", () => {
     // Use a regular function (not arrow) so it works as a constructor with `new`
     global.EventSource = vi.fn(function (this: MockEventSource, url: string) {
       Object.assign(this, mockES);
-      mockES = this;
-      mockES.url = url;
+      mockES = Object.assign(this, { url });
       EventSourceSpy(url);
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for ActivityFeed sub-component and any other fetches
@@ -225,7 +224,8 @@ describe("PipelineDashboard", () => {
       mockES.onerror?.();
     });
     await waitFor(() => {
-      expect(screen.getByText(/Reconnecting/)).toBeDefined();
+      // "Reconnecting" text may appear in multiple spots (status bar, header, etc.)
+      expect(screen.getAllByText(/Reconnecting/).length).toBeGreaterThanOrEqual(1);
     });
   });
 

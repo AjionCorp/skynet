@@ -78,7 +78,7 @@ print(auth_mode)
 PY
 )
 
-  local refresh_token access_token id_token issuer client_id exp auth_mode
+  local refresh_token access_token id_token issuer client_id exp _auth_mode
   {
     read -r refresh_token
     read -r access_token
@@ -86,7 +86,7 @@ PY
     read -r issuer
     read -r client_id
     read -r exp
-    read -r auth_mode
+    read -r _auth_mode
   } <<< "$parsed"
 
   if [ -z "$refresh_token" ]; then
@@ -157,10 +157,10 @@ PY
   fi
 
   local new_parsed
-  new_parsed=$(echo "$body" | python3 - <<'PY'
-import json, sys, time
+  new_parsed=$(_BODY="$body" python3 - <<'PY'
+import json, os
 try:
-    d = json.load(sys.stdin)
+    d = json.loads(os.environ['_BODY'])
 except Exception:
     print("", "", "", sep="\n")
     raise SystemExit

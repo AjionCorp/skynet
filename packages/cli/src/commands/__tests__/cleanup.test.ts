@@ -7,15 +7,21 @@ vi.mock("fs", () => ({
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "" })),
+}));
+
+vi.mock("../../utils/sqliteQuery", () => ({
+  isSqliteReady: vi.fn(() => false),
+  sqliteRows: vi.fn(() => []),
 }));
 
 import { readFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { cleanupCommand } from "../cleanup";
 
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 
 const CONFIG_CONTENT = [
   'export SKYNET_PROJECT_NAME="test-project"',
@@ -60,24 +66,25 @@ describe("cleanupCommand", () => {
       return "" as never;
     });
 
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
       // git branch --list 'dev/*' — returns all dev branches
-      if (cmdStr.includes("branch --list"))
-        return "  dev/merged-feature\n  dev/orphaned-branch\n  dev/claimed-active-task\n  dev/failed-task\n" as never;
+      if (argsStr.includes("branch") && argsStr.includes("--list") && !argsStr.includes("--merged"))
+        return { status: 0, stdout: "  dev/merged-feature\n  dev/orphaned-branch\n  dev/claimed-active-task\n  dev/failed-task\n", stderr: "" } as never;
       // git branch --merged main --list 'dev/*' — only merged-feature is merged
-      if (cmdStr.includes("--merged"))
-        return "  dev/merged-feature\n" as never;
-      // git worktree list — no worktrees
-      if (cmdStr.includes("worktree list"))
-        return "" as never;
+      if (argsStr.includes("--merged"))
+        return { status: 0, stdout: "  dev/merged-feature\n", stderr: "" } as never;
+      // git worktree list
+      if (argsStr.includes("worktree") && argsStr.includes("list"))
+        return { status: 0, stdout: "", stderr: "" } as never;
       // git branch -D — deletion
-      if (cmdStr.includes("branch -D"))
-        return "" as never;
+      if (argsStr.includes("branch") && argsStr.includes("-D"))
+        return { status: 0, stdout: "", stderr: "" } as never;
       // git worktree prune
-      if (cmdStr.includes("worktree prune"))
-        return "" as never;
-      return "" as never;
+      if (argsStr.includes("worktree") && argsStr.includes("prune"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
   });
 
@@ -99,9 +106,10 @@ describe("cleanupCommand", () => {
     expect(logCalls).toContain("dev/orphaned-branch");
 
     // Should NOT delete anything (no git branch -D calls)
-    const deleteCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("branch -D"),
-    );
+    const deleteCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const args = c[1] as string[];
+      return args && args.includes("-D");
+    });
     expect(deleteCalls).toHaveLength(0);
   });
 
@@ -133,13 +141,14 @@ describe("cleanupCommand", () => {
     await cleanupCommand({ dir: "/tmp/test-project", force: true });
 
     // Should have called git branch -D for merged and orphaned branches
-    const deleteCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("branch -D"),
-    );
+    const deleteCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const args = c[1] as string[];
+      return args && args.includes("-D");
+    });
     expect(deleteCalls.length).toBeGreaterThanOrEqual(2);
 
     // Verify specific branches deleted
-    const deletedBranches = deleteCalls.map((c) => String(c[0]));
+    const deletedBranches = deleteCalls.map((c) => (c[1] as string[]).join(" "));
     expect(deletedBranches.some((c) => c.includes("dev/merged-feature"))).toBe(true);
     expect(deletedBranches.some((c) => c.includes("dev/orphaned-branch"))).toBe(true);
 
@@ -151,9 +160,10 @@ describe("cleanupCommand", () => {
   it("prunes worktrees after force deletion", async () => {
     await cleanupCommand({ dir: "/tmp/test-project", force: true });
 
-    const pruneCalls = mockExecSync.mock.calls.filter((c) =>
-      String(c[0]).includes("worktree prune"),
-    );
+    const pruneCalls = mockSpawnSync.mock.calls.filter((c) => {
+      const args = c[1] as string[];
+      return args && args.includes("prune");
+    });
     expect(pruneCalls).toHaveLength(1);
   });
 
@@ -178,10 +188,12 @@ describe("cleanupCommand", () => {
   });
 
   it("handles no dev branches gracefully", async () => {
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("branch --list")) return "" as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("branch") && argsStr.includes("--list"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await cleanupCommand({ dir: "/tmp/test-project" });
@@ -197,19 +209,24 @@ describe("cleanupCommand", () => {
 
     await expect(
       cleanupCommand({ dir: "/tmp/test-project" }),
-    ).rejects.toThrow("skynet.config.sh not found");
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
+    );
   });
 
   it("preserves branches with active worktrees", async () => {
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("branch --list"))
-        return "  dev/worktree-branch\n" as never;
-      if (cmdStr.includes("--merged"))
-        return "" as never;
-      if (cmdStr.includes("worktree list"))
-        return "worktree /tmp/skynet-test-project-worktree-w1\nHEAD abc123\nbranch refs/heads/dev/worktree-branch\n" as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("branch") && argsStr.includes("--list") && !argsStr.includes("--merged"))
+        return { status: 0, stdout: "  dev/worktree-branch\n", stderr: "" } as never;
+      if (argsStr.includes("--merged"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      if (argsStr.includes("worktree") && argsStr.includes("list"))
+        return { status: 0, stdout: "worktree /tmp/skynet-test-project-worktree-w1\nHEAD abc123\nbranch refs/heads/dev/worktree-branch\n", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await cleanupCommand({ dir: "/tmp/test-project" });

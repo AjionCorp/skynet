@@ -48,7 +48,8 @@ test.describe("Logs page", () => {
     await page.goto("/admin/logs");
     await expect(page.getByText("Log Viewer")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Auto-refresh")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
+    // Use exact matching to avoid also matching the "Auto-refresh OFF/ON" button
+    await expect(page.getByRole("button", { name: "Refresh", exact: true })).toBeVisible();
   });
 
   test("no console errors on logs page", async ({ page }) => {

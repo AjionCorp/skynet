@@ -6,6 +6,7 @@ vi.mock("node:child_process", () => ({
 
 vi.mock("node:fs", () => ({
   readFileSync: vi.fn(() => ""),
+  existsSync: vi.fn(() => false),
 }));
 
 import { execSync } from "node:child_process";
@@ -98,7 +99,6 @@ describe("upgradeCommand", () => {
   });
 
   it("sets exitCode=1 when install fails", async () => {
-    let callCount = 0;
     mockExecSync.mockImplementation((cmd) => {
       const cmdStr = String(cmd);
       if (cmdStr.includes("npm view")) return "0.2.0\n" as never;

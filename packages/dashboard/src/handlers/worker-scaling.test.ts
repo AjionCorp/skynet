@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createWorkerScalingHandler } from "./worker-scaling";
 import type { SkynetConfig } from "../types";
 
@@ -14,20 +14,24 @@ vi.mock("fs", () => ({
   readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
   openSync: vi.fn(() => 99),
+  closeSync: vi.fn(),
   unlinkSync: vi.fn(),
+  rmSync: vi.fn(),
+  existsSync: vi.fn(() => false),
   constants: { O_WRONLY: 1, O_CREAT: 64, O_APPEND: 1024 },
 }));
 
 import { spawn } from "child_process";
-import { readFileSync, writeFileSync, openSync, unlinkSync } from "fs";
+import { readFileSync, openSync, unlinkSync, rmSync } from "fs";
 
 const mockSpawn = vi.mocked(spawn);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockUnlinkSync = vi.mocked(unlinkSync);
+const mockRmSync = vi.mocked(rmSync);
 const mockOpenSync = vi.mocked(openSync);
 
 // We need to mock process.kill to control which PIDs appear "alive"
-const originalProcessKill = process.kill.bind(process);
+const _originalProcessKill = process.kill.bind(process);
 let alivePids: Set<number> = new Set();
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
@@ -57,7 +61,10 @@ function makePostRequest(body: unknown): Request {
 // ---------------------------------------------------------------------------
 
 describe("createWorkerScalingHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.resetAllMocks();
     alivePids = new Set();
 
@@ -82,6 +89,10 @@ describe("createWorkerScalingHandler", () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error("ENOENT: no such file or directory");
     });
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   // -----------------------------------------------------------------------
@@ -239,9 +250,10 @@ describe("createWorkerScalingHandler", () => {
       // Should kill highest-numbered worker (worker 2)
       expect(process.kill).toHaveBeenCalledWith(1002, "SIGTERM");
 
-      // Should clean up PID lock file
-      expect(mockUnlinkSync).toHaveBeenCalledWith(
-        "/tmp/skynet-test-dev-worker-2.lock"
+      // Should clean up PID lock directory
+      expect(mockRmSync).toHaveBeenCalledWith(
+        "/tmp/skynet-test-dev-worker-2.lock",
+        { recursive: true, force: true }
       );
     });
 
@@ -459,7 +471,10 @@ describe("createWorkerScalingHandler", () => {
         if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
         throw new Error("ENOENT");
       });
-      // unlinkSync throws as if file was already deleted
+      // rmSync and unlinkSync throw as if files were already deleted
+      mockRmSync.mockImplementation(() => {
+        throw new Error("ENOENT: no such file or directory");
+      });
       mockUnlinkSync.mockImplementation(() => {
         throw new Error("ENOENT: no such file or directory");
       });

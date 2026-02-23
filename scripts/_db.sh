@@ -207,7 +207,7 @@ db_claim_next_task() {
     _completed_titles=""
   fi
 
-  while IFS="$_DB_SEP" read -r tid ttitle tblocked; do
+  while IFS="$_DB_SEP" read -r tid _ttitle tblocked; do
     [ -z "$tid" ] && continue
     local blocked=false
     if [ -n "$tblocked" ]; then

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import { shellEscape, validateShellValue } from "../utils/shellEscape";
 
 interface ConfigOptions {

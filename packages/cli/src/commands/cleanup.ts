@@ -10,7 +10,7 @@ interface CleanupOptions {
 }
 
 function isValidBranchName(branch: string): boolean {
-  return /^[a-zA-Z0-9._\/-]+$/.test(branch);
+  return /^[a-zA-Z0-9._/-]+$/.test(branch);
 }
 
 function slugify(title: string): string {

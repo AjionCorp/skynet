@@ -7,13 +7,19 @@ vi.mock("child_process", () => ({
 }));
 vi.mock("fs", () => ({
   statSync: vi.fn(() => ({ size: 0 })),
+  openSync: vi.fn(() => 99),
+  readSync: vi.fn(() => 0),
+  closeSync: vi.fn(),
 }));
 
 import { spawnSync } from "child_process";
-import { statSync } from "fs";
+import { statSync, openSync, readSync, closeSync } from "fs";
 
 const mockSpawnSync = vi.mocked(spawnSync);
 const mockStatSync = vi.mocked(statSync);
+const mockOpenSync = vi.mocked(openSync);
+const mockReadSync = vi.mocked(readSync);
+const _mockCloseSync = vi.mocked(closeSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -29,11 +35,32 @@ function makeRequest(params: Record<string, string>): Request {
   return new Request(url.toString());
 }
 
+/**
+ * Helper: mock readSync to simulate a file with a given number of newlines.
+ * The first call returns a buffer with `lineCount` newline bytes, the second returns 0.
+ */
+function mockFileWithLines(lineCount: number) {
+  let callCount = 0;
+  mockReadSync.mockImplementation((_fd: number, buf: NodeJS.ArrayBufferView) => {
+    if (callCount++ === 0) {
+      // Fill buffer with newlines
+      const bytes = buf as unknown as Uint8Array;
+      for (let i = 0; i < lineCount && i < bytes.length; i++) {
+        bytes[i] = 0x0a; // newline byte
+      }
+      return Math.min(lineCount, bytes.length);
+    }
+    return 0; // EOF
+  });
+}
+
 describe("createPipelineLogsHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
     mockStatSync.mockReturnValue({ size: 0 } as never);
+    mockOpenSync.mockReturnValue(99 as never);
+    mockReadSync.mockReturnValue(0 as never);
   });
 
   it("returns 400 when script param is missing", async () => {
@@ -140,10 +167,12 @@ describe("createPipelineLogsHandler", () => {
   });
 
   it("populates totalLines and fileSizeBytes from stat/wc", async () => {
-    mockSpawnSync
-      .mockReturnValueOnce({ stdout: "line1\n", stderr: "", status: 0 } as never)  // tail
-      .mockReturnValueOnce({ stdout: "       3 /path/to/file.log\n", stderr: "", status: 0 } as never);  // wc -l
+    mockSpawnSync.mockReturnValue({ stdout: "line1\n", stderr: "", status: 0 } as never);
     mockStatSync.mockReturnValue({ size: 1024 } as never);
+    mockOpenSync.mockReturnValue(99 as never);
+    // Simulate a file with 3 newline characters
+    mockFileWithLines(3);
+
     const handler = createPipelineLogsHandler(makeConfig());
     const res = await handler(makeRequest({ script: "dev-worker-1" }));
     const body = await res.json();
@@ -162,13 +191,14 @@ describe("createPipelineLogsHandler", () => {
     expect(body.error).toBeNull();
   });
 
-  it("uses config.scriptsDir override when set", async () => {
-    const config = makeConfig({ scriptsDir: "/custom/scripts" });
+  it("log path always uses devDir/scripts regardless of scriptsDir", async () => {
+    const config = makeConfig({ scriptsDir: "/custom/scripts", devDir: "/my/.dev" });
     const handler = createPipelineLogsHandler(config);
     await handler(makeRequest({ script: "dev-worker-1" }));
     const tailCall = mockSpawnSync.mock.calls[0];
     const logPathArg = (tailCall[1] as string[])[(tailCall[1] as string[]).length - 1];
-    expect(logPathArg).toContain("/custom/scripts/");
+    // Logs always live in devDir/scripts, not scriptsDir
+    expect(logPathArg).toContain("/my/.dev/scripts/");
   });
 
   it("returns count matching the lines param value", async () => {

@@ -80,7 +80,7 @@ describe("watchCommand", () => {
 
   it("reads state files and renders dashboard output", async () => {
     // watchCommand sets up interval — we just need the initial render
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     // The initial render should have written to stdout
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("");
@@ -102,7 +102,7 @@ describe("watchCommand", () => {
   });
 
   it("refreshes dashboard on interval tick", async () => {
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     const initialCallCount = stdoutSpy.mock.calls.length;
 
@@ -117,12 +117,16 @@ describe("watchCommand", () => {
     mockExistsSync.mockReturnValue(false);
 
     await expect(watchCommand({ dir: "/tmp/test-project" })).rejects.toThrow(
-      "skynet.config.sh not found",
+      "process.exit",
+    );
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
     );
   });
 
   it("shows health score in output", async () => {
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("");
     // Health score should be present (100 - 5 for 1 failed pending = 95)
@@ -130,7 +134,7 @@ describe("watchCommand", () => {
   });
 
   it("shows self-correction rate", async () => {
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("");
     // 1 fixed out of 1 resolved (fixed + blocked) = 100%
@@ -139,7 +143,7 @@ describe("watchCommand", () => {
   });
 
   it("displays 'No events recorded' when events.log is empty", async () => {
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("");
     expect(output).toContain("No events recorded");
@@ -154,7 +158,7 @@ describe("watchCommand", () => {
       return "" as never;
     });
 
-    const promise = watchCommand({ dir: "/tmp/test-project" });
+    const _promise = watchCommand({ dir: "/tmp/test-project" });
 
     const output = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0])).join("");
     expect(output).toContain("Worker 1 started");

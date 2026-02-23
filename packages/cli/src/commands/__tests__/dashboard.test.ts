@@ -5,7 +5,7 @@ vi.mock("fs", () => ({
 }));
 
 vi.mock("child_process", () => ({
-  spawn: vi.fn(() => ({ on: vi.fn() })),
+  spawn: vi.fn(() => ({ on: vi.fn(), unref: vi.fn() })),
   exec: vi.fn(),
 }));
 
@@ -20,7 +20,7 @@ import { dashboardCommand } from "../dashboard";
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockSpawn = vi.mocked(spawn);
-const mockExec = vi.mocked(exec);
+const _mockExec = vi.mocked(exec);
 const mockPlatform = vi.mocked(platform);
 
 describe("dashboardCommand", () => {
@@ -34,7 +34,7 @@ describe("dashboardCommand", () => {
     });
 
     mockExistsSync.mockReturnValue(true);
-    mockSpawn.mockReturnValue({ on: vi.fn() } as never);
+    mockSpawn.mockReturnValue({ on: vi.fn(), unref: vi.fn() } as never);
     mockPlatform.mockReturnValue("darwin");
   });
 
@@ -78,10 +78,12 @@ describe("dashboardCommand", () => {
     await dashboardCommand({});
     vi.advanceTimersByTime(3000);
 
-    expect(mockExec).toHaveBeenCalledWith(
-      expect.stringContaining("open "),
-      expect.any(Function),
+    // The openBrowser function uses spawn, not exec
+    const openCalls = mockSpawn.mock.calls.filter((c) =>
+      c[0] === "open"
     );
+    expect(openCalls).toHaveLength(1);
+    expect(openCalls[0][1]).toEqual([expect.stringContaining("http://localhost:")]);
   });
 
   it("opens browser via 'xdg-open' on Linux", async () => {
@@ -90,9 +92,11 @@ describe("dashboardCommand", () => {
     await dashboardCommand({});
     vi.advanceTimersByTime(3000);
 
-    expect(mockExec).toHaveBeenCalledWith(
-      expect.stringContaining("xdg-open "),
-      expect.any(Function),
+    // The openBrowser function uses spawn, not exec
+    const openCalls = mockSpawn.mock.calls.filter((c) =>
+      c[0] === "xdg-open"
     );
+    expect(openCalls).toHaveLength(1);
+    expect(openCalls[0][1]).toEqual([expect.stringContaining("http://localhost:")]);
   });
 });

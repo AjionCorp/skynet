@@ -317,10 +317,19 @@ describe("metricsCommand", () => {
   // ──────────────────────────────────────────
 
   it("throws when config file is missing", async () => {
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit");
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
     mockExistsSync.mockReturnValue(false);
 
     await expect(metricsCommand({ dir: "/tmp/test" })).rejects.toThrow(
-      "skynet.config.sh not found",
+      "process.exit",
+    );
+
+    expect(exitSpy).toHaveBeenCalledWith(1);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
     );
   });
 });

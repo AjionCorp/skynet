@@ -21,14 +21,12 @@ vi.mock("../../utils/sqliteQuery", () => ({
   sqlEscape: vi.fn((s: string) => s.replace(/'/g, "''")),
 }));
 
-import { existsSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../../utils/loadConfig";
 import { isSqliteReady, sqliteRows, sqliteQuery } from "../../utils/sqliteQuery";
 import { recoverGitCommand } from "../recover-git";
 
-const mockExistsSync = vi.mocked(existsSync);
-const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 const mockLoadConfig = vi.mocked(loadConfig);
 const mockIsSqliteReady = vi.mocked(isSqliteReady);
 const mockSqliteRows = vi.mocked(sqliteRows);
@@ -51,13 +49,16 @@ describe("recoverGitCommand", () => {
       SKYNET_DEV_DIR: "/tmp/test/.dev",
       SKYNET_MAIN_BRANCH: "main",
     });
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git fetch")) return Buffer.from("") as never;
-      if (cmdStr.includes("rev-list --count")) return "3" as never;
-      if (cmdStr.includes("git log --oneline"))
-        return "abc1234 chore: update pipeline status after [FEAT] Add feature\ndef5678 feat: add feature\nghi9012 chore: update pipeline status after [FIX] Fix bug" as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("fetch"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      if (argsStr.includes("rev-list") && argsStr.includes("--count"))
+        return { status: 0, stdout: "3", stderr: "" } as never;
+      if (argsStr.includes("log") && argsStr.includes("--oneline"))
+        return { status: 0, stdout: "abc1234 chore: update pipeline status after [FEAT] Add feature\ndef5678 feat: add feature\nghi9012 chore: update pipeline status after [FIX] Fix bug", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     // dry-run mode so it doesn't try to reset
@@ -66,9 +67,10 @@ describe("recoverGitCommand", () => {
     ).rejects.toThrow("process.exit");
 
     // Should have called rev-list to check divergence
-    const revListCalls = mockExecSync.mock.calls.filter(([cmd]) =>
-      String(cmd).includes("rev-list --count")
-    );
+    const revListCalls = mockSpawnSync.mock.calls.filter(([, args]) => {
+      const argsArr = args as string[];
+      return argsArr && argsArr.some((a) => a.includes("rev-list"));
+    });
     expect(revListCalls.length).toBe(1);
 
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -83,13 +85,16 @@ describe("recoverGitCommand", () => {
       SKYNET_DEV_DIR: "/tmp/test/.dev",
       SKYNET_MAIN_BRANCH: "main",
     });
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git fetch")) return Buffer.from("") as never;
-      if (cmdStr.includes("rev-list --count")) return "2" as never;
-      if (cmdStr.includes("git log --oneline"))
-        return "abc1234 chore: update pipeline status after [FEAT] Add widget\ndef5678 feat: add widget" as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("fetch"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      if (argsStr.includes("rev-list") && argsStr.includes("--count"))
+        return { status: 0, stdout: "2", stderr: "" } as never;
+      if (argsStr.includes("log") && argsStr.includes("--oneline"))
+        return { status: 0, stdout: "abc1234 chore: update pipeline status after [FEAT] Add widget\ndef5678 feat: add widget", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
 
     await expect(
@@ -106,9 +111,10 @@ describe("recoverGitCommand", () => {
     expect(logCalls).toContain("no changes made");
 
     // Should NOT have called git reset
-    const resetCalls = mockExecSync.mock.calls.filter(([cmd]) =>
-      String(cmd).includes("git reset")
-    );
+    const resetCalls = mockSpawnSync.mock.calls.filter(([, args]) => {
+      const argsArr = args as string[];
+      return argsArr && argsArr.some((a) => a.includes("reset"));
+    });
     expect(resetCalls.length).toBe(0);
   });
 
@@ -117,14 +123,18 @@ describe("recoverGitCommand", () => {
       SKYNET_DEV_DIR: "/tmp/test/.dev",
       SKYNET_MAIN_BRANCH: "main",
     });
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git fetch")) return Buffer.from("") as never;
-      if (cmdStr.includes("rev-list --count")) return "1" as never;
-      if (cmdStr.includes("git log --oneline"))
-        return "abc1234 chore: update pipeline status after [FEAT] Add dashboard" as never;
-      if (cmdStr.includes("git reset --hard")) return Buffer.from("") as never;
-      return "" as never;
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const argsArr = args as string[];
+      const argsStr = argsArr ? argsArr.join(" ") : "";
+      if (argsStr.includes("fetch"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      if (argsStr.includes("rev-list") && argsStr.includes("--count"))
+        return { status: 0, stdout: "1", stderr: "" } as never;
+      if (argsStr.includes("log") && argsStr.includes("--oneline"))
+        return { status: 0, stdout: "abc1234 chore: update pipeline status after [FEAT] Add dashboard", stderr: "" } as never;
+      if (argsStr.includes("reset") && argsStr.includes("--hard"))
+        return { status: 0, stdout: "", stderr: "" } as never;
+      return { status: 0, stdout: "", stderr: "" } as never;
     });
     mockIsSqliteReady.mockReturnValue(true);
     mockSqliteRows.mockReturnValue([["42", "completed"]]);

@@ -142,6 +142,10 @@ describe("pauseCommand", () => {
 
     await expect(
       pauseCommand({ dir: "/tmp/test-project" }),
-    ).rejects.toThrow("skynet.config.sh not found");
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("skynet.config.sh not found"),
+    );
   });
 });

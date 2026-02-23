@@ -89,7 +89,8 @@ test.describe("Monitoring dashboard — agent status", () => {
     expect(res.status()).toBe(200);
     const json = await res.json();
     expect(json.data).toBeDefined();
-    expect(json.data).toBeInstanceOf(Array);
+    // Handler returns { data: { agents: [...] } }
+    expect(json.data.agents).toBeInstanceOf(Array);
   });
 });
 
@@ -168,7 +169,8 @@ test.describe("Worker scaling controls", () => {
     expect(res.status()).toBe(200);
     const json = await res.json();
     expect(json.data).toBeDefined();
-    expect(json.data).toBeInstanceOf(Array);
+    // Handler returns { data: { workers: [...] } }
+    expect(json.data.workers).toBeInstanceOf(Array);
   });
 });
 
@@ -177,8 +179,9 @@ test.describe("Worker scaling controls", () => {
 test.describe("Mission dashboard", () => {
   test("mission page loads and shows content", async ({ page }) => {
     await page.goto("/admin/mission");
-    // Should show either mission data or "No mission defined" empty state
-    const hasMission = page.getByText("Purpose");
+    // Should show either mission data or "No mission defined" empty state.
+    // Use heading role to avoid matching raw mission.md content in the <pre> block.
+    const hasMission = page.getByRole("heading", { name: "Purpose" });
     const noMission = page.getByText("No mission defined");
     // One of these should be visible after loading
     await expect(hasMission.or(noMission)).toBeVisible({ timeout: 15_000 });
@@ -187,16 +190,17 @@ test.describe("Mission dashboard", () => {
   test("mission page shows summary cards when mission exists", async ({ page }) => {
     await page.goto("/admin/mission");
     // If a mission exists, summary cards will show; otherwise the empty state appears.
-    // Check for either the progress card or the empty state
-    const progressCard = page.getByText("Mission Progress");
+    // Use exact matching to avoid hitting raw mission.md content containing "Mission progress..."
+    const progressCard = page.getByText("Mission Progress", { exact: true });
     const noMission = page.getByText("No mission defined");
     await expect(progressCard.or(noMission)).toBeVisible({ timeout: 15_000 });
   });
 
   test("mission page has refresh button", async ({ page }) => {
     await page.goto("/admin/mission");
-    // Wait for page to finish loading
-    const hasMission = page.getByText("Purpose");
+    // Wait for page to finish loading.
+    // Use heading role to avoid matching raw mission.md content in the <pre> block.
+    const hasMission = page.getByRole("heading", { name: "Purpose" });
     const noMission = page.getByText("No mission defined");
     await expect(hasMission.or(noMission)).toBeVisible({ timeout: 15_000 });
     // Refresh button should be present (even if mission isn't defined, the button exists)

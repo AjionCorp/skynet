@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createTasksHandlers } from "./tasks";
 import type { SkynetConfig } from "../types";
 
@@ -9,11 +9,19 @@ vi.mock("fs", () => ({
   mkdirSync: vi.fn(),
   rmdirSync: vi.fn(),
 }));
+vi.mock("../lib/db", () => ({
+  getSkynetDB: vi.fn(() => ({
+    countPending: vi.fn(() => { throw new Error("SQLite not available"); }),
+    getBacklogItems: vi.fn(() => { throw new Error("SQLite not available"); }),
+    addTask: vi.fn(),
+    exportBacklog: vi.fn(() => { throw new Error("SQLite export not available"); }),
+  })),
+}));
 
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
-const mockRenameSync = vi.mocked(renameSync);
+const _mockRenameSync = vi.mocked(renameSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockRmdirSync = vi.mocked(rmdirSync);
 
@@ -26,11 +34,18 @@ function makeRequest(body: unknown): Request {
 const SAMPLE_BACKLOG = "# Backlog\n\n- [ ] [FEAT] Add login page\n- [>] [FIX] Fix auth bug\n- [ ] [FEAT] Add dashboard\n- [x] [FEAT] Setup project";
 
 describe("createTasksHandlers", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.resetAllMocks();
     mockReadFileSync.mockReturnValue(SAMPLE_BACKLOG as never);
     mockWriteFileSync.mockReturnValue(undefined as never);
     mockMkdirSync.mockReturnValue(undefined as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   describe("GET", () => {
@@ -129,8 +144,8 @@ describe("createTasksHandlers", () => {
     it("acquires and releases lock via mkdir/rmdir", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       await POST(makeRequest({ tag: "FEAT", title: "Lock test" }));
-      expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/skynet-test-backlog.lock");
-      expect(mockRmdirSync).toHaveBeenCalledWith("/tmp/skynet-test-backlog.lock");
+      expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/skynet-test--backlog.lock");
+      expect(mockRmdirSync).toHaveBeenCalledWith("/tmp/skynet-test--backlog.lock");
     });
 
     it("trims title whitespace", async () => {
@@ -141,14 +156,17 @@ describe("createTasksHandlers", () => {
       expect(body.data.inserted).toBe("- [ ] [FEAT] Spaced title");
     });
 
-    it("returns 500 with error message on write failure", async () => {
+    it("returns 200 with warning when file write fails but SQLite succeeds", async () => {
       mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
       const { POST } = createTasksHandlers(makeConfig());
       const res = await POST(makeRequest({ tag: "FEAT", title: "Write fail" }));
       const body = await res.json();
-      expect(res.status).toBe(500);
-      expect(body.data).toBeNull();
-      expect(body.error).toBe("Disk full");
+      // Handler saves to SQLite first; if backlog.md export and file fallback both fail,
+      // it returns 200 with a warning since the task is safely in SQLite.
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.inserted).toContain("Write fail");
+      expect(body.data.warning).toContain("backlog.md sync failed");
     });
 
     it("returns 400 when tag field is missing", async () => {

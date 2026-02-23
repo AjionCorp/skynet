@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPipelineTriggerHandler } from "./pipeline-trigger";
 import type { SkynetConfig } from "../types";
 
@@ -9,6 +9,7 @@ vi.mock("child_process", () => ({
 }));
 vi.mock("fs", () => ({
   openSync: vi.fn(() => 3),
+  closeSync: vi.fn(),
   constants: { O_WRONLY: 1, O_CREAT: 64, O_APPEND: 1024 },
 }));
 
@@ -35,9 +36,16 @@ function makePostRequest(body: unknown): Request {
 }
 
 describe("createPipelineTriggerHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
     mockUnref.mockReset();
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns 400 when script is not in triggerableScripts", async () => {

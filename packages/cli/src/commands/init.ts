@@ -47,7 +47,7 @@ function generateMissionContent(purpose: string, goals: string, doneCriteria: st
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
   const formattedGoals = goalLines
-    .map((g, i) => `${i + 1}. ${g.replace(/^\d+[\.\)]\s*/, "")}`)
+    .map((g, i) => `${i + 1}. ${g.replace(/^\d+[.)]\s*/, "")}`)
     .join("\n");
 
   // Format success criteria as numbered list
@@ -56,7 +56,7 @@ function generateMissionContent(purpose: string, goals: string, doneCriteria: st
     .map((l) => l.trim())
     .filter((l) => l.length > 0);
   const formattedCriteria = criteriaLines
-    .map((c, i) => `${i + 1}. ${c.replace(/^\d+[\.\)]\s*/, "")}`)
+    .map((c, i) => `${i + 1}. ${c.replace(/^\d+[.)]\s*/, "")}`)
     .join("\n");
 
   return `# Mission
@@ -114,7 +114,7 @@ export async function initCommand(options: InitOptions) {
   console.log("\n  Skynet Pipeline Setup\n");
 
   const projectDir = resolve(options.dir || process.cwd());
-  let projectName =
+  const projectName =
     options.name || (await prompt("Project name", projectDir.split("/").pop()));
 
   // Validate project name

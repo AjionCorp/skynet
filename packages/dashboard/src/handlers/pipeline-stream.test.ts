@@ -171,18 +171,26 @@ describe("createPipelineStreamHandler", () => {
     expect(mockWatcher.close).toHaveBeenCalled();
   });
 
-  it("sends heartbeat comment every 30 seconds", async () => {
+  it("sends status poll every 10 seconds", async () => {
+    const statusData = { workers: [] };
+    const updatedData = { workers: [{ name: "polled" }] };
+    mockGetStatus
+      .mockResolvedValueOnce(makeStatusResponse(statusData))
+      .mockResolvedValueOnce(makeStatusResponse(updatedData));
+
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
-    await reader.read();
+    await reader.read(); // initial status
     await flushAsync();
 
-    await vi.advanceTimersByTimeAsync(30_000);
+    await vi.advanceTimersByTimeAsync(10_000);
 
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
-    expect(text).toBe(": heartbeat\n\n");
+    expect(text).toMatch(/^data: /);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toEqual(updatedData);
     reader.cancel();
   });
 

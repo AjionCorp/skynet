@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPipelineStatusHandler } from "./pipeline-status";
 import type { SkynetConfig } from "../types";
 
@@ -14,15 +14,20 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
   readFileSync: vi.fn(() => ""),
   statSync: vi.fn(() => ({ mtimeMs: Date.now() })),
+  readdirSync: vi.fn(() => []),
 }));
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
+}));
+vi.mock("../lib/db", () => ({
+  getSkynetDB: vi.fn(() => { throw new Error("SQLite not available"); }),
 }));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { existsSync, statSync, readFileSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 
 const mockReadDevFile = vi.mocked(readDevFile);
 const mockGetLastLogLine = vi.mocked(getLastLogLine);
@@ -32,6 +37,7 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockStatSync = vi.mocked(statSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -42,7 +48,10 @@ function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
 }
 
 describe("createPipelineStatusHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
     mockReadDevFile.mockReturnValue("");
     mockGetLastLogLine.mockReturnValue(null);
@@ -50,6 +59,11 @@ describe("createPipelineStatusHandler", () => {
     mockGetWorkerStatus.mockReturnValue({ running: false, pid: null, ageMs: null });
     mockExistsSync.mockReturnValue(false);
     mockExecSync.mockReturnValue("" as never);
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns { data, error: null } envelope on success", async () => {
@@ -160,14 +174,14 @@ describe("createPipelineStatusHandler", () => {
     expect(data.auth.lastFailEpoch).toBe(1704067200);
   });
 
-  it("reports git status from execSync", async () => {
-    mockExecSync.mockImplementation((cmd) => {
-      const c = String(cmd);
-      if (c.includes("rev-parse")) return "feat/login\n" as never;
-      if (c.includes("rev-list")) return "3\n" as never;
-      if (c.includes("status --porcelain")) return "M f1.ts\nM f2.ts\n" as never;
-      if (c.includes("git log")) return "abc1234 Add login\n" as never;
-      return "" as never;
+  it("reports git status from spawnSync", async () => {
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const a = (args as string[]) || [];
+      if (a.includes("rev-parse")) return { stdout: "feat/login\n", stderr: "", status: 0 } as never;
+      if (a.includes("rev-list")) return { stdout: "3\n", stderr: "", status: 0 } as never;
+      if (a.includes("--porcelain")) return { stdout: "M f1.ts\nM f2.ts\n", stderr: "", status: 0 } as never;
+      if (a.includes("log")) return { stdout: "abc1234 Add login\n", stderr: "", status: 0 } as never;
+      return { stdout: "", stderr: "", status: 0 } as never;
     });
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();

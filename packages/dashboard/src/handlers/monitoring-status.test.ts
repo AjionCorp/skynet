@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMonitoringStatusHandler } from "./monitoring-status";
 import type { SkynetConfig } from "../types";
 
@@ -18,6 +18,10 @@ vi.mock("fs", () => ({
 }));
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => ""),
+  spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
+}));
+vi.mock("../lib/db", () => ({
+  getSkynetDB: vi.fn(() => { throw new Error("SQLite not available"); }),
 }));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
@@ -41,7 +45,10 @@ function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
 }
 
 describe("createMonitoringStatusHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
     mockReadDevFile.mockReturnValue("");
     mockGetLastLogLine.mockReturnValue(null);
@@ -49,6 +56,10 @@ describe("createMonitoringStatusHandler", () => {
     mockGetWorkerStatus.mockReturnValue({ running: false, pid: null, ageMs: null });
     mockExistsSync.mockReturnValue(false);
     mockExecSync.mockReturnValue("" as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns { data, error: null } envelope on success", async () => {

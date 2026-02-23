@@ -9,17 +9,19 @@ vi.mock("fs", () => ({
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(),
+  spawnSync: vi.fn(() => ({ status: 0, stdout: "", stderr: "" })),
 }));
 
 import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { configListCommand, configGetCommand, configSetCommand } from "../config";
 
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockRenameSync = vi.mocked(renameSync);
 const mockExistsSync = vi.mocked(existsSync);
-const mockExecSync = vi.mocked(execSync);
+const _mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 
 const CONFIG_CONTENT = `export SKYNET_PROJECT_NAME="test-project"
 export SKYNET_PROJECT_DIR="/tmp/test"
@@ -130,19 +132,21 @@ describe("configSetCommand", () => {
   });
 
   it("validates SKYNET_MAIN_BRANCH via git check-ref-format", async () => {
-    // Valid branch name
-    mockExecSync.mockReturnValue(Buffer.from("") as never);
+    // Valid branch name — spawnSync returns status 0
+    mockSpawnSync.mockReturnValue({ status: 0, stdout: "", stderr: "" } as never);
     await configSetCommand("SKYNET_MAIN_BRANCH", "develop", { dir: "/tmp/test" });
     expect(mockWriteFileSync).toHaveBeenCalled();
 
     vi.clearAllMocks();
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(CONFIG_CONTENT as never);
-
-    // Invalid branch name: git check-ref-format throws
-    mockExecSync.mockImplementation(() => {
-      throw new Error("invalid ref");
+    vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit");
     });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    // Invalid branch name: git check-ref-format returns non-zero status
+    mockSpawnSync.mockReturnValue({ status: 1, stdout: "", stderr: "" } as never);
     await expect(
       configSetCommand("SKYNET_MAIN_BRANCH", "bad..name", { dir: "/tmp/test" }),
     ).rejects.toThrow("process.exit");

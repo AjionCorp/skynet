@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createConfigHandler } from "./config";
 import type { SkynetConfig } from "../types";
 
@@ -37,10 +37,17 @@ function makeRequest(body: unknown): Request {
 }
 
 describe("createConfigHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
     mockExistsSync.mockReturnValue(false);
     mockReadFileSync.mockReturnValue("" as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   describe("GET", () => {
@@ -282,11 +289,11 @@ describe("createConfigHandler", () => {
 
     it("returns 500 with error envelope on write failure", async () => {
       mockExistsSync.mockReturnValue(true);
-      mockReadFileSync.mockReturnValue('export SKYNET_FOO="bar"\n' as never);
+      mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
       mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
 
       const { POST } = createConfigHandler(makeConfig());
-      const res = await POST(makeRequest({ updates: { SKYNET_FOO: "baz" } }));
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "8" } }));
       const body = await res.json();
 
       expect(res.status).toBe(500);

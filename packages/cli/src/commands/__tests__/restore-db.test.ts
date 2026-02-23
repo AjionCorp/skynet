@@ -31,7 +31,7 @@ const mockExistsSync = vi.mocked(existsSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockSpawnSync = vi.mocked(spawnSync);
 const mockLoadConfig = vi.mocked(loadConfig);
-const mockCopyFileSync = vi.mocked(copyFileSync);
+const _mockCopyFileSync = vi.mocked(copyFileSync);
 const mockStatSync = vi.mocked(statSync);
 const mockIsProcessRunning = vi.mocked(isProcessRunning);
 

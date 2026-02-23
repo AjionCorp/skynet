@@ -77,12 +77,11 @@ describe("MonitoringDashboard", () => {
     mockES = { onopen: null, onmessage: null, onerror: null, close: vi.fn(), url: "" };
     global.EventSource = vi.fn(function (this: MockEventSource, url: string) {
       Object.assign(this, mockES);
-      mockES = this;
-      mockES.url = url;
+      mockES = Object.assign(this, { url });
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for sub-components (WorkerScaling, agents, logs)
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [], error: null }))
+      new Response(JSON.stringify({ data: { workers: [] }, error: null }))
     ));
   });
 
@@ -104,9 +103,9 @@ describe("MonitoringDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Workers Active")).toBeDefined();
     });
-    // 2 running out of 3 total
+    // 3 running out of 4 total — number may appear in multiple DOM locations
     const runningCount = MOCK_STATUS.workers.filter((w) => w.running).length;
-    expect(screen.getByText(String(runningCount))).toBeDefined();
+    expect(screen.getAllByText(String(runningCount)).length).toBeGreaterThanOrEqual(1);
   });
 
   it("shows Running indicators for active workers in Pipeline Flow", async () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMissionStatusHandler } from "./mission-status";
 import type { SkynetConfig } from "../types";
 
@@ -19,9 +19,16 @@ function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
 }
 
 describe("createMissionStatusHandler", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
   beforeEach(() => {
+    process.env.NODE_ENV = "development";
     vi.clearAllMocks();
     mockReadDevFile.mockReturnValue("");
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
   });
 
   it("returns { data, error: null } envelope on success", async () => {

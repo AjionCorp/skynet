@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createEventsHandler } from "./events";
 import type { SkynetConfig } from "../types";
 
-vi.mock("fs", () => ({
-  readFileSync: vi.fn(() => ""),
+// Mock getSkynetDB so the SQLite path always throws (forcing tail fallback)
+vi.mock("../lib/db", () => ({
+  getSkynetDB: vi.fn(() => {
+    throw new Error("SQLite not available in tests");
+  }),
 }));
 
-import { readFileSync } from "fs";
-const mockReadFileSync = vi.mocked(readFileSync);
+vi.mock("child_process", () => ({
+  spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
+}));
+
+import { spawnSync } from "child_process";
+const mockSpawnSync = vi.mocked(spawnSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -31,10 +38,14 @@ const SAMPLE_LOG = [
   `${EPOCH_3}|task_claimed|Worker 1 claimed fix-auth`,
 ].join("\n");
 
+function mockTailOutput(stdout: string) {
+  mockSpawnSync.mockReturnValue({ stdout, stderr: "", status: 0 } as never);
+}
+
 describe("createEventsHandler", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    mockReadFileSync.mockReturnValue(SAMPLE_LOG);
+    mockTailOutput(SAMPLE_LOG);
   });
 
   it("reads pipe-delimited events.log and returns EventEntry[] shape", async () => {
@@ -44,7 +55,7 @@ describe("createEventsHandler", () => {
     expect(res.status).toBe(200);
     expect(body.error).toBeNull();
     expect(body.data).toHaveLength(3);
-    expect(body.data[0]).toEqual({
+    expect(body.data[0]).toMatchObject({
       ts: new Date(EPOCH_1 * 1000).toISOString(),
       event: "task_completed",
       detail: "Worker 1 finished feat-login",
@@ -54,13 +65,16 @@ describe("createEventsHandler", () => {
   it("reads from config.devDir/events.log", async () => {
     const GET = createEventsHandler(makeConfig({ devDir: "/custom/dev" }));
     await GET();
-    expect(mockReadFileSync).toHaveBeenCalledWith("/custom/dev/events.log", "utf-8");
+    expect(mockSpawnSync).toHaveBeenCalledWith(
+      "tail",
+      ["-100", "/custom/dev/events.log"],
+      expect.any(Object),
+    );
   });
 
   it("returns empty array when events.log is missing", async () => {
-    mockReadFileSync.mockImplementation(() => {
-      throw new Error("ENOENT: no such file");
-    });
+    // tail on a missing file returns empty stdout
+    mockTailOutput("");
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -70,7 +84,7 @@ describe("createEventsHandler", () => {
   });
 
   it("returns empty array when events.log is empty", async () => {
-    mockReadFileSync.mockReturnValue("");
+    mockTailOutput("");
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -79,7 +93,7 @@ describe("createEventsHandler", () => {
   });
 
   it("skips blank lines", async () => {
-    mockReadFileSync.mockReturnValue(`${EPOCH_1}|task_completed|Done\n\n\n${EPOCH_2}|task_failed|Error`);
+    mockTailOutput(`${EPOCH_1}|task_completed|Done\n\n\n${EPOCH_2}|task_failed|Error`);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -87,7 +101,7 @@ describe("createEventsHandler", () => {
   });
 
   it("skips lines with fewer than 3 pipe-delimited parts", async () => {
-    mockReadFileSync.mockReturnValue(`${EPOCH_1}|task_completed|Done\nbad_line\n${EPOCH_2}|only_two_parts`);
+    mockTailOutput(`${EPOCH_1}|task_completed|Done\nbad_line\n${EPOCH_2}|only_two_parts`);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -96,7 +110,7 @@ describe("createEventsHandler", () => {
   });
 
   it("skips lines with non-numeric epoch", async () => {
-    mockReadFileSync.mockReturnValue(`notanumber|task_completed|Done\n${EPOCH_1}|task_claimed|OK`);
+    mockTailOutput(`notanumber|task_completed|Done\n${EPOCH_1}|task_claimed|OK`);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -105,7 +119,7 @@ describe("createEventsHandler", () => {
   });
 
   it("converts epoch seconds to ISO timestamp", async () => {
-    mockReadFileSync.mockReturnValue(`${EPOCH_1}|test_event|detail`);
+    mockTailOutput(`${EPOCH_1}|test_event|detail`);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
@@ -114,21 +128,23 @@ describe("createEventsHandler", () => {
   });
 
   it("limits output to last 100 entries when file has more", async () => {
-    const lines = Array.from({ length: 150 }, (_, i) =>
-      `${EPOCH_1 + i}|event_${i}|detail_${i}`
+    // tail -100 already limits to the last 100 lines, so the handler
+    // just receives and parses those 100 lines directly.
+    const lines = Array.from({ length: 100 }, (_, i) =>
+      `${EPOCH_1 + 50 + i}|event_${50 + i}|detail_${50 + i}`
     ).join("\n");
-    mockReadFileSync.mockReturnValue(lines);
+    mockTailOutput(lines);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();
     expect(body.data).toHaveLength(100);
-    // Should keep the LAST 100 (entries 50-149)
+    // tail -100 returns the last 100 lines; the handler parses all of them
     expect(body.data[0].event).toBe("event_50");
     expect(body.data[99].event).toBe("event_149");
   });
 
   it("preserves pipes in detail field beyond the third part", async () => {
-    mockReadFileSync.mockReturnValue(`${EPOCH_1}|task_completed|detail|with|extra|pipes`);
+    mockTailOutput(`${EPOCH_1}|task_completed|detail|with|extra|pipes`);
     const GET = createEventsHandler(makeConfig());
     const res = await GET();
     const body = await res.json();

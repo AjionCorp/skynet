@@ -46,50 +46,51 @@ describe("EventsDashboard", () => {
     mockFetchWith(MOCK_EVENTS);
     renderWithProvider(<EventsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("task_completed")).toBeDefined();
+      // Event types appear in both filter dropdown <option> and table <span>, so use getAllByText
+      expect(screen.getAllByText("task_completed").length).toBeGreaterThanOrEqual(1);
     });
-    expect(screen.getByText("task_claimed")).toBeDefined();
-    expect(screen.getByText("task_failed")).toBeDefined();
-    expect(screen.getByText("fix_started")).toBeDefined();
-    expect(screen.getByText("fix_succeeded")).toBeDefined();
-    expect(screen.getByText("worker_killed")).toBeDefined();
+    expect(screen.getAllByText("task_claimed").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("task_failed").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("fix_started").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("fix_succeeded").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("worker_killed").length).toBeGreaterThanOrEqual(1);
   });
 
   it("filter dropdown filters by event type", async () => {
     mockFetchWith(MOCK_EVENTS);
     renderWithProvider(<EventsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("task_completed")).toBeDefined();
+      expect(screen.getAllByText("task_completed").length).toBeGreaterThanOrEqual(1);
     });
 
     // Select "task_failed" from filter dropdown
     const select = document.querySelector("select") as HTMLSelectElement;
     fireEvent.change(select, { target: { value: "task_failed" } });
 
-    // Only task_failed should remain
-    expect(screen.getByText("task_failed")).toBeDefined();
-    expect(screen.queryByText("task_completed")).toBeNull();
-    expect(screen.queryByText("task_claimed")).toBeNull();
-    expect(screen.queryByText("fix_started")).toBeNull();
+    // Only task_failed should remain in the table; other event types still in dropdown options
+    // The table should only show task_failed rows
+    const rows = document.querySelectorAll("tbody tr");
+    expect(rows.length).toBe(1);
+    expect(screen.getAllByText("task_failed").length).toBeGreaterThanOrEqual(1);
   });
 
   it("search input filters by detail text", async () => {
     mockFetchWith(MOCK_EVENTS);
     renderWithProvider(<EventsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("task_completed")).toBeDefined();
+      expect(screen.getAllByText("task_completed").length).toBeGreaterThanOrEqual(1);
     });
 
     // Type in search box
     const input = screen.getByPlaceholderText("Search events...");
     fireEvent.change(input, { target: { value: "compile error" } });
 
-    // Only events with "compile error" in detail should remain
-    expect(screen.getByText("task_failed")).toBeDefined();
-    expect(screen.getByText("fix_started")).toBeDefined();
-    expect(screen.getByText("fix_succeeded")).toBeDefined();
-    expect(screen.queryByText("task_completed")).toBeNull();
-    expect(screen.queryByText("task_claimed")).toBeNull();
+    // Only events with "compile error" in detail should remain in the table
+    const rows = document.querySelectorAll("tbody tr");
+    expect(rows.length).toBe(3); // task_failed, fix_started, fix_succeeded
+    expect(screen.getAllByText("task_failed").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("fix_started").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("fix_succeeded").length).toBeGreaterThanOrEqual(1);
   });
 
   it("empty state shows appropriate message", async () => {
@@ -120,7 +121,7 @@ describe("EventsDashboard", () => {
     mockFetchWith(MOCK_EVENTS);
     renderWithProvider(<EventsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("task_completed")).toBeDefined();
+      expect(screen.getAllByText("task_completed").length).toBeGreaterThanOrEqual(1);
     });
 
     // Search for something that doesn't exist
@@ -134,15 +135,16 @@ describe("EventsDashboard", () => {
     mockFetchWith(MOCK_EVENTS);
     renderWithProvider(<EventsDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("task_completed")).toBeDefined();
+      expect(screen.getAllByText("task_completed").length).toBeGreaterThanOrEqual(1);
     });
 
     const input = screen.getByPlaceholderText("Search events...");
     fireEvent.change(input, { target: { value: "WATCHDOG" } });
 
-    // "Worker 3 killed by watchdog" should match
-    expect(screen.getByText("worker_killed")).toBeDefined();
-    expect(screen.queryByText("task_completed")).toBeNull();
+    // "Worker 3 killed by watchdog" should match — only 1 row in table
+    const rows = document.querySelectorAll("tbody tr");
+    expect(rows.length).toBe(1);
+    expect(screen.getAllByText("worker_killed").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders header with Events title", async () => {

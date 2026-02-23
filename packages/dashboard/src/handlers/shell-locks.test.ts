@@ -1,12 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { execSync, spawnSync } from "child_process";
+import { spawnSync } from "child_process";
 import {
   mkdirSync,
   writeFileSync,
   readFileSync,
   existsSync,
   rmSync,
-  unlinkSync,
   statSync,
 } from "fs";
 import { join } from "path";
@@ -313,7 +312,7 @@ describe("Shell script lock acquisition", () => {
       // Pre-create lock dir, then remove it after 0.5s in background
       mkdirSync(`${lockPrefix}-backlog.lock`);
 
-      const result = spawnSync("bash", [
+      spawnSync("bash", [
         "-c",
         `${harness}
          # Remove the pre-existing lock in background after 0.3s

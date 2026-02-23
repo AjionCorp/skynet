@@ -192,8 +192,8 @@ PY
 
     if ! $_codex_auth_ok; then
       # Final check via Codex CLI status (non-interactive)
-      local status_out status_rc
-      status_out=$("${SKYNET_CODEX_BIN:-codex}" login status 2>/dev/null || true)
+      local status_rc
+      "${SKYNET_CODEX_BIN:-codex}" login status 2>/dev/null || true
       status_rc=$?
       if [ "$status_rc" -eq 0 ]; then
         _codex_auth_ok=true

@@ -6,6 +6,11 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
 }));
 
+vi.mock("../../utils/sqliteQuery", () => ({
+  isSqliteReady: vi.fn(() => false),
+  sqliteQuery: vi.fn(() => ""),
+}));
+
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { exportCommand } from "../export";
 
@@ -54,7 +59,6 @@ describe("exportCommand", () => {
       "failed-tasks.md",
       "blockers.md",
       "mission.md",
-      "skynet.config.sh",
       "events.log",
     ];
     for (const key of expectedKeys) {

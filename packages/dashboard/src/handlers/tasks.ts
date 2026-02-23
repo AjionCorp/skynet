@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "f
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
-import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
+import { parseBacklog as parseBacklogItems, backlogCounts } from "../lib/backlog-parser";
 
 /**
  * Parse backlog.md into items with status/tag/dependency info.

@@ -5,8 +5,6 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   Clock,
   Cpu,
   GitBranch,
@@ -28,7 +26,6 @@ import {
 } from "lucide-react";
 import type {
   WorkerInfo,
-  CurrentTask,
   WorkerHeartbeat,
   MonitoringStatus,
   AgentInfo,

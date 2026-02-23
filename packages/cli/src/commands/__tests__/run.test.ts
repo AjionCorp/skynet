@@ -106,13 +106,16 @@ describe("runCommand", () => {
     expect(opts.env.SKYNET_GATE_1).toBe("pnpm typecheck");
   });
 
-  it("passes through raw gate command", async () => {
+  it("rejects unknown gate names", async () => {
     mockSpawn.mockReturnValue(createMockChild(0) as never);
 
-    await runCommand("Some task", { dir: "/tmp/test-project", gate: "npm test" });
+    await expect(
+      runCommand("Some task", { dir: "/tmp/test-project", gate: "npm test" }),
+    ).rejects.toThrow("process.exit");
 
-    const opts = mockSpawn.mock.calls[0][2] as { env: Record<string, string> };
-    expect(opts.env.SKYNET_GATE_1).toBe("npm test");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Unknown gate"),
+    );
   });
 
   it("sets SKYNET_AGENT_PLUGIN when --agent is provided", async () => {

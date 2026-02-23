@@ -129,7 +129,7 @@ crash_recovery() {
       [ -e "$lockfile" ] || { log "Lock path vanished mid-check: $lockfile"; continue; }
       local lock_mtime
       lock_mtime=$(file_mtime "$lockfile")
-      local now=$(date +%s)
+      local now; now=$(date +%s)
       local lock_age_secs=$(( now - lock_mtime ))
       local stale_secs=$((SKYNET_STALE_MINUTES * 60))
       if [ "$lock_age_secs" -gt "$stale_secs" ]; then
@@ -473,9 +473,9 @@ if check_claude_auth; then
 fi
 
 # Also check Codex auth (non-blocking — just sets fail flag for awareness)
-codex_auth_ok=false
+_codex_auth_ok=false
 if check_codex_auth; then
-  codex_auth_ok=true
+  _codex_auth_ok=true
   agent_auth_ok=true
 fi
 

@@ -1,5 +1,4 @@
-import { existsSync } from "fs";
-import { resolve, join } from "path";
+import { resolve } from "path";
 import { loadConfig } from "../utils/loadConfig";
 import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery";
 

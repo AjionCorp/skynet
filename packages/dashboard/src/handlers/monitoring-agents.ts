@@ -148,7 +148,7 @@ function parseCrontab(
 ): Map<string, CronEntry> {
   const entries = new Map<string, CronEntry>();
 
-  let crontab = "";
+  let crontab: string;
   try {
     crontab = spawnSync("crontab", ["-l"], { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).stdout || "";
   } catch {
