@@ -132,6 +132,12 @@ crash_recovery() {
       [ -e "$lockfile" ] || { log "Lock path vanished mid-check: $lockfile"; continue; }
       local lock_mtime
       lock_mtime=$(file_mtime "$lockfile")
+      # Guard: if file_mtime returns 0 (stat failed, file vanished), skip
+      # the stale check — treat as "unknown age, assume fresh".
+      if [ "$lock_mtime" = "0" ]; then
+        log "file_mtime returned 0 for $lockfile — skipping stale check"
+        continue
+      fi
       local now; now=$(date +%s)
       local lock_age_secs=$(( now - lock_mtime ))
       local stale_secs=$((SKYNET_STALE_MINUTES * 60))
@@ -271,7 +277,13 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     local resolved_wt_dir
     resolved_wt_dir=$(cd "$wt_dir" 2>/dev/null && pwd -P || echo "$wt_dir")
     local orphan_pids
-    orphan_pids=$(ps ax -o pid,command 2>/dev/null | grep -F "$resolved_wt_dir" | grep -v grep | grep -v "^[[:space:]]*$$[[:space:]]" | awk '{print $1}' || true)
+    # Prefer pgrep -f for clean PID output; fall back to ps with explicit
+    # column format (-o pid= -o command=) to avoid column misalignment.
+    if command -v pgrep >/dev/null 2>&1; then
+      orphan_pids=$(pgrep -f "$resolved_wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
+    else
+      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -F "$resolved_wt_dir" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
+    fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
       echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
@@ -298,6 +310,12 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock"
   if [ "$recovered" -gt 0 ]; then
     log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees cleaned"
     tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees"
+  fi
+
+  # Alert operators when the 500-item safety limit was hit — recovery may be incomplete
+  if [ "$recovered" -gt 500 ]; then
+    emit_event "crash_recovery_limit" "Crash recovery hit 500-item limit — some items may not have been recovered"
+    tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery hit 500-item limit — recovery may be incomplete. Investigate immediately."
   fi
 }
 

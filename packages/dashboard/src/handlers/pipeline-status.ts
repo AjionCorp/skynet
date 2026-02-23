@@ -310,6 +310,12 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       }
 
       // Worker heartbeats
+      // NOTE: SQLite (workers.heartbeat_epoch) is the authoritative source for
+      // heartbeat data. The file-based heartbeat path below is a legacy fallback
+      // for installations that predate the SQLite migration. File-based reads are
+      // subject to TOCTOU races (file can change between existence check and read)
+      // but this is acceptable for display-only status — no control flow depends
+      // on the file-based values.
       let heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
       if (usingSqlite && db) {
         heartbeats = db.getHeartbeats(maxW);

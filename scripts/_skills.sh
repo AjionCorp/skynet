@@ -67,6 +67,10 @@ _skill_body() {
   fi
 }
 
+# Visited-set to prevent infinite loops if skills ever reference each other.
+# Tracks basenames of already-loaded skill files within a single get_skills_for_tag call.
+_LOADED_SKILLS=""
+
 # Return concatenated skill content for a given task tag.
 # Skills with no tags match everything. Skills with tags match only if
 # the task tag appears in their comma-separated tag list.
@@ -76,12 +80,21 @@ get_skills_for_tag() {
   local task_tag="$1"
   task_tag="$(echo "$task_tag" | tr '[:lower:]' '[:upper:]')"
   local result=""
+  _LOADED_SKILLS=""  # reset visited-set for each invocation
 
   [ -d "$SKYNET_SKILLS_DIR" ] || return 0
 
   local skill_file
   for skill_file in "$SKYNET_SKILLS_DIR"/*.md; do
     [ -f "$skill_file" ] || continue
+
+    # Guard against loading the same skill twice (circular include prevention)
+    local skill_basename
+    skill_basename="${skill_file##*/}"
+    case ",$_LOADED_SKILLS," in
+      *,"$skill_basename",*) continue ;;
+    esac
+    _LOADED_SKILLS="${_LOADED_SKILLS:+$_LOADED_SKILLS,}$skill_basename"
 
     local skill_tags
     skill_tags="$(_skill_tags "$skill_file")"

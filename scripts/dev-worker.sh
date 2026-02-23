@@ -97,6 +97,7 @@ _stop_heartbeat() {
 # --- Worktree helpers ---
 # Each worker gets its own worktree directory so multiple workers can run
 # on different branches without conflicting in the same working directory.
+# NOTE: Similar setup_worktree/cleanup_worktree exists in task-fixer.sh — keep in sync
 
 # Create a worktree for a feature branch. Installs deps via pnpm.
 setup_worktree() {
@@ -159,34 +160,15 @@ cleanup_worktree() {
 
 # --- PID lock to prevent duplicate runs (per worker ID, mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-dev-worker-${WORKER_ID}.lock"
-if mkdir "$LOCKFILE" 2>/dev/null; then
-  echo $$ > "$LOCKFILE/pid"
-else
-  # Lock dir exists — check for stale lock (owner PID no longer running)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Already running (PID $_existing_pid). Exiting." >> "$LOG"
-      exit 0
-    fi
-    # Stale lock — reclaim atomically
-    mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
-    rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
-    if mkdir "$LOCKFILE" 2>/dev/null; then
-      echo $$ > "$LOCKFILE/pid"
-    else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Lock contention. Exiting." >> "$LOG"
-      exit 0
-    fi
-  else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] Lock contention. Exiting." >> "$LOG"
-    exit 0
-  fi
+if ! acquire_worker_lock "$LOCKFILE" "$LOG" "W${WORKER_ID}"; then
+  exit 0
 fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 _CURRENT_TASK_DB_TITLE=""
 cleanup_on_exit() {
+  # Clean up any leaked _sql_exec/_sql_query temp files
+  _db_cleanup_tmpfiles 2>/dev/null || true
   # Stop heartbeat writer
   _stop_heartbeat 2>/dev/null || true
   # Ensure we're on main branch (may be on feature branch if killed during merge recovery)
@@ -216,8 +198,18 @@ trap 'log "ERR on line $LINENO"; exit 1' ERR
 # When SIGTERM/SIGINT is received (e.g. from `skynet stop`), set a flag so we
 # can finish the current phase cleanly and exit at the next safe checkpoint.
 # This prevents mid-merge kills from leaving branches in inconsistent state.
+# _IN_MERGE guards against SIGTERM during git merge/rebase — if set, we defer
+# the exit until the merge operation completes to avoid zombie branches.
 SHUTDOWN_REQUESTED=false
-trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at next checkpoint"' SIGTERM SIGINT
+_IN_MERGE=false
+trap '
+  SHUTDOWN_REQUESTED=true
+  if $_IN_MERGE; then
+    log "Shutdown signal received during merge — deferring until merge completes"
+  else
+    log "Shutdown signal received — will exit at next checkpoint"
+  fi
+' SIGTERM SIGINT
 
 # --- Pipeline pause check ---
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
@@ -693,9 +685,17 @@ WEOF
   }
   _MERGE_STATE_COMMIT_FN="_worker_state_commit"
 
-  # Call shared merge function
+  # Call shared merge function (guard against SIGTERM during merge)
+  _IN_MERGE=true
   _merge_rc=0
   do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
+  _IN_MERGE=false
+
+  # If shutdown was requested during merge, exit now that merge is complete
+  if $SHUTDOWN_REQUESTED; then
+    log "Deferred shutdown completing now (merge finished with rc=$_merge_rc)"
+    break
+  fi
 
   # Clear task title AFTER merge — ensures cleanup_on_exit can
   # properly unclaim if worker crashes between merge and state commit

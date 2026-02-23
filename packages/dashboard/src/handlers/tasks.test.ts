@@ -18,10 +18,9 @@ vi.mock("../lib/db", () => ({
   })),
 }));
 
-import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
-const _mockRenameSync = vi.mocked(renameSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockRmdirSync = vi.mocked(rmdirSync);
 

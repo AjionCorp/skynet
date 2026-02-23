@@ -76,12 +76,15 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
     if (exportMatch && exportMatch[1] in updates) {
       const key = exportMatch[1];
       // NOTE: validateUpdates() already rejects " and ` characters, so only
-      // $, \, \n, and \r can actually reach this replacement function.
-      const newValue = updates[key].replace(/[\\$\n\r]/g, (ch) => {
-        if (ch === "\n") return "\\n";
-        if (ch === "\r") return "\\r";
-        return "\\" + ch;
-      });
+      // $, \, \n, and \r can actually reach this escaping logic.
+      // IMPORTANT: Backslashes MUST be escaped first (separate pass) to avoid
+      // double-escaping. If \ and $ were handled in one pass, input `\$` could
+      // produce `\\$` (expands in shell) instead of the correct `\\\$`.
+      const newValue = updates[key]
+        .replace(/\\/g, "\\\\")
+        .replace(/\$/g, "\\$")
+        .replace(/\n/g, "\\n")
+        .replace(/\r/g, "\\r");
       result.push(`export ${key}="${newValue}"`);
     } else {
       result.push(line);

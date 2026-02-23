@@ -59,7 +59,11 @@ export SKYNET_POST_MERGE_TYPECHECK=true     # Validate main builds after merge; 
 export SKYNET_GIT_PUSH_TIMEOUT=30           # Timeout in seconds for each git push attempt (default: 30)
 
 # ---- Auth (Claude Code OAuth) ----
-export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"  # NOTE: world-readable on multi-user systems; use chmod 600 in production
+## SECURITY WARNING: Token cache is written with umask 077 (owner-only) by
+## auth-refresh.sh, but /tmp on shared systems may still expose it via race
+## conditions or sticky-bit bypass. On multi-user production systems, set this
+## path to a directory owned by the pipeline user (e.g., $HOME/.skynet/token).
+export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"
 export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"     # Sentinel file set when auth fails
 export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                     # macOS Keychain service name
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)

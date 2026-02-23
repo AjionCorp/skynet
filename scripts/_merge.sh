@@ -64,6 +64,12 @@ do_merge_to_main() {
 
   _MERGE_STATE_COMMITTED=false
 
+  # --- Pre-lock pull: fetch latest main before acquiring the merge lock ---
+  # This reduces lock hold time because the post-lock pull will be a fast
+  # no-op (or near-instant) if no other worker pushed in between.
+  cd "$PROJECT_DIR"
+  git pull --rebase origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+
   # --- Acquire merge mutex ---
   if ! acquire_merge_lock; then
     local _ml_holder=""

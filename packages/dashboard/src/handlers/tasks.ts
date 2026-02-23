@@ -221,7 +221,7 @@ export function createTasksHandlers(config: SkynetConfig) {
           error: null,
         });
       } finally {
-        try { rmdirSync(backlogLockPath); } catch { /* ignore */ }
+        try { rmdirSync(backlogLockPath); } catch { /* lock cleanup failure is non-fatal — lock dir may already be removed by another process */ }
       }
     } catch (err) {
       return Response.json(

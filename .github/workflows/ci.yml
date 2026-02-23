@@ -54,7 +54,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install shellcheck
         run: sudo apt-get install -y shellcheck
-      - run: shellcheck -S warning scripts/*.sh scripts/agents/*.sh scripts/notify/*.sh
+      - name: Shellcheck all scripts/ .sh files (recursive)
+        run: find scripts/ -name '*.sh' -print0 | xargs -0 shellcheck -S warning
 
   lint-ts:
     runs-on: ubuntu-latest
@@ -106,7 +107,7 @@ jobs:
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true
+    continue-on-error: false
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -115,7 +116,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level=moderate
+      - run: pnpm audit --audit-level=high
 
   e2e-admin:
     needs: [typecheck, build]
@@ -130,5 +131,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('**/pnpm-lock.yaml') }}
       - run: pnpm --filter admin exec playwright install --with-deps chromium
       - run: pnpm test:e2e

@@ -60,6 +60,9 @@ export SKYNET_FIXER_IGNORE_USAGE_LIMIT="${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-true}
 export SKYNET_DRIVER_BACKLOG_THRESHOLD="${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}"
 export SKYNET_MAX_LOG_SIZE_KB="${SKYNET_MAX_LOG_SIZE_KB:-1024}"
 export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
+# --dangerously-skip-permissions is required for autonomous workers to modify files
+# without interactive approval prompts. Only safe in isolated worktrees where no
+# user-owned files outside the project are at risk.
 export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-permissions}"
 export SKYNET_CODEX_MODEL="${SKYNET_CODEX_MODEL:-}"
 export SKYNET_CODEX_SUBCOMMAND="${SKYNET_CODEX_SUBCOMMAND:-exec}"
@@ -88,8 +91,9 @@ export SKYNET_SMOKE_TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
 # Post-merge typecheck gate (validates main still builds after merge; auto-reverts on failure)
 export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 
-# Timeout (seconds) for each git push attempt (prevents indefinite hang on network stalls)
-export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-30}"
+# Timeout (seconds) for each git push attempt (prevents indefinite hang on network stalls).
+# Increase if you see "git push failed after 3 attempts" on slow networks.
+export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-60}"
 
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034
@@ -145,6 +149,9 @@ if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
 fi
 
 # TODO: Add SKYNET_LOG_FORMAT=json option for structured logging (machine-parseable output)
+
+# NOTE: Individual scripts define their own log() to append to their specific LOG file.
+# This is intentional — each worker needs its own log destination.
 
 # --- Log rotation ---
 # Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.

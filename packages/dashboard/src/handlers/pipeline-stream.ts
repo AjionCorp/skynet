@@ -55,6 +55,14 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           try {
             controller.enqueue(encoder.encode(text));
           } catch {
+            // Enqueue failed (stream likely closed by client). Attempt to send
+            // an error event before cleaning up so well-behaved clients can
+            // distinguish a server-side close from a network drop.
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ data: null, error: "Stream closed" })}\n\n`));
+            } catch {
+              /* stream is fully dead — nothing more we can do */
+            }
             cleanup();
           }
         }

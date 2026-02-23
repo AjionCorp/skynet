@@ -5,6 +5,22 @@
 
 DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 
+# --- Temp file tracking for leak prevention ---
+# mktemp files created by _sql_exec/_sql_query are normally cleaned inline,
+# but a SIGTERM between mktemp and rm would leak them. _db_cleanup_tmpfiles()
+# sweeps any survivors — callers with their own EXIT traps should call it.
+# SIGKILL is uncatchable — leaked files use a fixed prefix so a cron job
+# like `find /tmp -name 'skynet-sql-*' -mmin +60 -delete` can clean up.
+_DB_TMPFILES=""
+_db_register_tmp() { _DB_TMPFILES="$_DB_TMPFILES $1"; }
+_db_cleanup_tmpfiles() {
+  local _f
+  for _f in $_DB_TMPFILES; do
+    rm -f "$_f" 2>/dev/null || true
+  done
+  _DB_TMPFILES=""
+}
+
 # Fail-fast guard: call at worker/fixer startup to ensure SQLite is available.
 _require_db() {
   [ -f "$DB_PATH" ] || { log "FATAL: SQLite database missing at $DB_PATH — run 'skynet init' first"; exit 1; }
@@ -29,6 +45,7 @@ _db_sep() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$
 _sql_exec() {
   local _sql_out _sql_rc _sql_errfile
   _sql_errfile=$(mktemp /tmp/skynet-sql-err-XXXXXX)
+  _db_register_tmp "$_sql_errfile"
   _sql_out=$(_db "$1" 2>"$_sql_errfile")
   _sql_rc=$?
   local _sql_err=""
@@ -46,6 +63,7 @@ _sql_exec() {
 _sql_query() {
   local _sql_out _sql_rc _sql_errfile
   _sql_errfile=$(mktemp /tmp/skynet-sql-query-err-XXXXXX)
+  _db_register_tmp "$_sql_errfile"
   _sql_out=$(_db_sep "$1" 2>"$_sql_errfile")
   _sql_rc=$?
   local _sql_err=""
@@ -248,6 +266,11 @@ SCHEMA
 
   # Schema migrations — add columns that may not exist in older databases
   _db "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
+
+  # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
+  # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
+  # if the WAL is already empty. Prevents unbounded WAL growth from concurrent workers.
+  _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
 }
 
 # ============================================================
@@ -282,15 +305,15 @@ db_claim_next_task() {
   local worker_id="$1"
   local result=""
 
-  # Build a lookup set of completed task titles (one query)
-  local _completed_titles
-  if ! _completed_titles=$(_db \
-    "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null); then
-    log "WARNING: db_claim_next_task: failed to load completed titles — all blocked tasks will stay blocked" 2>/dev/null || true
-    _completed_titles=""
-  fi
-
   while IFS="$_DB_SEP" read -r tid _ttitle tblocked; do
+    # Refresh completed titles each iteration so concurrent completions
+    # by other workers are visible when evaluating blocker dependencies.
+    local _completed_titles
+    if ! _completed_titles=$(_db \
+      "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null); then
+      log "WARNING: db_claim_next_task: failed to load completed titles — all blocked tasks will stay blocked" 2>/dev/null || true
+      _completed_titles=""
+    fi
     [ -z "$tid" ] && continue
     local blocked=false
     if [ -n "$tblocked" ]; then

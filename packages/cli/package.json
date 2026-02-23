@@ -30,8 +30,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "prepack": "cp -r ../../scripts ./scripts && cp -r ../../templates ./templates",
-    "postpack": "rm -rf ./scripts ./templates",
+    "prepack": "test -d ../../scripts && test -d ../../templates && cp -r ../../scripts ./scripts && cp -r ../../templates ./templates",
+    "postpack": "rm -rf ./scripts ./templates; true",
     "prepublishOnly": "tsc",
     "test": "vitest run"
   },

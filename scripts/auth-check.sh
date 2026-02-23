@@ -10,6 +10,11 @@
 # - On first failure: sends Telegram alert, adds blocker to blockers.md
 # - On repeat failures: throttles alerts to once per hour (not every 3 min)
 # - On recovery: sends Telegram "restored" message, clears blocker
+#
+# Blocker message tense note:
+#   - "authentication expired" (Claude) = token existed but is no longer valid
+#   - "authentication missing" (Codex/Gemini) = credentials were never configured
+#   These convey different failure modes and are intentionally distinct.
 
 if ! declare -f log >/dev/null 2>&1; then
   log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
@@ -105,7 +110,7 @@ check_claude_auth() {
   fi
 
   if $should_notify; then
-    echo "$now" > "$SKYNET_AUTH_FAIL_FLAG"
+    (umask 077; echo "$now" > "$SKYNET_AUTH_FAIL_FLAG")
     tg "🔴 *$SKYNET_PROJECT_NAME_UPPER AUTH DOWN* — Claude Code not authenticated. All pipeline jobs paused. Run: claude then /login"
     log "Claude Code not authenticated. Telegram alert sent."
     # Add to blockers if not already there
@@ -248,7 +253,7 @@ PY
   fi
 
   if $should_notify; then
-    echo "$now" > "$SKYNET_CODEX_AUTH_FAIL_FLAG"
+    (umask 077; echo "$now" > "$SKYNET_CODEX_AUTH_FAIL_FLAG")
     tg "🟡 *$SKYNET_PROJECT_NAME_UPPER CODEX AUTH MISSING* — Run \`codex\` to login (ChatGPT). Fallback agent unavailable."
     log "Codex CLI not authenticated. Telegram alert sent."
     if ! grep -q "Codex CLI authentication" "$BLOCKERS" 2>/dev/null; then
@@ -314,7 +319,7 @@ check_gemini_auth() {
   fi
 
   if $should_notify; then
-    echo "$now" > "$SKYNET_GEMINI_AUTH_FAIL_FLAG"
+    (umask 077; echo "$now" > "$SKYNET_GEMINI_AUTH_FAIL_FLAG")
     tg "🟡 *$SKYNET_PROJECT_NAME_UPPER GEMINI AUTH MISSING* — Set GEMINI_API_KEY or run \`gcloud auth application-default login\`. Fallback agent unavailable."
     log "Gemini CLI not authenticated. Telegram alert sent."
     if ! grep -q "Gemini CLI authentication" "$BLOCKERS" 2>/dev/null; then

@@ -240,7 +240,7 @@ tags: FEAT,FIX
 - Validate request bodies at the handler level
 ```
 
-Skills with no tags load for every task. Skills with tags only load when the task tag matches.
+Skills with no `tags:` field load for all tasks (universal skills). Comma-separated tags match only when the task tag is in the list. For example, `tags: FEAT,FIX` loads the skill for FEAT and FIX tasks but not INFRA or TEST tasks.
 
 ## CLI Reference
 
@@ -326,6 +326,11 @@ Two config files live in `.dev/`:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SKYNET_POST_MERGE_SMOKE` | `false` | Enable smoke tests + auto-revert after merge |
+| `SKYNET_POST_MERGE_TYPECHECK` | `true` | Validate main still builds after merge; auto-reverts on failure |
+| `SKYNET_GIT_PUSH_TIMEOUT` | `60` | Seconds per git push attempt before timeout |
+| `SKYNET_SKILLS_DIR` | `$SKYNET_DEV_DIR/skills` | Directory containing skill markdown files |
+| `SKYNET_WORKTREE_BASE` | `$SKYNET_DEV_DIR/worktrees` | Base directory for worker git worktrees |
+| `SKYNET_FIXER_IGNORE_USAGE_LIMIT` | `true` | Allow fixers to run even when usage limits are hit |
 | `SKYNET_DEV_PORT` | `3000` | Base dev server port (workers offset from this) |
 | `SKYNET_BRANCH_PREFIX` | `dev/` | Feature branch prefix |
 | `SKYNET_MAIN_BRANCH` | `main` | Target merge branch |

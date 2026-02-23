@@ -207,4 +207,84 @@ describe("createPipelineLogsHandler", () => {
     const body = await res.json();
     expect(body.data.count).toBe(50);
   });
+
+  // --- Path traversal defense ---
+
+  it("rejects path traversal via script name with dots/slashes", async () => {
+    const handler = createPipelineLogsHandler(makeConfig());
+    // Attempt directory traversal — script regex rejects non-alphanumeric-hyphen names
+    const res = await handler(makeRequest({ script: "../../../etc/passwd" }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.data).toBeNull();
+  });
+
+  it("rejects script names with slashes", async () => {
+    const handler = createPipelineLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "foo/bar" }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.data).toBeNull();
+  });
+
+  it("rejects script names with uppercase or underscores", async () => {
+    const handler = createPipelineLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "Dev_Worker" }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+  });
+
+  // --- Search sanitization ---
+
+  it("strips shell metacharacters from search input", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "safe result\n", stderr: "", status: 0 } as never);
+    const handler = createPipelineLogsHandler(makeConfig());
+    // Attempt to inject shell chars — sanitizeSearch strips them
+    const res = await handler(makeRequest({ script: "dev-worker-1", search: "error; rm -rf /" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    // Verify grep was called with sanitized string (no semicolons/slashes)
+    const grepCall = mockSpawnSync.mock.calls[0];
+    const searchArg = (grepCall[1] as string[])[1];
+    expect(searchArg).not.toContain(";");
+    expect(searchArg).not.toContain("/");
+  });
+
+  it("truncates search input to max 100 characters", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
+    const handler = createPipelineLogsHandler(makeConfig());
+    const longSearch = "a".repeat(200);
+    await handler(makeRequest({ script: "dev-worker-1", search: longSearch }));
+    const grepCall = mockSpawnSync.mock.calls[0];
+    const searchArg = (grepCall[1] as string[])[1];
+    expect(searchArg.length).toBeLessThanOrEqual(100);
+  });
+
+  // --- Error handling for missing files ---
+
+  it("returns empty data when log file does not exist (stat throws)", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 1 } as never);
+    mockStatSync.mockImplementation(() => { throw new Error("ENOENT: no such file"); });
+    const handler = createPipelineLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "dev-worker-1" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.totalLines).toBe(0);
+    expect(body.data.fileSizeBytes).toBe(0);
+  });
+
+  // --- Size limits ---
+
+  it("reports fileSizeBytes from stat for large files", async () => {
+    const largeSizeBytes = 50 * 1024 * 1024; // 50MB
+    mockSpawnSync.mockReturnValue({ stdout: "line\n", stderr: "", status: 0 } as never);
+    mockStatSync.mockReturnValue({ size: largeSizeBytes } as never);
+    mockOpenSync.mockReturnValue(99 as never);
+    mockFileWithLines(100000);
+
+    const handler = createPipelineLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "dev-worker-1" }));
+    const body = await res.json();
+    expect(body.data.fileSizeBytes).toBe(largeSizeBytes);
+  });
 });

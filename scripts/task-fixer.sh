@@ -55,6 +55,7 @@ usage_limit_hit() {
 }
 
 # --- Worktree helpers ---
+# NOTE: Similar setup_worktree/cleanup_worktree exists in dev-worker.sh — keep in sync
 setup_worktree() {
   mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
   local branch="$1"
@@ -117,32 +118,9 @@ if [ "$FIXER_ID" = "1" ]; then
 else
   LOCKFILE="${SKYNET_LOCK_PREFIX}-task-fixer-${FIXER_ID}.lock"
 fi
-if mkdir "$LOCKFILE" 2>/dev/null; then
-  echo $$ > "$LOCKFILE/pid"
-else
-  # Lock dir exists — check for stale lock (owner PID no longer running)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Already running (PID $_existing_pid). Exiting." >> "$LOG"
-      emit_event "fixer_idle" "Fixer $FIXER_ID: already running (PID $_existing_pid)"
-      exit 0
-    fi
-    # Stale lock — reclaim atomically
-    mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
-    rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
-    if mkdir "$LOCKFILE" 2>/dev/null; then
-      echo $$ > "$LOCKFILE/pid"
-    else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
-      emit_event "fixer_idle" "Fixer $FIXER_ID: lock contention after reclaim"
-      exit 0
-    fi
-  else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
-    emit_event "fixer_idle" "Fixer $FIXER_ID: lock contention"
-    exit 0
-  fi
+if ! acquire_worker_lock "$LOCKFILE" "$LOG" "F${FIXER_ID}"; then
+  emit_event "fixer_idle" "Fixer $FIXER_ID: lock contention"
+  exit 0
 fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
@@ -150,6 +128,8 @@ _db_task_id=""
 
 cleanup_on_exit() {
   local exit_code=$?
+  # Clean up any leaked _sql_exec/_sql_query temp files
+  _db_cleanup_tmpfiles 2>/dev/null || true
   # Release merge lock if held
   release_merge_lock 2>/dev/null || true
   # Abort any in-progress git merge on the main branch

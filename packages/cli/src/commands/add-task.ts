@@ -52,6 +52,11 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
     process.exit(1);
   }
 
+  // SECURITY: All user-supplied values MUST pass through sqlEscape() before
+  // interpolation into SQL string literals. sqlEscape doubles single quotes,
+  // strips NUL bytes, and neutralizes newlines (preventing dot-command injection
+  // in the sqlite3 CLI). The integer `pri` is safe (hardcoded 0 or 999).
+  // See packages/cli/src/utils/sqliteQuery.ts for the escape implementation.
   const safeTitle = sqlEscape(title.trim());
   const safeTag = sqlEscape(tag);
   const safeDesc = sqlEscape(options.description?.trim() || "");
