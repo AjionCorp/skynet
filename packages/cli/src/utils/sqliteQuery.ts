@@ -12,7 +12,7 @@ export function sqliteQuery(devDir: string, sql: string): string {
   if (!existsSync(dbPath)) {
     throw new Error("skynet.db not found");
   }
-  const result = spawnSync("sqlite3", ["-separator", "\x1f", dbPath, `.timeout 5000\n${sql}`], {
+  const result = spawnSync("sqlite3", ["-cmd", ".timeout 5000", "-separator", "\x1f", dbPath, sql], {
     encoding: "utf-8",
     stdio: ["ignore", "pipe", "pipe"],
     timeout: 5000,

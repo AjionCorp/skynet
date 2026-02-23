@@ -256,15 +256,6 @@ KEYS_OK=$(node -e "
 
 assert_output_grep 'exported to' "$EXPORT_OUTPUT" "export: output confirms export path"
 
-# Import expects skynet.config.sh key (validation) but export excludes it (secrets).
-# Inject a placeholder so the import round-trip validation passes.
-node -e "
-  var f = '$EXPORT_FILE';
-  var d = JSON.parse(require('fs').readFileSync(f,'utf8'));
-  d['skynet.config.sh'] = '';
-  require('fs').writeFileSync(f, JSON.stringify(d, null, 2));
-"
-
 # Modify backlog.md — inject a marker line
 echo "- [ ] [TEST] Injected line for round-trip test" >> "$DEV/backlog.md"
 assert_grep 'Injected line for round-trip test' "$DEV/backlog.md" "export/import: backlog modification applied"

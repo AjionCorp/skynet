@@ -66,22 +66,22 @@ test.describe("Logs page", () => {
 test.describe("Settings page", () => {
   test("loads and shows config key-value table with save button", async ({ page }) => {
     await page.goto("/admin/settings");
-    // Should show either "Pipeline Configuration" heading or "No configuration found" empty state
+    // Wait for page to load — either the heading or empty state will be visible
+    // Use .first() because both may be present simultaneously (heading + empty message)
     const configHeading = page.getByRole("heading", { name: "Pipeline Configuration" });
     const emptyState = page.getByText("No configuration found");
-    await expect(configHeading.or(emptyState)).toBeVisible({ timeout: 15_000 });
+    await expect(configHeading.or(emptyState).first()).toBeVisible({ timeout: 15_000 });
     // Save Changes button is present when config entries exist
     const saveButton = page.getByRole("button", { name: "Save Changes" });
     const noConfig = page.getByText("No configuration found");
-    // Either save button or empty state should be visible
-    await expect(saveButton.or(noConfig)).toBeVisible();
+    await expect(saveButton.or(noConfig).first()).toBeVisible();
   });
 
   test("shows refresh button", async ({ page }) => {
     await page.goto("/admin/settings");
     const configHeading = page.getByRole("heading", { name: "Pipeline Configuration" });
     const emptyState = page.getByText("No configuration found");
-    await expect(configHeading.or(emptyState)).toBeVisible({ timeout: 15_000 });
+    await expect(configHeading.or(emptyState).first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
   });
 

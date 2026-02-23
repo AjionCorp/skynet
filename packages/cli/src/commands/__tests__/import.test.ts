@@ -33,7 +33,6 @@ const VALID_SNAPSHOT = JSON.stringify({
   "failed-tasks.md": "",
   "blockers.md": "",
   "mission.md": "# Mission",
-  "skynet.config.sh": 'export SKYNET_PROJECT_NAME="test"',
 });
 
 function setupMocks(snapshotContent: string, existingFiles: Record<string, string> = {}) {

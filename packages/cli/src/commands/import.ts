@@ -16,8 +16,10 @@ const EXPECTED_KEYS = [
   "failed-tasks.md",
   "blockers.md",
   "mission.md",
-  "skynet.config.sh",
 ];
+
+// Machine-specific files that should never be overwritten by import
+const SKIP_FILES = new Set(["skynet.config.sh"]);
 
 const MD_FILES = new Set([
   "backlog.md",
@@ -87,6 +89,11 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
   }> = [];
 
   for (const filename of snapshotKeys) {
+    // Skip machine-specific files (paths, secrets)
+    if (SKIP_FILES.has(filename)) {
+      skipped.push({ filename, reason: "machine-specific (skipped)" });
+      continue;
+    }
     // Reject path traversal attempts
     const resolved = resolve(devDir, filename);
     if (!resolved.startsWith(resolve(devDir) + "/") && resolved !== resolve(devDir)) {
