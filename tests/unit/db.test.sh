@@ -4,7 +4,9 @@
 # Usage: bash tests/unit/db.test.sh
 # Creates a temp directory with isolated SQLite DB, tests every _db.sh function.
 
-set -euo pipefail
+# NOTE: -e is intentionally omitted — the test uses its own PASS/FAIL counters
+# and set -e conflicts with _db.sh functions that use pipes under pipefail.
+set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PASS=0
@@ -355,6 +357,9 @@ log "=== status transitions ==="
 
 # Create disposable tasks for each transition
 BLK_ID=$(db_add_task "Block me" "FEAT" "" "bottom")
+# db_block_task requires status='failed' or 'fixing-*' — set it up first
+sqlite3 "$DB_PATH" "UPDATE tasks SET status='claimed', worker_id=1 WHERE id=$BLK_ID;"
+sqlite3 "$DB_PATH" "UPDATE tasks SET status='failed', error='test' WHERE id=$BLK_ID;"
 db_block_task "$BLK_ID"
 STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$BLK_ID;")
 assert_eq "$STATUS" "blocked" "db_block_task: status set to blocked"
@@ -444,10 +449,10 @@ db_set_worker_status 2 "dev" "in_progress" "" "Stale task" ""
 sqlite3 "$DB_PATH" "UPDATE workers SET heartbeat_epoch = $(( NOW - 4000 )) WHERE id=2;"
 
 STALE=$(db_get_stale_heartbeats 3600)
-assert_contains "$STALE" "2|" "db_get_stale_heartbeats: detects stale worker"
+assert_contains "$STALE" "2${SEP}" "db_get_stale_heartbeats: detects stale worker"
 
 # Fresh worker should not appear
-STALE_CHECK=$(echo "$STALE" | grep "^1|" || true)
+STALE_CHECK=$(echo "$STALE" | grep "^1${SEP}" || true)
 assert_empty "$STALE_CHECK" "db_get_stale_heartbeats: fresh worker not reported"
 
 # ── Test: blockers ───────────────────────────────────────────────
