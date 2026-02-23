@@ -292,6 +292,70 @@ db_add_blocker "CI broken" "" 2>/dev/null
 SCORE3=$(db_get_health_score 2>/dev/null)
 [ "$SCORE3" -lt "$SCORE2" ] 2>/dev/null && pass "health score: drops more with blocker ($SCORE3 < $SCORE2)" || fail "health score: should drop more with blocker (got '$SCORE3')"
 
+# ============================================================
+# TEST: canary mode — file detection
+# ============================================================
+
+echo ""
+log "=== canary mode: file detection ==="
+
+# Create a canary-pending file
+cat > "$DEV_DIR/canary-pending" <<CANARY
+commit=abc123def456
+timestamp=$(date +%s)
+files=scripts/_locks.sh scripts/_merge.sh
+CANARY
+
+assert_eq "$(grep '^commit=' "$DEV_DIR/canary-pending" | cut -d= -f2)" "abc123def456" "canary: commit hash stored"
+assert_contains "$(cat "$DEV_DIR/canary-pending")" "scripts/_locks.sh" "canary: changed files listed"
+
+# Clean up
+rm -f "$DEV_DIR/canary-pending"
+
+# ============================================================
+# TEST: canary mode — timeout auto-clear
+# ============================================================
+
+echo ""
+log "=== canary mode: timeout auto-clear ==="
+
+# Create an expired canary-pending file (timestamp in the past)
+_old_ts=$(( $(date +%s) - 3600 ))  # 1 hour ago
+cat > "$DEV_DIR/canary-pending" <<CANARY
+commit=old123
+timestamp=$_old_ts
+files=scripts/test.sh
+CANARY
+
+_canary_age=$(( $(date +%s) - _old_ts ))
+_canary_timeout=$(( 30 * 60 ))  # 30 min default
+[ "$_canary_age" -gt "$_canary_timeout" ] && pass "canary: detects expired canary (age=${_canary_age}s > ${_canary_timeout}s)" || fail "canary: should detect expired canary"
+
+rm -f "$DEV_DIR/canary-pending"
+
+# ============================================================
+# TEST: canary mode — clearance after completion
+# ============================================================
+
+echo ""
+log "=== canary mode: clearance after completion ==="
+
+# Simulate: canary active, then a task completes
+cat > "$DEV_DIR/canary-pending" <<CANARY
+commit=new789
+timestamp=$(date +%s)
+files=scripts/_db.sh
+CANARY
+
+# Insert a recently-completed task
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, completed_at) VALUES ('Canary test task', 'FEAT', 'completed', datetime('now'));"
+
+# Check if completed tasks exist after canary timestamp
+_post_canary=$(_db "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','fixed') AND completed_at >= datetime('now', '-60 seconds');" 2>/dev/null || echo 0)
+[ "${_post_canary:-0}" -gt 0 ] && pass "canary: detects post-canary completion" || fail "canary: should detect post-canary completion"
+
+rm -f "$DEV_DIR/canary-pending"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

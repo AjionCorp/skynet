@@ -104,6 +104,26 @@ jobs:
       - run: bash tests/e2e/init-smoke.test.sh
       - run: bash tests/e2e/cli-commands.test.sh
 
+  integration-test:
+    needs: [typecheck, unit-test-sh]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Install sqlite3
+        run: sudo apt-get update && sudo apt-get install -y sqlite3
+      - name: Configure git identity
+        run: |
+          git config --global user.email "ci@ajioncorp.com"
+          git config --global user.name "CI"
+      - run: bash tests/integration/pipeline-cycle.test.sh
+
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5

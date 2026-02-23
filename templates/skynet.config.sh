@@ -58,6 +58,14 @@ export SKYNET_SMOKE_TIMEOUT=10              # Smoke test timeout in seconds (def
 export SKYNET_POST_MERGE_TYPECHECK=true     # Validate main builds after merge; auto-reverts on failure (default: true)
 export SKYNET_GIT_PUSH_TIMEOUT=30           # Timeout in seconds for each git push attempt (default: 30)
 
+# ── Canary Deployment ──────────────────────────────────────────────
+# When enabled, changes to scripts/*.sh trigger single-worker validation
+# before resuming full dispatch. Prevents self-modifying bugs from crashing
+# all workers simultaneously.
+export SKYNET_CANARY_ENABLED="false"
+# Auto-clear canary if no crash after this many minutes (prevents pipeline stall)
+export SKYNET_CANARY_TIMEOUT_MINUTES="30"
+
 # ---- Auth (Claude Code OAuth) ----
 ## SECURITY WARNING: Token cache is written with umask 077 (owner-only) by
 ## auth-refresh.sh, but /tmp on shared systems may still expose it via race

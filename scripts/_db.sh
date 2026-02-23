@@ -271,6 +271,17 @@ SCHEMA
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
   # if the WAL is already empty. Prevents unbounded WAL growth from concurrent workers.
   _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+
+  # Recursive CTEs require SQLite 3.8.3+ (2014). macOS ships 3.39+, Linux CI has latest.
+  local _sqlite_ver
+  _sqlite_ver=$(sqlite3 --version 2>/dev/null | cut -d' ' -f1 || echo "0.0.0")
+  local _major _minor _patch
+  _major=$(echo "$_sqlite_ver" | cut -d. -f1)
+  _minor=$(echo "$_sqlite_ver" | cut -d. -f2)
+  _patch=$(echo "$_sqlite_ver" | cut -d. -f3)
+  if [ "${_major:-0}" -lt 3 ] || { [ "${_major:-0}" -eq 3 ] && [ "${_minor:-0}" -lt 9 ]; }; then
+    echo "WARNING: SQLite $_sqlite_ver detected; Skynet requires 3.9+ for recursive CTEs" >&2
+  fi
 }
 
 # ============================================================
@@ -299,55 +310,56 @@ db_count_by_status() {
 
 # Find + atomically claim the next unblocked pending task for a worker.
 # Output: id|title|tag|description|branch  or empty string if none available.
-# Optimized: fetches all pending tasks + all completed titles in 2 queries max,
-# then resolves blockers in-memory instead of spawning per-dep sqlite3 processes.
+# Uses a single SQL statement with BEGIN IMMEDIATE + recursive CTE to resolve
+# blocker dependencies and claim atomically — no race window between check and claim.
 db_claim_next_task() {
-  local worker_id="$1"
-  local result=""
+  local worker_id; worker_id=$(_sql_int "$1")
 
-  while IFS="$_DB_SEP" read -r tid _ttitle tblocked; do
-    # Refresh completed titles each iteration so concurrent completions
-    # by other workers are visible when evaluating blocker dependencies.
-    local _completed_titles
-    if ! _completed_titles=$(_db \
-      "SELECT title FROM tasks WHERE status IN ('completed','done','fixed','superseded');" 2>/dev/null); then
-      log "WARNING: db_claim_next_task: failed to load completed titles — all blocked tasks will stay blocked" 2>/dev/null || true
-      _completed_titles=""
-    fi
-    [ -z "$tid" ] && continue
-    local blocked=false
-    if [ -n "$tblocked" ]; then
-      local _old_ifs="$IFS"; IFS=','
-      for dep in $tblocked; do
-        dep=$(echo "$dep" | sed 's/^ *//;s/ *$//')
-        [ -z "$dep" ] && continue
-        # Check in-memory lookup instead of spawning sqlite3
-        if ! echo "$_completed_titles" | grep -qxF "$dep"; then
-          blocked=true; break
-        fi
-      done
-      IFS="$_old_ifs"
-    fi
-    if ! $blocked; then
-      local changed
-      local _int_wid; _int_wid=$(_sql_int "$worker_id")
-      local _int_tid; _int_tid=$(_sql_int "$tid")
-      _validate_status_transition "$_int_tid" "pending" "claimed" "db_claim_next_task"
-      changed=$(_db "
-        UPDATE tasks SET status='claimed', worker_id=$_int_wid,
-          claimed_at=datetime('now'), updated_at=datetime('now')
-        WHERE id=$_int_tid AND status='pending';
-        SELECT changes();
-      ")
-      if [ "$changed" = "1" ]; then
-        result=$(_db_sep \
-          "SELECT id, title, tag, description, branch FROM tasks WHERE id=$_int_tid;")
-        break
-      fi
-    fi
-  done < <(_db_sep \
-    "SELECT id, title, blocked_by FROM tasks WHERE status='pending' ORDER BY priority ASC;")
-  echo "$result"
+  # Single atomic SQL: resolve blockers via recursive CTE, claim first unblocked pending task.
+  # BEGIN IMMEDIATE acquires RESERVED lock at start — serializes concurrent writers.
+  # The recursive CTE splits comma-separated blocked_by into individual dependencies
+  # and checks each against completed/done/fixed/superseded tasks.
+  local changed
+  changed=$(_db "
+    BEGIN IMMEDIATE;
+    WITH RECURSIVE dep_split(task_id, dep, rest) AS (
+      SELECT id,
+        TRIM(SUBSTR(blocked_by, 1, INSTR(blocked_by || ',', ',') - 1)),
+        SUBSTR(blocked_by, INSTR(blocked_by || ',', ',') + 1)
+      FROM tasks WHERE status = 'pending' AND blocked_by != ''
+      UNION ALL
+      SELECT task_id,
+        TRIM(SUBSTR(rest, 1, INSTR(rest || ',', ',') - 1)),
+        SUBSTR(rest, INSTR(rest || ',', ',') + 1)
+      FROM dep_split WHERE rest != ''
+    ),
+    unresolved AS (
+      SELECT DISTINCT task_id FROM dep_split
+      WHERE dep IS NOT NULL AND dep != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.title = dep_split.dep
+            AND t.status IN ('completed', 'done', 'fixed', 'superseded')
+        )
+    ),
+    target AS (
+      SELECT id FROM tasks
+      WHERE status = 'pending'
+        AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
+      ORDER BY priority ASC
+      LIMIT 1
+    )
+    UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
+      claimed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = (SELECT id FROM target) AND status = 'pending';
+    SELECT changes();
+    COMMIT;
+  ")
+
+  if [ "$changed" = "1" ]; then
+    # Fetch the claimed task details
+    _db_sep "SELECT id, title, tag, description, branch FROM tasks WHERE worker_id = $worker_id AND status = 'claimed' ORDER BY claimed_at DESC LIMIT 1;"
+  fi
 }
 
 db_unclaim_task() {

@@ -415,6 +415,15 @@ if [ -d "$MERGE_LOCK" ]; then
   fi
 fi
 
+# Clean up stale flock owner files from crashed workers (transition support)
+if [ -f "${SKYNET_LOCK_PREFIX}-merge.flock.owner" ]; then
+  _flock_owner_pid=$(cat "${SKYNET_LOCK_PREFIX}-merge.flock.owner" 2>/dev/null || echo "")
+  if [ -n "$_flock_owner_pid" ] && ! kill -0 "$_flock_owner_pid" 2>/dev/null; then
+    rm -f "${SKYNET_LOCK_PREFIX}-merge.flock.owner" 2>/dev/null || true
+    log "Cleaned up stale flock owner file for dead PID $_flock_owner_pid"
+  fi
+fi
+
 # --- SQLite integrity check ---
 # Quick check that the database is not corrupted. If it is, alert the operator
 # and continue in file-fallback mode (db functions will fail gracefully).
@@ -1034,6 +1043,72 @@ if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
   fi
 fi
 
+# ── Canary deployment gating ───────────────────────────────────────
+_canary_active=false
+_canary_file="${DEV_DIR}/canary-pending"
+_canary_commit=""
+
+if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; then
+  _canary_active=true
+  _canary_commit=$(grep '^commit=' "$_canary_file" 2>/dev/null | cut -d= -f2)
+  _canary_ts=$(grep '^timestamp=' "$_canary_file" 2>/dev/null | cut -d= -f2)
+  _canary_age=$(( $(date +%s) - ${_canary_ts:-0} ))
+  _canary_timeout=$(( ${SKYNET_CANARY_TIMEOUT_MINUTES:-30} * 60 ))
+
+  # Check if canary has timed out (auto-clear to prevent pipeline stall)
+  if [ "$_canary_age" -gt "$_canary_timeout" ]; then
+    log "CANARY: Auto-clearing after ${SKYNET_CANARY_TIMEOUT_MINUTES}min timeout (no crash detected)"
+    rm -f "$_canary_file"
+    _canary_active=false
+    emit_event "canary_timeout" "auto-cleared after ${_canary_age}s"
+  fi
+
+  # Check if any task completed successfully after canary commit
+  if $_canary_active; then
+    _post_canary_completed=$(_db "
+      SELECT COUNT(*) FROM tasks
+      WHERE status IN ('completed','fixed')
+        AND completed_at > datetime('now', '-${_canary_age} seconds');
+    " 2>/dev/null || echo 0)
+    if [ "${_post_canary_completed:-0}" -gt 0 ]; then
+      log "CANARY: Validated — $_post_canary_completed task(s) completed after canary commit"
+      rm -f "$_canary_file"
+      _canary_active=false
+      emit_event "canary_validated" "commit=$_canary_commit tasks_completed=$_post_canary_completed"
+    fi
+  fi
+
+  # Check for canary worker crash (dead PID + stale heartbeat)
+  if $_canary_active; then
+    _stale_in_canary=$(db_get_stale_heartbeats 300 1 | head -1)  # 5min, worker 1 only
+    if [ -n "$_stale_in_canary" ]; then
+      log "CANARY FAILED: Worker crashed during canary validation"
+      log "CANARY: Auto-reverting commit $_canary_commit"
+      # Attempt to revert the canary commit
+      if git revert --no-edit "$_canary_commit" 2>/dev/null; then
+        git push origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+        log "CANARY: Reverted commit $_canary_commit"
+        emit_event "canary_failed" "commit=$_canary_commit action=reverted"
+      else
+        log "CANARY: Auto-revert failed — manual intervention required"
+        emit_event "canary_failed" "commit=$_canary_commit action=revert_failed"
+      fi
+      # Alert via notification
+      notify "CANARY FAILED: Script changes in commit ${_canary_commit:0:8} caused worker crash. Auto-revert attempted." 2>/dev/null || true
+      rm -f "$_canary_file"
+      _canary_active=false
+    fi
+  fi
+fi
+
+# Apply canary dispatch limit
+_effective_max_workers="${SKYNET_MAX_WORKERS:-4}"
+if $_canary_active; then
+  log "CANARY: Active — limiting dispatch to 1 worker"
+  _effective_max_workers=1
+  emit_event "canary_started" "commit=$_canary_commit"
+fi
+
 # --- Pipeline pause check (skip dispatch but still run health checks above) ---
 pipeline_paused=false
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
@@ -1047,7 +1122,8 @@ if ! $_db_healthy; then
 elif $agent_auth_ok && ! $pipeline_paused; then
   # Rule 1: Kick dev-workers proportional to backlog size
   # Worker N starts when backlog has >= N tasks and worker N is idle
-  for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+  # Uses _effective_max_workers (canary-aware) instead of SKYNET_MAX_WORKERS
+  for _wid in $(seq 1 "$_effective_max_workers"); do
     if [ "$backlog_count" -ge "$_wid" ] && ! is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock"; then
       log "Backlog has $backlog_count tasks (>=$_wid), worker $_wid idle. Kicking off."
       tg "👁 *WATCHDOG*: Kicking off dev-worker $_wid ($backlog_count tasks waiting)"

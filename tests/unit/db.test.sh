@@ -597,6 +597,132 @@ else
   fail "concurrent claim: both workers got same task '$R1_TITLE'"
 fi
 
+# ── Test: concurrent claim stress (4 parallel workers) ────────────
+
+echo ""
+log "=== concurrent claim stress (4 parallel workers) ==="
+
+# Reset: unclaim everything and remove non-pending tasks for a clean slate
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Create 4 fresh pending tasks with no blockers
+STRESS_IDS=""
+for _i in 1 2 3 4; do
+  _sid=$(db_add_task "Stress task $_i" "TEST" "parallel claim test" "bottom")
+  STRESS_IDS="$STRESS_IDS $_sid"
+done
+
+STRESS_PENDING=$(db_count_pending)
+assert_eq "$STRESS_PENDING" "4" "stress: 4 pending tasks created"
+
+# Launch 4 parallel db_claim_next_task calls in background subshells
+STRESS_TMPDIR=$(mktemp -d)
+for _w in 1 2 3 4; do
+  (
+    _result=$(db_claim_next_task "$_w")
+    echo "$_result" > "$STRESS_TMPDIR/worker-$_w.out"
+  ) &
+done
+wait
+
+# Collect results
+STRESS_CLAIMED=0
+STRESS_TITLES=""
+for _w in 1 2 3 4; do
+  _out=""
+  [ -f "$STRESS_TMPDIR/worker-$_w.out" ] && _out=$(cat "$STRESS_TMPDIR/worker-$_w.out")
+  if [ -n "$_out" ]; then
+    STRESS_CLAIMED=$((STRESS_CLAIMED + 1))
+    _t=$(echo "$_out" | cut -d"$SEP" -f2)
+    STRESS_TITLES="$STRESS_TITLES|$_t"
+  fi
+done
+rm -rf "$STRESS_TMPDIR"
+
+assert_eq "$STRESS_CLAIMED" "4" "stress: exactly 4 tasks claimed"
+
+# Verify no double-claims: each task should have a different worker_id
+STRESS_UNIQUE_WORKERS=$(sqlite3 "$DB_PATH" "SELECT COUNT(DISTINCT worker_id) FROM tasks WHERE status='claimed';")
+assert_eq "$STRESS_UNIQUE_WORKERS" "4" "stress: no double-claims (4 unique worker_ids)"
+
+# Verify each claimed task has a unique title
+STRESS_UNIQUE_TITLES=$(sqlite3 "$DB_PATH" "SELECT COUNT(DISTINCT title) FROM tasks WHERE status='claimed';")
+assert_eq "$STRESS_UNIQUE_TITLES" "4" "stress: 4 unique titles claimed"
+
+# ── Test: blocker resolution chain ────────────────────────────────
+
+echo ""
+log "=== blocker resolution chain ==="
+
+# Clean slate
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Create task A (no blockers), task B (blocked_by="Task A"), task C (blocked_by="Task A, Task B")
+CHAIN_A=$(db_add_task "Task A" "TEST" "no blockers" "bottom")
+CHAIN_B=$(db_add_task "Task B" "TEST" "blocked by A" "bottom" "Task A")
+CHAIN_C=$(db_add_task "Task C" "TEST" "blocked by A and B" "bottom" "Task A, Task B")
+
+# Claim next — should get Task A (only unblocked task)
+CHAIN_R1=$(db_claim_next_task 1)
+CHAIN_R1_TITLE=$(echo "$CHAIN_R1" | cut -d"$SEP" -f2)
+assert_eq "$CHAIN_R1_TITLE" "Task A" "chain: first claim gets Task A (unblocked)"
+
+# Mark Task A completed
+db_complete_task "$CHAIN_A" "dev/task-a" "1m" 60
+
+# Claim next — should get Task B (A is now completed, so B is unblocked)
+CHAIN_R2=$(db_claim_next_task 2)
+CHAIN_R2_TITLE=$(echo "$CHAIN_R2" | cut -d"$SEP" -f2)
+assert_eq "$CHAIN_R2_TITLE" "Task B" "chain: second claim gets Task B (A completed)"
+
+# Task C should still be blocked (B is claimed, not completed)
+CHAIN_C_STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$CHAIN_C;")
+assert_eq "$CHAIN_C_STATUS" "pending" "chain: Task C still pending (B not completed)"
+
+# Trying to claim as worker 3 should NOT get Task C
+CHAIN_R3=$(db_claim_next_task 3)
+CHAIN_R3_TITLE=$(echo "$CHAIN_R3" | cut -d"$SEP" -f2)
+if [ "$CHAIN_R3_TITLE" = "Task C" ]; then
+  fail "chain: Task C should NOT be claimable (Task B not completed)"
+else
+  pass "chain: Task C correctly blocked (Task B not completed)"
+fi
+
+# Complete Task B, now Task C should be claimable
+db_complete_task "$CHAIN_B" "dev/task-b" "2m" 120
+
+CHAIN_R4=$(db_claim_next_task 3)
+CHAIN_R4_TITLE=$(echo "$CHAIN_R4" | cut -d"$SEP" -f2)
+assert_eq "$CHAIN_R4_TITLE" "Task C" "chain: Task C claimable after A and B completed"
+
+# ── Test: empty blocked_by handling ───────────────────────────────
+
+echo ""
+log "=== empty blocked_by handling ==="
+
+# Clean slate
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Create task with blocked_by='' (default from db_add_task)
+EMPTY_BLK_ID=$(db_add_task "No blockers empty string" "TEST" "" "bottom")
+
+# Create task with blocked_by IS NULL (set via raw SQL)
+NULL_BLK_ID=$(db_add_task "No blockers null" "TEST" "" "bottom")
+sqlite3 "$DB_PATH" "UPDATE tasks SET blocked_by=NULL WHERE id=$NULL_BLK_ID;"
+
+# Both should be claimable
+EMPTY_R1=$(db_claim_next_task 1)
+EMPTY_R1_TITLE=$(echo "$EMPTY_R1" | cut -d"$SEP" -f2)
+assert_not_empty "$EMPTY_R1_TITLE" "empty_blocked_by: first task claimable"
+
+EMPTY_R2=$(db_claim_next_task 2)
+EMPTY_R2_TITLE=$(echo "$EMPTY_R2" | cut -d"$SEP" -f2)
+assert_not_empty "$EMPTY_R2_TITLE" "empty_blocked_by: second task claimable"
+
+# Verify both tasks are now claimed
+EMPTY_CLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='claimed';")
+assert_eq "$EMPTY_CLAIMED" "2" "empty_blocked_by: both tasks (empty string and NULL) claimed"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

@@ -95,6 +95,12 @@ export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 # Increase if you see "git push failed after 3 attempts" on slow networks.
 export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-60}"
 
+# Canary deployment: when enabled, script changes (scripts/*.sh) trigger single-worker
+# validation before full dispatch. Prevents self-modifying bugs from crashing all workers.
+export SKYNET_CANARY_ENABLED="${SKYNET_CANARY_ENABLED:-false}"
+# Auto-clear canary after this many minutes if no crash detected (prevents pipeline stall)
+export SKYNET_CANARY_TIMEOUT_MINUTES="${SKYNET_CANARY_TIMEOUT_MINUTES:-30}"
+
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"

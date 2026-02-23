@@ -84,3 +84,117 @@ realpath_portable() {
     readlink -f "$1" 2>/dev/null || echo "$1"
   fi
 }
+
+# ============================================================
+# PORTABLE FILE LOCKING (flock)
+# ============================================================
+# Linux: native flock(1) command (util-linux)
+# macOS: perl Fcntl::flock fallback (perl ships with all macOS)
+#
+# Usage:
+#   _acquire_file_lock "$lockfile" "$timeout_secs"  -> returns 0 on success, 1 on timeout
+#   _release_file_lock                              -> releases current lock
+#
+# Auto-release on process death is guaranteed by the kernel on both platforms.
+# Lock state is stored in module-level variables:
+#   _FLOCK_FD   -- file descriptor (Linux)
+#   _FLOCK_PID  -- perl helper PID (macOS)
+#   _FLOCK_FILE -- the lock file path
+
+_FLOCK_FD=""
+_FLOCK_PID=""
+_FLOCK_FILE=""
+
+_acquire_file_lock() {
+  local lockfile="$1"
+  local timeout="${2:-30}"
+  _FLOCK_FILE="$lockfile"
+
+  # Create lock file if it doesn't exist
+  touch "$lockfile" 2>/dev/null || true
+
+  if ! $SKYNET_IS_MACOS; then
+    # Linux: use native flock
+    # Open file on FD 9 and use flock with timeout
+    exec 9>"$lockfile"
+    if flock -w "$timeout" 9 2>/dev/null; then
+      _FLOCK_FD=9
+      # Write PID for observability (not used for locking logic)
+      echo $$ > "$lockfile.owner" 2>/dev/null || true
+      return 0
+    else
+      exec 9>&- 2>/dev/null || true
+      return 1
+    fi
+  else
+    # macOS: use perl Fcntl as flock helper
+    # The perl process holds the lock; killing it releases the lock.
+    # We use a ready-pipe so we know when the lock is actually acquired.
+    local _ready_pipe
+    _ready_pipe=$(mktemp /tmp/skynet-flock-pipe-XXXXXX)
+    rm -f "$_ready_pipe"
+    mkfifo "$_ready_pipe" 2>/dev/null || { rm -f "$_ready_pipe"; return 1; }
+
+    perl -e '
+      use Fcntl qw(:flock);
+      my ($lockfile, $timeout, $ready_pipe) = @ARGV;
+      open(my $fh, ">", $lockfile) or die "Cannot open $lockfile: $!";
+      my $deadline = time() + $timeout;
+      my $got_lock = 0;
+      while (time() < $deadline) {
+        if (flock($fh, LOCK_EX | LOCK_NB)) {
+          $got_lock = 1;
+          last;
+        }
+        select(undef, undef, undef, 0.1);  # sleep 100ms
+      }
+      if (!$got_lock) {
+        open(my $rp, ">", $ready_pipe);
+        print $rp "TIMEOUT\n";
+        close($rp);
+        exit 1;
+      }
+      # Signal that lock is acquired
+      open(my $rp, ">", $ready_pipe);
+      print $rp "LOCKED\n";
+      close($rp);
+      # Hold lock until killed (SIGTERM/SIGKILL releases the file lock)
+      $SIG{TERM} = sub { exit 0; };
+      $SIG{INT}  = sub { exit 0; };
+      sleep 86400 while 1;  # Hold indefinitely until killed
+    ' "$lockfile" "$timeout" "$_ready_pipe" &
+    _FLOCK_PID=$!
+
+    # Wait for ready signal
+    local _result
+    _result=$(cat "$_ready_pipe" 2>/dev/null || echo "ERROR")
+    rm -f "$_ready_pipe"
+
+    if [ "$_result" = "LOCKED" ]; then
+      echo $$ > "$lockfile.owner" 2>/dev/null || true
+      return 0
+    else
+      # Timeout or error -- clean up
+      kill "$_FLOCK_PID" 2>/dev/null || true
+      wait "$_FLOCK_PID" 2>/dev/null || true
+      _FLOCK_PID=""
+      return 1
+    fi
+  fi
+}
+
+_release_file_lock() {
+  if [ -n "$_FLOCK_FD" ]; then
+    # Linux: close the file descriptor
+    exec 9>&- 2>/dev/null || true
+    _FLOCK_FD=""
+  fi
+  if [ -n "$_FLOCK_PID" ]; then
+    # macOS: kill the perl helper
+    kill "$_FLOCK_PID" 2>/dev/null || true
+    wait "$_FLOCK_PID" 2>/dev/null || true
+    _FLOCK_PID=""
+  fi
+  rm -f "${_FLOCK_FILE}.owner" 2>/dev/null || true
+  _FLOCK_FILE=""
+}

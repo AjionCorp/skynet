@@ -500,6 +500,82 @@ assert_eq "$B_STATUS" "fixed" "terminal: fixed is stable"
 assert_eq "$C_STATUS" "blocked" "terminal: blocked is stable"
 assert_eq "$D_STATUS" "superseded" "terminal: superseded is stable"
 
+# ============================================================
+# TEST 7: flock acquire and release
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== Test 7: flock acquire and release ==="
+
+# Test flock acquire and release
+_acquire_file_lock "$TMPDIR_ROOT/test.flock" 5
+assert_eq "$?" "0" "flock: acquire succeeds"
+_release_file_lock
+assert_eq "$?" "0" "flock: release succeeds"
+
+# ============================================================
+# TEST 8: flock auto-release on SIGKILL
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== Test 8: flock auto-release on SIGKILL ==="
+
+# Test auto-release on SIGKILL
+# On macOS, the lock is held by a perl helper subprocess. Killing only the
+# subshell orphans the perl process (still holding the lock). To simulate
+# a real process-group death (what happens when a worker crashes), we kill
+# the entire process group.
+bash -c '
+  source "'"$REPO_ROOT"'/scripts/_compat.sh"
+  _acquire_file_lock "'"$TMPDIR_ROOT"'/kill-test.flock" 5
+  echo $$ > "'"$TMPDIR_ROOT"'/kill-test-pid.txt"
+  sleep 60
+' &
+_child_pid=$!
+sleep 1  # Let child acquire lock
+
+# Kill the entire process group (catches perl helper on macOS)
+# Use pkill -P to kill children first, then the parent
+pkill -9 -P "$_child_pid" 2>/dev/null || true
+kill -9 "$_child_pid" 2>/dev/null || true
+wait "$_child_pid" 2>/dev/null || true
+sleep 0.5
+
+# Now we should be able to acquire the same lock
+_acquire_file_lock "$TMPDIR_ROOT/kill-test.flock" 5
+if [ $? -eq 0 ]; then
+  pass "flock: auto-release on SIGKILL"
+  _release_file_lock
+else
+  fail "flock: should auto-release after SIGKILL"
+fi
+
+# ============================================================
+# TEST 9: flock contention (second process waits then acquires)
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== Test 9: flock contention ==="
+
+# Test lock contention -- second process waits, then acquires after first releases
+_acquire_file_lock "$TMPDIR_ROOT/contention.flock" 30
+(
+  source "$REPO_ROOT/scripts/_compat.sh"
+  _acquire_file_lock "$TMPDIR_ROOT/contention.flock" 10
+  echo "ACQUIRED" > "$TMPDIR_ROOT/contention-result.txt"
+  _release_file_lock
+) &
+_contention_pid=$!
+sleep 1
+_release_file_lock  # Release from parent
+wait "$_contention_pid" 2>/dev/null || true
+
+if [ -f "$TMPDIR_ROOT/contention-result.txt" ] && grep -q "ACQUIRED" "$TMPDIR_ROOT/contention-result.txt"; then
+  pass "flock: contention — second process acquires after first releases"
+else
+  fail "flock: contention — second process should have acquired lock"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

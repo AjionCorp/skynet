@@ -238,6 +238,22 @@ do_merge_to_main() {
     return 6
   fi
 
+  # Canary detection: if scripts/*.sh files changed, write canary-pending
+  if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ]; then
+    local _canary_changed
+    _canary_changed=$(git diff --name-only HEAD~1..HEAD -- 'scripts/*.sh' 2>/dev/null || echo "")
+    if [ -n "$_canary_changed" ]; then
+      local _canary_file="${DEV_DIR}/canary-pending"
+      {
+        echo "commit=$(git rev-parse HEAD)"
+        echo "timestamp=$(date +%s)"
+        echo "files=$_canary_changed"
+      } > "$_canary_file"
+      log "CANARY: Script changes detected — canary mode activated"
+      log "CANARY: Changed files: $_canary_changed"
+    fi
+  fi
+
   release_merge_lock
   return 0
 }
