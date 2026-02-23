@@ -10,6 +10,7 @@ vi.mock("child_process", () => ({
 vi.mock("fs", () => ({
   openSync: vi.fn(() => 3),
   closeSync: vi.fn(),
+  existsSync: vi.fn(() => true),
   constants: { O_WRONLY: 1, O_CREAT: 64, O_APPEND: 1024 },
 }));
 

@@ -72,6 +72,9 @@ log() { :; }
 # Source _db.sh directly (it only needs $SKYNET_DEV_DIR)
 source "$REPO_ROOT/scripts/_db.sh"
 
+# _db_sep uses \x1f (Unit Separator), not '|'. Use this for cut/IFS on db output.
+SEP=$'\x1f'
+
 # ── Test: db_init ──────────────────────────────────────────────────
 
 echo ""
@@ -180,7 +183,7 @@ assert_not_empty "$CLAIM_RESULT" "db_claim_next_task: returns a task"
 
 # Should claim the highest-priority (lowest number) unblocked task
 # ID2 "Fix critical bug" has priority 0 and no blockers
-CLAIM_TITLE=$(echo "$CLAIM_RESULT" | cut -d'|' -f2)
+CLAIM_TITLE=$(echo "$CLAIM_RESULT" | cut -d"$SEP" -f2)
 assert_eq "$CLAIM_TITLE" "Fix critical bug" "db_claim_next_task: claims highest-priority unblocked task"
 
 # Verify status changed
@@ -194,13 +197,13 @@ assert_eq "$WID" "1" "db_claim_next_task: worker_id set"
 # Claim another — should skip blocked task
 # First, let's see what's next: ID1 "Build login page" is next in priority (pri=1)
 CLAIM2=$(db_claim_next_task 2)
-CLAIM2_TITLE=$(echo "$CLAIM2" | cut -d'|' -f2)
+CLAIM2_TITLE=$(echo "$CLAIM2" | cut -d"$SEP" -f2)
 assert_eq "$CLAIM2_TITLE" "Build login page" "db_claim_next_task: second claim gets next task"
 
 # Blocked task (ID5) should NOT be claimed since its deps are not completed
 # Claim next available
 CLAIM3=$(db_claim_next_task 3)
-CLAIM3_TITLE=$(echo "$CLAIM3" | cut -d'|' -f2)
+CLAIM3_TITLE=$(echo "$CLAIM3" | cut -d"$SEP" -f2)
 # Should be one of the remaining unblocked tasks, not "Blocked task"
 if [ "$CLAIM3_TITLE" != "Blocked task" ]; then
   pass "db_claim_next_task: skips blocked task"
@@ -233,7 +236,7 @@ log "=== db_complete_task ==="
 
 # Claim and complete
 CLAIMED=$(db_claim_next_task 1)
-CLAIMED_ID=$(echo "$CLAIMED" | cut -d'|' -f1)
+CLAIMED_ID=$(echo "$CLAIMED" | cut -d"$SEP" -f1)
 
 db_complete_task "$CLAIMED_ID" "dev/fix-critical-bug" "5m 30s" 330 "All gates passed"
 
@@ -264,7 +267,7 @@ db_complete_task "$ID1" "dev/build-login" "10m" 600
 
 # Now both blockers are completed — ID5 should be claimable
 CLAIM_BLOCKED=$(db_claim_next_task 1)
-CLAIM_BLOCKED_TITLE=$(echo "$CLAIM_BLOCKED" | cut -d'|' -f2)
+CLAIM_BLOCKED_TITLE=$(echo "$CLAIM_BLOCKED" | cut -d"$SEP" -f2)
 # It might claim another unblocked task first by priority; check that blocked task is at least now unblocked
 BLOCKED_STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$ID5;")
 if [ "$BLOCKED_STATUS" = "claimed" ] || [ "$BLOCKED_STATUS" = "pending" ]; then
@@ -463,7 +466,7 @@ COUNT=$(db_count_active_blockers)
 assert_eq "$COUNT" "2" "db_count_active_blockers: returns 2"
 
 # Resolve one
-BID=$(echo "$ACTIVE" | head -1 | cut -d'|' -f1)
+BID=$(echo "$ACTIVE" | head -1 | cut -d"$SEP" -f1)
 db_resolve_blocker "$BID"
 COUNT2=$(db_count_active_blockers)
 assert_eq "$COUNT2" "1" "db_resolve_blocker: count decreased to 1"
@@ -575,11 +578,11 @@ RACE_ID=$(db_add_task "Race condition test" "TEST" "" "top")
 
 # Simulate: claim from worker 1 succeeds, then claim from worker 2 should get a different task (or empty)
 R1=$(db_claim_next_task 1)
-R1_TITLE=$(echo "$R1" | cut -d'|' -f2)
+R1_TITLE=$(echo "$R1" | cut -d"$SEP" -f2)
 
 # Worker 2 tries to claim — should NOT get the same task
 R2=$(db_claim_next_task 2)
-R2_TITLE=$(echo "$R2" | cut -d'|' -f2)
+R2_TITLE=$(echo "$R2" | cut -d"$SEP" -f2)
 
 if [ -n "$R1_TITLE" ] && [ "$R1_TITLE" != "$R2_TITLE" ]; then
   pass "concurrent claim: two workers get different tasks"
