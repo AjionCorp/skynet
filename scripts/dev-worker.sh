@@ -272,10 +272,15 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
   else
     log "Stale lock detected (${age_minutes}m old). Moving to failed."
     task_title=$(grep "^##" "$WORKER_TASK_FILE" | head -1 | sed 's/^## //')
-    # SQLite: fail the task if we can find its ID
+    # SQLite: fail the task if we can find its ID (only if worker-claimed, not fixer-owned)
     _stale_id=$(db_get_task_id_by_title "$task_title" 2>/dev/null || true)
     if [ -n "$_stale_id" ]; then
-      db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
+      _stale_status=$(_db "SELECT status FROM tasks WHERE id=$(_sql_int "$_stale_id");" 2>/dev/null || true)
+      if [ "$_stale_status" = "claimed" ]; then
+        db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
+      elif [[ "$_stale_status" =~ ^fixing- ]]; then
+        log "Stale lock on $task_title but task is $_stale_status (fixer handling) — skipping"
+      fi
     fi
     db_export_state_files
   fi
@@ -482,6 +487,8 @@ EOF
     continue
   fi
 
+  # Update progress epoch after agent finishes — long runs may have staled it
+  db_update_progress "$WORKER_ID" 2>/dev/null || true
   log "Claude Code completed. Running checks before merge..."
 
   if [ ! -d "$WORKTREE_DIR" ]; then
@@ -536,6 +543,7 @@ EOF
       break
     fi
     log "Gate $_gate_idx passed."
+    db_update_progress "$WORKER_ID" 2>/dev/null || true
     _gate_idx=$((_gate_idx + 1))
   done
 
@@ -695,6 +703,7 @@ EOF
     emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
+    db_export_state_files
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1

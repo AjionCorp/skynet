@@ -38,7 +38,7 @@ acquire_merge_lock() {
           sleep 0.5  # Narrow PID reuse race window
           if ! kill -0 "$_ml_pid" 2>/dev/null; then
             mv "$MERGE_LOCK" "$MERGE_LOCK.stale.$$" 2>/dev/null || true
-            rm -rf "$MERGE_LOCK.stale.$$" &
+            rm -rf "$MERGE_LOCK.stale.$$" 2>/dev/null || true
             if mkdir "$MERGE_LOCK" 2>/dev/null; then
               echo $$ > "$MERGE_LOCK/pid"
               return 0
