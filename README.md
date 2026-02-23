@@ -65,6 +65,7 @@ The pipeline reads your `.dev/mission.md`, generates tasks, and starts implement
 | Git | Any recent | `git --version` |
 | pnpm | 9+ | `pnpm -v` |
 | Claude Code CLI | Authenticated | `claude --version` |
+| Gemini CLI | Optional | `gemini --version` |
 
 ```bash
 # Install Claude Code (default AI agent)
@@ -73,6 +74,9 @@ claude  # follow login prompts
 
 # Optional: install Codex as fallback
 npm install -g @openai/codex
+
+# Optional: install Gemini as fallback
+npm install -g @google/gemini-cli
 ```
 
 ### Initialize
@@ -302,9 +306,10 @@ Two config files live in `.dev/`:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SKYNET_AGENT_PLUGIN` | `auto` | `auto`, `claude`, `codex`, or path to custom plugin |
+| `SKYNET_AGENT_PLUGIN` | `auto` | `auto`, `claude`, `codex`, `gemini`, or path to custom plugin |
 | `SKYNET_CLAUDE_BIN` | `claude` | Claude Code binary |
 | `SKYNET_CODEX_BIN` | `codex` | Codex binary |
+| `SKYNET_GEMINI_BIN` | `gemini` | Gemini binary |
 
 **Notifications:**
 
@@ -349,9 +354,10 @@ SKYNET_WORKER_CONTEXT="
 
 | Plugin | Value | Description |
 |--------|-------|-------------|
-| `auto` | `SKYNET_AGENT_PLUGIN=auto` | Claude first, Codex fallback |
+| `auto` | `SKYNET_AGENT_PLUGIN=auto` | Claude first, Codex fallback, then Gemini |
 | `claude` | `SKYNET_AGENT_PLUGIN=claude` | Claude Code only |
 | `codex` | `SKYNET_AGENT_PLUGIN=codex` | OpenAI Codex only |
+| `gemini` | `SKYNET_AGENT_PLUGIN=gemini` | Google Gemini only |
 | `echo` | `SKYNET_AGENT_PLUGIN=echo` | Dry-run (no LLM calls, placeholder commits) |
 
 ### Custom Plugin

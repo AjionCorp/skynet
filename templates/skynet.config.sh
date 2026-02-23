@@ -92,7 +92,7 @@ export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"  # CLI flags
 # Which AI agent to use. Built-in: "auto", "claude", "codex"
 # Or set to an absolute path for a custom agent plugin script.
 # Custom plugins must define: agent_run "prompt" "logfile" and agent_check
-export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | /path/to/plugin.sh (default: auto)
+export SKYNET_AGENT_PLUGIN="auto"  # Agent selection: auto | claude | codex | gemini | /path/to/plugin.sh (default: auto)
 
 # ---- Worker Prompt Injection ----
 # export SKYNET_WORKER_CONTEXT=""       # Path to file with project-specific context injected into agent prompts
@@ -105,6 +105,13 @@ export SKYNET_CODEX_FLAGS="--full-auto"
 export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
 export SKYNET_CODEX_AUTH_FILE="$HOME/.codex/auth.json"  # Path to Codex CLI auth file
 export SKYNET_CODEX_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-codex-auth-failed"  # Sentinel for Codex auth failure
+
+# ---- Gemini CLI (Google fallback) ----
+export SKYNET_GEMINI_BIN="gemini"
+export SKYNET_GEMINI_FLAGS="-p"                  # -p = accept prompt from stdin
+export SKYNET_GEMINI_MODEL=""                     # Optional: pin a model (default: gemini's default)
+export SKYNET_GEMINI_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-gemini-auth-failed"
+export SKYNET_GEMINI_NOTIFY_INTERVAL=3600         # Seconds between Gemini auth-failure notifications
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup; add pnpm/node paths if not in /opt/homebrew/bin

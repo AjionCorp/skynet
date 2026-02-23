@@ -243,13 +243,83 @@ PY
   return 1
 }
 
-# Accept Claude or Codex auth. Returns 0 if either is available.
+GEMINI_NOTIFY_INTERVAL="${SKYNET_GEMINI_NOTIFY_INTERVAL:-3600}"  # seconds between repeat Telegram alerts
+
+check_gemini_auth() {
+  # Check if gemini binary is installed
+  if ! command -v "${SKYNET_GEMINI_BIN:-gemini}" >/dev/null 2>&1; then
+    # Not installed — not an error, just unavailable
+    return 1
+  fi
+
+  # Check auth fail flag (set on previous failure)
+  local _gemini_auth_ok=false
+
+  if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
+    _gemini_auth_ok=true
+  else
+    # Check Google ADC (Application Default Credentials)
+    local _adc_path="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}"
+    if [ -f "$_adc_path" ] && [ -s "$_adc_path" ]; then
+      # Validate ADC file is a regular file (not a symlink to a sensitive file)
+      if [ -L "$_adc_path" ]; then log "ADC file is a symlink, refusing: $_adc_path"; return 1; fi
+      _gemini_auth_ok=true
+    fi
+  fi
+
+  if $_gemini_auth_ok; then
+    # Auth looks good — clear any previous failure state
+    if [ -f "${SKYNET_GEMINI_AUTH_FAIL_FLAG:-}" ]; then
+      rm -f "$SKYNET_GEMINI_AUTH_FAIL_FLAG"
+      log "Gemini CLI auth restored."
+      tg "✅ *$SKYNET_PROJECT_NAME_UPPER GEMINI RESTORED* — Gemini CLI authenticated again."
+      if [ -f "$BLOCKERS" ]; then
+        grep -v "Gemini CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp" || true
+        mv "$BLOCKERS.tmp" "$BLOCKERS"
+      fi
+    fi
+    return 0
+  fi
+
+  # Auth missing — throttle notifications
+  local now
+  now=$(date +%s)
+  local should_notify=true
+
+  if [ -f "${SKYNET_GEMINI_AUTH_FAIL_FLAG:-}" ]; then
+    local last_notify
+    last_notify=$(cat "$SKYNET_GEMINI_AUTH_FAIL_FLAG")
+    local elapsed=$((now - last_notify))
+    if [ "$elapsed" -lt "$GEMINI_NOTIFY_INTERVAL" ]; then
+      should_notify=false
+    fi
+  fi
+
+  if $should_notify; then
+    echo "$now" > "$SKYNET_GEMINI_AUTH_FAIL_FLAG"
+    tg "🟡 *$SKYNET_PROJECT_NAME_UPPER GEMINI AUTH MISSING* — Set GEMINI_API_KEY or run \`gcloud auth application-default login\`. Fallback agent unavailable."
+    log "Gemini CLI not authenticated. Telegram alert sent."
+    if ! grep -q "Gemini CLI authentication" "$BLOCKERS" 2>/dev/null; then
+      echo "- **$(date '+%Y-%m-%d %H:%M')**: Gemini CLI authentication missing. Set GEMINI_API_KEY or configure Google ADC. Fallback agent unavailable." >> "$BLOCKERS"
+    fi
+  else
+    log "Gemini CLI not authenticated. (alert throttled, next in $((GEMINI_NOTIFY_INTERVAL - elapsed))s)"
+  fi
+
+  return 1
+}
+
+# Accept Claude, Codex, or Gemini auth. Returns 0 if any is available.
 check_any_auth() {
   if check_claude_auth; then
     return 0
   fi
   if check_codex_auth; then
     log "Claude auth down — using Codex fallback."
+    return 0
+  fi
+  if check_gemini_auth; then
+    log "Claude + Codex auth down — using Gemini fallback."
     return 0
   fi
   return 1

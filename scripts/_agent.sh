@@ -7,7 +7,7 @@
 #   agent_run "prompt" "log" — runs the agent, returns exit code
 #
 # Set SKYNET_AGENT_PLUGIN in skynet.config.sh to:
-#   "auto"                — try Claude first, fall back to Codex (default)
+#   "auto"                — try Claude first, fall back to Codex, then Gemini (default)
 #   "claude"              — use Claude Code only
 #   "codex"               — use Codex CLI only
 #   "echo"                — dry-run (no LLM, creates placeholder commit)
@@ -65,7 +65,7 @@ fi
 _resolve_plugin_path() {
   local name="$1"
   case "$name" in
-    claude|codex|echo) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
+    claude|codex|gemini|echo) echo "$SKYNET_SCRIPTS_DIR/agents/${name}.sh" ;;
     auto)         echo "auto" ;;
     *)            # file path — resolve relative paths against $PROJECT_DIR
                   if [ -f "$PROJECT_DIR/$name" ]; then
@@ -121,9 +121,10 @@ _load_plugin_as() {
 _plugin_resolved="$(_resolve_plugin_path "$SKYNET_AGENT_PLUGIN")"
 
 if [ "$_plugin_resolved" = "auto" ]; then
-  # Auto mode: try Claude first, fall back to Codex
+  # Auto mode: try Claude first, fall back to Codex, then Gemini
   _load_plugin_as "_claude" "$SKYNET_SCRIPTS_DIR/agents/claude.sh"
   _load_plugin_as "_codex" "$SKYNET_SCRIPTS_DIR/agents/codex.sh"
+  _load_plugin_as "_gemini" "$SKYNET_SCRIPTS_DIR/agents/gemini.sh"
 
   # Public API: run_agent "prompt" "log_file"
   # Returns the exit code of whichever agent ran.
@@ -145,6 +146,13 @@ if [ "$_plugin_resolved" = "auto" ]; then
         _codex_agent_run "$prompt" "$log_file"
         return $?
       fi
+      # Codex unavailable — try Gemini
+      if _gemini_agent_check; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code), Codex unavailable — falling back to Gemini CLI" >> "$log_file"
+        tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed, Codex down — switching to Gemini" 2>/dev/null || true
+        _gemini_agent_run "$prompt" "$log_file"
+        return $?
+      fi
       return $exit_code
     fi
 
@@ -156,7 +164,15 @@ if [ "$_plugin_resolved" = "auto" ]; then
       return $?
     fi
 
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: No AI agent available (Claude auth failed, Codex not installed)" >> "$log_file"
+    # Codex unavailable — try Gemini
+    if _gemini_agent_check; then
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude + Codex unavailable — falling back to Gemini CLI" >> "$log_file"
+      tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude + Codex down — switching to Gemini" 2>/dev/null || true
+      _gemini_agent_run "$prompt" "$log_file"
+      return $?
+    fi
+
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: No AI agent available (Claude, Codex, Gemini all unavailable)" >> "$log_file"
     return 1
   }
 
