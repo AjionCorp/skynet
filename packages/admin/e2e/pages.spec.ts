@@ -67,7 +67,7 @@ test.describe("Settings page", () => {
   test("loads and shows config key-value table with save button", async ({ page }) => {
     await page.goto("/admin/settings");
     // Should show either "Pipeline Configuration" heading or "No configuration found" empty state
-    const configHeading = page.getByText("Pipeline Configuration");
+    const configHeading = page.getByRole("heading", { name: "Pipeline Configuration" });
     const emptyState = page.getByText("No configuration found");
     await expect(configHeading.or(emptyState)).toBeVisible({ timeout: 15_000 });
     // Save Changes button is present when config entries exist
@@ -79,7 +79,7 @@ test.describe("Settings page", () => {
 
   test("shows refresh button", async ({ page }) => {
     await page.goto("/admin/settings");
-    const configHeading = page.getByText("Pipeline Configuration");
+    const configHeading = page.getByRole("heading", { name: "Pipeline Configuration" });
     const emptyState = page.getByText("No configuration found");
     await expect(configHeading.or(emptyState)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole("button", { name: "Refresh" })).toBeVisible();
