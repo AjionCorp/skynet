@@ -1,8 +1,8 @@
 import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { createInterface } from "readline";
-import { loadConfig } from "../utils/loadConfig";
-import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape } from "../utils/sqliteQuery.js";
 
 interface ResetTaskOptions {
   dir?: string;

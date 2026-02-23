@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from "fs";
 import { resolve, join, dirname } from "path";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 import { platform } from "os";

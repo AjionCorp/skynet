@@ -1,10 +1,10 @@
 import { existsSync, readdirSync, unlinkSync, writeFileSync, rmSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
-import { isProcessRunning } from "../utils/isProcessRunning";
-import { readFile } from "../utils/readFile";
-import { isSqliteReady, sqliteScalar, sqliteRows } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isProcessRunning } from "../utils/isProcessRunning.js";
+import { readFile } from "../utils/readFile.js";
+import { isSqliteReady, sqliteScalar, sqliteRows } from "../utils/sqliteQuery.js";
 
 interface DoctorOptions {
   dir?: string;

@@ -3,7 +3,7 @@ import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
 import { createInterface } from "readline";
-import { shellEscape } from "../utils/shellEscape";
+import { shellEscape } from "../utils/shellEscape.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

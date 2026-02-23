@@ -1,8 +1,8 @@
 import { resolve, join } from "path";
 import { spawnSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
-import { readFile } from "../utils/readFile";
-import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { readFile } from "../utils/readFile.js";
+import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
 
 interface CleanupOptions {
   dir?: string;

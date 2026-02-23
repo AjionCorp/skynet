@@ -1,6 +1,6 @@
 import { resolve } from "path";
-import { loadConfig } from "../utils/loadConfig";
-import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isSqliteReady, sqliteQuery, sqlEscape } from "../utils/sqliteQuery.js";
 
 interface AddTaskOptions {
   dir?: string;

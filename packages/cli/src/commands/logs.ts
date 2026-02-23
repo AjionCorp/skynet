@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, statSync, readdirSync, watch, openSync, readSync, closeSync } from "fs";
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface LogsOptions {
   dir?: string;

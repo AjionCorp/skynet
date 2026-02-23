@@ -2,8 +2,8 @@
 // and may show stale data if the pipeline is not running or hasn't exported
 // state files recently. SQLite migration will provide real-time accuracy.
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
-import { readFile } from "../utils/readFile";
+import { loadConfig } from "../utils/loadConfig.js";
+import { readFile } from "../utils/readFile.js";
 
 interface MetricsOptions {
   dir?: string;

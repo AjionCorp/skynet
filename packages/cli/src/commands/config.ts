@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } f
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
-import { shellEscape, validateShellValue } from "../utils/shellEscape";
+import { shellEscape, validateShellValue } from "../utils/shellEscape.js";
 
 interface ConfigOptions {
   dir?: string;

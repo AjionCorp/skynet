@@ -1,8 +1,8 @@
 import { existsSync, readdirSync } from "fs";
 import { resolve, join } from "path";
 import { spawnSync, spawn } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
-import { isProcessRunning } from "../utils/isProcessRunning";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isProcessRunning } from "../utils/isProcessRunning.js";
 
 interface StartOptions {
   dir?: string;

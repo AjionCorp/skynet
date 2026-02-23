@@ -1,8 +1,8 @@
 import { resolve } from "path";
 import { spawnSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
-import { isSqliteReady, sqliteRows, sqliteQuery } from "../utils/sqliteQuery";
-import { sqlEscape } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isSqliteReady, sqliteRows, sqliteQuery } from "../utils/sqliteQuery.js";
+import { sqlEscape } from "../utils/sqliteQuery.js";
 
 interface RecoverOptions {
   dir?: string;

@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, readdirSync, rmSync } from "fs";
 import { resolve, join } from "path";
 import { spawnSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface StopOptions {
   dir?: string;

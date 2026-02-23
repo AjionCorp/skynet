@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
 import { resolve } from "path";
 import { createInterface } from "readline";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface ImportOptions {
   dir?: string;

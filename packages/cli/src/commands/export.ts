@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "fs";
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
-import { sqliteQuery, isSqliteReady } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { sqliteQuery, isSqliteReady } from "../utils/sqliteQuery.js";
 
 interface ExportOptions {
   dir?: string;

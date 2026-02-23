@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, copyFileSync, statSync } from "fs";
 import { resolve, join, basename } from "path";
 import { spawnSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
-import { isProcessRunning } from "../utils/isProcessRunning";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isProcessRunning } from "../utils/isProcessRunning.js";
 
 interface RestoreOptions {
   dir?: string;

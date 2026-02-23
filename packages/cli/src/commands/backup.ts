@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { spawnSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface BackupOptions {
   dir?: string;

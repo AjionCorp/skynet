@@ -1,9 +1,9 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
-import { isProcessRunning } from "../utils/isProcessRunning";
-import { readFile } from "../utils/readFile";
-import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isProcessRunning } from "../utils/isProcessRunning.js";
+import { readFile } from "../utils/readFile.js";
+import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
 
 interface StatusOptions {
   dir?: string;

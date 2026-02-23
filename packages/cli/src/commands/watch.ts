@@ -1,9 +1,9 @@
 // TODO: Migrate to SQLite data source (currently reads from .md files which may be stale)
 import { existsSync } from "fs";
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
-import { isProcessRunning } from "../utils/isProcessRunning";
-import { readFile } from "../utils/readFile";
+import { loadConfig } from "../utils/loadConfig.js";
+import { isProcessRunning } from "../utils/isProcessRunning.js";
+import { readFile } from "../utils/readFile.js";
 
 interface WatchOptions {
   dir?: string;

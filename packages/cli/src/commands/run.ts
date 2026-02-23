@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { resolve, join } from "path";
 import { spawn } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface RunOptions {
   dir?: string;

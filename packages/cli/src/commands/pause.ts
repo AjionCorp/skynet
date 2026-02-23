@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, renameSync, existsSync } from "fs";
 import { resolve, join } from "path";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface PauseOptions {
   dir?: string;

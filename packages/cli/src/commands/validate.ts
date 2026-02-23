@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, statfsSync } from "fs";
 import { resolve, join } from "path";
 import { execSync } from "child_process";
-import { loadConfig } from "../utils/loadConfig";
+import { loadConfig } from "../utils/loadConfig.js";
 
 interface ValidateOptions {
   dir?: string;
