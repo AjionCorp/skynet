@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, unlinkSync, statSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 
 interface BackupOptions {
@@ -30,10 +30,14 @@ export async function backupCommand(options: BackupOptions) {
   const backupFile = join(backupDir, `skynet.db.${timestamp}`);
 
   try {
-    execSync(`sqlite3 "${dbPath}" ".backup '${backupFile}'"`, {
+    const result = spawnSync("sqlite3", [dbPath, `.backup '${backupFile}'`], {
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
     });
+    if (result.status !== 0) {
+      const stderr = result.stderr ? result.stderr.toString().trim() : "";
+      throw new Error(`sqlite3 backup failed (exit ${result.status}): ${stderr}`);
+    }
 
     const size = statSync(backupFile).size;
     const sizeKb = Math.round(size / 1024);

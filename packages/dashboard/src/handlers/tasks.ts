@@ -2,56 +2,32 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "f
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
-import { extractTitle, parseBlockedBy } from "../lib/backlog-parser";
+import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
 
 /**
  * Parse backlog.md into items with status/tag/dependency info.
+ * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
  */
 function parseBacklog(raw: string) {
-  const lines = raw.split("\n");
-  const items: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[]; blocked: boolean }[] = [];
-  let pendingCount = 0;
-  let claimedCount = 0;
-  let doneCount = 0;
+  const parsed = parseBacklogItems(raw);
+  const counts = backlogCounts(parsed);
 
-  // First pass: collect all items
-  const rawItems: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[] }[] = [];
-  for (const line of lines) {
-    let status: "pending" | "claimed" | "done" | null = null;
-    let text = "";
-    if (line.startsWith("- [ ] ")) {
-      status = "pending";
-      text = line.replace("- [ ] ", "");
-      pendingCount++;
-    } else if (line.startsWith("- [>] ")) {
-      status = "claimed";
-      text = line.replace("- [>] ", "");
-      claimedCount++;
-    } else if (line.startsWith("- [x] ")) {
-      status = "done";
-      text = line.replace("- [x] ", "");
-      doneCount++;
-    }
-    if (status === null) continue;
-
-    const tagMatch = text.match(/^\[([^\]]+)\]/);
-    const blockedBy = parseBlockedBy(text);
-    rawItems.push({ text, tag: tagMatch?.[1] ?? "", status, blockedBy });
-  }
-
-  // Second pass: resolve blocked status (blocked if any dependency is not done)
+  // Resolve blocked status (blocked if any dependency is not done)
   const titleToStatus = new Map<string, string>();
-  for (const item of rawItems) {
-    titleToStatus.set(extractTitle(item.text), item.status);
+  for (const item of parsed) {
+    titleToStatus.set(item.title, item.status);
   }
 
-  for (const item of rawItems) {
-    const blocked = item.blockedBy.length > 0 &&
-      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done");
-    items.push({ ...item, blocked });
-  }
+  const items = parsed.map((item) => ({
+    text: item.raw,
+    tag: item.tag ?? "",
+    status: item.status,
+    blockedBy: item.blockedBy,
+    blocked: item.blockedBy.length > 0 &&
+      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
+  }));
 
-  return { items, pendingCount, claimedCount, doneCount };
+  return { items, ...counts };
 }
 
 /**
@@ -184,7 +160,6 @@ export function createTasksHandlers(config: SkynetConfig) {
           { status: 423 }
         );
       }
-
       try {
         const desc = description?.trim()
           ? ` \u2014 ${description.trim()}`

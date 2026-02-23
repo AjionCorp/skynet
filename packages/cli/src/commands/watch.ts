@@ -1,3 +1,4 @@
+// TODO: Migrate to SQLite data source (currently reads from .md files which may be stale)
 import { existsSync } from "fs";
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";

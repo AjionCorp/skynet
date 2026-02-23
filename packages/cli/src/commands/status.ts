@@ -22,6 +22,8 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMins}m`;
 }
 
+// NOTE: duplicated in packages/dashboard/src/handlers/pipeline-status.ts
+// Kept separate to avoid cross-package dependency for a 10-line function
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;
@@ -522,13 +524,13 @@ export async function statusCommand(options: StatusOptions) {
       lastActivity: lastActivity ? lastActivity.toISOString() : null,
     };
     console.log(JSON.stringify(data, null, 2));
-    process.exit(0);
+    return;
   }
 
   // --- Quiet output mode ---
   if (options.quiet) {
     console.log(healthScore);
-    process.exit(0);
+    return;
   }
 
   print("");

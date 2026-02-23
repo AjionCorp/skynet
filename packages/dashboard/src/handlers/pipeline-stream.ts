@@ -93,7 +93,14 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
         // Poll every 10s to catch lock file changes (worker start/stop)
         // Lock files live in /tmp/ which fs.watch doesn't cover
         heartbeatInterval = setInterval(() => {
-          if (!closed) pushStatus();
+          if (closed) {
+            if (heartbeatInterval) clearInterval(heartbeatInterval);
+            return;
+          }
+          pushStatus().catch(() => {
+            closed = true;
+            cleanup();
+          });
         }, 10_000);
       },
       cancel() {

@@ -95,7 +95,7 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
   const now = sqlEscape(new Date().toISOString());
   sqliteQuery(devDir,
     `UPDATE tasks SET status='pending', attempts=0, error=NULL, fixer_id=NULL, updated_at='${now}' ` +
-    `WHERE id=${taskId};`
+    `WHERE id=${Number(taskId)};`
   );
   console.log(`\n  Reset task: attempts → 0, status → pending`);
 

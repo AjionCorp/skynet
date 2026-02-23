@@ -53,9 +53,13 @@ export SKYNET_MAX_LOG_SIZE_KB=1024        # Max log file size in KB before rotat
 export SKYNET_MAX_EVENTS_LOG_KB=1024     # Max events.log size in KB before rotation (default: 1024 = 1MB)
 export SKYNET_WATCHDOG_INTERVAL=180      # Seconds between watchdog monitoring cycles (default: 180)
 export SKYNET_ONE_SHOT=""                # Set to 1 for single-task mode — worker exits after one task (default: empty)
+export SKYNET_POST_MERGE_SMOKE=false        # Run post-merge smoke test (default: false)
+export SKYNET_SMOKE_TIMEOUT=10              # Smoke test timeout in seconds (default: 10)
+export SKYNET_POST_MERGE_TYPECHECK=true     # Validate main builds after merge; auto-reverts on failure (default: true)
+export SKYNET_GIT_PUSH_TIMEOUT=30           # Timeout in seconds for each git push attempt (default: 30)
 
 # ---- Auth (Claude Code OAuth) ----
-export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"  # Cached auth token path
+export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"  # NOTE: world-readable on multi-user systems; use chmod 600 in production
 export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"     # Sentinel file set when auth fails
 export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                     # macOS Keychain service name
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)
@@ -99,6 +103,8 @@ export SKYNET_CODEX_BIN="codex"
 export SKYNET_CODEX_SUBCOMMAND="exec"  # Use non-interactive Codex CLI subcommand for workers
 export SKYNET_CODEX_FLAGS="--full-auto"
 export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
+export SKYNET_CODEX_AUTH_FILE="$HOME/.codex/auth.json"  # Path to Codex CLI auth file
+export SKYNET_CODEX_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-codex-auth-failed"  # Sentinel for Codex auth failure
 
 # ---- Environment ----
 export SKYNET_EXTRA_PATH="/opt/homebrew/bin:/usr/local/bin"  # Additional PATH entries prepended at startup; add pnpm/node paths if not in /opt/homebrew/bin
@@ -119,4 +125,4 @@ export SKYNET_ERROR_ENV_KEYS=""  # Env var names whose absence triggers server e
 
 # ---- Dashboard Auth ----
 # Set an API key to protect the admin dashboard. Leave empty to disable auth (local dev only).
-export SKYNET_DASHBOARD_API_KEY=""
+export SKYNET_DASHBOARD_API_KEY=""  # WARNING: Leave empty only for local dev; set a strong random key for any network-accessible deployment

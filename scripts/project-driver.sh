@@ -4,6 +4,7 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
+_require_db
 
 LOG="$SCRIPTS_DIR/project-driver.log"
 BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"

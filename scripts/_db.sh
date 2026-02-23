@@ -16,7 +16,7 @@ _DB_SEP=$'\x1f'
 # --- SQL injection prevention ---
 _sql_escape() { echo "$1" | sed "s/'/''/g"; }
 # Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
-_sql_int() { echo "${1%%[^0-9]*}"; }
+_sql_int() { local v="${1%%[^0-9]*}"; echo "${v:-0}"; }
 
 # --- Error-checked sqlite3 wrapper for mutations ---
 # Usage: _sql_exec "SQL statement"
@@ -159,6 +159,7 @@ SCHEMA
 # TASK CRUD
 # ============================================================
 
+# Used by tests; production uses db_claim_next_task() instead
 # Output: pipe-delimited rows: id|title|tag|description|blocked_by|priority
 db_get_pending_tasks() {
   sqlite3 -separator "$_DB_SEP" "$DB_PATH" \
@@ -756,8 +757,3 @@ db_export_state_files() {
   db_export_failed "$FAILED" 2>/dev/null || true
 }
 
-# Regenerate markdown from SQLite if DB exists. Returns 1 if no DB (caller does fallback).
-_db_sync_state_files() {
-  [ -f "$DB_PATH" ] || return 1
-  db_export_state_files
-}

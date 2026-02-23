@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
     }
 
+    // TODO: Store a session token or HMAC instead of the raw API key
     const response = NextResponse.json({ ok: true });
     response.cookies.set("skynet-api-key", apiKey, {
       httpOnly: true,

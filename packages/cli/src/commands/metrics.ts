@@ -1,3 +1,4 @@
+// TODO: Migrate to SQLite data source (currently reads from .md files which may be stale)
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
 import { readFile } from "../utils/readFile";
@@ -11,6 +12,7 @@ interface MetricsOptions {
  * Parse duration string ("Nm" or "Nh Mm") to minutes.
  * Returns NaN if unparseable.
  */
+// NOTE: duration parsing duplicated in pipeline-status.ts, status.ts, and db.ts
 function parseDurationMinutes(dur: string): number {
   const trimmed = dur.trim();
 

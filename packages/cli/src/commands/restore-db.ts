@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, copyFileSync, statSync } from "fs";
 import { resolve, join, basename } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
+import { isProcessRunning } from "../utils/isProcessRunning";
 
 interface RestoreOptions {
   dir?: string;
@@ -27,11 +28,16 @@ export async function restoreDbCommand(file: string, options: RestoreOptions) {
 
   // Validate the backup file is a valid SQLite database
   try {
-    const check = execSync(`sqlite3 "${restorePath}" "PRAGMA integrity_check;"`, {
+    const checkResult = spawnSync("sqlite3", [restorePath, "PRAGMA integrity_check;"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
-    }).trim();
+    });
+    if (checkResult.status !== 0) {
+      const stderr = (checkResult.stderr || "").trim();
+      throw new Error(`sqlite3 integrity check failed (exit ${checkResult.status}): ${stderr}`);
+    }
+    const check = (checkResult.stdout || "").trim();
     if (check !== "ok") {
       console.error(`Backup file failed integrity check: ${check}`);
       process.exit(1);
@@ -48,7 +54,8 @@ export async function restoreDbCommand(file: string, options: RestoreOptions) {
   let runningWorkers = 0;
   for (let i = 1; i <= maxWorkers; i++) {
     const lockFile = `${lockPrefix}-dev-worker-${i}.lock`;
-    if (existsSync(lockFile)) runningWorkers++;
+    const { running } = isProcessRunning(lockFile);
+    if (running) runningWorkers++;
   }
   if (runningWorkers > 0 && !options.force) {
     console.error(`${runningWorkers} worker(s) appear to be running. Use --force to restore anyway.`);
@@ -66,10 +73,13 @@ export async function restoreDbCommand(file: string, options: RestoreOptions) {
     const timestamp = new Date().toISOString().replace(/[T:]/g, "-").slice(0, 19);
     const preRestoreBackup = join(backupDir, `skynet.db.pre-restore-${timestamp}`);
     try {
-      execSync(`sqlite3 "${dbPath}" ".backup '${preRestoreBackup}'"`, {
+      const backupResult = spawnSync("sqlite3", [dbPath, `.backup '${preRestoreBackup}'`], {
         stdio: ["ignore", "pipe", "pipe"],
         timeout: 30000,
       });
+      if (backupResult.status !== 0) {
+        throw new Error(`sqlite3 backup failed (exit ${backupResult.status})`);
+      }
       console.log(`  Pre-restore backup: ${basename(preRestoreBackup)}`);
     } catch {
       // If current DB is corrupted, just copy it
@@ -82,22 +92,31 @@ export async function restoreDbCommand(file: string, options: RestoreOptions) {
   try {
     copyFileSync(restorePath, dbPath);
     // Verify the restored DB
-    const verify = execSync(`sqlite3 "${dbPath}" "PRAGMA integrity_check;"`, {
+    const verifyResult = spawnSync("sqlite3", [dbPath, "PRAGMA integrity_check;"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
-    }).trim();
+    });
+    if (verifyResult.status !== 0) {
+      const stderr = (verifyResult.stderr || "").trim();
+      throw new Error(`sqlite3 integrity check failed (exit ${verifyResult.status}): ${stderr}`);
+    }
+    const verify = (verifyResult.stdout || "").trim();
     if (verify === "ok") {
       console.log("  Restore: OK (integrity verified)");
     } else {
       console.log(`  Restore: WARNING (integrity check returned: ${verify})`);
     }
 
-    const taskCount = execSync(`sqlite3 "${dbPath}" "SELECT COUNT(*) FROM tasks;"`, {
+    const countResult = spawnSync("sqlite3", [dbPath, "SELECT COUNT(*) FROM tasks;"], {
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 5000,
-    }).trim();
+    });
+    if (countResult.status !== 0) {
+      throw new Error(`sqlite3 count query failed (exit ${countResult.status})`);
+    }
+    const taskCount = (countResult.stdout || "").trim();
     console.log(`  Tasks in restored DB: ${taskCount}\n`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

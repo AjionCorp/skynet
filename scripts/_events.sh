@@ -23,6 +23,8 @@ emit_event() {
     local sz
     sz=$(wc -c < "$events_log" 2>/dev/null || echo 0)
     if [ "$sz" -gt $((max_kb * 1024)) ]; then
+      rm -f "${events_log}.2"
+      [ -f "${events_log}.1" ] && mv "${events_log}.1" "${events_log}.2"
       mv "$events_log" "${events_log}.1"
     fi
   fi

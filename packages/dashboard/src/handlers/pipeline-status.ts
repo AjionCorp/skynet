@@ -2,7 +2,7 @@ import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
-import { extractTitle, parseBlockedBy } from "../lib/backlog-parser";
+import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
 
 /**
  * Parse current-task.md into a structured object.
@@ -29,6 +29,7 @@ function parseCurrentTask(raw: string) {
  * Parse a human-readable duration string (e.g., "23m", "1h 12m") into minutes.
  * Returns null if the string cannot be parsed.
  */
+// NOTE: duration parsing duplicated in pipeline-status.ts, status.ts, and db.ts
 function parseDurationMinutes(s: string): number | null {
   const hm = s.match(/^(\d+)h\s+(\d+)m$/);
   if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
@@ -49,6 +50,8 @@ function formatDuration(minutes: number): string {
   return rem === 0 ? `${h}h` : `${h}h ${rem}m`;
 }
 
+// NOTE: duplicated in packages/cli/src/commands/status.ts
+// Kept separate to avoid cross-package dependency for a 10-line function
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;
@@ -90,47 +93,26 @@ function readCodexAuthStatus(
 
 /**
  * Parse backlog.md into items with status/tag/dependency info.
+ * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
  */
 function parseBacklog(raw: string) {
-  const lines = raw.split("\n");
-  const rawItems: { text: string; tag: string; status: "pending" | "claimed" | "done"; blockedBy: string[] }[] = [];
-  let pendingCount = 0;
-  let claimedCount = 0;
-  let doneCount = 0;
-
-  for (const line of lines) {
-    let status: "pending" | "claimed" | "done" | null = null;
-    let text = "";
-    if (line.startsWith("- [ ] ")) {
-      status = "pending";
-      text = line.replace("- [ ] ", "");
-      pendingCount++;
-    } else if (line.startsWith("- [>] ")) {
-      status = "claimed";
-      text = line.replace("- [>] ", "");
-      claimedCount++;
-    } else if (line.startsWith("- [x] ")) {
-      status = "done";
-      text = line.replace("- [x] ", "");
-      doneCount++;
-    }
-    if (status === null) continue;
-
-    const tagMatch = text.match(/^\[([^\]]+)\]/);
-    rawItems.push({ text, tag: tagMatch?.[1] ?? "", status, blockedBy: parseBlockedBy(text) });
-  }
+  const parsed = parseBacklogItems(raw);
+  const counts = backlogCounts(parsed);
 
   // Resolve blocked status
   const titleToStatus = new Map<string, string>();
-  for (const item of rawItems) {
-    titleToStatus.set(extractTitle(item.text), item.status);
+  for (const item of parsed) {
+    titleToStatus.set(item.title, item.status);
   }
-  const items = rawItems.map((item) => ({
-    ...item,
+  const items = parsed.map((item) => ({
+    text: item.raw,
+    tag: item.tag ?? "",
+    status: item.status,
+    blockedBy: item.blockedBy,
     blocked: item.blockedBy.length > 0 && item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
   }));
 
-  return { items, pendingCount, claimedCount, doneCount };
+  return { items, ...counts };
 }
 
 /**

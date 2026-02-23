@@ -74,7 +74,7 @@ _heartbeat_pid=""
 _start_heartbeat() {
   (
     while true; do
-      date +%s > "$HEARTBEAT_FILE"
+      date +%s > "$HEARTBEAT_FILE.tmp" && mv "$HEARTBEAT_FILE.tmp" "$HEARTBEAT_FILE"
       db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       sleep 60
     done
@@ -739,7 +739,7 @@ EOF
   # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
     git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
-    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>/dev/null || true
+    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>>"$LOG" || log "WARNING: State file commit failed — code merge will push without state update"
   fi
 
   # Clear task title AFTER state is committed — ensures cleanup_on_exit can
@@ -813,7 +813,9 @@ EOF
     if ! git_push_with_retry; then
       log "CRITICAL: revert push also failed — local main diverged from remote. Stopping worker."
       tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: W${WORKER_ID} local main diverged — push failed for $task_title and revert push also failed"
-      emit_event "push_diverged" "Worker $WORKER_ID: $task_title — local main diverged from remote"
+      emit_event "push_diverged" "$WORKER_ID" "Force-syncing to origin/main after push failure"
+      log "CRITICAL: Push failed after revert — force-syncing local main to origin"
+      git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
       release_merge_lock
       exit 1
     fi

@@ -124,7 +124,7 @@ export async function recoverGitCommand(options: RecoverOptions) {
         for (const row of rows) {
           const id = row[0];
           sqliteQuery(devDir,
-            `UPDATE tasks SET status='failed', error='push divergence recovery', updated_at=datetime('now') WHERE id=${id};`
+            `UPDATE tasks SET status='failed', error='push divergence recovery', updated_at=datetime('now') WHERE id=${Number(id)};`
           );
           console.log(`    Reset task ${id}: '${title}' -> failed`);
         }

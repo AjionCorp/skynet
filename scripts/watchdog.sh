@@ -91,6 +91,15 @@ crash_recovery() {
   all_locks+=("${SKYNET_LOCK_PREFIX}-project-driver.lock")
 
   for lockfile in "${all_locks[@]}"; do
+    # Handle orphaned lock dirs (mkdir succeeded but process died before writing pid file)
+    if [ -d "$lockfile" ] && [ ! -f "$lockfile/pid" ]; then
+      local lock_age_secs=$(( $(date +%s) - $(file_mtime "$lockfile") ))
+      if [ "$lock_age_secs" -gt 60 ]; then
+        log "Removing orphaned lock dir (no pid file, ${lock_age_secs}s old): $lockfile"
+        rm -rf "$lockfile"
+      fi
+      continue
+    fi
     # Support both dir-based locks (lockfile/pid) and legacy file-based locks
     local lock_pid=""
     if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
@@ -225,7 +234,7 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 
     # Kill any orphan processes running inside the worktree (claude, node, etc.)
     local orphan_pids
-    orphan_pids=$(pgrep -f "$wt_dir" 2>/dev/null || true)
+    orphan_pids=$(pgrep -f "$wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
       echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
@@ -473,20 +482,7 @@ _handle_stale_worker() {
       task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
     fi
     if [ -n "$task_title" ]; then
-      # SQLite unclaim
       db_unclaim_task_by_title "$task_title" 2>/dev/null || true
-      # Backward compat: also unclaim in file
-      local backlog_lock="${SKYNET_LOCK_PREFIX}-backlog.lock"
-      if mkdir "$backlog_lock" 2>/dev/null; then
-        if [ -f "$BACKLOG" ]; then
-          __AWK_TITLE="$task_title" awk 'BEGIN{title=ENVIRON["__AWK_TITLE"]} {
-            if ($0 == "- [>] " title) print "- [ ] " title
-            else print
-          }' "$BACKLOG" > "$BACKLOG.tmp"
-          mv "$BACKLOG.tmp" "$BACKLOG"
-        fi
-        rmdir "$backlog_lock" 2>/dev/null || rm -rf "$backlog_lock" 2>/dev/null || true
-      fi
       log "Unclaimed task: $task_title"
     fi
 
@@ -564,83 +560,18 @@ _normalize_title() {
     cut -c1-50
 }
 
-# --- Auto-supersede pending failed tasks that were re-completed ---
-# When a task fails and gets re-implemented as a fresh task, the new task
-# goes to completed.md while the old failed entry stays as status=pending.
-# This detects such cases by normalizing core task titles (before " — "):
-# strip tags, strip "FRESH implementation" suffix, lowercase, collapse
-# whitespace, and compare the first 50 characters.
-_auto_supersede_completed_tasks() {
-  [ -f "$FAILED" ] || return 0
-  [ -f "$COMPLETED" ] || return 0
-
-  # Build list of completed core titles (text before " — "), then normalize
-  local completed_raw
-  completed_raw=$(awk -F'|' 'NR > 2 {
-    t = $3; gsub(/^ +| +$/, "", t); sub(/ —.*/, "", t)
-    if (t != "") print t
-  }' "$COMPLETED")
-  [ -z "$completed_raw" ] && return 0
-
-  local completed_normalized=""
-  while IFS= read -r _line; do
-    local _norm
-    _norm=$(_normalize_title "$_line")
-    if [ -n "$_norm" ]; then
-      completed_normalized="${completed_normalized}${_norm}
-"
-    fi
-  done <<< "$completed_raw"
-  [ -z "$completed_normalized" ] && return 0
-
-  local updated=0
-
-  # Scan pending entries in failed-tasks.md for matches in completed.md
-  while IFS='|' read -r _ _date task branch _error _attempts status _; do
-    status=$(echo "$status" | sed 's/^ *//;s/ *$//')
-    [ "$status" = "pending" ] || continue
-
-    task=$(echo "$task" | sed 's/^ *//;s/ *$//')
-    branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
-
-    # Extract core title (before first " — ") and normalize
-    local core_title="${task%% —*}"
-    [ -z "$core_title" ] && continue
-    local norm_title
-    norm_title=$(_normalize_title "$core_title")
-    [ -z "$norm_title" ] && continue
-
-    # Check if any completed task shares this normalized core title
-    if echo "$completed_normalized" | grep -qxF "$norm_title"; then
-      # Replace pending → superseded for this specific line (match by branch)
-      awk -v br="$branch" '{
-        if (index($0, br) > 0 && match($0, /\| *pending *\|/))
-          sub(/\| *pending *\|/, "| superseded |")
-        print
-      }' "$FAILED" > "$FAILED.tmp" && mv "$FAILED.tmp" "$FAILED"
-      updated=$((updated + 1))
-      log "Auto-superseded: $core_title (branch: $branch, normalized match in completed.md)"
-    fi
-  done < <(tail -n +3 "$FAILED")
-
-  if [ "$updated" -gt 0 ]; then
-    log "Auto-superseded $updated failed task(s) completed via fresh implementation"
-    tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Auto-superseded $updated task(s) re-completed via fresh branch"
-  fi
-}
-
 # --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
 # SQLite auto-supersede (atomic, handles normalized root matching)
 _db_superseded=$(db_auto_supersede_completed 2>/dev/null || echo 0)
 if [ "${_db_superseded:-0}" -gt 0 ] 2>/dev/null; then
   log "SQLite auto-superseded $_db_superseded failed task(s)"
 fi
-# Also run file-based auto-supersede for backward compat
-_auto_supersede_completed_tasks
 
 # --- Archive old completed tasks to prevent unbounded state file growth ---
 # If completed.md has >100 entries, move entries older than 7 days to
 # completed-archive.md, keeping only the most recent 100 in the active file.
+# NOTE: Operates on generated completed.md rather than SQLite directly.
+# This is acceptable since completed.md is regenerated at merge time.
 _archive_old_completions() {
   [ -f "$COMPLETED" ] || return 0
 
@@ -736,7 +667,7 @@ _cleanup_stale_branches() {
     esac
 
     # Skip entries without a real branch (e.g. "merged to main")
-    case "$branch" in dev/*) ;; *) continue ;; esac
+    case "$branch" in dev/*|fix/*) ;; *) continue ;; esac
 
     # Never delete the branch we're currently on
     [ "$branch" = "$current_branch" ] && continue
@@ -775,7 +706,7 @@ if [ -n "$_db_cleanup_branches" ]; then
   while IFS= read -r _branch; do
     [ -z "$_branch" ] && continue
     [ "$_branch" = "$_current_branch" ] && continue
-    case "$_branch" in dev/*) ;; *) continue ;; esac
+    case "$_branch" in dev/*|fix/*) ;; *) continue ;; esac
     if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$_branch" 2>/dev/null; then
       git -C "$PROJECT_DIR" branch -D "$_branch" 2>/dev/null && {
         log "SQLite: Deleted stale branch: $_branch"
@@ -850,6 +781,9 @@ _health_score_alert() {
 
     # -2 per stale heartbeat
     score=$((score - _stale_heartbeat_count * 2))
+
+    # NOTE: file-based fallback omits staleTasks24h deduction (-1 per task in_progress >24h)
+    # The SQLite path (db_get_health_score) includes this via julianday comparison.
 
     [ "$score" -lt 0 ] && score=0
     [ "$score" -gt 100 ] && score=100

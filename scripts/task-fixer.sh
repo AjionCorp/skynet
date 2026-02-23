@@ -21,7 +21,6 @@ else
   LOG="$SCRIPTS_DIR/task-fixer-${FIXER_ID}.log"
 fi
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
-FIXER_STATS="$DEV_DIR/fixer-stats.log"
 FIXER_COOLDOWN="$DEV_DIR/fixer-cooldown"
 
 # Instance-specific worktree (isolated from dev-workers and other fixers)
@@ -94,7 +93,10 @@ setup_worktree() {
     return 1
   fi
   log "Installing deps in worktree..."
-  (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1
+  if ! (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1; then
+    log "ERROR: Dependency install failed in worktree"
+    # continue to agent anyway — some projects don't need install
+  fi
 }
 
 cleanup_worktree() {
@@ -199,17 +201,6 @@ if [ -n "$_db_last5" ]; then
     _total_count=$((_total_count + 1))
     [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
   done <<< "$_db_last5"
-  [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
-fi
-# Fallback: file-based check (pipe-delimited file format — keep IFS='|')
-if ! $_consec_all_fail && [ -f "$FIXER_STATS" ]; then
-  _last5=$(tail -5 "$FIXER_STATS")
-  _fail_count=0; _total_count=0
-  while IFS='|' read -r _epoch _result _title; do
-    [ -z "$_epoch" ] && continue
-    _total_count=$((_total_count + 1))
-    [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
-  done <<< "$_last5"
   [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
 fi
 if $_consec_all_fail; then
@@ -485,7 +476,6 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" || true
     _CURRENT_TASK_TITLE=""
     db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-    echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
   else
     # --- Graceful shutdown checkpoint (before merge) ---
     if $SHUTDOWN_REQUESTED; then
@@ -553,20 +543,24 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "Merge conflict — attempting rebase recovery..."
       git merge --abort 2>/dev/null || true
       git_pull_with_retry 2 || true
-      git checkout "$branch_name" 2>>"$LOG"
-      if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
-        log "Rebase succeeded — retrying merge."
-        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-        if git merge "$branch_name" --no-edit 2>>"$LOG"; then
-          _merge_succeeded=true
-        else
-          log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-          git merge --abort 2>/dev/null || true
-        fi
+      if ! git checkout "$branch_name" 2>>"$LOG"; then
+        log "ERROR: Failed to checkout $branch_name for rebase recovery"
+        # Skip rebase — just report the merge failure
       else
-        log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-        git rebase --abort 2>/dev/null || true
-        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+        if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
+          log "Rebase succeeded — retrying merge."
+          git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+          if git merge "$branch_name" --no-edit 2>>"$LOG"; then
+            _merge_succeeded=true
+          else
+            log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+            git merge --abort 2>/dev/null || true
+          fi
+        else
+          log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
+          git rebase --abort 2>/dev/null || true
+          git checkout "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
+        fi
       fi
     fi
     set -e
@@ -604,8 +598,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           _CURRENT_TASK_TITLE=""
           release_merge_lock
           db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-          echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-          return
+                return
         fi
         log "Post-merge typecheck passed."
       fi
@@ -646,8 +639,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
           tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
           emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (smoke test failed)"
           db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-          echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-          return
+                return
         fi
         log "Post-merge smoke test passed."
       fi
@@ -680,8 +672,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         _CURRENT_TASK_TITLE=""
         release_merge_lock
         db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-        echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-        return
+            return
       fi
 
       _CURRENT_TASK_TITLE=""
@@ -690,7 +681,6 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $((fix_attempts + 1)))"
       emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"
       db_add_fixer_stat "success" "$task_title" "$FIXER_ID" 2>/dev/null || true
-      echo "$(date +%s)|success|$task_title" >> "$FIXER_STATS"
     else
       log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
       new_attempts=$((fix_attempts + 1))
@@ -700,8 +690,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
       emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
       db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-      echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
-    fi
+      fi
     }
     _do_merge_and_push
   fi
@@ -730,7 +719,6 @@ else
 
   _CURRENT_TASK_TITLE=""
   db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
-  echo "$(date +%s)|failure|$task_title" >> "$FIXER_STATS"
 fi
 
 log "Task-fixer finished."

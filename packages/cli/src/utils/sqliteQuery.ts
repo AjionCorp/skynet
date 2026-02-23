@@ -57,5 +57,5 @@ export function isSqliteReady(devDir: string): boolean {
  * Escape a string for safe use in SQL single-quoted literals.
  */
 export function sqlEscape(value: string): string {
-  return value.replace(/'/g, "''");
+  return value.replace(/\0/g, "").replace(/'/g, "''");
 }
