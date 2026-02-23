@@ -125,6 +125,7 @@ else
     _existing_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
     if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Already running (PID $_existing_pid). Exiting." >> "$LOG"
+      emit_event "fixer_idle" "Fixer $FIXER_ID: already running (PID $_existing_pid)"
       exit 0
     fi
     # Stale lock — reclaim atomically
@@ -134,10 +135,12 @@ else
       echo $$ > "$LOCKFILE/pid"
     else
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
+      emit_event "fixer_idle" "Fixer $FIXER_ID: lock contention after reclaim"
       exit 0
     fi
   else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] Lock contention. Exiting." >> "$LOG"
+    emit_event "fixer_idle" "Fixer $FIXER_ID: lock contention"
     exit 0
   fi
 fi
@@ -178,6 +181,7 @@ cleanup_on_exit() {
   fi
   # Ensure fixer status is idle on exit (normal or abnormal)
   db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || true
+  emit_event "fixer_idle" "Fixer $FIXER_ID: exit handler (code $exit_code)" 2>/dev/null || true
   # Release PID lock
   rm -rf "$LOCKFILE"
   # Log crash event (only on abnormal exit)
@@ -198,6 +202,7 @@ trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at ne
 # --- Pipeline pause check ---
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
   log "Pipeline paused — exiting"
+  emit_event "fixer_idle" "Fixer $FIXER_ID: pipeline paused"
   exit 0
 fi
 
@@ -205,6 +210,7 @@ fi
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_any_auth; then
   log "No agent auth available (Claude/Codex). Skipping task-fixer."
+  emit_event "fixer_idle" "Fixer $FIXER_ID: no auth available"
   exit 1
 fi
 
@@ -224,6 +230,7 @@ fi
 if $_consec_all_fail; then
   date +%s > "$FIXER_COOLDOWN"
   log "Fixer paused: 5 consecutive failures, cooling down 30min"
+  emit_event "fixer_idle" "Fixer $FIXER_ID: cooldown after 5 consecutive failures"
   rm -rf "$LOCKFILE"
   exit 0
 fi
@@ -257,6 +264,7 @@ fi
 
 if [ -z "$pending_failure" ]; then
   log "No pending failed tasks. Nothing to fix."
+  emit_event "fixer_idle" "Fixer $FIXER_ID: no pending failures"
   exit 0
 fi
 
@@ -277,6 +285,7 @@ if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $task_title"
   emit_event "task_blocked" "Fixer $FIXER_ID: $task_title (max attempts)"
   log "Moved to blockers. Exiting."
+  emit_event "fixer_idle" "Fixer $FIXER_ID: task blocked (max attempts)"
   exit 0
 fi
 
@@ -298,6 +307,7 @@ _handle_worktree_failure() {
   log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
   [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
   _CURRENT_TASK_TITLE=""
+  emit_event "fixer_idle" "Fixer $FIXER_ID: worktree failure (${WORKTREE_LAST_ERROR:-unknown})"
   exit 0
 }
 
@@ -441,6 +451,7 @@ if $SHUTDOWN_REQUESTED; then
   [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
   _CURRENT_TASK_TITLE=""
   cleanup_worktree "$branch_name"
+  emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown before fix attempt"
   exit 0
 fi
 
@@ -451,6 +462,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     cleanup_worktree
     db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
     _CURRENT_TASK_TITLE=""
+    emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown after fix"
     exit 0
   fi
   # Update progress epoch after agent finishes — long runs may have staled it
@@ -522,6 +534,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       cleanup_worktree  # Keep branch for next attempt
       db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
+      emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown before merge"
       exit 0
     fi
 
@@ -552,6 +565,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
 
       _CURRENT_TASK_TITLE=""
+      emit_event "fixer_idle" "Fixer $FIXER_ID: merge lock contention"
       exit 0
     fi
 
@@ -746,6 +760,7 @@ else
     [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || true
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
+    emit_event "fixer_idle" "Fixer $FIXER_ID: usage limit hit"
     log "Task-fixer finished."
     exit 0
   fi
@@ -763,4 +778,5 @@ fi
 
 # Ensure fixer is idle before exit (cleanup_on_exit also does this as a safety net)
 db_set_worker_idle "$FIXER_ID" "Fixer session ended" 2>/dev/null || true
+emit_event "fixer_idle" "Fixer $FIXER_ID: session ended"
 log "Task-fixer finished."

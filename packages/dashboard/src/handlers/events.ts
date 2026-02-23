@@ -38,6 +38,7 @@ export function createEventsHandler(config: SkynetConfig) {
 
         const epoch = Number(parts[0]);
         if (!Number.isFinite(epoch)) continue;
+        if (epoch < 0 || epoch > 8.64e12) continue;
 
         const detail = parts.slice(2).join("|");
         const workerMatch = detail.match(/^(?:Worker|Fixer)\s+(\d+):/);
