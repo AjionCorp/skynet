@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # _locks.sh — Shared lock helpers for cross-worker coordination
 # Sourced by _config.sh. Requires SKYNET_LOCK_PREFIX to be set.
+#
+# NOTE: SIGKILL (kill -9) cannot be caught by any process, so EXIT/TERM traps
+# will NOT fire in that case. This means lock directories may be left behind
+# ("stale locks"). The watchdog's crash_recovery() handles this by checking
+# whether the PID recorded in the lock is still alive, reclaiming stale locks
+# from dead processes.
 
 MERGE_LOCK="${SKYNET_LOCK_PREFIX}-merge.lock"
 

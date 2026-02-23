@@ -74,6 +74,8 @@ _heartbeat_pid=""
 _start_heartbeat() {
   (
     while true; do
+      # Exit if parent worker process is no longer alive
+      kill -0 $$ 2>/dev/null || exit 0
       date +%s > "$HEARTBEAT_FILE.tmp" && mv "$HEARTBEAT_FILE.tmp" "$HEARTBEAT_FILE"
       db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       sleep 60
@@ -183,6 +185,7 @@ else
 fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
+_CURRENT_TASK_DB_TITLE=""
 cleanup_on_exit() {
   # Stop heartbeat writer
   _stop_heartbeat 2>/dev/null || true
@@ -198,7 +201,7 @@ cleanup_on_exit() {
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      db_unclaim_task_by_title "$_CURRENT_TASK_TITLE" 2>/dev/null || true
+      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || true
     fi
     db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || true
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
@@ -339,6 +342,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
+  _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
   # shellcheck disable=SC2034
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
@@ -376,6 +380,7 @@ EOF
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
+        _CURRENT_TASK_DB_TITLE=""
         break
       fi
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
@@ -384,6 +389,7 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       continue
     fi
     log "Reusing existing branch $branch_name in worktree"
@@ -396,6 +402,7 @@ EOF
         [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
+        _CURRENT_TASK_DB_TITLE=""
         break
       fi
       log "Failed to create worktree for $branch_name — unclaiming."
@@ -404,6 +411,7 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       continue
     fi
   fi
@@ -456,6 +464,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -479,6 +488,7 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
       cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -532,6 +542,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -574,6 +585,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
     continue
   fi
@@ -591,6 +603,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     cleanup_worktree "$branch_name"
     break
   fi
@@ -623,6 +636,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     cleanup_worktree "$branch_name"
     continue
   fi
@@ -635,6 +649,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
 
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     release_merge_lock
     continue
   fi
@@ -674,6 +689,7 @@ EOF
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     _one_shot_exit=1
     release_merge_lock
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
@@ -708,6 +724,7 @@ EOF
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
       release_merge_lock
       continue
@@ -743,22 +760,28 @@ EOF
 EOF
 
   # Commit pipeline status updates (skip in one-shot mode — task was never in backlog)
+  _state_commit_succeeded=false
   if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
     git add "$BACKLOG" "$WORKER_TASK_FILE" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
-    git commit -m "chore: update pipeline status after $task_title" --no-verify 2>>"$LOG" || log "WARNING: State file commit failed — code merge will push without state update"
+    if git commit -m "chore: update pipeline status after $task_title" --no-verify 2>>"$LOG"; then
+      _state_commit_succeeded=true
+    else
+      log "WARNING: State file commit failed — code merge will push without state update"
+    fi
   fi
 
   # Clear task title AFTER state is committed — ensures cleanup_on_exit can
   # properly unclaim if worker crashes between merge and state commit
   _CURRENT_TASK_TITLE=""
+  _CURRENT_TASK_DB_TITLE=""
 
   # --- Post-merge smoke test (if enabled) ---
   if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
     log "Running post-merge smoke test..."
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$LOG" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge and state commit"
-      # In one-shot mode there's no state commit — revert only the merge
-      if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+      # Revert merge + state commit (if it succeeded), or just merge otherwise
+      if $_state_commit_succeeded; then
         # HEAD is state commit, HEAD~1 is merge — revert both
         if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
           log "CRITICAL: git revert failed — main may be broken. Stopping worker."
@@ -768,7 +791,7 @@ EOF
           exit 1
         fi
       else
-        # HEAD is merge (no state commit in one-shot) — revert just the merge
+        # HEAD is merge (state commit failed or one-shot mode) — revert just the merge
         if ! git revert --no-commit HEAD 2>>"$LOG"; then
           log "CRITICAL: git revert failed — main may be broken. Stopping worker."
           tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
@@ -784,6 +807,7 @@ EOF
       db_export_state_files
 
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
       release_merge_lock
       tg "🔄 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} REVERTED*: $task_title (smoke test failed)"
@@ -797,8 +821,8 @@ EOF
   # Push merged changes to origin (while still holding merge lock)
   if ! git_push_with_retry; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"
-    # Revert state commit + merge (or just merge in one-shot mode)
-    if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
+    # Revert merge + state commit (if it succeeded), or just merge otherwise
+    if $_state_commit_succeeded; then
       if ! git revert --no-commit HEAD HEAD~1 2>>"$LOG"; then
         log "CRITICAL: git revert failed — main may be broken. Stopping worker."
         tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
@@ -825,6 +849,7 @@ EOF
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push diverged — revert push also failed" || true
       _CURRENT_TASK_TITLE=""
+      _CURRENT_TASK_DB_TITLE=""
       release_merge_lock
       exit 1
     fi
@@ -832,7 +857,9 @@ EOF
     emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
     tasks_failed=$((tasks_failed + 1))
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
+    db_export_state_files
     _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
     release_merge_lock
     continue
   fi

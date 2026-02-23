@@ -54,8 +54,16 @@ export function isSqliteReady(devDir: string): boolean {
 }
 
 /**
- * Escape a string for safe use in SQL single-quoted literals.
+ * Escape a string for safe use in SQL single-quoted literals passed to
+ * the sqlite3 CLI. Strips NULs, escapes backslashes (prevents escape
+ * sequence injection), replaces newlines/carriage returns (prevents
+ * multi-line SQL injection via the CLI), and doubles single quotes.
  */
 export function sqlEscape(value: string): string {
-  return value.replace(/\0/g, "").replace(/'/g, "''");
+  return value
+    .replace(/\0/g, "")
+    .replace(/\\/g, "\\\\")
+    .replace(/\n/g, " ")
+    .replace(/\r/g, "")
+    .replace(/'/g, "''");
 }

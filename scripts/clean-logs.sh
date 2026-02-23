@@ -31,6 +31,18 @@ for logfile in "$SCRIPTS_DIR"/*.log; do
   fi
 done
 
+# Rotate events.log if it exceeds SKYNET_MAX_EVENTS_LOG_KB (default 1024 KB)
+_events_log="$DEV_DIR/events.log"
+if [ -f "$_events_log" ]; then
+  _events_max_bytes=$(( ${SKYNET_MAX_EVENTS_LOG_KB:-1024} * 1024 ))
+  _events_size=$(file_size "$_events_log")
+  if [ "$_events_size" -gt "$_events_max_bytes" ]; then
+    rm -f "${_events_log}.2"
+    [ -f "${_events_log}.1" ] && mv "${_events_log}.1" "${_events_log}.2"
+    mv "$_events_log" "${_events_log}.1"
+  fi
+fi
+
 # Clean up rotated log backups older than 24h
 find "$SCRIPTS_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true
 find "$DEV_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true

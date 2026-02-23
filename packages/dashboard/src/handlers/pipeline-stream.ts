@@ -45,6 +45,9 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
 
         function send(text: string) {
           if (closed) return;
+          // Backpressure: skip enqueue if the client is consuming slower than
+          // we produce.  desiredSize <= 0 means the internal queue is full.
+          if ((controller.desiredSize ?? 1) <= 0) return;
           try {
             controller.enqueue(encoder.encode(text));
           } catch {

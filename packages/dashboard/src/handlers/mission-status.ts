@@ -118,13 +118,19 @@ function crossReferenceCompleted(
       .split(/\W+/)
       .filter((w) => w.length > 3);
 
+    // Require at least 3 significant words to prevent false positives
+    // on short criteria text that could match many unrelated tasks
+    if (criterionWords.length < 3) return criterion;
+
     // Check if any completed task closely matches this criterion
+    // using word-boundary matching (whole word, not substring)
     for (const task of completedTasks) {
+      const taskWords = new Set(task.split(/\W+/).filter((w) => w.length > 3));
       const matchCount = criterionWords.filter((word) =>
-        task.includes(word)
+        taskWords.has(word)
       ).length;
       // If more than half of significant words match, consider it completed
-      if (criterionWords.length > 0 && matchCount / criterionWords.length >= 0.5) {
+      if (matchCount / criterionWords.length >= 0.5) {
         return { ...criterion, completed: true };
       }
     }
@@ -199,10 +205,9 @@ export function createMissionStatusHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to read mission status",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

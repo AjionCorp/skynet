@@ -59,6 +59,9 @@ while true; do
 set -euo pipefail
 trap 'log "Watchdog cycle failed at line $LINENO"' ERR
 
+# Rotate watchdog's own log if it exceeds configurable threshold
+rotate_log_if_needed "$LOG"
+
 # Trim logs to last 24h on each watchdog run
 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 
@@ -190,8 +193,17 @@ IDLE_EOF
     fi
   done
 
-  # Also check for any [>] entries in backlog with no live worker at all
-  if [ -f "$BACKLOG" ]; then
+  # Also check for any [>] entries in backlog with no live worker at all.
+  # NOTE: This is intentional redundancy (belt-and-suspenders). The SQLite
+  # orphan reconciliation above handles claimed tasks via the DB. This
+  # file-based check is a legacy fallback that catches orphans visible in
+  # backlog.md even if the DB reconciliation missed them (e.g., DB write
+  # failed, or task was claimed before the SQLite migration).
+  # Skip this block when SQLite DB exists — the post-crash_recovery SQLite
+  # reconciliation (lines below) handles it authoritatively.
+  if [ -f "$DB_PATH" ]; then
+    : # SQLite reconciliation will handle orphaned claims — skip file-based check
+  elif [ -f "$BACKLOG" ]; then
     local any_worker_alive=false
     for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
       is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock" && any_worker_alive=true
@@ -271,15 +283,18 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 crash_recovery
 
 # --- Reconcile orphaned 'claimed' tasks ---
+# NOTE: Reconciliation counters are logged per-event (log + emit_event) rather
+# than aggregated, ensuring accuracy regardless of which code path runs.
 # If a task is 'claimed' in SQLite but the worker that claimed it is either dead
 # or working on a different task, unclaim it back to 'pending'.
-# Time guard: only reconcile claims older than 120s to avoid racing with the
-# ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
+# Time guard: only reconcile claims older than ORPHAN_CUTOFF to avoid racing with
+# the ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
+_ORPHAN_CUTOFF="${SKYNET_ORPHAN_CUTOFF_SECONDS:-120}"
 _orphaned_claimed=$(_db_sep "
   SELECT t.id, t.title, t.worker_id
   FROM tasks t
   WHERE t.status = 'claimed' AND t.worker_id IS NOT NULL
-    AND t.claimed_at < datetime('now', '-120 seconds')
+    AND t.claimed_at < datetime('now', '-$_ORPHAN_CUTOFF seconds')
     AND NOT EXISTS (
       SELECT 1 FROM workers w
       WHERE w.id = t.worker_id AND w.status = 'in_progress' AND w.current_task_id = t.id
@@ -302,7 +317,7 @@ _stale_fixing=$(_db_sep "
   SELECT id, title, fixer_id
   FROM tasks
   WHERE status LIKE 'fixing-%'
-    AND updated_at < datetime('now', '-120 seconds');
+    AND updated_at < datetime('now', '-$_ORPHAN_CUTOFF seconds');
 " 2>/dev/null || true)
 if [ -n "$_stale_fixing" ]; then
   while IFS="$_DB_SEP" read -r _sf_id _sf_title _sf_fid; do
@@ -997,7 +1012,7 @@ else
   echo 300 > "$_adaptive_file"
 fi
 
-) || log "Watchdog cycle failed (exit $?) — will retry next cycle"
+) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
 
 # Read adaptive interval from subshell output (falls back to default)
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"

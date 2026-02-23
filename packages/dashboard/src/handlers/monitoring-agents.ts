@@ -222,10 +222,9 @@ export function createMonitoringAgentsHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to read agent status",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

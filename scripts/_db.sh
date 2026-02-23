@@ -27,7 +27,8 @@ _db_sep() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$
 # Usage: _sql_exec "SQL statement"
 # Logs to stderr and returns 1 on failure.
 _sql_exec() {
-  local _sql_out _sql_rc _sql_errfile="/tmp/skynet-sql-err-$$"
+  local _sql_out _sql_rc _sql_errfile
+  _sql_errfile=$(mktemp /tmp/skynet-sql-err-XXXXXX)
   _sql_out=$(_db "$1" 2>"$_sql_errfile")
   _sql_rc=$?
   local _sql_err=""
@@ -43,15 +44,19 @@ _sql_exec() {
 
 # Error-checked sqlite3 wrapper that returns pipe-delimited rows.
 _sql_query() {
-  local _sql_err
-  _sql_err=$(_db_sep "$1" 2>&1)
-  local _sql_rc=$?
+  local _sql_out _sql_rc _sql_errfile
+  _sql_errfile=$(mktemp /tmp/skynet-sql-query-err-XXXXXX)
+  _sql_out=$(_db_sep "$1" 2>"$_sql_errfile")
+  _sql_rc=$?
+  local _sql_err=""
+  [ -f "$_sql_errfile" ] && _sql_err=$(cat "$_sql_errfile" 2>/dev/null)
+  rm -f "$_sql_errfile"
   if [ $_sql_rc -ne 0 ]; then
     local _sql_ctx="${1:0:200}"
     log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
     return 1
   fi
-  echo "$_sql_err"
+  [ -n "$_sql_out" ] && echo "$_sql_out"
   return 0
 }
 
@@ -280,7 +285,7 @@ db_fail_task() {
   _sql_exec "
     UPDATE tasks SET status='failed', branch='$branch_esc', error='$error_esc',
       failed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id AND (status='claimed' OR status LIKE 'fixing-%');
+    WHERE id=$task_id AND (status='claimed' OR status LIKE 'fixing-%' OR status='completed');
   "
 }
 
@@ -315,13 +320,13 @@ db_add_task() {
 # Mark a backlog task as done (the [x] equivalent — task was completed elsewhere)
 db_mark_done() {
   local task_id; task_id=$(_sql_int "$1")
-  _db "UPDATE tasks SET status='done', updated_at=datetime('now') WHERE id=$task_id;"
+  _db "UPDATE tasks SET status='done', updated_at=datetime('now') WHERE id=$task_id AND status='pending';"
 }
 
 # Get task ID by title (exact match). Returns id or empty.
 db_get_task_id_by_title() {
   local title; title=$(_sql_escape "$1")
-  _db "SELECT id FROM tasks WHERE title='$title' ORDER BY id DESC LIMIT 1;"
+  _db "SELECT id FROM tasks WHERE TRIM(title)=TRIM('$title') ORDER BY id DESC LIMIT 1;"
 }
 
 # Get task row by ID. Output: id|title|tag|status|branch|error|attempts
@@ -344,10 +349,10 @@ db_get_pending_failures() {
 db_claim_failure() {
   local task_id; task_id=$(_sql_int "$1")
   local fixer_id; fixer_id=$(_sql_int "$2")
-  local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
+  # fixer_id is already sanitized to digits-only by _sql_int — no need for _sql_escape
   local changed
   changed=$(_db "
-    UPDATE tasks SET status='fixing-$fixer_esc', fixer_id=$fixer_id, updated_at=datetime('now')
+    UPDATE tasks SET status='fixing-$fixer_id', fixer_id=$fixer_id, updated_at=datetime('now')
     WHERE id=$task_id AND status='failed';
     SELECT changes();
   ")
@@ -356,10 +361,10 @@ db_claim_failure() {
 
 db_unclaim_failure() {
   local fixer_id; fixer_id=$(_sql_int "$1")
-  local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
+  # fixer_id is already sanitized to digits-only by _sql_int — no need for _sql_escape
   _sql_exec "
     UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
-    WHERE status='fixing-$fixer_esc';
+    WHERE status='fixing-$fixer_id';
   "
 }
 
@@ -390,13 +395,13 @@ db_fix_task() {
   _sql_exec "
     UPDATE tasks SET status='fixed', branch='$branch_esc', attempts=$attempts, error='$error_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id;
+    WHERE id=$task_id AND (status='failed' OR status LIKE 'fixing-%' OR status='blocked');
   "
 }
 
 db_block_task() {
   local task_id; task_id=$(_sql_int "$1")
-  _sql_exec "UPDATE tasks SET status='blocked', updated_at=datetime('now') WHERE id=$task_id;"
+  _sql_exec "UPDATE tasks SET status='blocked', updated_at=datetime('now') WHERE id=$task_id AND (status='failed' OR status LIKE 'fixing-%');"
 }
 
 db_supersede_task() {

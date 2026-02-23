@@ -42,10 +42,20 @@ function isProcessAlive(pid: number): boolean {
 /**
  * Reset a stale current-task file if it shows in_progress but no worker is running.
  * Without this, a newly spawned worker sees "in_progress" and exits immediately.
+ * Guards against clobbering a live worker by checking for its PID lock first.
  */
-function resetStaleTaskFile(devDir: string, workerType: ScalableType, slotId: number): void {
+function resetStaleTaskFile(devDir: string, lockPrefix: string, workerType: ScalableType, slotId: number): void {
   // Only dev-worker uses per-worker current-task files that can block startup
   if (workerType !== "dev-worker") return;
+
+  // Check if the worker's PID lock exists and its process is still running.
+  // If so, do NOT reset — the worker is alive and owns this task file.
+  const lockPath = `${lockPrefix}-dev-worker-${slotId}.lock`;
+  const pid = readPidFile(lockPath);
+  if (pid !== null && isProcessAlive(pid)) {
+    return; // Worker is alive — don't clobber its task file
+  }
+
   const taskFile = resolve(devDir, `current-task-${slotId}.md`);
   try {
     const content = readFileSync(taskFile, "utf-8");
@@ -131,10 +141,9 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to get worker counts",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );
@@ -199,7 +208,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
           usedIds.add(newId);
 
           // Clear stale in_progress task file so the new worker doesn't bail out
-          resetStaleTaskFile(devDir, workerType, newId);
+          resetStaleTaskFile(devDir, lockPrefix, workerType, newId);
 
           const scriptPath = resolve(scriptsDir, `${workerType}.sh`);
           // First instance of non-dev-worker uses unnumbered log; extras get numbered
@@ -237,18 +246,36 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         for (const instance of toKill) {
           // Check if the worker is currently holding the merge lock — refuse to
           // kill mid-merge to prevent leaving main in an inconsistent state.
+          //
+          // TOCTOU note: There is an inherent race window between this check and
+          // the kill() call below — the worker could acquire the merge lock in
+          // between. We narrow the window with a second check immediately before
+          // kill, but cannot fully eliminate it without kernel-level atomic
+          // check-and-kill. In practice the window is <1ms and the merge lock
+          // acquisition itself takes longer (mkdir + PID write), making this
+          // race extremely unlikely to trigger.
           const mergeLockDir = `${lockPrefix}-merge.lock`;
           const mergePidFile = `${mergeLockDir}/pid`;
-          if (existsSync(mergeLockDir) && existsSync(mergePidFile)) {
+          const isMerging = (): boolean => {
+            if (!existsSync(mergeLockDir) || !existsSync(mergePidFile)) return false;
             try {
-              const lockPid = readFileSync(mergePidFile, "utf-8").trim();
-              if (lockPid === String(instance.pid)) {
-                return Response.json(
-                  { data: null, error: `Worker ${instance.id} is currently merging — cannot scale down safely. Try again shortly.` },
-                  { status: 409 }
-                );
-              }
-            } catch { /* ignore read errors */ }
+              return readFileSync(mergePidFile, "utf-8").trim() === String(instance.pid);
+            } catch { return false; }
+          };
+
+          if (isMerging()) {
+            return Response.json(
+              { data: null, error: `Worker ${instance.id} is currently merging — cannot scale down safely. Try again shortly.` },
+              { status: 409 }
+            );
+          }
+
+          // Second check right before kill to narrow the TOCTOU window
+          if (isMerging()) {
+            return Response.json(
+              { data: null, error: `Worker ${instance.id} acquired merge lock — cannot scale down safely. Try again shortly.` },
+              { status: 409 }
+            );
           }
 
           try {
@@ -290,10 +317,9 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to scale workers",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

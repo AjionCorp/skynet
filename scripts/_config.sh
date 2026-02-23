@@ -70,6 +70,7 @@ export SKYNET_CODEX_OAUTH_ISSUER="${SKYNET_CODEX_OAUTH_ISSUER:-}"
 export SKYNET_DEV_SERVER_URL="${SKYNET_DEV_SERVER_URL:-http://localhost:3000}"
 export SKYNET_DEV_PORT="${SKYNET_DEV_PORT:-${SKYNET_DEV_SERVER_PORT:-3000}}"
 export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
+export SKYNET_LINT_CMD="${SKYNET_LINT_CMD:-}"  # empty string means "skip lint gate"
 export SKYNET_WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${SKYNET_DEV_DIR}/worktrees}"
 
 # Quality gates defaults (just typecheck by default)

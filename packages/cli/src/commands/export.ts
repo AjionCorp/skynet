@@ -51,6 +51,11 @@ export async function exportCommand(options: ExportOptions) {
   const defaultPath = `skynet-snapshot-${isoDate}.json`;
   const outputPath = resolve(options.output || defaultPath);
 
+  console.warn(
+    "\n  WARNING: The export may contain sensitive data (task descriptions, error logs, DB dumps)." +
+    "\n  Review the output before sharing or storing in untrusted locations.\n"
+  );
+
   writeFileSync(outputPath, JSON.stringify(snapshot, null, 2), "utf-8");
 
   console.log(`\n  Pipeline snapshot exported to: ${outputPath}`);

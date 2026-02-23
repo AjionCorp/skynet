@@ -59,6 +59,7 @@ tg_throttled() {
     [ "$diff" -lt "$interval" ] && return 0
   fi
 
+  mkdir -p "$(dirname "$flag_file")" 2>/dev/null || true
   echo "$now" > "$flag_file"
   tg "$msg"
 }

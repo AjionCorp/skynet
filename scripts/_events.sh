@@ -23,9 +23,16 @@ emit_event() {
     local sz
     sz=$(wc -c < "$events_log" 2>/dev/null || echo 0)
     if [ "$sz" -gt $((max_kb * 1024)) ]; then
-      rm -f "${events_log}.2"
-      [ -f "${events_log}.1" ] && mv "${events_log}.1" "${events_log}.2"
-      mv "$events_log" "${events_log}.1"
+      # Brief mkdir-based lock around rotation to prevent concurrent writers
+      # from rotating simultaneously (only the rotation section, not the emit).
+      local _rot_lock="${SKYNET_LOCK_PREFIX:-/tmp/skynet}-events-rotate.lock"
+      if mkdir "$_rot_lock" 2>/dev/null; then
+        rm -f "${events_log}.2"
+        [ -f "${events_log}.1" ] && mv "${events_log}.1" "${events_log}.2"
+        mv "$events_log" "${events_log}.1"
+        rmdir "$_rot_lock" 2>/dev/null || true
+      fi
+      # If lock acquisition failed, another writer is rotating — skip this cycle
     fi
   fi
   local _safe_desc="${description:0:3000}"

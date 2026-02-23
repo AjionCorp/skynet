@@ -158,8 +158,18 @@ cleanup_on_exit() {
   git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
-  # Unclaim task if we were mid-fix (revert fixing-N back to pending)
-  if [ -n "$_CURRENT_TASK_TITLE" ]; then
+  # Unclaim task if we were mid-fix (revert fixing-N back to pending).
+  # Only unclaim tasks whose fixer_id matches this instance, preventing
+  # a broad sweep from reclaiming tasks belonging to other fixers.
+  if [ -n "$_CURRENT_TASK_TITLE" ] && [ -n "$_db_task_id" ]; then
+    # Verify the task is still claimed by this fixer before unclaiming
+    local _claimed_fixer
+    _claimed_fixer=$(_db "SELECT fixer_id FROM tasks WHERE id=$(_sql_int "$_db_task_id") AND status='fixing-$FIXER_ID';" 2>/dev/null || echo "")
+    if [ "$_claimed_fixer" = "$FIXER_ID" ]; then
+      db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+      log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE (fixer $FIXER_ID)"
+    fi
+  elif [ -n "$_CURRENT_TASK_TITLE" ]; then
     db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
@@ -677,7 +687,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (push failed post-merge)"
         new_attempts=$((fix_attempts + 1))
         [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || true
-    
+        db_export_state_files
+
         _CURRENT_TASK_TITLE=""
         release_merge_lock
         db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true

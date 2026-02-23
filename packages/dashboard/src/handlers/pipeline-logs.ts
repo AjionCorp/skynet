@@ -61,6 +61,16 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
 
     const logPath = resolve(logsDir, `${script}.log`);
 
+    // Defense-in-depth: ensure resolved path stays within the logs directory
+    // (the regex check above already prevents traversal characters, but this
+    // guards against future changes to the allowedScripts set).
+    if (!logPath.startsWith(resolve(logsDir) + "/") && logPath !== resolve(logsDir)) {
+      return Response.json(
+        { data: null, error: "Forbidden" },
+        { status: 403 }
+      );
+    }
+
     try {
       let output: string;
 

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync, lstatSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
@@ -362,6 +362,12 @@ export async function initCommand(options: InitOptions) {
       // Reject path traversal attempts
       const resolvedTarget = resolve(devDir, filename);
       if (!resolvedTarget.startsWith(resolve(devDir) + "/") && resolvedTarget !== resolve(devDir)) continue;
+      // Skip symlinks to prevent overwriting files outside .dev/
+      try {
+        if (lstatSync(resolvedTarget).isSymbolicLink()) continue;
+      } catch {
+        // File doesn't exist yet — safe to write
+      }
       writeFileSync(resolvedTarget, content, "utf-8");
       restored++;
     }

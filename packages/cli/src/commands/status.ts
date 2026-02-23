@@ -11,6 +11,9 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
+// Keep in sync with packages/dashboard/src/lib/constants.ts STALE_THRESHOLD_SECONDS
+const STALE_THRESHOLD_SECONDS = 45 * 60;
+
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -148,6 +151,11 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Task Counts (SQLite only) ---
+  // NOTE: completedCount here queries status IN ('completed','done') from SQLite.
+  // The dashboard handler (pipeline-status.ts) uses db.getCompletedCount() which
+  // queries status IN ('completed','fixed'). The difference is intentional:
+  // CLI counts 'done' tasks (SQLite lifecycle), dashboard counts 'fixed' tasks
+  // (self-corrected failures that were re-completed).
   let pending = 0;
   let claimed = 0;
   let completedCount = 0;
@@ -223,11 +231,11 @@ export async function statusCommand(options: StatusOptions) {
 
   // --- Heartbeat staleness (SQLite only) ---
   const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
-  const staleThresholdMs = 45 * 60 * 1000;
+  const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
 
   if (usingSqlite) {
     try {
-      // staleSecs is computed from constants (45 * 60) — safe to interpolate
+      // staleSecs is computed from STALE_THRESHOLD_SECONDS — safe to interpolate
       const staleSecs = Math.floor(staleThresholdMs / 1000);
       const hbRow = sqliteRows(devDir,
         `SELECT
@@ -367,6 +375,10 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Health Score ---
+  // Keep in sync with canonical formula in:
+  //   packages/dashboard/src/lib/db.ts (SkynetDB.calculateHealthScore)
+  //   packages/dashboard/src/handlers/pipeline-status.ts (calculateHealthScore)
+  //   scripts/watchdog.sh (_health_score_alert)
   let healthScore = 100;
   healthScore -= failedPending * 5;
   healthScore -= blockerCount * 10;

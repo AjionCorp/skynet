@@ -4,6 +4,7 @@ import { dirname } from "path";
 import { fileURLToPath } from "url";
 import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
+import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "../lib/backlog-parser";
@@ -109,12 +110,17 @@ function parseBacklog(raw: string) {
 }
 
 /**
- * Calculate a pipeline health score (0–100).
+ * Calculate a pipeline health score (0-100).
  * Starts at 100 and deducts for issues:
  *   -5 per pending failed task
  *  -10 per active blocker
  *   -2 per stale heartbeat
  *   -1 per task that has been in progress >24 hours
+ *
+ * Keep in sync with canonical formula in:
+ *   - packages/dashboard/src/lib/db.ts (SkynetDB.calculateHealthScore)
+ *   - packages/cli/src/commands/status.ts (healthScore calculation)
+ *   - scripts/watchdog.sh (_health_score_alert)
  */
 function calculateHealthScore(opts: {
   failedPendingCount: number;
@@ -174,6 +180,15 @@ function parseMissionProgress(opts: {
 
 /**
  * Evaluate a single success criterion against pipeline state.
+ *
+ * Criterion IDs (1-6) correspond to the standard mission.md format:
+ *   1. Zero-to-autonomous setup
+ *   2. Self-correction rate
+ *   3. No zombies/deadlocks
+ *   4. Dashboard visibility
+ *   5. Measurable progress
+ *   6. Multi-agent support
+ * The default case handles unknown criteria safely (returns "not-met").
  */
 function evaluateCriterion(
   id: number,
@@ -324,7 +339,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       if (usingSqlite && db) {
         heartbeats = db.getHeartbeats(maxW);
       } else {
-        const staleThresholdMs = 45 * 60 * 1000;
+        const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
         for (let wid = 1; wid <= maxW; wid++) {
           const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
           if (hbRaw) {
@@ -627,6 +642,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
+      // NOTE: getCompletedCount() queries status IN ('completed','fixed').
+      // The CLI status.ts uses status IN ('completed','done') instead.
+      // See CLI status.ts for the rationale on this difference.
       const completedTotal = (usingSqlite && db) ? db.getCompletedCount() : completed.length;
 
       const missionProgress = parseMissionProgress({
@@ -685,10 +703,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Failed to read pipeline status",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

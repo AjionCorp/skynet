@@ -44,13 +44,18 @@ export async function runCommand(task: string, options: RunOptions) {
     process.exit(1);
   }
 
-  // Resolve gate command from shorthand or pass through raw command
+  // Resolve gate command from shorthand — reject unknown gate names
   const gateMap: Record<string, string> = {
     typecheck: vars.SKYNET_TYPECHECK_CMD || "pnpm typecheck",
   };
-  const gate = options.gate
-    ? gateMap[options.gate] || options.gate
-    : undefined;
+  let gate: string | undefined;
+  if (options.gate) {
+    if (!(options.gate in gateMap)) {
+      console.error(`Error: Unknown gate "${options.gate}". Valid gates: ${Object.keys(gateMap).join(", ")}`);
+      process.exit(1);
+    }
+    gate = gateMap[options.gate];
+  }
 
   const agent = options.agent || undefined;
   const workerId = options.worker || "99";

@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { spawnSync } from "child_process";
 import type { SkynetConfig, EventEntry } from "../types";
 import { getSkynetDB } from "../lib/db";
 
@@ -17,10 +17,14 @@ export function createEventsHandler(config: SkynetConfig) {
         console.warn(`[events] SQLite fallback: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
       }
 
-      let raw: string;
-      try {
-        raw = readFileSync(eventsPath, "utf-8");
-      } catch {
+      // Read only the last 100 lines instead of the entire file to avoid
+      // unbounded memory usage on large events.log files.
+      const tailResult = spawnSync("tail", ["-100", eventsPath], {
+        encoding: "utf-8",
+        timeout: 5000,
+      });
+      const raw = tailResult.stdout || "";
+      if (!raw.trim()) {
         return Response.json({ data: [] as EventEntry[], error: null });
       }
 
@@ -47,14 +51,14 @@ export function createEventsHandler(config: SkynetConfig) {
         });
       }
 
-      const last100 = entries.slice(-100);
-
-      return Response.json({ data: last100, error: null });
+      return Response.json({ data: entries, error: null });
     } catch (err) {
       return Response.json(
         {
           data: null,
-          error: err instanceof Error ? err.message : "Failed to read events",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

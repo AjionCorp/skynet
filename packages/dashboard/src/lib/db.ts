@@ -5,6 +5,7 @@ import type {
   EventEntry,
   SelfCorrectionStats,
 } from "../types";
+import { STALE_THRESHOLD_SECONDS } from "./constants";
 
 // better-sqlite3 is a peer/optional dependency — handlers that call SkynetDB
 // must ensure it's installed.  We use a lazy require so the rest of the package
@@ -341,7 +342,7 @@ export class SkynetDB {
 
   /** Get heartbeats for all workers. */
   getHeartbeats(maxWorkers: number): Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> {
-    const staleMs = 45 * 60 * 1000;
+    const staleMs = STALE_THRESHOLD_SECONDS * 1000;
     const result: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
     const rows = this.db
       .prepare("SELECT id, heartbeat_epoch FROM workers WHERE id <= ?")
@@ -397,9 +398,15 @@ export class SkynetDB {
 
   // ── Health Score ───────────────────────────────────────────────────
 
-  /** Calculate pipeline health score (0-100) in a single query. */
+  /**
+   * Calculate pipeline health score (0-100) in a single query.
+   * Canonical health score formula -- keep in sync with:
+   *   - packages/dashboard/src/handlers/pipeline-status.ts (calculateHealthScore)
+   *   - packages/cli/src/commands/status.ts (healthScore calculation)
+   *   - scripts/watchdog.sh (_health_score_alert)
+   */
   calculateHealthScore(maxWorkers: number): number {
-    const staleEpoch = Math.floor(Date.now() / 1000) - 45 * 60;
+    const staleEpoch = Math.floor(Date.now() / 1000) - STALE_THRESHOLD_SECONDS;
     const row = this.db
       .prepare(
         `SELECT
@@ -557,12 +564,41 @@ export class SkynetDB {
 }
 
 // ─── Singleton factory ───────────────────────────────────────────────
+// Connection pooling is unnecessary here: the dashboard runs as a single
+// Next.js server process with WAL-mode SQLite, so a single reused
+// connection (with busy_timeout) is sufficient and avoids the complexity
+// of pool management.
 
 let _instance: SkynetDB | null = null;
+let _instanceIno: bigint | number | null = null;
+let _instancePath: string | null = null;
 
 export function getSkynetDB(devDir: string): SkynetDB {
+  const dbPath = `${devDir}/skynet.db`;
+  // Check if the database file's inode has changed (e.g., restored from backup).
+  // If so, close the stale connection and create a fresh one.
+  if (_instance && _instancePath === dbPath) {
+    try {
+      const { statSync } = require("fs") as typeof import("fs");
+      const currentIno = statSync(dbPath).ino;
+      if (_instanceIno !== null && currentIno !== _instanceIno) {
+        _instance.close();
+        _instance = null;
+        _instanceIno = null;
+      }
+    } catch {
+      // File missing — let the constructor handle the error
+    }
+  }
   if (!_instance) {
-    _instance = new SkynetDB(`${devDir}/skynet.db`);
+    _instance = new SkynetDB(dbPath);
+    _instancePath = dbPath;
+    try {
+      const { statSync } = require("fs") as typeof import("fs");
+      _instanceIno = statSync(dbPath).ino;
+    } catch {
+      _instanceIno = null;
+    }
   }
   return _instance;
 }

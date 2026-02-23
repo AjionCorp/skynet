@@ -9,6 +9,9 @@ interface WatchOptions {
   dir?: string;
 }
 
+// Keep in sync with packages/dashboard/src/lib/constants.ts STALE_THRESHOLD_SECONDS
+const STALE_THRESHOLD_SECONDS = 45 * 60;
+
 // ANSI color codes
 const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
@@ -66,7 +69,7 @@ function renderDashboard(projectDir: string, vars: Record<string, string>) {
   // --- Health Score ---
   let staleHeartbeatCount = 0;
   let staleTasks24hCount = 0;
-  const staleThresholdMs = 45 * 60 * 1000;
+  const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
   const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
   for (let wid = 1; wid <= maxWorkers; wid++) {

@@ -6,6 +6,9 @@ import { parseBody } from "../lib/parse-body";
  * Parse a skynet.config.sh file into key-value pairs.
  * Extracts `export VAR="value"` and `export VAR=value` lines.
  * Preserves comments for context.
+ *
+ * NOTE: Multi-line values (backslash continuation, heredocs) are NOT supported.
+ * Each export must be on a single line.
  */
 function parseConfigFile(raw: string): { key: string; value: string; comment: string }[] {
   const entries: { key: string; value: string; comment: string }[] = [];
@@ -33,8 +36,13 @@ function parseConfigFile(raw: string): { key: string; value: string; comment: st
       const key = exportMatch[1];
       let value = exportMatch[2];
       // Strip surrounding quotes
-      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+      if (value.startsWith('"') && value.endsWith('"')) {
         value = value.slice(1, -1);
+        // Unescape bash double-quote escape sequences
+        value = value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+      } else if (value.startsWith("'") && value.endsWith("'")) {
+        value = value.slice(1, -1);
+        // Single-quoted values have no escape sequences in bash
       }
       entries.push({ key, value, comment: pendingComment });
       pendingComment = "";
@@ -64,7 +72,9 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
     const exportMatch = trimmed.match(/^export\s+([A-Z_][A-Z0-9_]*)=(.*)$/);
     if (exportMatch && exportMatch[1] in updates) {
       const key = exportMatch[1];
-      const newValue = updates[key].replace(/["\\$`\n\r]/g, (ch) => {
+      // NOTE: validateUpdates() already rejects " and ` characters, so only
+      // $, \, \n, and \r can actually reach this replacement function.
+      const newValue = updates[key].replace(/[\\$\n\r]/g, (ch) => {
         if (ch === "\n") return "\\n";
         if (ch === "\r") return "\\r";
         return "\\" + ch;
@@ -114,10 +124,17 @@ const MUTABLE_KEYS = new Set([
   "SKYNET_GATE_2",
   "SKYNET_GATE_3",
   "SKYNET_BRANCH_PREFIX",
+  "SKYNET_MAIN_BRANCH",
+  "SKYNET_CLAUDE_BIN",
   "SKYNET_CLAUDE_FLAGS",
+  "SKYNET_CODEX_BIN",
+  "SKYNET_CODEX_SUBCOMMAND",
   "SKYNET_CODEX_FLAGS",
   "SKYNET_CODEX_MODEL",
   "SKYNET_AGENT_PLUGIN",
+  "SKYNET_EXTRA_PATH",
+  "SKYNET_WORKER_CONTEXT",
+  "SKYNET_WORKER_CONVENTIONS",
 ]);
 
 /**
@@ -128,10 +145,11 @@ function validateUpdates(updates: Record<string, string>): string | null {
     if (typeof key !== "string" || typeof value !== "string") {
       return `Invalid type for key "${key}"`;
     }
-    // Block shell injection: no backticks, $(), ${}, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
-    // Note: bare $VAR references are intentionally allowed — bash will expand them when sourcing.
-    // Only $() and ${} command/brace expansion are blocked for security.
-    if (/[`"'|&><()]|\$[({]|;|\n|\r/.test(value)) {
+    // Block shell injection: no backticks, $(), ${}, $VAR, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
+    // Bare $VAR references are also blocked — they would be expanded by bash when
+    // sourcing the config, allowing exfiltration of environment variables or
+    // unintended value injection.
+    if (/[`"'|&><()]|\$[({a-zA-Z_]|;|\n|\r/.test(value)) {
       return `Unsafe characters in value for "${key}"`;
     }
     // Key must be a valid bash variable name
@@ -188,7 +206,9 @@ export function createConfigHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error: err instanceof Error ? err.message : "Failed to read config",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );
@@ -239,7 +259,9 @@ export function createConfigHandler(config: SkynetConfig) {
       return Response.json(
         {
           data: null,
-          error: err instanceof Error ? err.message : "Failed to update config",
+          error: process.env.NODE_ENV === "development"
+            ? (err instanceof Error ? err.message : "Internal error")
+            : "Internal server error",
         },
         { status: 500 }
       );

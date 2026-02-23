@@ -1,4 +1,6 @@
-// TODO: Migrate to SQLite data source (currently reads from .md files which may be stale)
+// NOTE: Metrics reads from .md state files (completed.md, failed-tasks.md) only
+// and may show stale data if the pipeline is not running or hasn't exported
+// state files recently. SQLite migration will provide real-time accuracy.
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig";
 import { readFile } from "../utils/readFile";

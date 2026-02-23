@@ -36,7 +36,10 @@ acquire_lock() {
 }
 
 release_lock() {
-  rm -rf "$LOCK_FILE" 2>/dev/null || true
+  # Only remove lock if owned by this process (PID check like _locks.sh)
+  if [ -f "$LOCK_FILE/pid" ] && [ "$(cat "$LOCK_FILE/pid" 2>/dev/null)" = "$$" ]; then
+    rm -rf "$LOCK_FILE" 2>/dev/null || true
+  fi
 }
 
 if ! acquire_lock; then
@@ -99,11 +102,15 @@ if ! $typecheck_ok; then
 fi
 
 # --- Lint (informational, don't block on it) ---
-log "Running lint..."
-if eval "$SKYNET_LINT_CMD" >> "$LOG" 2>&1; then
-  log "Lint passed."
+if [ -n "$SKYNET_LINT_CMD" ]; then
+  log "Running lint..."
+  if eval "$SKYNET_LINT_CMD" >> "$LOG" 2>&1; then
+    log "Lint passed."
+  else
+    log "Lint has warnings/errors (non-blocking)."
+  fi
 else
-  log "Lint has warnings/errors (non-blocking)."
+  log "Lint skipped (SKYNET_LINT_CMD is empty)."
 fi
 
 # --- Git status check ---
