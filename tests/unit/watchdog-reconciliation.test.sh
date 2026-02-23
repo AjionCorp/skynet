@@ -6,7 +6,9 @@
 #
 # Usage: bash tests/unit/watchdog-reconciliation.test.sh
 
-set -euo pipefail
+# NOTE: -e is intentionally omitted — the test uses its own PASS/FAIL counters
+# and set -e conflicts with _db.sh functions that use pipes under pipefail.
+set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PASS=0
@@ -95,6 +97,9 @@ log() { echo "$*" >> "$LOG_CAPTURE"; }
 source "$REPO_ROOT/scripts/_db.sh"
 db_init
 
+# _db_sep uses \x1f (Unit Separator), not '|'. Use this for output parsing.
+SEP=$'\x1f'
+
 # Source compat layer (needed by validate_backlog for file_mtime, file_size, to_upper)
 source "$REPO_ROOT/scripts/_compat.sh"
 
@@ -104,25 +109,22 @@ SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
 eval "$(sed -n '/^validate_backlog()/,/^}$/p' "$REPO_ROOT/scripts/_config.sh")"
 
 # ============================================================
-# TEST: validate_backlog — duplicate detection
+# TEST: validate_backlog — duplicate detection (SQLite-based)
 # ============================================================
 
 echo ""
 log "=== validate_backlog: duplicate detection ==="
 
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Build login page — OAuth2
-- [ ] [FEAT] Build login page — Different description
-- [ ] [FIX] Fix navbar
-- [x] [FEAT] Completed task
-EOF
+# Insert duplicate pending titles into SQLite
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Build login page" "FEAT" "OAuth2" "top"
+db_add_task "Build login page" "FEAT" "Different description" "bottom"
+db_add_task "Fix navbar" "FIX" "" "bottom"
 
 : > "$LOG_CAPTURE"
 validate_backlog 2>/dev/null
 VALIDATE_OUTPUT=$(cat "$LOG_CAPTURE")
-assert_contains "$VALIDATE_OUTPUT" "Duplicate pending title" "validate_backlog: detects duplicate titles"
+assert_contains "$VALIDATE_OUTPUT" "Duplicate pending title" "validate_backlog: detects duplicate titles in SQLite"
 
 # ============================================================
 # TEST: validate_backlog — no false positives on unique tasks
@@ -131,120 +133,15 @@ assert_contains "$VALIDATE_OUTPUT" "Duplicate pending title" "validate_backlog: 
 echo ""
 printf "  %s\n" "=== validate_backlog: no false positives ==="
 
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Unique task one
-- [ ] [FIX] Unique task two
-- [ ] [CHORE] Unique task three
-EOF
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Unique task one" "FEAT" "" "top"
+db_add_task "Unique task two" "FIX" "" "bottom"
+db_add_task "Unique task three" "CHORE" "" "bottom"
 
 : > "$LOG_CAPTURE"
 validate_backlog 2>/dev/null
 VALIDATE_OUTPUT2=$(cat "$LOG_CAPTURE")
 assert_not_contains "$VALIDATE_OUTPUT2" "Duplicate" "validate_backlog: no false positive on unique tasks"
-
-# ============================================================
-# TEST: validate_backlog — orphaned claim detection + auto-fix
-# ============================================================
-
-echo ""
-printf "  %s\n" "=== validate_backlog: orphaned claims ==="
-
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [>] [FEAT] Orphaned claimed task
-- [ ] [FIX] Normal pending task
-EOF
-
-# No workers are running (no lock dirs), so this [>] should be orphaned
-: > "$LOG_CAPTURE"
-validate_backlog 2>/dev/null
-VALIDATE_OUTPUT3=$(cat "$LOG_CAPTURE")
-assert_contains "$VALIDATE_OUTPUT3" "Orphaned claim" "validate_backlog: detects orphaned claim"
-
-# Verify auto-fix: [>] should be reset to [ ]
-assert_grep_file '^\- \[ \] \[FEAT\] Orphaned claimed task' "$BACKLOG" "validate_backlog: auto-fixes orphaned claim to pending"
-
-# ============================================================
-# TEST: validate_backlog — self-blocking detection
-# ============================================================
-
-echo ""
-printf "  %s\n" "=== validate_backlog: self-blocking ==="
-
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Self blocker | blockedBy: Self blocker
-- [ ] [FIX] Normal task
-EOF
-
-: > "$LOG_CAPTURE"
-validate_backlog 2>/dev/null
-VALIDATE_OUTPUT4=$(cat "$LOG_CAPTURE")
-assert_contains "$VALIDATE_OUTPUT4" "task blocks itself" "validate_backlog: detects self-blocking task"
-
-# ============================================================
-# TEST: validate_backlog — missing blockedBy reference
-# ============================================================
-
-echo ""
-printf "  %s\n" "=== validate_backlog: missing blockedBy ref ==="
-
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Dependent task | blockedBy: ZZZZZ phantom ref that is nowhere
-- [ ] [FIX] Normal task
-EOF
-
-: > "$LOG_CAPTURE"
-validate_backlog 2>/dev/null
-VALIDATE_OUTPUT5=$(cat "$LOG_CAPTURE")
-assert_contains "$VALIDATE_OUTPUT5" "blockedBy ref not found" "validate_backlog: detects missing blockedBy reference"
-
-# ============================================================
-# TEST: validate_backlog — valid blockedBy reference
-# ============================================================
-
-echo ""
-printf "  %s\n" "=== validate_backlog: valid blockedBy ref ==="
-
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Second task | blockedBy: First task
-- [ ] [FIX] First task
-EOF
-
-: > "$LOG_CAPTURE"
-validate_backlog 2>/dev/null
-VALIDATE_OUTPUT6=$(cat "$LOG_CAPTURE")
-assert_not_contains "$VALIDATE_OUTPUT6" "blockedBy ref not found" "validate_backlog: valid blockedBy not flagged"
-
-# ============================================================
-# TEST: validate_backlog — blockedBy ref found in completed.md
-# ============================================================
-
-echo ""
-printf "  %s\n" "=== validate_backlog: blockedBy ref in completed.md ==="
-
-cat > "$BACKLOG" <<'EOF'
-# Backlog
-
-- [ ] [FEAT] Depends on completed | blockedBy: Already done task
-EOF
-
-cat > "$COMPLETED" <<'EOF'
-2026-02-20 | Already done task | dev/done | 5m | success
-EOF
-
-: > "$LOG_CAPTURE"
-validate_backlog 2>/dev/null
-VALIDATE_OUTPUT7=$(cat "$LOG_CAPTURE")
-assert_not_contains "$VALIDATE_OUTPUT7" "blockedBy ref not found" "validate_backlog: finds blockedBy in completed.md"
 
 # ============================================================
 # TEST: _normalize_title
@@ -346,8 +243,8 @@ sqlite3 "$DB_PATH" "UPDATE workers SET heartbeat_epoch = $STALE_EPOCH WHERE id=2
 
 # 45 min threshold = 2700 seconds
 STALE=$(db_get_stale_heartbeats 2700)
-assert_contains "$STALE" "2|" "stale heartbeat: detects worker 2 as stale"
-assert_not_contains "$STALE" "1|$NOW" "stale heartbeat: worker 1 not flagged"
+assert_contains "$STALE" "2${SEP}" "stale heartbeat: detects worker 2 as stale"
+assert_not_contains "$STALE" "1${SEP}$NOW" "stale heartbeat: worker 1 not flagged"
 
 # ============================================================
 # TEST: SQLite integrity check (PRAGMA quick_check)

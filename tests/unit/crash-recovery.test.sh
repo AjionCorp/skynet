@@ -6,7 +6,9 @@
 #
 # Usage: bash tests/unit/crash-recovery.test.sh
 
-set -euo pipefail
+# NOTE: -e is intentionally omitted — the test uses its own PASS/FAIL counters
+# and set -e conflicts with _db.sh functions that use pipes under pipefail.
+set -uo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PASS=0
@@ -80,6 +82,9 @@ log() { echo "$*" >> "$LOG_CAPTURE"; }
 # Source modules under test
 source "$REPO_ROOT/scripts/_compat.sh"
 source "$REPO_ROOT/scripts/_db.sh"
+
+# _db_sep uses \x1f (Unit Separator), not '|'. Use this for output parsing.
+SEP=$'\x1f'
 db_init
 
 # Define is_running (from watchdog.sh)
@@ -246,8 +251,7 @@ FIXER_LOCK="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
 rm -rf "$FIXER_LOCK" 2>/dev/null || true
 
 # Query should detect this as stale
-_DB_SEP="|"
-STALE_FIXING=$(sqlite3 -separator "$_DB_SEP" "$DB_PATH" "
+STALE_FIXING=$(sqlite3 -separator "|" "$DB_PATH" "
   SELECT id, title, fixer_id
   FROM tasks
   WHERE status LIKE 'fixing-%'
@@ -381,12 +385,12 @@ db_set_worker_status 4 "dev" "idle" "" "" ""
 # Check if db_get_hung_workers exists
 if declare -f db_get_hung_workers >/dev/null 2>&1; then
   HUNG=$(db_get_hung_workers 2700)
-  assert_contains "$HUNG" "2|" "hung worker: detects worker 2 as hung"
+  assert_contains "$HUNG" "2${SEP}" "hung worker: detects worker 2 as hung"
 
-  HUNG_CHECK1=$(echo "$HUNG" | grep "^1|" || true)
+  HUNG_CHECK1=$(echo "$HUNG" | grep "^1${SEP}" || true)
   assert_empty "$HUNG_CHECK1" "hung worker: normal worker 1 not flagged"
 
-  HUNG_CHECK4=$(echo "$HUNG" | grep "^4|" || true)
+  HUNG_CHECK4=$(echo "$HUNG" | grep "^4${SEP}" || true)
   assert_empty "$HUNG_CHECK4" "hung worker: idle worker 4 not flagged"
 else
   # Fallback: test via direct SQL
@@ -405,9 +409,9 @@ fi
 
 # Stale heartbeat detection (different from hung)
 STALE=$(db_get_stale_heartbeats 2700)
-assert_contains "$STALE" "3|" "stale heartbeat: detects worker 3"
+assert_contains "$STALE" "3${SEP}" "stale heartbeat: detects worker 3"
 
-STALE_CHECK2=$(echo "$STALE" | grep "^2|" || true)
+STALE_CHECK2=$(echo "$STALE" | grep "^2${SEP}" || true)
 assert_empty "$STALE_CHECK2" "stale heartbeat: worker 2 NOT stale (heartbeat is fresh)"
 
 # ============================================================
