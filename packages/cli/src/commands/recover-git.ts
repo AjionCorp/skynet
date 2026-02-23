@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig";
 import { isSqliteReady, sqliteRows, sqliteQuery } from "../utils/sqliteQuery";
 import { sqlEscape } from "../utils/sqliteQuery";
@@ -26,29 +26,31 @@ export async function recoverGitCommand(options: RecoverOptions) {
   console.log(`\n  Skynet Git Recovery${isDryRun ? " (DRY RUN)" : ""}\n`);
 
   // Check for divergence
-  try {
-    execSync(`git fetch origin ${mainBranch}`, {
+  {
+    const result = spawnSync("git", ["fetch", "origin", mainBranch], {
       cwd: projectDir,
       stdio: ["ignore", "pipe", "pipe"],
       timeout: 30000,
     });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`  Failed to fetch origin: ${msg}`);
-    process.exit(1);
+    if (result.status !== 0) {
+      const msg = result.stderr ? result.stderr.toString().trim() : "unknown error";
+      console.error(`  Failed to fetch origin: ${msg}`);
+      process.exit(1);
+    }
   }
 
   let divergedCount: number;
-  try {
-    const count = execSync(`git rev-list --count origin/${mainBranch}..${mainBranch}`, {
+  {
+    const result = spawnSync("git", ["rev-list", "--count", `origin/${mainBranch}..${mainBranch}`], {
       cwd: projectDir,
       encoding: "utf-8",
       stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-    divergedCount = parseInt(count, 10) || 0;
-  } catch {
-    console.error("  Failed to detect divergence. Is this a git repository?");
-    process.exit(1);
+    });
+    if (result.status !== 0) {
+      console.error("  Failed to detect divergence. Is this a git repository?");
+      process.exit(1);
+    }
+    divergedCount = parseInt((result.stdout as string).trim(), 10) || 0;
   }
 
   if (divergedCount === 0) {
@@ -59,10 +61,11 @@ export async function recoverGitCommand(options: RecoverOptions) {
   console.log(`  Divergence: ${divergedCount} local commit(s) ahead of origin/${mainBranch}\n`);
 
   // Show diverged commits
-  const logOutput = execSync(
-    `git log --oneline origin/${mainBranch}..${mainBranch}`,
+  const logResult = spawnSync(
+    "git", ["log", "--oneline", `origin/${mainBranch}..${mainBranch}`],
     { cwd: projectDir, encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] }
-  ).trim();
+  );
+  const logOutput = (logResult.stdout as string).trim();
 
   console.log("  Diverged commits:");
   for (const line of logOutput.split("\n")) {
@@ -100,16 +103,17 @@ export async function recoverGitCommand(options: RecoverOptions) {
 
   // Reset to origin
   console.log(`\n  Resetting local ${mainBranch} to origin/${mainBranch}...`);
-  try {
-    execSync(`git reset --hard origin/${mainBranch}`, {
+  {
+    const result = spawnSync("git", ["reset", "--hard", `origin/${mainBranch}`], {
       cwd: projectDir,
       stdio: ["ignore", "pipe", "pipe"],
     });
+    if (result.status !== 0) {
+      const msg = result.stderr ? result.stderr.toString().trim() : "unknown error";
+      console.error(`  Git reset failed: ${msg}`);
+      process.exit(1);
+    }
     console.log("  Git reset: OK");
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error(`  Git reset failed: ${msg}`);
-    process.exit(1);
   }
 
   // Reset incorrectly-completed tasks in SQLite to 'failed'

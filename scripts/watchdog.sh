@@ -32,7 +32,8 @@ else
       exit 0
     fi
     # Stale lock — reclaim atomically
-    rm -rf "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+    mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+    rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
     if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
       echo $$ > "$WATCHDOG_LOCK_DIR/pid"
     else
@@ -56,6 +57,7 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 while true; do
 (
 set -euo pipefail
+trap 'log "Watchdog cycle failed at line $LINENO"' ERR
 
 # Trim logs to last 24h on each watchdog run
 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
@@ -233,8 +235,13 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     is_running "$wt_lock" && continue
 
     # Kill any orphan processes running inside the worktree (claude, node, etc.)
+    # NOTE: pgrep -f matches against the full command line. Using the resolved absolute
+    # path reduces (but doesn't eliminate) false positives from unrelated processes whose
+    # command lines happen to contain a similar substring.
+    local resolved_wt_dir
+    resolved_wt_dir=$(cd "$wt_dir" 2>/dev/null && pwd -P || echo "$wt_dir")
     local orphan_pids
-    orphan_pids=$(pgrep -f "$wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
+    orphan_pids=$(pgrep -f "$resolved_wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
       echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
@@ -394,6 +401,9 @@ if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
     log "WARNING: Daily DB backup failed"
   fi
 fi
+
+# Clean up old /tmp sentinel files (older than 7 days) to prevent accumulation
+find /tmp -maxdepth 1 -name "skynet-${SKYNET_PROJECT_NAME}-*" -mtime +7 -type f -delete 2>/dev/null || true
 
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
@@ -631,6 +641,8 @@ _archive_old_completions() {
     local entry_date
     entry_date=$(echo "$line" | awk -F'|' '{gsub(/^ +| +$/,"",$2); print $2}')
 
+    # Truncate entry_date to 10 chars (YYYY-MM-DD) for safe string comparison
+    entry_date="${entry_date:0:10}"
     # If date is older than cutoff, mark for archival
     if [ -n "$entry_date" ] && [ "$entry_date" \< "$cutoff_date" ]; then
       archive_lines="${archive_lines}${line}
@@ -973,6 +985,9 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
 fi
 
 # --- Adaptive interval: shorter when work is available, longer when idle ---
+# NOTE: _adaptive_file path must match between this inner scope (subshell) and the
+# outer scope below that reads it. Both use "/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
+# via variable interpolation from the same SKYNET_PROJECT_NAME env var.
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 if [ "${backlog_count:-0}" -gt 0 ] || [ "${failed_pending:-0}" -gt 0 ]; then
   echo 30 > "$_adaptive_file"

@@ -128,7 +128,8 @@ else
       exit 0
     fi
     # Stale lock — reclaim atomically
-    rm -rf "$LOCKFILE" 2>/dev/null || true
+    mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
+    rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
     if mkdir "$LOCKFILE" 2>/dev/null; then
       echo $$ > "$LOCKFILE/pid"
     else
@@ -153,6 +154,8 @@ cleanup_on_exit() {
     git merge --abort 2>/dev/null || true
     log "Crash recovery: aborted in-progress merge"
   fi
+  git rebase --abort 2>/dev/null || true
+  git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were mid-fix (revert fixing-N back to pending)
@@ -417,6 +420,13 @@ fi
 
 emit_event "fix_started" "Fixer $FIXER_ID: $task_title"
 if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
+  if $SHUTDOWN_REQUESTED; then
+    log "Shutdown requested after fix — unclaiming and exiting cleanly"
+    cleanup_worktree
+    db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+    _CURRENT_TASK_TITLE=""
+    exit 0
+  fi
   log "Task-fixer succeeded. Running quality gates before merge..."
 
   if [ ! -d "$WORKTREE_DIR" ]; then
@@ -509,8 +519,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}. Keeping as pending for retry."
       emit_event "merge_lock_contention" "Fixer $FIXER_ID: $task_title (lock held by PID ${_ml_holder:-unknown})"
       cleanup_worktree
-      new_attempts=$((fix_attempts + 1))
-      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$new_attempts" "failed" || true
+      # Lock contention is infra, not a fix failure — do not increment attempts
+      [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
 
       _CURRENT_TASK_TITLE=""
       exit 0
@@ -602,7 +612,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         log "Post-merge typecheck passed."
       fi
 
-      git branch -d "$branch_name"
+      git branch -d "$branch_name" 2>/dev/null || git branch -D "$branch_name" 2>/dev/null || true
 
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))

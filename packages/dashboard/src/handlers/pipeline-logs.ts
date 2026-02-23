@@ -94,14 +94,17 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
         fileSizeBytes = statSync(logPath).size;
         // Count lines via streaming byte scan (no subprocess, ~4x less memory than wc -l)
         const fd = openSync(logPath, "r");
-        const buf = Buffer.alloc(65536);
-        let bytesRead: number;
-        while ((bytesRead = readSync(fd, buf, 0, buf.length, null)) > 0) {
-          for (let i = 0; i < bytesRead; i++) {
-            if (buf[i] === 0x0a) totalLines++;
+        try {
+          const buf = Buffer.alloc(65536);
+          let bytesRead: number;
+          while ((bytesRead = readSync(fd, buf, 0, buf.length, null)) > 0) {
+            for (let i = 0; i < bytesRead; i++) {
+              if (buf[i] === 0x0a) totalLines++;
+            }
           }
+        } finally {
+          closeSync(fd);
         }
-        closeSync(fd);
       } catch {
         /* ignore */
       }

@@ -44,6 +44,9 @@ export async function validateCommand(options: ValidateOptions) {
       gatesFound++;
       console.log(`    Gate ${gateIdx}: ${gateCmd}`);
 
+      // Gate commands are intentionally shell-executed — they are user-defined
+      // quality gates. The trust boundary is the config file and the dashboard
+      // config API validation.
       try {
         execSync(gateCmd, {
           cwd: projectDir,

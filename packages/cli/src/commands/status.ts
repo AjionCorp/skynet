@@ -227,6 +227,7 @@ export async function statusCommand(options: StatusOptions) {
 
   if (usingSqlite) {
     try {
+      // staleSecs is computed from constants (45 * 60) — safe to interpolate
       const staleSecs = Math.floor(staleThresholdMs / 1000);
       const hbRow = sqliteRows(devDir,
         `SELECT

@@ -36,7 +36,8 @@ export function middleware(request: NextRequest) {
   const cookie = request.cookies.get("skynet-api-key");
   const token = authHeader?.replace("Bearer ", "") || cookie?.value;
 
-  // Accept either the raw API key (Bearer header) or HMAC-derived session token (cookie)
+  // Accepts both raw API key (for backward compatibility / CLI usage) and HMAC session token.
+  // Prefer session token for browser-based access to avoid key exposure in logs.
   const expectedSessionToken = deriveSessionToken(apiKey);
   if (token && (safeCompare(token, apiKey) || safeCompare(token, expectedSessionToken))) {
     return NextResponse.next();

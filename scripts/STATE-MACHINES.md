@@ -68,6 +68,7 @@ and timing thresholds. All `file:line` references are canonical.
 | `fixed` | Merged to main by task-fixer | `db_fix_task` |
 | `blocked` | Exceeded max fix attempts | `db_block_task` |
 | `superseded` | Duplicate of a completed task | `db_supersede_task` / `db_auto_supersede_completed` |
+| `done` | Task completed externally (manual mark-done, not via pipeline merge) | manual / API |
 
 ---
 

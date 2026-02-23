@@ -14,7 +14,7 @@ _require_db() {
 _DB_SEP=$'\x1f'
 
 # --- SQL injection prevention ---
-_sql_escape() { echo "$1" | sed "s/'/''/g"; }
+_sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
 # Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
 _sql_int() { local v="${1%%[^0-9]*}"; echo "${v:-0}"; }
 
@@ -27,16 +27,18 @@ _db_sep() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$
 # Usage: _sql_exec "SQL statement"
 # Logs to stderr and returns 1 on failure.
 _sql_exec() {
-  local _sql_err
-  _sql_err=$(_db "$1" 2>&1)
-  local _sql_rc=$?
+  local _sql_out _sql_rc _sql_errfile="/tmp/skynet-sql-err-$$"
+  _sql_out=$(_db "$1" 2>"$_sql_errfile")
+  _sql_rc=$?
+  local _sql_err=""
+  [ -f "$_sql_errfile" ] && _sql_err=$(cat "$_sql_errfile" 2>/dev/null)
+  rm -f "$_sql_errfile"
   if [ $_sql_rc -ne 0 ]; then
-    local _sql_ctx="${1:0:200}"
-    log "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
+    [ -n "$_sql_err" ] && log "SQL ERROR: $_sql_err"
+    log "SQL FAILED (rc=$_sql_rc): $(echo "$1" | head -1)"
     return 1
   fi
-  echo "$_sql_err"
-  return 0
+  [ -n "$_sql_out" ] && echo "$_sql_out"
 }
 
 # Error-checked sqlite3 wrapper that returns pipe-delimited rows.
@@ -259,12 +261,13 @@ db_complete_task() {
   local branch="$2" duration="$3" duration_secs; duration_secs=$(_sql_int "${4:-0}")
   local notes="${5:-success}"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
+  local duration_esc; duration_esc=$(_sql_escape "$duration")
   local notes_esc; notes_esc=$(_sql_escape "$notes")
   _sql_exec "
     UPDATE tasks SET status='completed', branch='$branch_esc',
-      duration='$duration', duration_secs=$duration_secs, notes='$notes_esc',
+      duration='$duration_esc', duration_secs=$duration_secs, notes='$notes_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id;
+    WHERE id=$task_id AND status='claimed';
   "
 }
 
@@ -277,7 +280,7 @@ db_fail_task() {
   _sql_exec "
     UPDATE tasks SET status='failed', branch='$branch_esc', error='$error_esc',
       failed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id;
+    WHERE id=$task_id AND (status='claimed' OR status LIKE 'fixing-%');
   "
 }
 
@@ -292,8 +295,8 @@ db_add_task() {
   norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
   if [ "$position" = "top" ]; then
-    _db "UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');"
     _db "
+      UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
       VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
       SELECT last_insert_rowid();
@@ -352,7 +355,7 @@ db_claim_failure() {
 }
 
 db_unclaim_failure() {
-  local fixer_id="$1"
+  local fixer_id; fixer_id=$(_sql_int "$1")
   local fixer_esc; fixer_esc=$(_sql_escape "$fixer_id")
   _sql_exec "
     UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
@@ -361,6 +364,10 @@ db_unclaim_failure() {
 }
 
 db_update_failure() {
+  case "$4" in
+    failed|blocked|fixing-*) ;;
+    *) log "ERROR: invalid status '$4' for db_update_failure"; return 1 ;;
+  esac
   local task_id; task_id=$(_sql_int "$1")
   local error="$2"
   local attempts; attempts=$(_sql_int "$3")
@@ -411,12 +418,12 @@ db_auto_supersede_completed() {
     UPDATE blockers SET status='resolved', resolved_at=datetime('now')
     WHERE status='active' AND task_title IN (
       SELECT title FROM tasks
-      WHERE status='failed' AND normalized_root != '' AND normalized_root IN (
+      WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
         SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
       )
     );
     UPDATE tasks SET status='superseded', updated_at=datetime('now')
-    WHERE status='failed' AND normalized_root != '' AND normalized_root IN (
+    WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
       SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
     );
     SELECT changes();
@@ -491,12 +498,14 @@ db_get_worker_status() {
 # Output: id|heartbeat_epoch|age_secs (one per stale worker)
 db_get_stale_heartbeats() {
   local stale_secs; stale_secs=$(_sql_int "$1")
+  local max_workers; max_workers=$(_sql_int "${2:-9999}")
   local now; now=$(date +%s)
   _db_sep \
     "SELECT id, heartbeat_epoch, ($now - heartbeat_epoch) as age_secs
      FROM workers
      WHERE heartbeat_epoch IS NOT NULL AND heartbeat_epoch > 0
-       AND ($now - heartbeat_epoch) > $stale_secs;"
+       AND ($now - heartbeat_epoch) > $stale_secs
+       AND id <= $max_workers;"
 }
 
 # Detect hung workers: heartbeat is fresh (subshell alive) but progress is stale
@@ -594,7 +603,7 @@ db_get_health_score() {
   failed_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='failed';")
   active_blockers=$(_db "SELECT COUNT(*) FROM blockers WHERE status='active';")
   local stale_secs=$(( ${SKYNET_STALE_MINUTES:-45} * 60 ))
-  stale_hbs=$(db_get_stale_heartbeats "$stale_secs" | grep -c '|') || stale_hbs=0
+  stale_hbs=$(db_get_stale_heartbeats "$stale_secs" "${SKYNET_MAX_WORKERS:-4}" | grep -c .) || stale_hbs=0
   stale_tasks=$(_db "SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL AND (julianday('now')-julianday(started_at))>1;")
   local score=$((100 - failed_pending * 5 - active_blockers * 10 - stale_hbs * 2 - stale_tasks))
   [ "$score" -lt 0 ] && score=0

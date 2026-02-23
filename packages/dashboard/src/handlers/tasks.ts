@@ -7,6 +7,7 @@ import { parseBacklog as parseBacklogItems, backlogCounts, extractTitle } from "
 /**
  * Parse backlog.md into items with status/tag/dependency info.
  * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
+ * NOTE: duplicated in pipeline-status.ts — consider extracting to backlog-parser.ts
  */
 function parseBacklog(raw: string) {
   const parsed = parseBacklogItems(raw);

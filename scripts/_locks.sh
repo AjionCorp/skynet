@@ -55,7 +55,9 @@ acquire_merge_lock() {
   return 0
 }
 
-# Release merge lock.
+# Release merge lock (only if owned by this process).
 release_merge_lock() {
-  rm -rf "$MERGE_LOCK" 2>/dev/null || true
+  if [ -f "$MERGE_LOCK/pid" ] && [ "$(cat "$MERGE_LOCK/pid" 2>/dev/null)" = "$$" ]; then
+    rm -rf "$MERGE_LOCK"
+  fi
 }

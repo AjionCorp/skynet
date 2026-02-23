@@ -574,11 +574,13 @@ export async function doctorCommand(options: DoctorOptions) {
   let heartbeatTotal = 0;
   const heartbeatScanMax = maxWorkers || 10;
   const staleHeartbeatPaths: string[] = [];
+  const countedWorkerIds = new Set<number>();
 
   for (let n = 1; n <= heartbeatScanMax; n++) {
     const hbPath = join(devDir, `worker-${n}.heartbeat`);
     if (existsSync(hbPath)) {
       heartbeatTotal++;
+      countedWorkerIds.add(n);
       const epoch = Number(readFile(hbPath).trim());
       if (epoch) {
         const ageMs = now - epoch * 1000;
@@ -606,6 +608,8 @@ export async function doctorCommand(options: DoctorOptions) {
         `SELECT id, heartbeat_epoch FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs};`
       );
       for (const row of dbStale) {
+        const wid = Number(row[0]);
+        if (countedWorkerIds.has(wid)) continue;
         const epoch = Number(row[1]) || 0;
         const ageMin = epoch ? Math.round((now - epoch * 1000) / 60000) : 0;
         console.log(`    Worker ${row[0]} (DB): stale (${ageMin}m old, threshold: ${staleMinutes}m)`);

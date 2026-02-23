@@ -28,5 +28,6 @@ emit_event() {
       mv "$events_log" "${events_log}.1"
     fi
   fi
-  echo "$(date +%s)|${event}|${description}" >> "$events_log"
+  local _safe_desc="${description:0:3000}"
+  echo "$(date +%s)|${event}|${_safe_desc}" >> "$events_log"
 }

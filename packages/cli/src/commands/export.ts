@@ -8,13 +8,13 @@ interface ExportOptions {
   output?: string;
 }
 
+// skynet.config.sh excluded — may contain secrets (tokens, webhook URLs)
 const STATE_FILES = [
   "backlog.md",
   "completed.md",
   "failed-tasks.md",
   "blockers.md",
   "mission.md",
-  "skynet.config.sh",
   "events.log",
 ];
 

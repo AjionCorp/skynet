@@ -233,11 +233,13 @@ export async function watchCommand(options: WatchOptions) {
     }
   }, 3000);
 
-  // Clean exit on SIGINT
-  process.on("SIGINT", () => {
+  // Clean exit on SIGINT / SIGTERM
+  const cleanup = () => {
     clearInterval(interval);
     process.stdout.write("\x1b[2J\x1b[H");
     console.log("\n  Skynet watch stopped.\n");
     process.exit(0);
-  });
+  };
+  process.on("SIGINT", cleanup);
+  process.on("SIGTERM", cleanup);
 }

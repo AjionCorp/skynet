@@ -66,7 +66,7 @@ run_with_timeout() {
     gtimeout "$secs" "$@"
   else
     # perl fallback — available on all macOS
-    perl -e 'alarm shift @ARGV; exec @ARGV' "$secs" "$@"
+    perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
   fi
 }
 

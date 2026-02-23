@@ -168,7 +168,8 @@ else
       exit 0
     fi
     # Stale lock — reclaim atomically
-    rm -rf "$LOCKFILE" 2>/dev/null || true
+    mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
+    rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
     if mkdir "$LOCKFILE" 2>/dev/null; then
       echo $$ > "$LOCKFILE/pid"
     else
@@ -780,6 +781,7 @@ EOF
 
       # SQLite: revert from completed to failed (BEFORE exporting state files)
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || true
+      db_export_state_files
 
       _CURRENT_TASK_TITLE=""
       _one_shot_exit=1
@@ -818,9 +820,11 @@ EOF
     if ! git_push_with_retry; then
       log "CRITICAL: revert push also failed — local main diverged from remote. Stopping worker."
       tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: W${WORKER_ID} local main diverged — push failed for $task_title and revert push also failed"
-      emit_event "push_diverged" "$WORKER_ID" "Force-syncing to origin/main after push failure"
+      emit_event "push_diverged" "Force-syncing to origin/main after push failure"
       log "CRITICAL: Push failed after revert — force-syncing local main to origin"
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$LOG" || true
+      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push diverged — revert push also failed" || true
+      _CURRENT_TASK_TITLE=""
       release_merge_lock
       exit 1
     fi

@@ -93,6 +93,7 @@ function readConfigFile(projectDir: string): string {
 function parseConfig(content: string): ParsedVar[] {
   const vars: ParsedVar[] = [];
   const resolved: Record<string, string> = {};
+  const ALLOWED_ENV = new Set(["HOME", "USER", "PATH"]);
   const lines = content.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
@@ -101,7 +102,7 @@ function parseConfig(content: string): ParsedVar[] {
     if (match) {
       let value = match[2];
       // Resolve variable references
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => resolved[key] || process.env[key] || "");
+      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => resolved[key] || (ALLOWED_ENV.has(key) ? process.env[key] || "" : ""));
       resolved[match[1]] = value;
       vars.push({ name: match[1], value, lineIndex: i });
     }

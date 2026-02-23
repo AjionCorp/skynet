@@ -68,7 +68,7 @@ export SKYNET_CODEX_AUTH_FAIL_FLAG="${SKYNET_CODEX_AUTH_FAIL_FLAG:-${SKYNET_LOCK
 export SKYNET_CODEX_REFRESH_BUFFER_SECS="${SKYNET_CODEX_REFRESH_BUFFER_SECS:-900}"
 export SKYNET_CODEX_OAUTH_ISSUER="${SKYNET_CODEX_OAUTH_ISSUER:-}"
 export SKYNET_DEV_SERVER_URL="${SKYNET_DEV_SERVER_URL:-http://localhost:3000}"
-export SKYNET_DEV_PORT="${SKYNET_DEV_PORT:-3000}"
+export SKYNET_DEV_PORT="${SKYNET_DEV_PORT:-${SKYNET_DEV_SERVER_PORT:-3000}}"
 export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
 export SKYNET_WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${SKYNET_DEV_DIR}/worktrees}"
 
@@ -130,7 +130,10 @@ source "$SKYNET_SCRIPTS_DIR/_locks.sh"
 
 # Source SQLite database abstraction layer
 source "$SKYNET_SCRIPTS_DIR/_db.sh"
-db_init
+if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
+  db_init
+  _SKYNET_DB_INITIALIZED=1
+fi
 
 # --- Log rotation ---
 # Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.

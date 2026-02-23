@@ -1,5 +1,5 @@
 import { readFileSync, existsSync } from "fs";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { homedir, platform } from "os";
 import type { SkynetConfig } from "../types";
 
@@ -146,10 +146,7 @@ function parseCrontab(
 
   let crontab = "";
   try {
-    crontab = execSync("crontab -l 2>/dev/null", {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    crontab = spawnSync("crontab", ["-l"], { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).stdout || "";
   } catch {
     return entries;
   }
@@ -247,10 +244,7 @@ function getDarwinAgents(
     { pid: string; exitStatus: number }
   >();
   try {
-    const output = execSync("launchctl list", {
-      encoding: "utf-8",
-      timeout: 5000,
-    });
+    const output = spawnSync("launchctl", ["list"], { encoding: "utf-8", timeout: 5000, stdio: ["ignore", "pipe", "pipe"] }).stdout || "";
     const prefix = agentPrefix + ".";
     for (const line of output.split("\n")) {
       const match = line.match(

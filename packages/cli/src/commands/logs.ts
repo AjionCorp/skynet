@@ -99,11 +99,21 @@ function followFile(filePath: string) {
   };
 
   const watcher = watch(filePath, () => {
-    readNewContent();
+    try {
+      readNewContent();
+    } catch {
+      // File may have been deleted or rotated — ignore
+    }
   });
 
   // Also poll every 1s in case fs.watch misses events
-  const interval = setInterval(readNewContent, 1000);
+  const interval = setInterval(() => {
+    try {
+      readNewContent();
+    } catch {
+      // File may have been deleted or rotated — ignore
+    }
+  }, 1000);
 
   process.on("SIGINT", () => {
     watcher.close();

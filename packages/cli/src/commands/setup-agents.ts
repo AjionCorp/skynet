@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, readdirSync, existsSync, unlinkSync } from
 import { resolve, join, dirname } from "path";
 import { loadConfig } from "../utils/loadConfig";
 import { fileURLToPath } from "url";
-import { execSync } from "child_process";
+import { spawnSync } from "child_process";
 import { platform } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -85,7 +85,7 @@ function setupLaunchd(
     } else {
       // Unload existing agent if loaded
       try {
-        execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
+        spawnSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
       } catch {
         // Not loaded, that's fine
       }
@@ -100,7 +100,7 @@ function setupLaunchd(
     console.log("\n  Loading agents...\n");
     for (const plist of installed) {
       try {
-        execSync(`launchctl load "${plist}"`, { stdio: "inherit" });
+        spawnSync("launchctl", ["load", plist], { stdio: "inherit" });
         console.log(`    Loaded: ${plist.split("/").pop()}`);
       } catch {
         console.error(`    Failed to load: ${plist.split("/").pop()}`);
@@ -160,7 +160,10 @@ function setupCron(
   // Read existing crontab
   let existingCrontab = "";
   try {
-    existingCrontab = execSync("crontab -l 2>/dev/null", { encoding: "utf-8" });
+    const result = spawnSync("crontab", ["-l"], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
+    if (result.status === 0) {
+      existingCrontab = result.stdout || "";
+    }
   } catch {
     // No existing crontab, that's fine
   }
@@ -175,7 +178,7 @@ function setupCron(
   const newCrontab = existingCrontab.trimEnd() + "\n" + cronBlock + "\n";
 
   // Install via crontab -
-  execSync("crontab -", { input: newCrontab, stdio: ["pipe", "inherit", "inherit"] });
+  spawnSync("crontab", ["-"], { input: newCrontab, stdio: ["pipe", "inherit", "inherit"] });
 
   for (const template of templates) {
     const agentName = agentNameFromTemplate(template);
@@ -212,7 +215,7 @@ function uninstallLaunchd(): void {
     const agentName = parts.length >= 4 ? parts.slice(3).join(".") : file;
 
     try {
-      execSync(`launchctl unload "${plistPath}" 2>/dev/null`, { stdio: "ignore" });
+      spawnSync("launchctl", ["unload", plistPath], { stdio: "ignore" });
     } catch {
       // Not loaded, that's fine
     }
@@ -227,7 +230,10 @@ function uninstallLaunchd(): void {
 function uninstallCron(): void {
   let existingCrontab = "";
   try {
-    existingCrontab = execSync("crontab -l 2>/dev/null", { encoding: "utf-8" });
+    const result = spawnSync("crontab", ["-l"], { encoding: "utf-8", stdio: ["ignore", "pipe", "pipe"] });
+    if (result.status === 0) {
+      existingCrontab = result.stdout || "";
+    }
   } catch {
     console.log("No skynet agents installed.");
     return;
@@ -256,7 +262,7 @@ function uninstallCron(): void {
   }
 
   const newCrontab = existingCrontab.replace(blockRegex, "");
-  execSync("crontab -", { input: newCrontab, stdio: ["pipe", "ignore", "ignore"] });
+  spawnSync("crontab", ["-"], { input: newCrontab, stdio: ["pipe", "ignore", "ignore"] });
 
   if (agentNames.length > 0) {
     console.log(`Removed ${agentNames.length} agent${agentNames.length === 1 ? "" : "s"} (${agentNames.join(", ")}).`);

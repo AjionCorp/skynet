@@ -6,8 +6,9 @@ import { readDevFile } from "../lib/file-reader";
  * Returns the content between `## SectionName` and the next `## ` or EOF.
  */
 function extractSection(raw: string, sectionName: string): string {
+  const escaped = sectionName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const pattern = new RegExp(
-    `^## ${sectionName}\\s*$`,
+    `^## ${escaped}\\s*$`,
     "im"
   );
   const match = raw.match(pattern);

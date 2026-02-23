@@ -36,7 +36,8 @@ else
       exit 0
     fi
     # Stale lock — reclaim atomically
-    rm -rf "$LOCKFILE" 2>/dev/null || true
+    mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
+    rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
     if mkdir "$LOCKFILE" 2>/dev/null; then
       echo $$ > "$LOCKFILE/pid"
     else
@@ -176,7 +177,7 @@ $backlog_prompt_content
 ### Current Task (.dev/current-task.md)
 $current_task_content
 
-### Recent Completed Tasks (last 30 of $(wc -l < "$COMPLETED") entries)
+### Recent Completed Tasks (last 30 of $([ -f "$COMPLETED" ] && wc -l < "$COMPLETED" || echo 0) entries)
 $completed_content
 
 ### Failed Tasks (.dev/failed-tasks.md)
@@ -323,6 +324,7 @@ if run_agent "$PROMPT" "$LOG"; then
   # --- Deduplicate newly added tasks against pre-existing entries ---
   # Acquire backlog lock to prevent races with dev-worker claiming tasks
   if [ -f "$BACKLOG" ] && [ -s "$_dedup_normalized" ] && mkdir "$BACKLOG_LOCK" 2>/dev/null; then
+    echo $$ > "$BACKLOG_LOCK/pid" 2>/dev/null || true
     _dedup_cleaned=$(mktemp)
     _dedup_count=0
     while IFS= read -r _line; do

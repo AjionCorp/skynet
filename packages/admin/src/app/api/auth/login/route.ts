@@ -3,8 +3,12 @@ import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 
 export async function POST(request: Request) {
   try {
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+    if (contentLength > 10_000) {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
     const text = await request.text();
-    if (text.length > 1_000_000) {
+    if (text.length > 10_000) {
       return NextResponse.json({ error: "Request body too large" }, { status: 413 });
     }
     const { apiKey } = JSON.parse(text) as { apiKey: string };

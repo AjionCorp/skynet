@@ -1,7 +1,7 @@
 import { existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { spawn, exec } from "child_process";
+import { spawn } from "child_process";
 import { platform } from "os";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -30,9 +30,8 @@ interface DashboardOptions {
 
 function openBrowser(url: string) {
   const cmd = platform() === "darwin" ? "open" : "xdg-open";
-  exec(`${cmd} ${url}`, () => {
-    // Silently ignore errors (e.g. no display available)
-  });
+  const child = spawn(cmd, [url], { detached: true, stdio: "ignore" });
+  child.unref();
 }
 
 export async function dashboardCommand(options: DashboardOptions) {

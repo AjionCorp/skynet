@@ -30,3 +30,7 @@ for logfile in "$SCRIPTS_DIR"/*.log; do
     tail -n +"$first_line" "$logfile" > "$logfile.tmp" && mv "$logfile.tmp" "$logfile"
   fi
 done
+
+# Clean up rotated log backups older than 24h
+find "$SCRIPTS_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true
+find "$DEV_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true

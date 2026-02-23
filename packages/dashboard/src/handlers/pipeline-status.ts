@@ -86,6 +86,7 @@ function readCodexAuthStatus(
 /**
  * Parse backlog.md into items with status/tag/dependency info.
  * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
+ * NOTE: duplicated in tasks.ts — consider extracting to backlog-parser.ts
  */
 function parseBacklog(raw: string) {
   const parsed = parseBacklogItems(raw);

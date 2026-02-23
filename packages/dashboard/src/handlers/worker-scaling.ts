@@ -1,5 +1,5 @@
 import { spawn } from "child_process";
-import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, rmSync, constants } from "fs";
+import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, rmSync, existsSync, constants } from "fs";
 import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
@@ -235,6 +235,22 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
           .slice(0, Math.abs(delta));
 
         for (const instance of toKill) {
+          // Check if the worker is currently holding the merge lock — refuse to
+          // kill mid-merge to prevent leaving main in an inconsistent state.
+          const mergeLockDir = `${lockPrefix}-merge.lock`;
+          const mergePidFile = `${mergeLockDir}/pid`;
+          if (existsSync(mergeLockDir) && existsSync(mergePidFile)) {
+            try {
+              const lockPid = readFileSync(mergePidFile, "utf-8").trim();
+              if (lockPid === String(instance.pid)) {
+                return Response.json(
+                  { data: null, error: `Worker ${instance.id} is currently merging — cannot scale down safely. Try again shortly.` },
+                  { status: 409 }
+                );
+              }
+            } catch { /* ignore read errors */ }
+          }
+
           try {
             process.kill(instance.pid, "SIGTERM");
           } catch {
