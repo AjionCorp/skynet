@@ -52,7 +52,7 @@ _sql_query() {
   [ -f "$_sql_errfile" ] && _sql_err=$(cat "$_sql_errfile" 2>/dev/null)
   rm -f "$_sql_errfile"
   if [ $_sql_rc -ne 0 ]; then
-    local _sql_ctx="${1:0:200}"
+    local _sql_ctx="${1:0:500}"
     log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
     return 1
   fi
@@ -360,12 +360,9 @@ db_claim_failure() {
 }
 
 db_unclaim_failure() {
-  local fixer_id; fixer_id=$(_sql_int "$1")
-  # fixer_id is already sanitized to digits-only by _sql_int — no need for _sql_escape
-  _sql_exec "
-    UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
-    WHERE status='fixing-$fixer_id';
-  "
+  local task_id; task_id=$(_sql_int "$1")
+  local fixer_id; fixer_id=$(_sql_int "$2")
+  _sql_exec "UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now') WHERE id=$task_id AND status='fixing-$fixer_id';"
 }
 
 db_update_failure() {

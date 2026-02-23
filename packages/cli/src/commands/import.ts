@@ -62,6 +62,11 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
     process.exit(1);
   }
 
+  if (typeof snapshot !== "object" || snapshot === null || Array.isArray(snapshot)) {
+    console.error("Error: Snapshot must be a JSON object");
+    process.exit(1);
+  }
+
   // Validate expected keys
   const missingKeys = EXPECTED_KEYS.filter((key) => !(key in snapshot));
   if (missingKeys.length > 0) {

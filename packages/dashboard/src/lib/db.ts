@@ -182,7 +182,7 @@ export class SkynetDB {
 
   getCompletedCount(): number {
     const row = this.db
-      .prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed')")
+      .prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed','done')")
       .get() as { cnt: number };
     return row.cnt;
   }

@@ -68,6 +68,54 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_ONE_SHOT_TASK: "Task description for single-task mode (set automatically by skynet run)",
 };
 
+/** Keys that `config set` is allowed to modify (mirrors dashboard MUTABLE_KEYS). */
+const MUTABLE_KEYS = new Set([
+  "SKYNET_MAX_WORKERS",
+  "SKYNET_MAX_FIXERS",
+  "SKYNET_MAX_TASKS_PER_RUN",
+  "SKYNET_STALE_MINUTES",
+  "SKYNET_AGENT_TIMEOUT_MINUTES",
+  "SKYNET_MAX_FIX_ATTEMPTS",
+  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
+  "SKYNET_DRIVER_BACKLOG_THRESHOLD",
+  "SKYNET_HEALTH_ALERT_THRESHOLD",
+  "SKYNET_MAX_LOG_SIZE_KB",
+  "SKYNET_MAX_EVENTS_LOG_KB",
+  "SKYNET_WATCHDOG_INTERVAL",
+  "SKYNET_ONE_SHOT",
+  "SKYNET_POST_MERGE_SMOKE",
+  "SKYNET_SMOKE_TIMEOUT",
+  "SKYNET_POST_MERGE_TYPECHECK",
+  "SKYNET_GIT_PUSH_TIMEOUT",
+  "SKYNET_TG_ENABLED",
+  "SKYNET_TG_BOT_TOKEN",
+  "SKYNET_TG_CHAT_ID",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+  "SKYNET_NOTIFY_CHANNELS",
+  "SKYNET_DEV_SERVER_CMD",
+  "SKYNET_DEV_SERVER_URL",
+  "SKYNET_DEV_PORT",
+  "SKYNET_TYPECHECK_CMD",
+  "SKYNET_LINT_CMD",
+  "SKYNET_INSTALL_CMD",
+  "SKYNET_GATE_1",
+  "SKYNET_GATE_2",
+  "SKYNET_GATE_3",
+  "SKYNET_BRANCH_PREFIX",
+  "SKYNET_MAIN_BRANCH",
+  "SKYNET_CLAUDE_BIN",
+  "SKYNET_CLAUDE_FLAGS",
+  "SKYNET_CODEX_BIN",
+  "SKYNET_CODEX_SUBCOMMAND",
+  "SKYNET_CODEX_FLAGS",
+  "SKYNET_CODEX_MODEL",
+  "SKYNET_AGENT_PLUGIN",
+  "SKYNET_EXTRA_PATH",
+  "SKYNET_WORKER_CONTEXT",
+  "SKYNET_WORKER_CONVENTIONS",
+]);
+
 interface ParsedVar {
   name: string;
   value: string;
@@ -228,6 +276,10 @@ export async function configSetCommand(key: string, value: string, options: Conf
   }
   if (value === undefined || value === null) {
     console.error("Error: VALUE is required.");
+    process.exit(1);
+  }
+  if (!MUTABLE_KEYS.has(key)) {
+    console.error(`\n  Error: "${key}" is not a valid mutable config key.\n  Valid keys: ${[...MUTABLE_KEYS].join(", ")}\n`);
     process.exit(1);
   }
 

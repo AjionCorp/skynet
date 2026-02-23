@@ -15,7 +15,9 @@ for logfile in "$SCRIPTS_DIR"/*.log; do
   size=$(file_size "$logfile")
   [ "$size" -lt 51200 ] && continue
 
-  # Find the line number of the first timestamp >= cutoff
+  # Find the line number of the first timestamp >= cutoff.
+  # The `|| true` prevents grep's exit-code-1 (no matches) from propagating
+  # through the process substitution when set -e is active.
   first_line=""
   while IFS= read -r match; do
     line_no="${match%%:*}"
@@ -24,7 +26,7 @@ for logfile in "$SCRIPTS_DIR"/*.log; do
       first_line="$line_no"
       break
     fi
-  done < <(grep -n '^\[' "$logfile" 2>/dev/null)
+  done < <(grep -n '^\[' "$logfile" 2>/dev/null || true)
 
   if [ -n "$first_line" ] && [ "$first_line" -gt 10 ]; then
     tail -n +"$first_line" "$logfile" > "$logfile.tmp" && mv "$logfile.tmp" "$logfile"

@@ -32,12 +32,17 @@ acquire_merge_lock() {
             return 0
           fi
         fi
-        # If PID is recorded and dead, reclaim immediately
+        # If PID is recorded and dead, double-check after brief sleep to
+        # narrow the PID reuse race window before reclaiming.
         if [ -n "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
-          rm -rf "$MERGE_LOCK" 2>/dev/null || true
-          if mkdir "$MERGE_LOCK" 2>/dev/null; then
-            echo $$ > "$MERGE_LOCK/pid"
-            return 0
+          sleep 0.1  # Narrow PID reuse race window
+          if ! kill -0 "$_ml_pid" 2>/dev/null; then
+            mv "$MERGE_LOCK" "$MERGE_LOCK.stale.$$" 2>/dev/null || true
+            rm -rf "$MERGE_LOCK.stale.$$" &
+            if mkdir "$MERGE_LOCK" 2>/dev/null; then
+              echo $$ > "$MERGE_LOCK/pid"
+              return 0
+            fi
           fi
         fi
         # Fallback: check age (covers case where PID is alive but lock is ancient)

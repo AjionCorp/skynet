@@ -317,7 +317,7 @@ else
 fi
 
 # Unclaim failure
-db_unclaim_failure 1
+db_unclaim_failure "$FAIL_ID" 1
 STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$FAIL_ID;")
 assert_eq "$STATUS" "failed" "db_unclaim_failure: reverts to failed"
 

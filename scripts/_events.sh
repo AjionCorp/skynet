@@ -36,5 +36,5 @@ emit_event() {
     fi
   fi
   local _safe_desc="${description:0:3000}"
-  echo "$(date +%s)|${event}|${_safe_desc}" >> "$events_log"
+  printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc" >> "$events_log"
 }

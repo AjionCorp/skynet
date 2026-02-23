@@ -346,6 +346,11 @@ export async function initCommand(options: InitOptions) {
       process.exit(1);
     }
 
+    if (typeof snapshot !== "object" || snapshot === null || Array.isArray(snapshot)) {
+      console.error("\n  Error: Snapshot must be a JSON object");
+      process.exit(1);
+    }
+
     // Validate expected keys
     const expectedKeys = ["backlog.md", "completed.md", "failed-tasks.md", "blockers.md", "mission.md"];
     const missingKeys = expectedKeys.filter((key) => !(key in snapshot));
@@ -359,15 +364,15 @@ export async function initCommand(options: InitOptions) {
     for (const [filename, content] of Object.entries(snapshot)) {
       if (filename === "skynet.config.sh") continue;
       if (typeof content !== "string") continue;
-      // Reject path traversal attempts
       const resolvedTarget = resolve(devDir, filename);
-      if (!resolvedTarget.startsWith(resolve(devDir) + "/") && resolvedTarget !== resolve(devDir)) continue;
-      // Skip symlinks to prevent overwriting files outside .dev/
+      // Skip symlinks FIRST to prevent following links outside .dev/
       try {
         if (lstatSync(resolvedTarget).isSymbolicLink()) continue;
       } catch {
         // File doesn't exist yet — safe to write
       }
+      // Reject path traversal attempts
+      if (!resolvedTarget.startsWith(resolve(devDir) + "/") && resolvedTarget !== resolve(devDir)) continue;
       writeFileSync(resolvedTarget, content, "utf-8");
       restored++;
     }

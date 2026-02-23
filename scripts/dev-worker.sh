@@ -76,7 +76,7 @@ _start_heartbeat() {
     while true; do
       # Exit if parent worker process is no longer alive
       kill -0 $$ 2>/dev/null || exit 0
-      date +%s > "$HEARTBEAT_FILE.tmp" && mv "$HEARTBEAT_FILE.tmp" "$HEARTBEAT_FILE"
+      date +%s > "$HEARTBEAT_FILE"
       db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       sleep 60
     done
@@ -313,6 +313,10 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
       _db_task_id=$(echo "$_db_result" | cut -d$'\x1f' -f1)
       _db_title=$(echo "$_db_result" | cut -d$'\x1f' -f2)
       _db_tag=$(echo "$_db_result" | cut -d$'\x1f' -f3)
+      if [ -z "$_db_title" ] || [ -z "$_db_task_id" ]; then
+        log "ERROR: db_claim_next_task returned malformed result, skipping"
+        continue
+      fi
       next_task="- [ ] [${_db_tag}] ${_db_title}"
     else
       next_task=""
@@ -328,7 +332,10 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
 **Updated:** $(date '+%Y-%m-%d %H:%M')
 **Note:** Backlog empty — project-driver kicked off to replenish
 EOF
-    # Kick off project-driver if not already running
+    # Kick off project-driver if not already running.
+    # NOTE: -f on the pid file (not -d on the lock dir) is intentional — checking
+    # the pid file implicitly confirms the mkdir-based lock directory exists AND
+    # that the PID was written (vs. a crash between mkdir and pid-write).
     if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid")" 2>/dev/null); then
       nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
       log "Project-driver launched (PID $!)."
@@ -722,6 +729,7 @@ EOF
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)"
       tasks_failed=$((tasks_failed + 1))
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
+      db_export_state_files
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""

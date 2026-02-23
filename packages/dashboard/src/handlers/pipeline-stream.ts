@@ -45,9 +45,13 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
 
         function send(text: string) {
           if (closed) return;
-          // Backpressure: skip enqueue if the client is consuming slower than
-          // we produce.  desiredSize <= 0 means the internal queue is full.
-          if ((controller.desiredSize ?? 1) <= 0) return;
+          // Backpressure: log when the client is consuming slower than we
+          // produce (desiredSize <= 0 means the internal queue is full).
+          // We still enqueue — ReadableStream handles natural backpressure
+          // via its internal buffer — but log a warning for observability.
+          if ((controller.desiredSize ?? 1) <= 0) {
+            console.debug("[pipeline-stream] SSE backpressure: client is slow, event queued despite full buffer");
+          }
           try {
             controller.enqueue(encoder.encode(text));
           } catch {

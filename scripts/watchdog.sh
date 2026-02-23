@@ -124,6 +124,9 @@ crash_recovery() {
       log "Stale lock: $lockfile (PID $lock_pid dead)"
     else
       # PID alive — check if it's been running too long (zombie/hung worker)
+      # Guard: if lockfile disappeared between the pid-read and now, skip it.
+      # Without this, file_mtime returns 0 → lock_age_secs ≈ 1.7B → always stale.
+      [ -e "$lockfile" ] || { log "Lock path vanished mid-check: $lockfile"; continue; }
       local lock_mtime
       lock_mtime=$(file_mtime "$lockfile")
       local now=$(date +%s)
@@ -1014,10 +1017,13 @@ fi
 
 ) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
 
-# Read adaptive interval from subshell output (falls back to default)
+# Read adaptive interval from subshell output (falls back to default).
+# Guard against empty/stale reads: if cat returns empty string (slow write,
+# interrupted subshell), fall back to the configured WATCHDOG_INTERVAL.
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 _cycle_interval="$WATCHDOG_INTERVAL"
-[ -f "$_adaptive_file" ] && _cycle_interval=$(cat "$_adaptive_file" 2>/dev/null || echo "$WATCHDOG_INTERVAL")
+[ -f "$_adaptive_file" ] && _cycle_interval=$(cat "$_adaptive_file" 2>/dev/null)
+_cycle_interval="${_cycle_interval:-$WATCHDOG_INTERVAL}"
 sleep "$_cycle_interval"
 
 done  # end main loop

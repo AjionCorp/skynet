@@ -118,6 +118,9 @@ check_codex_auth() {
   if [ -n "${OPENAI_API_KEY:-}" ]; then
     _codex_auth_ok=true
   elif [ -f "$_auth_file" ] && [ -s "$_auth_file" ]; then
+    # Validate auth file is a regular file (not a symlink to a sensitive file)
+    if [ -L "$_auth_file" ]; then log "Auth file is a symlink, refusing: $_auth_file"; return 1; fi
+
     # Check token expiry (if available) and refresh if needed
     local parsed
     parsed=$(AUTH_FILE="$_auth_file" python3 - <<'PY'
@@ -155,6 +158,12 @@ print(exp)
 print(1 if refresh else 0)
 PY
 )
+    _line_count=$(echo "$parsed" | wc -l)
+    if [ "$_line_count" -lt 2 ]; then
+      log "WARNING: Failed to parse auth file"
+      return 1
+    fi
+
     local exp has_refresh
     {
       read -r exp

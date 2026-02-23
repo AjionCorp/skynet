@@ -280,8 +280,13 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
 
           try {
             process.kill(instance.pid, "SIGTERM");
-          } catch {
-            // Process already dead
+          } catch (err: unknown) {
+            const killErr = err as NodeJS.ErrnoException;
+            if (killErr.code === "ESRCH") {
+              // Process already gone — expected, ignore
+            } else {
+              console.warn(`[worker-scaling] Unexpected error killing PID ${instance.pid}: ${killErr.message ?? String(err)}`);
+            }
           }
 
           // Clean up lock directory (mkdir-based mutex)

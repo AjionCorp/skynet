@@ -30,10 +30,8 @@ function formatDuration(ms: number): string {
 function decodeJwtExp(token: string): number | null {
   const parts = token.split(".");
   if (parts.length < 2) return null;
-  const payload = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-  const padded = payload + "=".repeat((4 - (payload.length % 4)) % 4);
   try {
-    const json = JSON.parse(Buffer.from(padded, "base64").toString("utf8"));
+    const json = JSON.parse(Buffer.from(parts[1], "base64url").toString());
     return typeof json.exp === "number" ? json.exp : null;
   } catch {
     return null;
@@ -151,11 +149,8 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Task Counts (SQLite only) ---
-  // NOTE: completedCount here queries status IN ('completed','done') from SQLite.
-  // The dashboard handler (pipeline-status.ts) uses db.getCompletedCount() which
-  // queries status IN ('completed','fixed'). The difference is intentional:
-  // CLI counts 'done' tasks (SQLite lifecycle), dashboard counts 'fixed' tasks
-  // (self-corrected failures that were re-completed).
+  // NOTE: completedCount queries all terminal success states: completed, fixed, done.
+  // Keep in sync with dashboard (pipeline-status.ts) and db.ts (getCompletedCount).
   let pending = 0;
   let claimed = 0;
   let completedCount = 0;
@@ -168,7 +163,7 @@ export async function statusCommand(options: StatusOptions) {
         `SELECT
           (SELECT COUNT(*) FROM tasks WHERE status='pending') as c0,
           (SELECT COUNT(*) FROM tasks WHERE status='claimed') as c1,
-          (SELECT COUNT(*) FROM tasks WHERE status IN ('completed','done')) as c2,
+          (SELECT COUNT(*) FROM tasks WHERE status IN ('completed','fixed','done')) as c2,
           (SELECT COUNT(*) FROM tasks WHERE status='failed') as c3,
           (SELECT COUNT(*) FROM tasks WHERE status='fixed') as c4;`
       );
@@ -294,7 +289,7 @@ export async function statusCommand(options: StatusOptions) {
 
   if (usingSqlite) {
     try {
-      const rows = sqliteRows(devDir, "SELECT completed_at, title FROM tasks WHERE status IN ('completed','done') ORDER BY completed_at DESC LIMIT 3;");
+      const rows = sqliteRows(devDir, "SELECT completed_at, title FROM tasks WHERE status IN ('completed','fixed','done') ORDER BY completed_at DESC LIMIT 3;");
       recent = rows.map((r) => {
         const date = (r[0] || "").slice(0, 10);
         const title = r[1] || "";

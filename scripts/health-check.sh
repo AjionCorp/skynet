@@ -96,7 +96,10 @@ done
 if ! $typecheck_ok; then
   log "Typecheck still failing after $MAX_FIX_ATTEMPTS attempts. Adding blocker."
   if ! grep -q "typecheck failing" "$BLOCKERS" 2>/dev/null; then
-    [ -f "$BLOCKERS" ] && sed_inplace 's/_No active blockers._//' "$BLOCKERS"
+    # Ensure blockers file exists before sed_inplace (which may create an empty
+    # file on some platforms if the target is missing)
+    [ -f "$BLOCKERS" ] || touch "$BLOCKERS"
+    sed_inplace 's/_No active blockers._//' "$BLOCKERS"
     echo "- **$(date '+%Y-%m-%d')**: TypeScript typecheck failing after $MAX_FIX_ATTEMPTS auto-fix attempts. Manual intervention needed." >> "$BLOCKERS"
   fi
 fi

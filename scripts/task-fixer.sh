@@ -166,11 +166,13 @@ cleanup_on_exit() {
     local _claimed_fixer
     _claimed_fixer=$(_db "SELECT fixer_id FROM tasks WHERE id=$(_sql_int "$_db_task_id") AND status='fixing-$FIXER_ID';" 2>/dev/null || echo "")
     if [ "$_claimed_fixer" = "$FIXER_ID" ]; then
-      db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+      db_export_state_files 2>/dev/null || true
       log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE (fixer $FIXER_ID)"
     fi
   elif [ -n "$_CURRENT_TASK_TITLE" ]; then
-    db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+    db_unclaim_failure "${_db_task_id:-0}" "$FIXER_ID" 2>/dev/null || true
+    db_export_state_files 2>/dev/null || true
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   # Release PID lock
@@ -422,7 +424,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
 # --- Graceful shutdown checkpoint (before fix attempt) ---
 if $SHUTDOWN_REQUESTED; then
   log "Shutdown requested before fix attempt — unclaiming and exiting cleanly"
-  [ -n "$_db_task_id" ] && db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
   _CURRENT_TASK_TITLE=""
   cleanup_worktree "$branch_name"
   exit 0
@@ -433,7 +435,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested after fix — unclaiming and exiting cleanly"
     cleanup_worktree
-    db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+    db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
     _CURRENT_TASK_TITLE=""
     exit 0
   fi
@@ -501,7 +503,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     if $SHUTDOWN_REQUESTED; then
       log "Shutdown requested before merge — reverting claim and exiting cleanly"
       cleanup_worktree  # Keep branch for next attempt
-      db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       exit 0
     fi
@@ -541,7 +543,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     cd "$PROJECT_DIR"
     if ! git_pull_with_retry; then
       log "Cannot pull main — skipping merge, unclaiming task."
-      [ -n "$_db_task_id" ] && db_unclaim_failure "$FIXER_ID" 2>/dev/null || true
+      [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       release_merge_lock
       return

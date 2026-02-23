@@ -11,10 +11,17 @@ export function readDevFile(devDir: string, filename: string): string {
   const resolved = resolve(devDir, filename);
   const resolvedDevDir = resolve(devDir);
   if (!resolved.startsWith(resolvedDevDir + "/") && resolved !== resolvedDevDir) return "";
+  // Cache canonical devDir outside try to avoid TOCTOU between realpathSync calls
+  let canonicalDevDir: string;
+  try {
+    canonicalDevDir = realpathSync(resolvedDevDir);
+  } catch {
+    return "";
+  }
   try {
     // Resolve symlinks to prevent escaping devDir via symlink targets
     const real = realpathSync(resolved);
-    if (!real.startsWith(realpathSync(devDir))) return "";
+    if (!real.startsWith(canonicalDevDir)) return "";
     return readFileSync(real, "utf-8");
   } catch {
     return "";

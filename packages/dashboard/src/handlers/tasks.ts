@@ -180,35 +180,43 @@ export function createTasksHandlers(config: SkynetConfig) {
         } catch (exportErr) {
           console.warn(`[tasks POST] backlog export failed, falling back to direct write: ${exportErr instanceof Error ? exportErr.message : String(exportErr)}`);
           // Fallback: write the single line directly
-          const raw = readFileSync(backlogPath, "utf-8");
-          const lines = raw.split("\n");
-          if (position === "bottom") {
-            let lastPendingIndex = -1;
-            for (let i = 0; i < lines.length; i++) {
-              if (lines[i].startsWith("- [ ] ") || lines[i].startsWith("- [>] ")) {
-                lastPendingIndex = i;
+          try {
+            const raw = readFileSync(backlogPath, "utf-8");
+            const lines = raw.split("\n");
+            if (position === "bottom") {
+              let lastPendingIndex = -1;
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith("- [ ] ") || lines[i].startsWith("- [>] ")) {
+                  lastPendingIndex = i;
+                }
+              }
+              if (lastPendingIndex === -1) {
+                const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
+                lines.splice(headerEnd + 1, 0, taskLine);
+              } else {
+                lines.splice(lastPendingIndex + 1, 0, taskLine);
+              }
+            } else {
+              const firstTaskIndex = lines.findIndex(
+                (l) => l.startsWith("- [ ] ") || l.startsWith("- [>] ")
+              );
+              if (firstTaskIndex === -1) {
+                const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
+                lines.splice(headerEnd + 1, 0, taskLine);
+              } else {
+                lines.splice(firstTaskIndex, 0, taskLine);
               }
             }
-            if (lastPendingIndex === -1) {
-              const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
-              lines.splice(headerEnd + 1, 0, taskLine);
-            } else {
-              lines.splice(lastPendingIndex + 1, 0, taskLine);
-            }
-          } else {
-            const firstTaskIndex = lines.findIndex(
-              (l) => l.startsWith("- [ ] ") || l.startsWith("- [>] ")
-            );
-            if (firstTaskIndex === -1) {
-              const headerEnd = lines.findIndex((l, i) => i > 0 && l.trim() === "");
-              lines.splice(headerEnd + 1, 0, taskLine);
-            } else {
-              lines.splice(firstTaskIndex, 0, taskLine);
-            }
+            const tmpPath = backlogPath + ".tmp";
+            writeFileSync(tmpPath, lines.join("\n"), "utf-8");
+            renameSync(tmpPath, backlogPath);
+          } catch (fallbackErr) {
+            console.error(`[tasks POST] CRITICAL: Both SQLite export and file fallback failed. Task exists in SQLite only. Export error: ${exportErr instanceof Error ? exportErr.message : String(exportErr)}. File error: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`);
+            return Response.json({
+              data: { inserted: taskLine, position: position ?? "top", warning: "Task saved to SQLite but backlog.md sync failed. Run watchdog to reconcile." },
+              error: null,
+            });
           }
-          const tmpPath = backlogPath + ".tmp";
-          writeFileSync(tmpPath, lines.join("\n"), "utf-8");
-          renameSync(tmpPath, backlogPath);
         }
 
         return Response.json({

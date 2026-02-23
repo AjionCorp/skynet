@@ -642,9 +642,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         /* ignore */
       }
 
-      // NOTE: getCompletedCount() queries status IN ('completed','fixed').
-      // The CLI status.ts uses status IN ('completed','done') instead.
-      // See CLI status.ts for the rationale on this difference.
+      // NOTE: getCompletedCount() queries all terminal success states: completed, fixed, done.
+      // Keep in sync with CLI status.ts and db.ts.
       const completedTotal = (usingSqlite && db) ? db.getCompletedCount() : completed.length;
 
       const missionProgress = parseMissionProgress({

@@ -105,19 +105,24 @@ if [ -f "$SYNC_HEALTH" ]; then sync_health_content=$(cat "$SYNC_HEALTH"); else s
 # Count task metrics (prefer SQLite, fallback to file)
 remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
 remaining=${remaining:-0}
+[[ "$remaining" =~ ^[0-9]+$ ]] || remaining=0
 claimed=$(db_count_claimed 2>/dev/null || grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo 0)
 claimed=${claimed:-0}
+[[ "$claimed" =~ ^[0-9]+$ ]] || claimed=0
 # shellcheck disable=SC2034
 done_count=$(db_count_by_status "done" 2>/dev/null || grep -c '^\- \[x\]' "$BACKLOG" 2>/dev/null || echo 0)
 done_count=${done_count:-0}
+[[ "$done_count" =~ ^[0-9]+$ ]] || done_count=0
 completed_count=$(db_count_by_status "completed" 2>/dev/null || echo "")
-if [ -z "$completed_count" ]; then
+if [ -z "$completed_count" ] || ! [[ "$completed_count" =~ ^[0-9]+$ ]]; then
   completed_count=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
   completed_count=${completed_count:-0}
+  [[ "$completed_count" =~ ^[0-9]+$ ]] || completed_count=0
   completed_count=$((completed_count > 1 ? completed_count - 1 : 0))
 fi
 failed_count=$(db_count_by_status "failed" 2>/dev/null || grep -c '| pending |' "$FAILED" 2>/dev/null || echo 0)
 failed_count=${failed_count:-0}
+[[ "$failed_count" =~ ^[0-9]+$ ]] || failed_count=0
 
 # Get codebase structure summary (guard directories that may not exist yet)
 if [ -d "$PROJECT_DIR" ]; then
@@ -141,20 +146,24 @@ _today=$(date '+%Y-%m-%d')
 today_completed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed' AND completed_at LIKE '${_today}%';" 2>/dev/null \
   || grep -c "$_today" "$COMPLETED" 2>/dev/null || echo 0)
 today_completed=${today_completed:-0}
+[[ "$today_completed" =~ ^[0-9]+$ ]] || today_completed=0
 total_completed=$(db_count_by_status "completed" 2>/dev/null || echo "")
-if [ -z "$total_completed" ]; then
+if [ -z "$total_completed" ] || ! [[ "$total_completed" =~ ^[0-9]+$ ]]; then
   total_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
   total_completed=${total_completed:-0}
+  [[ "$total_completed" =~ ^[0-9]+$ ]] || total_completed=0
   total_completed=$((total_completed > 1 ? total_completed - 1 : 0))
 fi
 total_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','fixed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo "")
-if [ -z "$total_failed" ]; then
+if [ -z "$total_failed" ] || ! [[ "$total_failed" =~ ^[0-9]+$ ]]; then
   total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || true)
   total_failed=${total_failed:-0}
+  [[ "$total_failed" =~ ^[0-9]+$ ]] || total_failed=0
   total_failed=$((total_failed > 1 ? total_failed - 1 : 0))
 fi
 fixed_count=$(db_count_by_status "fixed" 2>/dev/null || grep -c 'fixed' "$FAILED" 2>/dev/null || echo 0)
 fixed_count=${fixed_count:-0}
+[[ "$fixed_count" =~ ^[0-9]+$ ]] || fixed_count=0
 fix_rate=$((fixed_count * 100 / (total_failed > 0 ? total_failed : 1)))
 
 log "Velocity: today=$today_completed, total_completed=$total_completed, total_failed=$total_failed, fixed=$fixed_count, fix_rate=${fix_rate}%"
@@ -356,6 +365,7 @@ if run_agent "$PROMPT" "$LOG"; then
 
   new_remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   new_remaining=${new_remaining:-0}
+  [[ "$new_remaining" =~ ^[0-9]+$ ]] || new_remaining=0
   log "Project driver completed successfully."
   tg "📋 *$SKYNET_PROJECT_NAME_UPPER BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
 else
@@ -373,6 +383,7 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
   # Re-read pending count (may have changed after run_agent)
   mc_pending=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   mc_pending=${mc_pending:-0}
+  [[ "$mc_pending" =~ ^[0-9]+$ ]] || mc_pending=0
 
   if [ "$mc_pending" -eq 0 ]; then
     log "Zero pending tasks — evaluating mission success criteria."
@@ -381,9 +392,10 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
 
     # Criterion 1: Completed tasks > 50
     mc_completed=$(db_count_by_status "completed" 2>/dev/null || echo "")
-    if [ -z "$mc_completed" ]; then
+    if [ -z "$mc_completed" ] || ! [[ "$mc_completed" =~ ^[0-9]+$ ]]; then
       mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
       mc_completed=${mc_completed:-0}
+      [[ "$mc_completed" =~ ^[0-9]+$ ]] || mc_completed=0
       mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
     fi
     if [ "$mc_completed" -gt 50 ]; then
@@ -396,10 +408,13 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     # Criterion 2: Self-correction rate > 95%
     mc_fixed=$(db_count_by_status "fixed" 2>/dev/null || grep -c '| fixed |' "$FAILED" 2>/dev/null || echo 0)
     mc_fixed=${mc_fixed:-0}
+    [[ "$mc_fixed" =~ ^[0-9]+$ ]] || mc_fixed=0
     mc_blocked=$(db_count_by_status "blocked" 2>/dev/null || grep -c '| blocked |' "$FAILED" 2>/dev/null || echo 0)
     mc_blocked=${mc_blocked:-0}
+    [[ "$mc_blocked" =~ ^[0-9]+$ ]] || mc_blocked=0
     mc_superseded=$(db_count_by_status "superseded" 2>/dev/null || grep -c '| superseded |' "$FAILED" 2>/dev/null || echo 0)
     mc_superseded=${mc_superseded:-0}
+    [[ "$mc_superseded" =~ ^[0-9]+$ ]] || mc_superseded=0
     mc_total_attempted=$((mc_fixed + mc_blocked + mc_superseded))
     if [ "$mc_total_attempted" -gt 0 ]; then
       mc_fix_rate=$((mc_fixed * 100 / mc_total_attempted))
@@ -420,8 +435,10 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
     if [ -f "$mc_watchdog_log" ]; then
       mc_zombie_refs=$(grep -ci 'zombie' "$mc_watchdog_log" 2>/dev/null || true)
       mc_zombie_refs=${mc_zombie_refs:-0}
+      [[ "$mc_zombie_refs" =~ ^[0-9]+$ ]] || mc_zombie_refs=0
       mc_deadlock_refs=$(grep -ci 'deadlock' "$mc_watchdog_log" 2>/dev/null || true)
       mc_deadlock_refs=${mc_deadlock_refs:-0}
+      [[ "$mc_deadlock_refs" =~ ^[0-9]+$ ]] || mc_deadlock_refs=0
     fi
     mc_issue_refs=$((mc_zombie_refs + mc_deadlock_refs))
     if [ "$mc_issue_refs" -eq 0 ]; then
