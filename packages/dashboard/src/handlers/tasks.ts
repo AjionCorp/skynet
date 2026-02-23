@@ -2,28 +2,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "f
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
-
-/**
- * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
- */
-function extractTitle(text: string): string {
-  // Remove blockedBy metadata suffix
-  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
-  // Remove tag prefix
-  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
-  // Remove description after em-dash
-  const dashIdx = withoutTag.indexOf(" \u2014 ");
-  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
-}
-
-/**
- * Parse blockedBy metadata from raw text.
- */
-function parseBlockedBy(text: string): string[] {
-  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
-  if (!match) return [];
-  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
-}
+import { extractTitle, parseBlockedBy } from "../lib/backlog-parser";
 
 /**
  * Parse backlog.md into items with status/tag/dependency info.

@@ -1,3 +1,22 @@
+/**
+ * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
+ */
+export function extractTitle(text: string): string {
+  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
+  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
+  const dashIdx = withoutTag.indexOf(" \u2014 ");
+  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
+}
+
+/**
+ * Parse blockedBy metadata from raw text.
+ */
+export function parseBlockedBy(text: string): string[] {
+  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
+  if (!match) return [];
+  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+}
+
 export interface ParsedBacklogItem {
   raw: string;
   status: "pending" | "claimed" | "done";

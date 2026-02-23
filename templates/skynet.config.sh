@@ -51,6 +51,8 @@ export SKYNET_DRIVER_BACKLOG_THRESHOLD=5  # Project-driver kicks off when backlo
 export SKYNET_HEALTH_ALERT_THRESHOLD="50"  # Health score threshold (0-100) — watchdog alerts when score drops below this (default: 50)
 export SKYNET_MAX_LOG_SIZE_KB=1024        # Max log file size in KB before rotation (default: 1024 = 1MB)
 export SKYNET_MAX_EVENTS_LOG_KB=1024     # Max events.log size in KB before rotation (default: 1024 = 1MB)
+export SKYNET_WATCHDOG_INTERVAL=180      # Seconds between watchdog monitoring cycles (default: 180)
+export SKYNET_ONE_SHOT=""                # Set to 1 for single-task mode — worker exits after one task (default: empty)
 
 # ---- Auth (Claude Code OAuth) ----
 export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"  # Cached auth token path

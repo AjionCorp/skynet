@@ -2,6 +2,7 @@ import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
+import { extractTitle, parseBlockedBy } from "../lib/backlog-parser";
 
 /**
  * Parse current-task.md into a structured object.
@@ -22,25 +23,6 @@ function parseCurrentTask(raw: string) {
     worker: workerMatch?.[1] ?? null,
     lastInfo: lastMatch?.[1] ?? null,
   };
-}
-
-/**
- * Extract the task title from raw text (strip tag prefix and description/metadata suffixes).
- */
-function extractTitle(text: string): string {
-  const withoutMeta = text.replace(/\s*\|\s*blockedBy:\s*.+$/i, "");
-  const withoutTag = withoutMeta.replace(/^\[[^\]]+\]\s*/, "");
-  const dashIdx = withoutTag.indexOf(" \u2014 ");
-  return (dashIdx >= 0 ? withoutTag.slice(0, dashIdx) : withoutTag).trim();
-}
-
-/**
- * Parse blockedBy metadata from raw text.
- */
-function parseBlockedBy(text: string): string[] {
-  const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
-  if (!match) return [];
-  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
 }
 
 /**
