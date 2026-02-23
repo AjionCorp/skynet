@@ -84,6 +84,10 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - name: Configure git identity for test commits
+        run: |
+          git config --global user.email "ci@ajioncorp.com"
+          git config --global user.name "CI"
       - run: pnpm --filter @ajioncorp/skynet-cli build
       - run: bash tests/e2e/init-smoke.test.sh
       - run: bash tests/e2e/cli-commands.test.sh
@@ -101,5 +105,5 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
-      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm --filter admin exec playwright install --with-deps chromium
       - run: pnpm test:e2e
