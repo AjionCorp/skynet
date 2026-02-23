@@ -1,6 +1,10 @@
 import { readFileSync } from "fs";
 import type { SkynetConfig, PromptTemplate } from "../types";
 
+/**
+ * List of worker/agent scripts that have associated prompt files.
+ * IMPORTANT: Update this list when adding new worker types to scripts/.
+ */
 const PROMPT_SCRIPTS = [
   "dev-worker",
   "task-fixer",

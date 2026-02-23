@@ -295,7 +295,14 @@ _handle_worktree_failure() {
 }
 
 _make_fix_branch() {
-  branch_name="fix/$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
+  local _branch_base
+  _branch_base="$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
+  if [ -z "$_branch_base" ] || ! echo "$_branch_base" | grep -qE '^[a-z0-9]'; then
+    log "ERROR: Could not sanitize task title into valid branch name"
+    # use a fallback based on task ID
+    _branch_base="task-$_db_task_id"
+  fi
+  branch_name="fix/$_branch_base"
   if ! setup_worktree "$branch_name" true; then
     _handle_worktree_failure
   fi

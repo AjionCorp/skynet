@@ -114,7 +114,7 @@ crash_recovery() {
     else
       continue
     fi
-    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); continue; }
+    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); if [ "$recovered" -gt 500 ]; then log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"; break; fi; continue; }
 
     local stale=false
 
@@ -165,6 +165,10 @@ crash_recovery() {
       rm -rf "$lockfile"
       recovered=$((recovered + 1))
       _cr_stale_pids=$((_cr_stale_pids + 1))
+      if [ "$recovered" -gt 500 ]; then
+        log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+        break
+      fi
     fi
   done
 
@@ -185,6 +189,10 @@ crash_recovery() {
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
+        if [ "$recovered" -gt 500 ]; then
+          log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+          break
+        fi
       fi
       # Reset current-task file and SQLite worker status to idle
       db_set_worker_idle "$wid" "dead worker recovered by watchdog" 2>/dev/null || true
@@ -226,6 +234,10 @@ IDLE_EOF
           log "Unclaimed orphaned task (no workers alive): $title"
           recovered=$((recovered + 1))
           _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
+          if [ "$recovered" -gt 500 ]; then
+            log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+            break
+          fi
         done <<< "$claimed_lines"
       fi
     fi
@@ -234,16 +246,16 @@ IDLE_EOF
   # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
   local worktree_dirs=()
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
-  worktree_dirs+=("${WORKTREE_BASE}/w${_wid}:${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
+  worktree_dirs+=("${WORKTREE_BASE}/w${_wid}|${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
   done
-worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock")
+worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock")
   for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
-  worktree_dirs+=("${WORKTREE_BASE}/fixer-${_fid}:${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
+  worktree_dirs+=("${WORKTREE_BASE}/fixer-${_fid}|${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
   done
 
   for entry in "${worktree_dirs[@]}"; do
-    local wt_dir="${entry%%:*}"
-    local wt_lock="${entry##*:}"
+    local wt_dir="${entry%%|*}"
+    local wt_lock="${entry##*|}"
 
     # If worktree exists but its worker is NOT running — it's orphaned
     [ -d "$wt_dir" ] || continue
@@ -274,6 +286,10 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1:${SKYNET_LOCK_PREFIX}-task-fixer.lock"
     log "Cleaned orphan worktree: $wt_dir"
     recovered=$((recovered + 1))
     _cr_cleaned_worktrees=$((_cr_cleaned_worktrees + 1))
+    if [ "$recovered" -gt 500 ]; then
+      log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+      break
+    fi
   done
 
   if [ "$recovered" -gt 0 ]; then
@@ -380,16 +396,30 @@ if [ -f "$DB_PATH" ]; then
       log "Attempting automatic DB restore from $_restore_backup"
       _backup_check=$(sqlite3 "$_restore_backup" "PRAGMA quick_check;" 2>/dev/null | head -1)
       if [ "$_backup_check" = "ok" ]; then
-        cp "$DB_PATH" "$DB_PATH.corrupted.$(date +%s)"
-        sqlite3 "$_restore_backup" ".backup '$DB_PATH'"
-        _restore_check=$(sqlite3 "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | head -1)
-        if [ "$_restore_check" = "ok" ]; then
-          _db_healthy=true
-          log "DB restore succeeded from $_restore_backup"
-          tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite auto-restored from backup $_restore_backup"
-        else
-          log "CRITICAL: DB restore verification failed"
-          tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: DB restore failed verification. Manual intervention required."
+        # Atomically move corrupted DB out of the way so concurrent workers
+        # cannot read partial state during the restore process.
+        _corrupted_path="$DB_PATH.corrupted.$(date +%s)"
+        mv "$DB_PATH" "$_corrupted_path" 2>/dev/null || {
+          log "CRITICAL: Failed to rename corrupted DB — cannot proceed with restore"
+          tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: DB rename failed. Manual intervention required."
+        }
+        if [ ! -f "$DB_PATH" ]; then
+          # Restore to a temp file first, verify integrity, then atomically rename into place
+          _restore_tmp="$DB_PATH.restore-tmp.$$"
+          sqlite3 "$_restore_backup" ".backup '$_restore_tmp'" 2>/dev/null
+          _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA quick_check;" 2>/dev/null | head -1)
+          if [ "$_restore_check" = "ok" ]; then
+            mv "$_restore_tmp" "$DB_PATH"
+            _db_healthy=true
+            log "DB restore succeeded from $_restore_backup"
+            tg "✅ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite auto-restored from backup $_restore_backup"
+          else
+            rm -f "$_restore_tmp" 2>/dev/null || true
+            # Restore the corrupted copy back so at least we have a DB file
+            mv "$_corrupted_path" "$DB_PATH" 2>/dev/null || true
+            log "CRITICAL: DB restore verification failed"
+            tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: DB restore failed verification. Manual intervention required."
+          fi
         fi
       else
         log "CRITICAL: Backup file $_restore_backup is also corrupted"
@@ -587,6 +617,7 @@ _hung_workers=$(db_get_hung_workers "$_hung_stale_secs" 2>/dev/null || true)
 if [ -n "$_hung_workers" ]; then
   while IFS=$'\x1f' read -r _hwid _hprog _hage; do
     [ -z "$_hwid" ] && continue
+    [ -z "$_hage" ] && continue
     _hw_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${_hwid}.lock"
     _hw_pid=""
     if [ -d "$_hw_lock" ] && [ -f "$_hw_lock/pid" ]; then
@@ -991,6 +1022,7 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   _success_24h=0
   while IFS='|' read -r _epoch _result _title; do
     [ -z "$_epoch" ] && continue
+    [[ "$_epoch" =~ ^[0-9]+$ ]] || continue
     if [ "$_epoch" -ge "$_24h_ago" ] 2>/dev/null; then
       _total_24h=$((_total_24h + 1))
       [ "$_result" = "success" ] && _success_24h=$((_success_24h + 1))

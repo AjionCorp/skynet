@@ -550,8 +550,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           cwd: projectRoot, encoding: "utf-8", timeout: 5000,
         });
         lastGitCommit = logResult.status === 0 ? (logResult.stdout?.trim() || null) : null;
-      } catch {
-        /* ignore */
+      } catch (err) {
+        if (process.env.NODE_ENV === "development") console.warn("[pipeline-status] git error:", err);
       }
 
       // Post-commit gate

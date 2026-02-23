@@ -99,29 +99,35 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
             }
           });
         } catch {
-          // fs.watch not available — client will rely on EventSource reconnect
+          // fs.watch not available or failed to initialize —
+          // ensure partial state is cleaned up, then client will rely
+          // on EventSource reconnect via the polling interval below.
+          cleanup();
         }
 
         // Poll every 10s to catch lock file changes (worker start/stop)
         // Lock files live in /tmp/ which fs.watch doesn't cover
-        heartbeatInterval = setInterval(() => {
-          if (closed) {
-            if (heartbeatInterval) clearInterval(heartbeatInterval);
-            return;
-          }
-          pushStatus().catch(() => {
-            closed = true;
-            cleanup();
-          });
-        }, 10_000);
+        if (!closed) {
+          heartbeatInterval = setInterval(() => {
+            if (closed) {
+              if (heartbeatInterval) clearInterval(heartbeatInterval);
+              return;
+            }
+            pushStatus().catch(() => {
+              cleanup();
+            });
+          }, 10_000);
+        }
 
         // Close stream after 5 minutes to prevent indefinite connections.
         // Clients using EventSource will automatically reconnect.
-        const MAX_LIFETIME_MS = 5 * 60 * 1000;
-        lifetimeTimeout = setTimeout(() => {
-          cleanup();
-          try { controller.close(); } catch { /* already closed */ }
-        }, MAX_LIFETIME_MS);
+        if (!closed) {
+          const MAX_LIFETIME_MS = 5 * 60 * 1000;
+          lifetimeTimeout = setTimeout(() => {
+            cleanup();
+            try { controller.close(); } catch { /* already closed */ }
+          }, MAX_LIFETIME_MS);
+        }
       },
       cancel() {
         cleanup();

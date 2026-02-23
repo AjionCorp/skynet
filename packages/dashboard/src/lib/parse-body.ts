@@ -13,8 +13,11 @@ export async function parseBody<T>(
     if (text.length > MAX_BODY_SIZE) {
       return { data: null, error: "Request body too large", status: 413 };
     }
-    const data = JSON.parse(text) as T;
-    return { data, error: null };
+    const parsed = JSON.parse(text);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      return { data: null, error: "Request body must be a JSON object", status: 400 };
+    }
+    return { data: parsed as T, error: null };
   } catch {
     return { data: null, error: "Invalid JSON body", status: 400 };
   }

@@ -97,6 +97,8 @@ function parseCronSchedule(
 ): { intervalSeconds: number; human: string } | null {
   const intervalSeconds = cronToIntervalSeconds(expr);
   if (intervalSeconds === null) return null;
+  // Cap at 24 hours — step values like */999999 would produce enormous intervals
+  if (intervalSeconds > 86400) return null;
 
   const parts = expr.trim().split(/\s+/);
   const [minute, hour] = parts;

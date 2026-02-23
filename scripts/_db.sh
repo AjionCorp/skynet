@@ -392,7 +392,7 @@ db_fix_task() {
   _sql_exec "
     UPDATE tasks SET status='fixed', branch='$branch_esc', attempts=$attempts, error='$error_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id AND (status='failed' OR status LIKE 'fixing-%' OR status='blocked');
+    WHERE id=$task_id AND (status='failed' OR status LIKE 'fixing-%');
   "
 }
 
@@ -486,7 +486,11 @@ db_update_heartbeat() {
 db_update_progress() {
   local wid; wid=$(_sql_int "$1")
   local epoch; epoch=$(date +%s)
-  _db "UPDATE workers SET progress_epoch=$epoch WHERE id=$wid;" 2>/dev/null || true
+  _sql_exec "
+    INSERT INTO workers (id, progress_epoch, updated_at)
+    VALUES ($wid, $epoch, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET progress_epoch=$epoch, updated_at=datetime('now');
+  "
 }
 
 # Output: id|worker_type|status|current_task_id|task_title|branch|started_at|heartbeat_epoch|last_info
@@ -767,8 +771,11 @@ db_export_failed() {
 # Call inside merge lock before git commit of state files.
 db_export_state_files() {
   [ ! -f "$DB_PATH" ] && return 0
-  db_export_backlog "$BACKLOG" 2>/dev/null || true
-  db_export_completed "$COMPLETED" 2>/dev/null || true
-  db_export_failed "$FAILED" 2>/dev/null || true
+  local _errs=0
+  db_export_backlog "$BACKLOG" 2>/dev/null || { log "WARNING: db_export_backlog failed"; _errs=$((_errs+1)); }
+  db_export_completed "$COMPLETED" 2>/dev/null || { log "WARNING: db_export_completed failed"; _errs=$((_errs+1)); }
+  db_export_failed "$FAILED" 2>/dev/null || { log "WARNING: db_export_failed failed"; _errs=$((_errs+1)); }
+  [ $_errs -gt 0 ] && return 1
+  return 0
 }
 

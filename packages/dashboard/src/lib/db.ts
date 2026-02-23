@@ -406,6 +406,7 @@ export class SkynetDB {
    *   - scripts/watchdog.sh (_health_score_alert)
    */
   calculateHealthScore(maxWorkers: number): number {
+    const safeMax = Math.max(1, Math.min(maxWorkers, 100));
     const staleEpoch = Math.floor(Date.now() / 1000) - STALE_THRESHOLD_SECONDS;
     const row = this.db
       .prepare(
@@ -417,7 +418,7 @@ export class SkynetDB {
            (SELECT COUNT(*) FROM workers WHERE status='in_progress' AND started_at IS NOT NULL
               AND (julianday('now')-julianday(started_at))>1) as stale_task_count`
       )
-      .get(maxWorkers, staleEpoch) as {
+      .get(safeMax, staleEpoch) as {
         failed_count: number;
         blocker_count: number;
         stale_hb_count: number;

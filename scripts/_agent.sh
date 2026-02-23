@@ -27,6 +27,11 @@ export SKYNET_AGENT_TIMEOUT_MINUTES="${SKYNET_AGENT_TIMEOUT_MINUTES:-45}"
 # no GNU coreutils dependency). SIGALRM exit code (142) is normalized to 124.
 # Set SKYNET_AGENT_TIMEOUT_MINUTES=0 to disable.
 _agent_exec() {
+  if [ -n "${SKYNET_AGENT_TIMEOUT_MINUTES:-}" ]; then
+    if ! [[ "$SKYNET_AGENT_TIMEOUT_MINUTES" =~ ^[0-9]+$ ]]; then
+      echo "[WARN] SKYNET_AGENT_TIMEOUT_MINUTES is non-numeric: '$SKYNET_AGENT_TIMEOUT_MINUTES'" >&2
+    fi
+  fi
   local timeout_secs=$(( SKYNET_AGENT_TIMEOUT_MINUTES * 60 ))
 
   if [ "$timeout_secs" -le 0 ]; then

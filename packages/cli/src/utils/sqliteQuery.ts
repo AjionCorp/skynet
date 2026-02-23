@@ -54,10 +54,16 @@ export function isSqliteReady(devDir: string): boolean {
 }
 
 /**
- * Escape a string for safe use in SQL single-quoted literals passed to
- * the sqlite3 CLI. Strips NULs, escapes backslashes (prevents escape
- * sequence injection), replaces newlines/carriage returns (prevents
- * multi-line SQL injection via the CLI), and doubles single quotes.
+ * Escape a string for safe embedding in SQL single-quoted literals
+ * passed to the sqlite3 CLI. This is the CLI's SQL injection defense.
+ *
+ * Security model: Removes NUL bytes, escapes backslashes, replaces
+ * newlines (preventing dot-command injection), and doubles single quotes.
+ *
+ * IMPORTANT: This function is ONLY safe when the escaped value is
+ * embedded inside SQL single-quoted string literals. It does NOT
+ * protect against injection in other SQL contexts (e.g., table names,
+ * column names, or unquoted numeric positions).
  */
 export function sqlEscape(value: string): string {
   return value

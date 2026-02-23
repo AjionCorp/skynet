@@ -36,5 +36,7 @@ emit_event() {
     fi
   fi
   local _safe_desc="${description:0:3000}"
+  # Strip trailing backslash to avoid corrupted escape sequences after truncation
+  [[ "$_safe_desc" == *'\' ]] && _safe_desc="${_safe_desc%?}"
   printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc" >> "$events_log"
 }
