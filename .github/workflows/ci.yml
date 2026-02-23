@@ -34,7 +34,7 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm test -- --coverage
+      - run: pnpm test
 
   lint-sh:
     runs-on: ubuntu-latest
