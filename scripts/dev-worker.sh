@@ -736,26 +736,30 @@ EOF
       fi
     fi
     if ! eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
-      log "POST-MERGE TYPECHECK FAILED — reverting merge"
+      log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
       if ! git revert HEAD --no-edit 2>>"$LOG"; then
         log "CRITICAL: git revert failed — main may be broken. Stopping worker."
-        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken"
-        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after typecheck"
+        tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken" || true
+        emit_event "revert_failed" "Worker $WORKER_ID: $task_title — git revert failed after typecheck" || true
         release_merge_lock
         exit 1
       fi
       git_push_with_retry || log "WARNING: push of revert commit failed"
-      emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)"
-      tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)"
+      # Revert confirmed on main — NOW release the merge lock so other workers
+      # never see a broken main between the failed merge and the revert commit.
+      release_merge_lock
+      # Bookkeeping below is non-critical — guard every call so ERR trap cannot
+      # fire and cause cleanup_on_exit to double-release the (already freed) lock.
+      emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)" || true
+      tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)" || true
       tasks_failed=$((tasks_failed + 1))
       [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
-      db_export_state_files
+      db_export_state_files || true
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
-      emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title"
+      emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title" || true
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       _one_shot_exit=1
-      release_merge_lock
       continue
     fi
     log "Post-merge typecheck passed."

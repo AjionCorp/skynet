@@ -7,7 +7,7 @@ import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reade
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
-import { parseBacklog as parseBacklogItems, backlogCounts } from "../lib/backlog-parser";
+import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 
 /**
@@ -83,31 +83,6 @@ function readCodexAuthStatus(
   } catch {
     return { status: "invalid", expiresInMs: null, hasRefreshToken: false, source: "invalid" };
   }
-}
-
-/**
- * Parse backlog.md into items with status/tag/dependency info.
- * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
- * NOTE: duplicated in tasks.ts — consider extracting to backlog-parser.ts
- */
-function parseBacklog(raw: string) {
-  const parsed = parseBacklogItems(raw);
-  const counts = backlogCounts(parsed);
-
-  // Resolve blocked status
-  const titleToStatus = new Map<string, string>();
-  for (const item of parsed) {
-    titleToStatus.set(item.title, item.status);
-  }
-  const items = parsed.map((item) => ({
-    text: item.raw,
-    tag: item.tag ?? "",
-    status: item.status,
-    blockedBy: item.blockedBy,
-    blocked: item.blockedBy.length > 0 && item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
-  }));
-
-  return { items, ...counts };
 }
 
 /**
@@ -357,12 +332,12 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       }
 
       // Backlog
-      let backlog: ReturnType<typeof parseBacklog>;
+      let backlog: ReturnType<typeof parseBacklogWithBlocked>;
       if (usingSqlite && db) {
         backlog = db.getBacklogItems();
       } else {
         const backlogRaw = readDevFile(devDir, "backlog.md");
-        backlog = parseBacklog(backlogRaw);
+        backlog = parseBacklogWithBlocked(backlogRaw);
       }
 
       // Completed

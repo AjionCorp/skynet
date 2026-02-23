@@ -24,12 +24,20 @@ check_claude_auth() {
   local _auth_ok=false
   local _access_token=""
   [ -f "$SKYNET_AUTH_TOKEN_CACHE" ] && _access_token=$(cat "$SKYNET_AUTH_TOKEN_CACHE" 2>/dev/null)
-  [ -n "$_access_token" ] \
-    && curl -sf -o /dev/null --max-time 10 \
-         https://api.anthropic.com/api/oauth/claude_cli/roles \
-         -H "Authorization: Bearer $_access_token" \
-         -H "Content-Type: application/json" \
-    && _auth_ok=true
+  if [ -n "$_access_token" ]; then
+    # Retry with exponential backoff to tolerate transient network flakes
+    local _attempt
+    for _attempt in 1 2 3; do
+      if curl -sf -o /dev/null --max-time 10 \
+           https://api.anthropic.com/api/oauth/claude_cli/roles \
+           -H "Authorization: Bearer $_access_token" \
+           -H "Content-Type: application/json"; then
+        _auth_ok=true
+        break
+      fi
+      [ "$_attempt" -lt 3 ] && sleep "$((_attempt * 2))"
+    done
+  fi
 
   if $_auth_ok; then
     # Auth works — clear any previous failure state
@@ -50,14 +58,24 @@ check_claude_auth() {
   if [ -f "$SCRIPTS_DIR/auth-refresh.sh" ]; then
     log "Auth failed — triggering auth-refresh.sh to attempt token refresh..."
     if bash "$SCRIPTS_DIR/auth-refresh.sh" 2>>"${LOG:-/tmp/skynet-auth-refresh.err}"; then
-      # Re-read refreshed token and retry
+      # Re-read refreshed token and retry with backoff
       _access_token=""
       [ -f "$SKYNET_AUTH_TOKEN_CACHE" ] && _access_token=$(cat "$SKYNET_AUTH_TOKEN_CACHE" 2>/dev/null)
-      if [ -n "$_access_token" ] \
-        && curl -sf -o /dev/null --max-time 10 \
-             https://api.anthropic.com/api/oauth/claude_cli/roles \
-             -H "Authorization: Bearer $_access_token" \
-             -H "Content-Type: application/json"; then
+      local _post_refresh_ok=false
+      if [ -n "$_access_token" ]; then
+        local _retry
+        for _retry in 1 2 3; do
+          if curl -sf -o /dev/null --max-time 10 \
+               https://api.anthropic.com/api/oauth/claude_cli/roles \
+               -H "Authorization: Bearer $_access_token" \
+               -H "Content-Type: application/json"; then
+            _post_refresh_ok=true
+            break
+          fi
+          [ "$_retry" -lt 3 ] && sleep "$((_retry * 2))"
+        done
+      fi
+      if $_post_refresh_ok; then
         log "Auth restored after auto-refresh."
         rm -f "$SKYNET_AUTH_FAIL_FLAG"
         if [ -f "$BLOCKERS" ]; then

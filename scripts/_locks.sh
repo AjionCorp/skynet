@@ -15,6 +15,16 @@ MERGE_LOCK="${SKYNET_LOCK_PREFIX}-merge.lock"
 # Waits up to ~30s (60 retries x 0.5s). Stale lock timeout: 120s.
 # Returns 0 on success, 1 on failure.
 acquire_merge_lock() {
+  # Emergency unlock: if the sentinel file exists, force-remove the merge lock
+  # so the pipeline can recover without waiting for the 120s stale timeout.
+  # Create the sentinel with: touch /tmp/skynet-{project}-unlock-emergency
+  local _emergency="${SKYNET_LOCK_PREFIX}-unlock-emergency"
+  if [ -f "$_emergency" ]; then
+    log "EMERGENCY UNLOCK: sentinel detected — force-removing merge lock"
+    rm -rf "$MERGE_LOCK" 2>/dev/null || true
+    rm -f "$_emergency"
+  fi
+
   local attempts=0
   while ! mkdir "$MERGE_LOCK" 2>/dev/null; do
     attempts=$((attempts + 1))

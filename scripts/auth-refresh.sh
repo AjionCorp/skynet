@@ -75,6 +75,7 @@ print(d.get('rateLimitTier', ''))
 
   # Always export current token to cache file for cron scripts (secure permissions)
   (umask 077; echo "$access_token" > "$TOKEN_CACHE")
+  chmod 600 "$TOKEN_CACHE" 2>/dev/null || true
 
   if [ "$remaining_secs" -gt "$REFRESH_BUFFER_SECS" ]; then
     log "Token still valid for ${remaining_secs}s ($(( remaining_secs / 60 ))m). No refresh needed."
@@ -162,6 +163,7 @@ print(json.dumps(creds))
 
   # Export new token to cache file for cron scripts (secure permissions)
   (umask 077; echo "$new_access" > "$TOKEN_CACHE")
+  chmod 600 "$TOKEN_CACHE" 2>/dev/null || true
 
   local now_after
   now_after=$(python3 -c "import time; print(int(time.time() * 1000))")

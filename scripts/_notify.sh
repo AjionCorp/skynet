@@ -7,6 +7,17 @@
 # skynet.config.sh to a comma-separated list of enabled channels
 # (e.g. "telegram", "telegram,slack,discord").
 
+# Redact sensitive values for safe log output.
+# Shows first 4 and last 4 chars for strings > 8 chars, else "***".
+_redact_for_log() {
+  local val="$1"
+  if [ ${#val} -le 8 ]; then
+    echo "***"
+  else
+    echo "${val:0:4}...${val: -4}"
+  fi
+}
+
 # Default: telegram only (backward compatible)
 export SKYNET_NOTIFY_CHANNELS="${SKYNET_NOTIFY_CHANNELS:-telegram}"
 

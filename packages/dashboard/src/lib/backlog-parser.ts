@@ -112,3 +112,43 @@ export function backlogCounts(items: ParsedBacklogItem[]): {
   }
   return { pendingCount, claimedCount, doneCount };
 }
+
+export interface BacklogItemWithBlocked {
+  text: string;
+  tag: string;
+  status: "pending" | "claimed" | "done";
+  blockedBy: string[];
+  blocked: boolean;
+}
+
+/**
+ * Parse backlog.md into items with resolved blocked status and counts.
+ * This is the canonical "parse + resolve dependencies" wrapper used by handlers.
+ */
+export function parseBacklogWithBlocked(raw: string): {
+  items: BacklogItemWithBlocked[];
+  pendingCount: number;
+  claimedCount: number;
+  doneCount: number;
+} {
+  const parsed = parseBacklog(raw);
+  const counts = backlogCounts(parsed);
+
+  // Resolve blocked status (blocked if any dependency is not done)
+  const titleToStatus = new Map<string, string>();
+  for (const item of parsed) {
+    titleToStatus.set(item.title, item.status);
+  }
+
+  const items: BacklogItemWithBlocked[] = parsed.map((item) => ({
+    text: item.raw,
+    tag: item.tag ?? "",
+    status: item.status,
+    blockedBy: item.blockedBy,
+    blocked:
+      item.blockedBy.length > 0 &&
+      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
+  }));
+
+  return { items, ...counts };
+}

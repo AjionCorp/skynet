@@ -7,8 +7,13 @@ notify_discord() {
   local msg="$1"
   [ -n "${SKYNET_DISCORD_WEBHOOK_URL:-}" ] || return 0
 
-  curl -sf -X POST "$SKYNET_DISCORD_WEBHOOK_URL" \
+  if ! curl -sf -X POST "$SKYNET_DISCORD_WEBHOOK_URL" \
     -H "Content-Type: application/json" \
     -d "{\"content\": $(printf '%s' "$msg" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" \
-    > /dev/null 2>&1 || true
+    > /dev/null 2>&1; then
+    # Log failure with redacted webhook URL — never expose raw URL
+    if declare -f _redact_for_log >/dev/null 2>&1; then
+      log "Discord notify failed (webhook=$(_redact_for_log "$SKYNET_DISCORD_WEBHOOK_URL"))"
+    fi
+  fi
 }

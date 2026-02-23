@@ -2,34 +2,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "f
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
-import { parseBacklog as parseBacklogItems, backlogCounts } from "../lib/backlog-parser";
-
-/**
- * Parse backlog.md into items with status/tag/dependency info.
- * Delegates to the canonical parseBacklog in backlog-parser.ts and adapts the shape.
- * NOTE: duplicated in pipeline-status.ts — consider extracting to backlog-parser.ts
- */
-function parseBacklog(raw: string) {
-  const parsed = parseBacklogItems(raw);
-  const counts = backlogCounts(parsed);
-
-  // Resolve blocked status (blocked if any dependency is not done)
-  const titleToStatus = new Map<string, string>();
-  for (const item of parsed) {
-    titleToStatus.set(item.title, item.status);
-  }
-
-  const items = parsed.map((item) => ({
-    text: item.raw,
-    tag: item.tag ?? "",
-    status: item.status,
-    blockedBy: item.blockedBy,
-    blocked: item.blockedBy.length > 0 &&
-      item.blockedBy.some((dep) => titleToStatus.get(dep) !== "done"),
-  }));
-
-  return { items, ...counts };
-}
+import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
 /**
  * Create GET and POST handlers for the tasks endpoint.
@@ -64,7 +37,7 @@ export function createTasksHandlers(config: SkynetConfig) {
       }
 
       const raw = readFileSync(backlogPath, "utf-8");
-      const backlog = parseBacklog(raw);
+      const backlog = parseBacklogWithBlocked(raw);
       const items = backlog.items.filter((i) => i.status !== "done");
       return Response.json({
         data: {
