@@ -362,6 +362,7 @@ if run_agent "$PROMPT" "$LOG"; then
     echo $$ > "$BACKLOG_LOCK/pid" 2>/dev/null || true
     _dedup_cleaned=$(mktemp /tmp/skynet-dedup-cleaned-XXXXXX)
     chmod 600 "$_dedup_cleaned"
+    trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized" "$_dedup_cleaned"' EXIT
     _dedup_count=0
     while IFS= read -r _line; do
       if echo "$_line" | grep -q '^\- \[ \]'; then

@@ -43,7 +43,7 @@ emit_event() {
           echo "events rotation: mv current->.1 failed (disk full?) — events log may grow unbounded" >&2
         fi
         [ -f "${events_log}.2" ] && gzip -f "${events_log}.2" 2>/dev/null &
-        rm -rf "$_rot_lock" 2>/dev/null || true
+        rmdir "$_rot_lock" 2>/dev/null || rm -rf "$_rot_lock" 2>/dev/null || true
       else
         # Stale lock recovery: if holder PID is dead or lock is older than 60s, reclaim
         local _rot_force=false

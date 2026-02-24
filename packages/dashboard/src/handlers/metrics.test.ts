@@ -125,6 +125,7 @@ describe("createMetricsHandler", () => {
     expect(body).toContain("skynet_workers_active 2");
     expect(body).toContain("skynet_blockers_active 1");
     expect(body).toContain("skynet_events_total 42");
+    expect(body).toContain("skynet_up 1");
   });
 
   it("all metric values are numeric", async () => {
@@ -147,7 +148,7 @@ describe("createMetricsHandler", () => {
     }
   });
 
-  it("returns 200 with empty body when DB is unavailable", async () => {
+  it("returns 200 with skynet_up 0 when DB is unavailable", async () => {
     // Re-mock getSkynetDB to throw
     const { getSkynetDB } = await import("../lib/db");
     vi.mocked(getSkynetDB).mockImplementationOnce(() => {
@@ -159,10 +160,12 @@ describe("createMetricsHandler", () => {
     const body = await res.text();
 
     expect(res.status).toBe(200);
-    expect(body).toBe("");
+    expect(body).toContain("skynet_up 0");
+    // Should NOT contain task metrics
+    expect(body).not.toContain("skynet_tasks_total");
   });
 
-  it("returns 200 with empty body when countPending throws", async () => {
+  it("returns 200 with skynet_up 0 when countPending throws", async () => {
     mockDB.countPending.mockImplementationOnce(() => {
       throw new Error("Database locked");
     });
@@ -172,7 +175,9 @@ describe("createMetricsHandler", () => {
     const body = await res.text();
 
     expect(res.status).toBe(200);
-    expect(body).toBe("");
+    expect(body).toContain("skynet_up 0");
+    // Should NOT contain task metrics
+    expect(body).not.toContain("skynet_tasks_total");
   });
 
   it("passes maxWorkers from config to calculateHealthScore", async () => {

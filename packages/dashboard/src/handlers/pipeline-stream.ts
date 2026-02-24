@@ -33,8 +33,9 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
     let lastPayloadHash = "";
 
     function cleanup() {
-      if (!closed) activeConnections = Math.max(0, activeConnections - 1);
+      if (closed) return;
       closed = true;
+      activeConnections = Math.max(0, activeConnections - 1);
       if (watcher) {
         watcher.close();
         watcher = null;

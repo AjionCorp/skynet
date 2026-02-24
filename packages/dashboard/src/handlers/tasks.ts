@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync, existsSync, unlinkSync, rmSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync, existsSync, rmSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
@@ -273,9 +273,7 @@ export function createTasksHandlers(config: SkynetConfig) {
         });
       } finally {
         try {
-          // Remove PID file first, then the lock directory
-          try { unlinkSync(pidFile); } catch { /* ignore */ }
-          rmdirSync(backlogLockPath);
+          rmSync(backlogLockPath, { recursive: true, force: true });
         } catch { /* lock cleanup failure is non-fatal — lock dir may already be removed by another process */ }
       }
     } catch (err) {

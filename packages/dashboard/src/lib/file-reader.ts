@@ -10,7 +10,11 @@ export function readDevFile(devDir: string, filename: string): string {
   const resolved = resolve(devDir, filename);
   const resolvedDevDir = resolve(devDir);
   if (!resolved.startsWith(resolvedDevDir + "/") && resolved !== resolvedDevDir) return "";
-  // Cache canonical devDir outside try to avoid TOCTOU between realpathSync calls
+  // Cache canonical devDir outside try to avoid TOCTOU between realpathSync calls.
+  // NOTE: A narrow TOCTOU window exists between the realpathSync checks and the
+  // readFileSync below — a symlink could be swapped between validation and read.
+  // This is acceptable because .dev/ is operator-owned and not writable by
+  // untrusted users. The symlink check is defense-in-depth, not a security boundary.
   let canonicalDevDir: string;
   try {
     canonicalDevDir = realpathSync(resolvedDevDir);

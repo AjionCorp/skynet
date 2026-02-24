@@ -198,4 +198,32 @@ describe("createEventsHandler", () => {
     // Check what actually happens: epoch=0 is >= 0 and <= 4.1e9, so it passes
     expect(body.data).toHaveLength(2);
   });
+
+  // ── TEST-P2-5: Epoch boundary tests ─────────────────────────────────
+  it("accepts epoch exactly 0 as valid", async () => {
+    mockTailOutput("0|task_completed|Done at epoch zero");
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].event).toBe("task_completed");
+  });
+
+  it("accepts epoch exactly 4.1e9 as valid", async () => {
+    mockTailOutput("4100000000|task_completed|Far future but valid");
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].event).toBe("task_completed");
+  });
+
+  it("rejects epoch 4100000001 (just beyond 4.1e9 boundary)", async () => {
+    mockTailOutput(`4100000001|task_completed|Rejected\n${EPOCH_1}|task_claimed|OK`);
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].event).toBe("task_claimed");
+  });
 });

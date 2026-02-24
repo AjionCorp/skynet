@@ -21,12 +21,11 @@ vi.mock("../lib/db", () => ({
   })),
 }));
 
-import { readFileSync, writeFileSync, mkdirSync, rmdirSync, unlinkSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
-const _mockUnlinkSync = vi.mocked(unlinkSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
-const mockRmdirSync = vi.mocked(rmdirSync);
+const mockRmSync = vi.mocked(rmSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return { projectName: "test-project", devDir: "/tmp/test/.dev", lockPrefix: "/tmp/skynet-test-", workers: [], triggerableScripts: [], taskTags: ["FEAT", "FIX", "INFRA", "TEST", "NMI"], ...overrides };
@@ -148,14 +147,14 @@ describe("createTasksHandlers", () => {
       }) as typeof writeFileSync);
       const { POST } = createTasksHandlers(makeConfig());
       await POST(makeRequest({ tag: "FEAT", title: "Should release lock" }));
-      expect(mockRmdirSync).toHaveBeenCalled();
+      expect(mockRmSync).toHaveBeenCalled();
     });
 
-    it("acquires and releases lock via mkdir/rmdir", async () => {
+    it("acquires and releases lock via mkdir/rmSync", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       await POST(makeRequest({ tag: "FEAT", title: "Lock test" }));
       expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/skynet-test--backlog.lock");
-      expect(mockRmdirSync).toHaveBeenCalledWith("/tmp/skynet-test--backlog.lock");
+      expect(mockRmSync).toHaveBeenCalledWith("/tmp/skynet-test--backlog.lock", { recursive: true, force: true });
     });
 
     it("trims title whitespace", async () => {
@@ -363,6 +362,21 @@ describe("createTasksHandlers", () => {
       const res = await POST(makeRequest({ tag: "FEAT", title: "Double fail" }));
       const body = await res.json();
       expect(res.status).toBe(200);
+      expect(body.data.warning).toContain("backlog.md sync failed");
+    });
+
+    it("returns 200 with warning when exportBacklog throws and readFileSync also throws in fallback", async () => {
+      // Simulate both exportBacklog (already throws via mock) AND readFileSync failing in fallback
+      mockReadFileSync.mockImplementation(((path: string) => {
+        if (String(path).endsWith("backlog.md")) throw new Error("Permission denied");
+        return SAMPLE_BACKLOG;
+      }) as typeof readFileSync);
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Read fail too" }));
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.inserted).toContain("Read fail too");
       expect(body.data.warning).toContain("backlog.md sync failed");
     });
   });

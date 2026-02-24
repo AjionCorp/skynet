@@ -481,6 +481,34 @@ describe("createMonitoringAgentsHandler", () => {
       expect(healthCheck.logPath).toBe("/tmp/health-check.log");
     });
 
+    it("rejects cron schedule with step value producing interval > 86400s", async () => {
+      // */99999 * * * * would produce 99999 * 60 = 5999940s, far beyond 86400s cap
+      const crontabOutput = [
+        "# crontab entries",
+        "# BEGIN skynet:test-project",
+        "*/99999 * * * * SKYNET_DEV_DIR=/home/user/.dev /bin/bash /home/user/.dev/scripts/dev-worker-1.sh >> /tmp/dev-worker-1.log 2>&1",
+        "# END skynet:test-project",
+      ].join("\n");
+
+      mockSpawnSync.mockReturnValue({
+        stdout: crontabOutput,
+        stderr: "",
+        status: 0,
+      } as never);
+
+      const handler = createMonitoringAgentsHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+
+      expect(res.status).toBe(200);
+      // The agent should be loaded (crontab entry exists) but interval should be null
+      // because parseCronSchedule rejects intervals > 86400s
+      const devWorker = data.agents[0];
+      expect(devWorker.loaded).toBe(true);
+      expect(devWorker.interval).toBeNull();
+      expect(devWorker.intervalHuman).toBeNull();
+    });
+
     it("returns unloaded agents when no crontab entries match", async () => {
       mockSpawnSync.mockReturnValue({
         stdout: "# empty crontab\n",

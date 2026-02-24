@@ -282,6 +282,33 @@ describe("createPipelineStreamHandler", () => {
     expect(mockWatcher.close).toHaveBeenCalled();
   });
 
+  it("sends auth-expired event with session-lifetime reason before closing on 5-minute timeout", async () => {
+    const sameData = { workers: [] };
+    mockGetStatus.mockResolvedValue(makeStatusResponse(sameData));
+
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
+    await reader.read(); // initial status
+    await flushAsync();
+
+    // Advance past the 5-minute lifetime
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
+
+    // Collect all remaining chunks before stream closes
+    let authExpiredFound = false;
+    for (let i = 0; i < 100; i++) {
+      const result = await reader.read();
+      if (result.done) break;
+      const text = new TextDecoder().decode(result.value);
+      if (text.includes("event: auth-expired") && text.includes("session-lifetime")) {
+        authExpiredFound = true;
+      }
+    }
+    expect(authExpiredFound).toBe(true);
+  });
+
   it("suppresses duplicate consecutive payloads (deduplication)", async () => {
     const sameData = { workers: [{ name: "w1" }] };
     // Return the same data for initial + poll

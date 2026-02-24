@@ -100,4 +100,33 @@ describe("getLastLogLine", () => {
     const result = getLastLogLine("/tmp/nonexistent-dir", "dev-worker-1");
     expect(result).toBeNull();
   });
+
+  it("returns the last line from a real temp file with multiple lines", () => {
+    const logDir = mkdtempSync(join(tmpdir(), "skynet-logtest-"));
+    const scriptsDir = join(logDir, "scripts");
+    mkdirSync(scriptsDir);
+    writeFileSync(
+      join(scriptsDir, "test-script.log"),
+      "[2026-01-01 10:00:00] First line\n[2026-01-01 10:01:00] Second line\n[2026-01-01 10:02:00] Last line\n"
+    );
+    try {
+      const result = getLastLogLine(logDir, "test-script");
+      expect(result).toBe("[2026-01-01 10:02:00] Last line");
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns the single line from a one-line file", () => {
+    const logDir = mkdtempSync(join(tmpdir(), "skynet-logtest-"));
+    const scriptsDir = join(logDir, "scripts");
+    mkdirSync(scriptsDir);
+    writeFileSync(join(scriptsDir, "single.log"), "only line\n");
+    try {
+      const result = getLastLogLine(logDir, "single");
+      expect(result).toBe("only line");
+    } finally {
+      rmSync(logDir, { recursive: true, force: true });
+    }
+  });
 });

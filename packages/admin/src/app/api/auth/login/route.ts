@@ -21,6 +21,8 @@ function isRateLimited(ip: string): boolean {
   }
   const entry = LOGIN_ATTEMPTS.get(ip);
   if (!entry || now >= entry.resetAt) {
+    // Expired entry — delete to prevent unbounded map growth
+    if (entry) LOGIN_ATTEMPTS.delete(ip);
     return false;
   }
   return entry.count >= MAX_ATTEMPTS;

@@ -63,11 +63,11 @@ usage_limit_hit() {
 # --- Worktree helpers (shared module) ---
 # Task-fixer uses non-strict install (continue on failure) and deletes stale
 # branches before creating worktrees from main.
-# shellcheck disable=SC2034  # read by sourced _worktree.sh
+# NOTE: _worktree.sh is already sourced by _config.sh; no need to re-source here.
+# shellcheck disable=SC2034  # read by _worktree.sh functions at runtime
 WORKTREE_INSTALL_STRICT=false
 # shellcheck disable=SC2034
 WORKTREE_DELETE_STALE_BRANCH=true
-source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
 
 # --- PID lock (instance-specific: fixer 1 → -task-fixer.lock, fixer 2+ → -task-fixer-N.lock) ---
 if [ "$FIXER_ID" = "1" ]; then
@@ -103,7 +103,7 @@ cleanup_on_exit() {
   # Unclaim task if we were mid-fix (revert fixing-N back to pending).
   # Only unclaim tasks whose fixer_id matches this instance, preventing
   # a broad sweep from reclaiming tasks belonging to other fixers.
-  if [ -n "$_CURRENT_TASK_TITLE" ] && [ -n "$_db_task_id" ]; then
+  if [ -n "$_CURRENT_TASK_TITLE" ] && [ -n "$_db_task_id" ] && [ "$_db_task_id" != "0" ]; then
     # Verify the task is still claimed by this fixer before unclaiming
     local _claimed_fixer
     _claimed_fixer=$(_db "SELECT fixer_id FROM tasks WHERE id=$(_sql_int "$_db_task_id") AND status='fixing-$FIXER_ID';" 2>/dev/null || echo "")
@@ -113,15 +113,9 @@ cleanup_on_exit() {
       log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE (fixer $FIXER_ID)"
     fi
   elif [ -n "$_CURRENT_TASK_TITLE" ]; then
-    # Guard: only call db_unclaim_failure when we have a valid task ID.
-    # _db_task_id may be empty if the crash occurred before claiming completed.
-    if [ -n "$_db_task_id" ] && [ "$_db_task_id" != "0" ]; then
-      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
-      db_export_state_files 2>/dev/null || true
-      log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
-    else
-      log "WARNING: Crash recovery skipped db_unclaim — no valid task ID for: $_CURRENT_TASK_TITLE"
-    fi
+    # _db_task_id is empty or 0 — crash occurred before claiming completed.
+    # Cannot unclaim without a valid task ID; log a warning for diagnostics.
+    log "WARNING: Crash recovery skipped db_unclaim — no valid task ID for: $_CURRENT_TASK_TITLE"
   fi
   # Ensure fixer status is idle on exit (normal or abnormal)
   db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale fixer status"

@@ -3,8 +3,8 @@ import { STALE_THRESHOLD_SECONDS, SAFE_SCRIPT_NAME, SAFE_SCRIPT_PATH, SAFE_AGENT
 
 describe("constants", () => {
   describe("STALE_THRESHOLD_SECONDS", () => {
-    it("is 30 minutes", () => {
-      expect(STALE_THRESHOLD_SECONDS).toBe(1800);
+    it("is 45 minutes (matching config template default)", () => {
+      expect(STALE_THRESHOLD_SECONDS).toBe(2700);
     });
   });
 

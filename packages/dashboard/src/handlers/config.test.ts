@@ -13,14 +13,15 @@ vi.mock("fs", () => ({
   statSync: vi.fn(() => ({ mtimeMs: Date.now() })),
 }));
 
-import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmSync, statSync } from "fs";
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockRenameSync = vi.mocked(renameSync);
 const _mockMkdirSync = vi.mocked(mkdirSync);
-const _mockRmdirSync = vi.mocked(rmdirSync);
+const mockRmSync = vi.mocked(rmSync);
+const mockStatSync = vi.mocked(statSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -450,6 +451,43 @@ describe("createConfigHandler", () => {
       expect(res.status).toBe(423);
       expect(body.error).toContain("locked");
       expect(body.data).toBeNull();
+    });
+
+    it("breaks stale lock via TTL detection when mtime > 30s ago", async () => {
+      mockExistsSync.mockReturnValue(true);
+      // readFileSync: return config content for config reads, PID for lock PID reads
+      const configContent = 'export SKYNET_MAX_WORKERS="4"\n';
+      mockReadFileSync.mockImplementation(((path: string) => {
+        if (String(path).endsWith("/pid")) return String(process.pid);
+        return configContent;
+      }) as typeof readFileSync);
+
+      // mkdirSync: fail EEXIST on first call (lock held), succeed on subsequent calls
+      let mkdirCallCount = 0;
+      _mockMkdirSync.mockImplementation((() => {
+        mkdirCallCount++;
+        if (mkdirCallCount === 1) {
+          const err = new Error("EEXIST") as NodeJS.ErrnoException;
+          err.code = "EEXIST";
+          throw err;
+        }
+        return undefined;
+      }) as typeof mkdirSync);
+
+      // statSync: return mtime > 30s ago to trigger TTL-based stale detection
+      mockStatSync.mockReturnValue({ mtimeMs: Date.now() - 60_000 } as ReturnType<typeof statSync>);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "8" } }));
+      const body = await res.json();
+
+      // Lock should have been broken via rmSync and handler should succeed
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(mockRmSync).toHaveBeenCalledWith(
+        expect.stringContaining("config.lock"),
+        expect.objectContaining({ recursive: true, force: true })
+      );
     });
 
     it("rejects non-printable characters (NUL byte) in values", async () => {

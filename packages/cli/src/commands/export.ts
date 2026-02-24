@@ -51,6 +51,9 @@ export async function exportCommand(options: ExportOptions) {
   const defaultPath = `skynet-snapshot-${isoDate}.json`;
   const outputPath = resolve(options.output || defaultPath);
 
+  // Security: Print the warning BEFORE writing the file so operators see it
+  // even if the write fails or is interrupted. The export may contain full
+  // SQLite dumps including task descriptions, error logs, and DB schema.
   console.warn(
     "\n  WARNING: The export may contain sensitive data (task descriptions, error logs, DB dumps)." +
     "\n  Review the output before sharing or storing in untrusted locations.\n"

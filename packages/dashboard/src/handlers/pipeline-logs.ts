@@ -104,15 +104,21 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
       let fileSizeBytes = 0;
       try {
         fileSizeBytes = statSync(logPath).size;
-        // Count lines via streaming byte scan (no subprocess, ~4x less memory than wc -l)
+        // Count lines via streaming byte scan (no subprocess, ~4x less memory than wc -l).
+        // Cap at 10MB to avoid excessive CPU on very large log files — beyond this
+        // the line count is approximate (capped) and the UI already has totalLines for display only.
+        const LINE_COUNT_BYTE_CAP = 10 * 1024 * 1024; // 10MB
         const fd = openSync(logPath, "r");
         try {
           const buf = Buffer.alloc(65536);
           let bytesRead: number;
+          let totalBytesScanned = 0;
           while ((bytesRead = readSync(fd, buf, 0, buf.length, null)) > 0) {
             for (let i = 0; i < bytesRead; i++) {
               if (buf[i] === 0x0a) totalLines++;
             }
+            totalBytesScanned += bytesRead;
+            if (totalBytesScanned >= LINE_COUNT_BYTE_CAP) break;
           }
         } finally {
           closeSync(fd);

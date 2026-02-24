@@ -16,6 +16,7 @@
  */
 
 import { existsSync, readdirSync } from "fs";
+import path from "path";
 import type { MissionProgress } from "../types";
 import { readDevFile } from "./file-reader";
 
@@ -201,7 +202,7 @@ export function evaluateCriterion(
     }
     case 6: {
       // "The system works with any LLM agent (Claude, Codex, future models)"
-      const projectRoot = ctx.devDir.replace(/\/?\.dev\/?$/, "");
+      const projectRoot = path.resolve(ctx.devDir, "..");
       const agentsDir = `${projectRoot}/scripts/agents`;
       let agentPlugins: string[] = [];
       try {

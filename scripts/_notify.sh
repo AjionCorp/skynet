@@ -31,20 +31,22 @@ unset _notify_plugin
 
 # Dispatch a message to all enabled notification channels.
 # Each channel's notify_<name>() is called; failures are silenced.
+# Uses a subshell to contain IFS changes, avoiding global IFS modification fragility.
 _notify_all() {
   local msg="$1"
-  # IFS is saved/restored rather than using `local IFS` for bash 3.2 compat
-  local _old_ifs="$IFS"
-  IFS=','
-  for _channel in $SKYNET_NOTIFY_CHANNELS; do
-    _channel=$(echo "$_channel" | sed 's/^ *//;s/ *$//')
-    [ -z "$_channel" ] && continue
-    local _fn="notify_${_channel}"
-    if declare -f "$_fn" > /dev/null 2>&1; then
-      "$_fn" "$msg" || true
-    fi
-  done
-  IFS="$_old_ifs"
+  # Subshell isolates IFS change — no save/restore needed, no risk of
+  # corrupting the caller's IFS if the function exits early or traps fire.
+  (
+    IFS=','
+    for _channel in $SKYNET_NOTIFY_CHANNELS; do
+      _channel=$(echo "$_channel" | sed 's/^ *//;s/ *$//')
+      [ -z "$_channel" ] && continue
+      _fn="notify_${_channel}"
+      if declare -f "$_fn" > /dev/null 2>&1; then
+        "$_fn" "$msg" || true
+      fi
+    done
+  )
 }
 
 # Public API: tg "message"

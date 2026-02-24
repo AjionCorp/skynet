@@ -465,6 +465,48 @@ describe("createWorkerScalingHandler", () => {
       expect(data.workers[0].count).toBe(0);
     });
 
+    it("GET ignores PID files containing PID 0", async () => {
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "0";
+        throw new Error("ENOENT");
+      });
+
+      const { GET } = createWorkerScalingHandler(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+
+      expect(data.workers[0].count).toBe(0);
+      expect(data.workers[0].pids).toEqual([]);
+    });
+
+    it("GET ignores PID files containing negative PIDs", async () => {
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "-1234";
+        throw new Error("ENOENT");
+      });
+
+      const { GET } = createWorkerScalingHandler(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+
+      expect(data.workers[0].count).toBe(0);
+      expect(data.workers[0].pids).toEqual([]);
+    });
+
+    it("GET ignores PID files containing NaN values", async () => {
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "NaN";
+        throw new Error("ENOENT");
+      });
+
+      const { GET } = createWorkerScalingHandler(makeConfig());
+      const res = await GET();
+      const { data } = await res.json();
+
+      expect(data.workers[0].count).toBe(0);
+      expect(data.workers[0].pids).toEqual([]);
+    });
+
     it("GET ignores PID files for dead processes", async () => {
       // PID file exists but process is dead (not in alivePids)
       mockReadFileSync.mockImplementation((path: unknown) => {

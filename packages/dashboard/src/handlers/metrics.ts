@@ -60,9 +60,18 @@ export function createMetricsHandler(config: SkynetConfig) {
       lines.push("# TYPE skynet_events_total counter");
       lines.push(`skynet_events_total ${totalEvents}`);
       lines.push("");
+
+      // --- DB availability indicator ---
+      lines.push("# HELP skynet_up Whether the Skynet DB is reachable (1=up, 0=down)");
+      lines.push("# TYPE skynet_up gauge");
+      lines.push("skynet_up 1");
+      lines.push("");
     } catch {
-      // DB unavailable — return empty metrics (not 500)
-      // This is valid Prometheus behavior: scrape succeeds but reports nothing
+      // DB unavailable — emit skynet_up 0 so Prometheus can detect DB issues
+      lines.push("# HELP skynet_up Whether the Skynet DB is reachable (1=up, 0=down)");
+      lines.push("# TYPE skynet_up gauge");
+      lines.push("skynet_up 0");
+      lines.push("");
     }
 
     return new Response(lines.join("\n"), {

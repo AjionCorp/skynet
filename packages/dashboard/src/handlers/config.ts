@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmdirSync, rmSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync, statSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { VALID_CONFIG_KEY } from "../lib/constants";
@@ -383,7 +383,7 @@ export function createConfigHandler(config: SkynetConfig) {
           error: null,
         });
       } finally {
-        try { rmdirSync(lockPath); } catch { /* lock cleanup failure is non-fatal */ }
+        try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* lock cleanup failure is non-fatal */ }
       }
     } catch (err) {
       return Response.json(

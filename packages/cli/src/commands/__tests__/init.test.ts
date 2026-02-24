@@ -8,6 +8,8 @@ vi.mock("fs", () => ({
   symlinkSync: vi.fn(),
   readdirSync: vi.fn(() => []),
   statSync: vi.fn(() => ({ isDirectory: () => false })),
+  lstatSync: vi.fn(() => { throw new Error("ENOENT"); }),
+  chmodSync: vi.fn(),
 }));
 
 vi.mock("readline", () => ({
@@ -24,6 +26,7 @@ import {
   existsSync,
   readdirSync,
   statSync,
+  lstatSync,
 } from "fs";
 import { initCommand } from "../init";
 
@@ -33,6 +36,7 @@ const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 const mockStatSync = vi.mocked(statSync);
+const mockLstatSync = vi.mocked(lstatSync);
 
 describe("initCommand", () => {
   beforeEach(() => {
@@ -100,6 +104,60 @@ describe("initCommand", () => {
     expect(console.error).toHaveBeenCalledWith(
       expect.stringContaining("lowercase alphanumeric"),
     );
+  });
+
+  it("--from-snapshot skips symlink targets", async () => {
+    const snapshot = JSON.stringify({
+      "backlog.md": "# Backlog\n- [ ] [TEST] Task 1",
+      "completed.md": "# Completed",
+      "failed-tasks.md": "# Failed",
+      "blockers.md": "# Blockers",
+      "mission.md": "# Mission",
+      "symlinked-file.md": "should be skipped",
+    });
+
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      // Snapshot file exists
+      if (path.endsWith("snapshot.json")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      // Config template
+      if (path.includes("templates") || path.endsWith("skynet.config.sh")) {
+        return 'export SKYNET_PROJECT_NAME="PLACEHOLDER_PROJECT_NAME"\nexport SKYNET_PROJECT_DIR="PLACEHOLDER_PROJECT_DIR"\nexport SKYNET_DEV_SERVER_CMD="pnpm dev"\nexport SKYNET_DEV_PORT=3000\nexport SKYNET_DEV_SERVER_URL="http://localhost:3000"\nexport SKYNET_TYPECHECK_CMD="pnpm typecheck"\nexport SKYNET_LINT_CMD="pnpm lint"\nexport SKYNET_PLAYWRIGHT_DIR=""\nexport SKYNET_SMOKE_TEST="e2e/smoke.spec.ts"\nexport SKYNET_FEATURE_TEST="e2e/features.spec.ts"\nexport SKYNET_MAIN_BRANCH="main"\nexport SKYNET_TG_ENABLED=false\nexport SKYNET_TG_BOT_TOKEN=""\nexport SKYNET_TG_CHAT_ID=""' as never;
+      }
+      // Snapshot file
+      if (path.endsWith("snapshot.json")) return snapshot as never;
+      return "" as never;
+    });
+
+    // lstatSync: symlinked-file.md is a symlink, others throw ENOENT (file doesn't exist yet)
+    mockLstatSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("symlinked-file.md")) {
+        return { isSymbolicLink: () => true } as never;
+      }
+      throw new Error("ENOENT");
+    });
+
+    await initCommand({
+      name: "test-proj",
+      nonInteractive: true,
+      dir: "/tmp/fake-proj",
+      fromSnapshot: "/tmp/fake-proj/snapshot.json",
+    });
+
+    // Verify writeFileSync was called for normal files but NOT for symlinked-file.md
+    const writeArgs = mockWriteFileSync.mock.calls.map((c) => c[0] as string);
+    const wroteSymlink = writeArgs.some((p) => p.endsWith("symlinked-file.md"));
+    expect(wroteSymlink).toBe(false);
+
+    // Should have written some of the normal snapshot files
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls.flat().join("\n");
+    expect(logCalls).toContain("Restored");
   });
 
   it("skips existing state files", async () => {

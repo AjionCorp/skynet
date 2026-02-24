@@ -4,6 +4,7 @@ import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
 import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
+import { calculateHealthScore } from "@ajioncorp/skynet";
 
 interface WatchOptions {
   dir?: string;
@@ -113,16 +114,12 @@ function fetchFromSqlite(devDir: string, staleThresholdSecs: number = DEFAULT_ST
       staleTasks24hCount = Number(hbRow[0][1]) || 0;
     }
 
-    // TODO(tech-debt): This health score formula is inlined and duplicated from
-    // packages/dashboard/src/lib/health.ts (calculateHealthScore). Import and
-    // use calculateHealthScore from @ajioncorp/skynet instead — see status.ts
-    // for the canonical import pattern.
-    let healthScore = 100;
-    healthScore -= failedPending * 5;
-    healthScore -= blockerCount * 10;
-    healthScore -= staleHeartbeatCount * 2;
-    healthScore -= staleTasks24hCount * 1;
-    healthScore = Math.max(0, Math.min(100, healthScore));
+    const healthScore = calculateHealthScore({
+      failedPendingCount: failedPending,
+      blockerCount,
+      staleHeartbeatCount,
+      staleTasks24hCount,
+    });
 
     // Worker details
     const workerRows = sqliteRows(devDir,
@@ -232,13 +229,12 @@ function fetchFromFiles(devDir: string, maxWorkers: number, staleThresholdSecs: 
     ? 0
     : (blockersContent.match(/^- /gm) || []).length;
 
-  // TODO(tech-debt): Same inlined health score formula — see fetchFromSqlite above.
-  let healthScore = 100;
-  healthScore -= failedPending * 5;
-  healthScore -= blockerCount * 10;
-  healthScore -= staleHeartbeatCount * 2;
-  healthScore -= staleTasks24hCount * 1;
-  healthScore = Math.max(0, Math.min(100, healthScore));
+  const healthScore = calculateHealthScore({
+    failedPendingCount: failedPending,
+    blockerCount,
+    staleHeartbeatCount,
+    staleTasks24hCount,
+  });
 
   // Self-correction stats
   const failedLines = failed

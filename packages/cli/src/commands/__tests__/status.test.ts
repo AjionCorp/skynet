@@ -491,6 +491,36 @@ describe("statusCommand", () => {
 
   // --- Additional edge cases ---
 
+  it("reports Codex auth as invalid when auth file exceeds 1MB", async () => {
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      // Auth file exists
+      if (path.endsWith("auth.json")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return makeConfigContent() as never;
+      return "" as never;
+    });
+
+    // statSync returns size > 1MB for the auth file
+    mockStatSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("auth.json")) {
+        return { size: 2_000_000, mtime: new Date(), mtimeMs: Date.now(), isDirectory: () => false } as never;
+      }
+      return { mtime: new Date(), mtimeMs: Date.now(), isDirectory: () => false, size: 100 } as never;
+    });
+
+    await statusCommand({ dir: "/tmp/test-project" });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls.flat().join("\n");
+    expect(logCalls).toContain("Invalid (auth file too large)");
+  });
+
   it("shows paused status when pipeline-paused file exists", async () => {
     mockExistsSync.mockImplementation((p) => {
       const path = String(p);

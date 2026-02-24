@@ -107,7 +107,7 @@ _stop_heartbeat() {
 # Each worker gets its own worktree directory so multiple workers can run
 # on different branches without conflicting in the same working directory.
 # WORKTREE_INSTALL_STRICT=true (default) — fail on install error.
-source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
+# NOTE: _worktree.sh is already sourced by _config.sh; no need to re-source here.
 
 # --- PID lock to prevent duplicate runs (per worker ID, mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-dev-worker-${WORKER_ID}.lock"

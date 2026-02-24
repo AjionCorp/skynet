@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, statSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, statSync, lstatSync } from "fs";
 import { resolve } from "path";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig.js";
@@ -166,6 +166,14 @@ export async function importCommand(snapshotPath: string, options: ImportOptions
   for (const entry of plan) {
     const content = snapshot[entry.filename];
     if (typeof content !== "string") continue;
+
+    // Reject symlinks to prevent writing through them to unexpected locations
+    try {
+      if (lstatSync(entry.targetPath).isSymbolicLink()) {
+        console.warn(`  Skipping symlink: ${entry.filename}`);
+        continue;
+      }
+    } catch { /* File doesn't exist yet -- safe to write */ }
 
     if (entry.action === "merge") {
       const existing = readFileSync(entry.targetPath, "utf-8");

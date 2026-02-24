@@ -1,10 +1,10 @@
 /**
- * Default stale threshold in seconds (30 minutes).
- * NOTE: This is the fallback when SkynetConfig.staleMinutes is not available.
- * The config template ships SKYNET_STALE_MINUTES=45, but handlers override
- * this constant with the config value when present. Only used as a last-resort default.
+ * Default stale threshold in seconds (45 minutes).
+ * Conservative fallback matching the config template default (SKYNET_STALE_MINUTES=45).
+ * Handlers override this constant with the config value when present.
+ * Only used as a last-resort default when SkynetConfig.staleMinutes is not available.
  */
-export const STALE_THRESHOLD_SECONDS = 30 * 60; // 1800 seconds = 30 minutes
+export const STALE_THRESHOLD_SECONDS = 45 * 60; // 2700 seconds = 45 minutes
 
 /**
  * Validates script names and worker types: lowercase alphanumeric and hyphens only.

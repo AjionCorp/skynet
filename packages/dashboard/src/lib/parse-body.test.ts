@@ -124,4 +124,34 @@ describe("parseBody", () => {
     expect(result.error).toBe("Content-Type must be application/json");
     expect(result.status).toBe(415);
   });
+
+  it("parses multi-chunk stream body (exercises Buffer.concat path)", async () => {
+    // Build a ReadableStream that yields 2+ chunks to exercise the
+    // Buffer.concat code path (chunks.length > 1).
+    const encoder = new TextEncoder();
+    const chunk1 = encoder.encode('{"hel');
+    const chunk2 = encoder.encode('lo":"wo');
+    const chunk3 = encoder.encode('rld"}');
+
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(chunk1);
+        controller.enqueue(chunk2);
+        controller.enqueue(chunk3);
+        controller.close();
+      },
+    });
+
+    const req = new Request("http://localhost/test", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: stream,
+      // @ts-expect-error -- duplex required by Node but not in TS types
+      duplex: "half",
+    });
+
+    const result = await parseBody<{ hello: string }>(req);
+    expect(result.error).toBeNull();
+    expect(result.data).toEqual({ hello: "world" });
+  });
 });

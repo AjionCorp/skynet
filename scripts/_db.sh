@@ -154,14 +154,15 @@ _sql_query() {
 # ============================================================
 
 # Valid status transitions (state machine):
-#   pending    → claimed, superseded
-#   claimed    → active, pending (unclaim), failed
-#   active     → completed, failed
+#   pending    → claimed, superseded, done
+#   claimed    → completed, pending (unclaim), failed
 #   failed     → fixing-N, pending (reset), superseded, blocked
 #   fixing-N   → failed, completed
 #   blocked    → pending (unblock), superseded
 #   completed  → (terminal)
 #   superseded → (terminal)
+#   done       → (terminal)
+#   done       → (terminal)
 #
 # This is an audit-only guard: logs a WARNING on unexpected transitions
 # but does NOT block the operation. Non-breaking by design.
@@ -180,17 +181,12 @@ _validate_status_transition() {
   case "$from_status" in
     pending)
       case "$to_status" in
-        claimed|superseded) valid=true ;;
+        claimed|superseded|done) valid=true ;;
       esac
       ;;
     claimed)
       case "$to_status" in
-        active|pending|failed) valid=true ;;
-      esac
-      ;;
-    active)
-      case "$to_status" in
-        completed|failed) valid=true ;;
+        completed|pending|failed) valid=true ;;
       esac
       ;;
     failed)
@@ -209,7 +205,7 @@ _validate_status_transition() {
         pending|superseded) valid=true ;;
       esac
       ;;
-    completed|superseded)
+    completed|superseded|done)
       # Terminal states — no valid transitions out
       # Exception: completed → failed is used by smoke test revert (post-merge)
       case "$to_status" in
@@ -651,7 +647,7 @@ db_get_pending_failures() {
     "SELECT id, title, branch, error, attempts, status FROM tasks WHERE status='failed' ORDER BY failed_at ASC;"
 }
 
-db_claim_failure() {
+_db_claim_failure_inner() {
   local task_id; task_id=$(_sql_int "$1")
   local fixer_id; fixer_id=$(_sql_int "$2")
   # fixer_id is already sanitized to digits-only by _sql_int — no need for _sql_escape
@@ -663,6 +659,7 @@ db_claim_failure() {
   ")
   [ "$changed" = "1" ] && return 0 || return 1
 }
+db_claim_failure() { _db_retry _db_claim_failure_inner "$@"; }
 
 db_unclaim_failure() {
   local task_id; task_id=$(_sql_int "$1")
@@ -720,9 +717,11 @@ db_supersede_task() {
 
 # Auto-supersede failed tasks matching completed roots. Returns count of changes.
 # Also resolves orphaned blockers linked to newly-superseded tasks.
-# OPS-P2-4: Capture changes() after each UPDATE separately to report combined count.
+# Both UPDATEs are wrapped in a single transaction for atomicity.
+# Returns a single number (task changes) — the caller in watchdog.sh expects one number.
 db_auto_supersede_completed() {
   _db "
+    BEGIN IMMEDIATE;
     UPDATE blockers SET status='resolved', resolved_at=datetime('now')
     WHERE status='active' AND task_title IN (
       SELECT title FROM tasks
@@ -730,12 +729,12 @@ db_auto_supersede_completed() {
         SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
       )
     );
-    SELECT changes();
     UPDATE tasks SET status='superseded', updated_at=datetime('now')
     WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
       SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
     );
     SELECT changes();
+    COMMIT;
   "
 }
 

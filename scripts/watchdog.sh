@@ -297,6 +297,10 @@ IDLE_EOF
   if [ -f "$DB_PATH" ]; then
     : # SQLite reconciliation will handle orphaned claims — skip file-based check
   elif [ -f "$BACKLOG" ]; then
+    # DEAD CODE NOTE: This branch is effectively unreachable because db_init()
+    # in _config.sh always creates the DB file before watchdog runs. The branch
+    # (including the db_unclaim_task_by_title call below) is retained as a
+    # defensive fallback for edge cases where the DB file is deleted at runtime.
     local any_worker_alive=false
     for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
       is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock" && any_worker_alive=true
@@ -632,6 +636,9 @@ fi
 # Clean up old /tmp sentinel files (older than 7 days) to prevent accumulation
 find /tmp -maxdepth 1 -name "skynet-${SKYNET_PROJECT_NAME}-*" -mtime +7 -type f -exec rm -f {} + 2>/dev/null || true
 
+# Clean up old .dev sentinel files (>7 days) to prevent accumulation in devDir
+find "$DEV_DIR" -maxdepth 1 -name '.db-*-sentinel-*' -mtime +7 -delete 2>/dev/null || true
+
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
 
@@ -747,6 +754,16 @@ driver_running=false
 is_running "${SKYNET_LOCK_PREFIX}-project-driver.lock" && driver_running=true
 
 # --- Stale heartbeat detection ---
+# Dual-source design: The file-based heartbeat check below uses .dev/worker-N.heartbeat
+# files, while the DB is authoritative (db_get_stale_heartbeats / db_get_hung_workers).
+# Both sources are checked intentionally as defense-in-depth:
+#   - File-based: catches cases where the DB write fails or the worker process is
+#     stuck in a way that prevents DB updates (e.g., SQLITE_BUSY timeout, disk full).
+#   - DB-based: provides the authoritative view with richer metadata (progress_epoch
+#     for hung worker detection) and is used by the dashboard/CLI for health scoring.
+# The two sources may drift (e.g., heartbeat file updated but DB write failed, or
+# vice versa). This is acceptable — the file check acts as a safety net, and the
+# worst case is a redundant kill of an already-dead worker.
 # If a worker is alive but its heartbeat is older than SKYNET_STALE_MINUTES,
 # it's stuck. Kill it, unclaim its task, remove worktree, reset to idle.
 _handle_stale_worker() {
@@ -962,6 +979,15 @@ _archive_old_completions() {
   mv "$archive_tmp" "$archive"
   # Then rename completed.md (archive already has the old entries as backup)
   mv "$completed_tmp" "$COMPLETED"
+
+  # Cap the archive to 1000 lines to prevent unbounded growth
+  local _archive_lines
+  _archive_lines=$(wc -l < "$archive" 2>/dev/null || echo 0)
+  if [ "${_archive_lines:-0}" -gt 1000 ]; then
+    local _archive_cap_tmp="${archive}.cap-tmp.$$"
+    tail -1000 "$archive" > "$_archive_cap_tmp" && mv "$_archive_cap_tmp" "$archive"
+    log "Truncated completed-archive.md from $_archive_lines to 1000 lines"
+  fi
 
   log "Archived $archived_count completed entries older than $max_age_days days"
 }
@@ -1286,7 +1312,9 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
 
   # LIMITATION: Canary validation only monitors worker 1. If worker 1 is idle
   # while other workers run with the new code, canary validation may not trigger.
-  # Future improvement: watch any worker running post-canary-commit code.
+  # Future enhancement: iterate all workers (1..SKYNET_MAX_WORKERS), check if any
+  # have a heartbeat newer than the canary commit timestamp, and validate against
+  # whichever worker is actually running post-canary code.
   # Check for canary worker crash (dead PID + stale heartbeat)
   if $_canary_active; then
     _stale_in_canary=$(db_get_stale_heartbeats 300 1 | head -1)  # 5min, worker 1 only
@@ -1309,7 +1337,7 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
         emit_event "canary_failed" "commit=$_canary_commit action=revert_lock_contention"
       fi
       # Alert via notification
-      notify "CANARY FAILED: Script changes in commit ${_canary_commit:0:8} caused worker crash. Auto-revert attempted." 2>/dev/null || true
+      tg "CANARY FAILED: Script changes in commit ${_canary_commit:0:8} caused worker crash. Auto-revert attempted." 2>/dev/null || true
       rm -f "$_canary_file"
       _canary_active=false
     fi
@@ -1496,6 +1524,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     else
       log "WARNING: WAL checkpoint failed"
     fi
+    # Run PRAGMA optimize to keep query planner statistics up-to-date
+    _db "PRAGMA optimize;" 2>/dev/null || true
     # Prune events older than 7 days to prevent unbounded table growth
     db_prune_old_events 7
     # Prune fixer_stats older than 90 days to prevent unbounded table growth
@@ -1601,21 +1631,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     log "Maintenance: cleaned $_stale_cleaned stale lock directory(ies)"
   fi
 
-  # (g) Stale branch cleanup — delete merged dev/* branches
-  _maint_merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null | grep "^  ${SKYNET_BRANCH_PREFIX}" || true)
-  if [ -n "$_maint_merged_branches" ]; then
-    _maint_branch_deleted=0
-    while IFS= read -r _maint_branch; do
-      _maint_branch=$(echo "$_maint_branch" | sed 's/^ *//')
-      [ -z "$_maint_branch" ] && continue
-      if git -C "$PROJECT_DIR" branch -d "$_maint_branch" 2>/dev/null; then
-        _maint_branch_deleted=$((_maint_branch_deleted + 1))
-      fi
-    done <<< "$_maint_merged_branches"
-    if [ "$_maint_branch_deleted" -gt 0 ]; then
-      log "Maintenance: deleted $_maint_branch_deleted merged ${SKYNET_BRANCH_PREFIX}* branch(es)"
-    fi
-  fi
+  # (g) Stale branch cleanup — skipped here; _cleanup_merged_dev_branches()
+  # already runs per-cycle (see above). No need for duplicate cleanup.
 
   log "Periodic maintenance complete"
 fi

@@ -1,3 +1,4 @@
+import { statSync as fsStatSync } from "fs";
 import type {
   BacklogItem,
   CompletedTask,
@@ -116,6 +117,9 @@ export class SkynetDB {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.pragma("busy_timeout = 15000");
+    // Lightweight call that only runs ANALYZE when statistics are stale.
+    // Safe to call on every connection — no-op when stats are fresh.
+    this.db.pragma("optimize");
   }
 
   close(): void {
@@ -700,8 +704,7 @@ export function getSkynetDB(devDir: string): SkynetDB {
   }
   if (_instance && _instancePath === dbPath) {
     try {
-      const { statSync } = require("fs") as typeof import("fs");
-      const currentIno = statSync(dbPath).ino;
+      const currentIno = fsStatSync(dbPath).ino;
       if (_instanceIno !== null && currentIno !== _instanceIno) {
         _instance.close();
         _instance = null;
@@ -715,8 +718,7 @@ export function getSkynetDB(devDir: string): SkynetDB {
     _instance = new SkynetDB(dbPath);
     _instancePath = dbPath;
     try {
-      const { statSync } = require("fs") as typeof import("fs");
-      _instanceIno = statSync(dbPath).ino;
+      _instanceIno = fsStatSync(dbPath).ino;
     } catch {
       _instanceIno = null;
     }

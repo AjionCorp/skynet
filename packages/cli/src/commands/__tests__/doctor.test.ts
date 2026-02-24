@@ -6,6 +6,8 @@ vi.mock("fs", () => ({
   readdirSync: vi.fn(() => []),
   unlinkSync: vi.fn(),
   writeFileSync: vi.fn(),
+  rmSync: vi.fn(),
+  statSync: vi.fn(() => ({ mtime: new Date(), mtimeMs: Date.now(), isDirectory: () => false })),
 }));
 
 vi.mock("child_process", () => ({
@@ -13,7 +15,7 @@ vi.mock("child_process", () => ({
   spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
 }));
 
-import { readFileSync, existsSync, readdirSync } from "fs";
+import { readFileSync, existsSync, readdirSync, writeFileSync } from "fs";
 import { execSync, spawnSync } from "child_process";
 import { doctorCommand } from "../doctor";
 
@@ -272,6 +274,61 @@ describe("doctorCommand", () => {
     // Config Validation section should warn about the missing gate command
     expect(logCalls).toContain("NOT FOUND");
     expect(logCalls).toContain("SKYNET_GATE_1");
+  });
+
+  it("--fix replaces [>] with [ ] for orphaned claimed tasks in backlog", async () => {
+    const configContent = makeConfigContent();
+    const backlogContent = [
+      "# Backlog",
+      "",
+      "- [>] [INFRA] Orphaned claimed task — no matching current-task file",
+      "- [ ] [DATA] Normal pending task — description",
+      "- [>] [TEST] Another orphaned claim — also no file",
+    ].join("\n");
+
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      if (path.endsWith(".dev/scripts")) return true;
+      if (path.match(/\.(sh)$/)) return true;
+      if (path.endsWith("backlog.md")) return true;
+      if (path.endsWith("completed.md")) return true;
+      if (path.endsWith("failed-tasks.md")) return true;
+      if (path.endsWith("mission.md")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return configContent as never;
+      if (path.endsWith("backlog.md")) return backlogContent as never;
+      return "" as never;
+    });
+
+    // No current-task files in devDir => claimed tasks are orphaned
+    mockReaddirSync.mockReturnValue([] as never);
+
+    const mockWriteFileSync = vi.mocked(writeFileSync);
+
+    await doctorCommand({ dir: "/tmp/test-project", fix: true });
+
+    // Should have written the fixed backlog
+    const writeCall = mockWriteFileSync.mock.calls.find(
+      (c) => (c[0] as string).endsWith("backlog.md"),
+    );
+    expect(writeCall).toBeDefined();
+    const fixedContent = writeCall![1] as string;
+    // [>] should be replaced with [ ] for both orphaned tasks
+    expect(fixedContent).toContain("- [ ] [INFRA] Orphaned claimed task");
+    expect(fixedContent).toContain("- [ ] [TEST] Another orphaned claim");
+    // Normal pending task should remain unchanged
+    expect(fixedContent).toContain("- [ ] [DATA] Normal pending task");
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    expect(logCalls).toContain("Fixed:");
+    expect(logCalls).toContain("orphaned claimed task");
   });
 
   it("outputs WARN for stale heartbeat", async () => {

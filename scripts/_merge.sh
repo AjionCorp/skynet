@@ -99,8 +99,10 @@ do_merge_to_main() {
   # --- Pre-lock pull: fetch latest main before acquiring the merge lock ---
   # This reduces lock hold time because the post-lock pull will be a fast
   # no-op (or near-instant) if no other worker pushed in between.
+  # NOTE: No --rebase flag — rebase can rewrite commits and cause issues
+  # when multiple workers are merging concurrently.
   cd "$PROJECT_DIR"
-  git pull --rebase origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+  git pull origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
 
   # --- Acquire merge mutex ---
   if ! acquire_merge_lock; then
@@ -290,7 +292,7 @@ do_merge_to_main() {
   # Canary detection: if scripts/*.sh files changed, write canary-pending
   if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ]; then
     local _canary_changed
-    _canary_changed=$(git diff --name-only HEAD~1..HEAD -- 'scripts/*.sh' 2>/dev/null || echo "")
+    _canary_changed=$(git diff --name-only HEAD~1..HEAD -- 'scripts/*.sh' 'scripts/agents/*.sh' 'scripts/lock-backends/*.sh' 'scripts/notify/*.sh' 2>/dev/null || echo "")
     if [ -n "$_canary_changed" ]; then
       local _canary_file="${DEV_DIR}/canary-pending"
       {
