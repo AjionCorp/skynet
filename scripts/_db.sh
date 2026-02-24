@@ -1119,10 +1119,11 @@ db_export_completed() {
     echo "| Date | Task | Branch | Duration | Notes |"
     echo "|------|------|--------|----------|-------|"
     _db_sep \
-      "SELECT COALESCE(completed_at,''), tag, title, COALESCE(branch,''), COALESCE(duration,''), COALESCE(notes,'')
+      "SELECT COALESCE(MAX(completed_at),''), tag, title, COALESCE(MAX(branch),''), COALESCE(MAX(duration),''), COALESCE(MAX(notes),'')
        FROM tasks
        WHERE status IN ('completed','fixed')
-       ORDER BY completed_at DESC
+       GROUP BY tag, title
+       ORDER BY MAX(completed_at) DESC
        LIMIT 200;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
