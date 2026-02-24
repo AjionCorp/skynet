@@ -86,7 +86,7 @@ export async function POST(request: Request) {
     }
 
     const sessionToken = deriveSessionToken(expected);
-    const response = NextResponse.json({ ok: true });
+    const response = NextResponse.json({ data: { ok: true }, error: null });
     response.cookies.set("skynet-api-key", sessionToken, {
       httpOnly: true,
       sameSite: "strict",

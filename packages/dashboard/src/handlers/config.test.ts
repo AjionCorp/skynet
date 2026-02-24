@@ -7,14 +7,18 @@ vi.mock("fs", () => ({
   readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
   renameSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  rmdirSync: vi.fn(),
 }));
 
-import { existsSync, readFileSync, writeFileSync, renameSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
 
 const mockExistsSync = vi.mocked(existsSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockRenameSync = vi.mocked(renameSync);
+const _mockMkdirSync = vi.mocked(mkdirSync);
+const _mockRmdirSync = vi.mocked(rmdirSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {

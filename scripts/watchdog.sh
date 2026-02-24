@@ -24,7 +24,11 @@ log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
 
 # --- Singleton enforcement via mkdir-based atomic lock ---
 if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-  echo $$ > "$WATCHDOG_LOCK_DIR/pid"
+  if ! echo $$ > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+    rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+    log "PID write failed. Exiting."
+    exit 1
+  fi
 else
   # Lock dir exists — check for stale lock (owner PID no longer running)
   if [ -d "$WATCHDOG_LOCK_DIR" ] && [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
@@ -37,7 +41,11 @@ else
     mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
     rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
     if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-      echo $$ > "$WATCHDOG_LOCK_DIR/pid"
+      if ! echo $$ > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+        rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+        log "PID write failed. Exiting."
+        exit 1
+      fi
     else
       log "Watchdog lock contention. Exiting."
       exit 0
@@ -666,11 +674,11 @@ if $_codex_auth_ok && [ -z "${OPENAI_API_KEY:-}" ] && [ -f "$_codex_auth_file" ]
     _codex_token=$(python3 -c "
 import json, sys
 try:
-  d = json.load(open('$_codex_auth_file'))
+  d = json.load(open(sys.argv[1]))
   t = d.get('tokens', {})
   print(t.get('id_token', '') or t.get('access_token', ''))
 except: pass
-" 2>/dev/null || true)
+" "$_codex_auth_file" 2>/dev/null || true)
   fi
   if [ -n "$_codex_token" ]; then
     _codex_expiry=$(_check_token_expiry "$_codex_token" 86400)
@@ -1216,6 +1224,11 @@ _canary_commit=""
 if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; then
   _canary_active=true
   _canary_commit=$(grep '^commit=' "$_canary_file" 2>/dev/null | cut -d= -f2)
+  # Validate commit hash — must be at least 7 hex chars to prevent injection via git revert
+  case "$_canary_commit" in
+    [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]*) ;;
+    *) log "CANARY: Invalid commit hash — skipping revert"; _canary_active=false ;;
+  esac
   _canary_ts=$(grep '^timestamp=' "$_canary_file" 2>/dev/null | cut -d= -f2)
   _canary_age=$(( $(date +%s) - ${_canary_ts:-0} ))
   # Sanitize _canary_age for SQL interpolation — value is from date arithmetic

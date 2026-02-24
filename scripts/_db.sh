@@ -1183,12 +1183,8 @@ db_maintenance() {
   _db "PRAGMA optimize;" 2>/dev/null || true
 
   # Step 4: VACUUM only if DB file > 10MB
-  local db_size=0
-  if [ "$(uname)" = "Darwin" ]; then
-    db_size=$(stat -f%z "$DB_PATH" 2>/dev/null || echo 0)
-  else
-    db_size=$(stat -c%s "$DB_PATH" 2>/dev/null || echo 0)
-  fi
+  local db_size
+  db_size=$(file_size "$DB_PATH")
   local threshold=10485760  # 10MB
   if [ "${db_size:-0}" -gt "$threshold" ] 2>/dev/null; then
     log "db_maintenance: DB size ${db_size} > 10MB — running VACUUM"

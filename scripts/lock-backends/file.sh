@@ -57,7 +57,10 @@ lock_backend_acquire() {
       if $_force_release; then
         rm -rf "$lockdir" 2>/dev/null || true
         if mkdir "$lockdir" 2>/dev/null; then
-          echo $$ > "$lockdir/pid"
+          if ! echo $$ > "$lockdir/pid" 2>/dev/null; then
+            rmdir "$lockdir" 2>/dev/null || true
+            return 1
+          fi
           return 0
         fi
       fi
@@ -71,7 +74,10 @@ lock_backend_acquire() {
     # On strict POSIX systems, replace with `sleep 1` or `perl -e 'select(undef,undef,undef,0.5)'`.
     sleep 0.5
   done
-  echo $$ > "$lockdir/pid"
+  if ! echo $$ > "$lockdir/pid" 2>/dev/null; then
+    rmdir "$lockdir" 2>/dev/null || true
+    return 1
+  fi
   return 0
 }
 

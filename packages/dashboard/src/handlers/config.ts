@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmdirSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { VALID_CONFIG_KEY } from "../lib/constants";
@@ -317,23 +317,46 @@ export function createConfigHandler(config: SkynetConfig) {
         );
       }
 
-      const missingKeys = writeConfigFile(configPath, updates);
+      // Acquire mkdir-based mutex lock around the read-modify-write cycle
+      const lockPath = `${config.devDir}/config.lock`;
+      let lockAcquired = false;
+      for (let attempt = 0; attempt < 30; attempt++) {
+        try {
+          mkdirSync(lockPath);
+          lockAcquired = true;
+          break;
+        } catch {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      if (!lockAcquired) {
+        return Response.json(
+          { data: null, error: "Config file is locked by another process" },
+          { status: 423 }
+        );
+      }
 
-      // Re-read to return updated state
-      const raw = readFileSync(configPath, "utf-8");
-      const entries = parseConfigFile(raw).map(e => ({
-        ...e,
-        value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
-      }));
+      try {
+        const missingKeys = writeConfigFile(configPath, updates);
 
-      const warning = missingKeys.length > 0
-        ? `Keys not found in config file (not updated): ${missingKeys.join(", ")}`
-        : null;
+        // Re-read to return updated state
+        const raw = readFileSync(configPath, "utf-8");
+        const entries = parseConfigFile(raw).map(e => ({
+          ...e,
+          value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
+        }));
 
-      return Response.json({
-        data: { entries, configPath, updatedKeys: Object.keys(updates), ...(warning ? { warning } : {}) },
-        error: null,
-      });
+        const warning = missingKeys.length > 0
+          ? `Keys not found in config file (not updated): ${missingKeys.join(", ")}`
+          : null;
+
+        return Response.json({
+          data: { entries, configPath, updatedKeys: Object.keys(updates), ...(warning ? { warning } : {}) },
+          error: null,
+        });
+      } finally {
+        try { rmdirSync(lockPath); } catch { /* lock cleanup failure is non-fatal */ }
+      }
     } catch (err) {
       return Response.json(
         {

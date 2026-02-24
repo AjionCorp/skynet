@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync, existsSync, unlinkSync, rmSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
@@ -72,11 +72,15 @@ export function createTasksHandlers(config: SkynetConfig) {
   }
 
   async function POST(request: Request): Promise<Response> {
-    // Rate limiting: prefer SQLite-backed (cross-process), fall back to in-memory
+    // Rate limiting: prefer SQLite-backed (cross-process), fall back to in-memory.
+    // In-memory fallback records the timestamp AFTER successful task creation
+    // (see _postTimestamps.push below) to avoid consuming a slot on validation failure.
     let rateLimitAllowed = true;
+    let _usingSqliteRateLimit = false;
     try {
       const db = getSkynetDB(devDir);
       rateLimitAllowed = db.checkRateLimit(RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+      _usingSqliteRateLimit = true;
     } catch {
       // SQLite unavailable — fall back to in-memory rate limiting
       const now = Date.now();
@@ -85,9 +89,8 @@ export function createTasksHandlers(config: SkynetConfig) {
       }
       if (_postTimestamps.length >= RATE_LIMIT_MAX) {
         rateLimitAllowed = false;
-      } else {
-        _postTimestamps.push(now);
       }
+      // Do NOT push here — slot is recorded after successful task creation
     }
     if (!rateLimitAllowed) {
       return Response.json(
@@ -150,14 +153,46 @@ export function createTasksHandlers(config: SkynetConfig) {
         );
       }
 
-      // Atomic lock acquisition using mkdir with retry (mirrors shell script pattern)
+      // Atomic lock acquisition using mkdir with PID tracking and stale detection
       let lockAcquired = false;
+      const pidFile = `${backlogLockPath}/pid`;
       for (let attempt = 0; attempt < 30; attempt++) {
         try {
           mkdirSync(backlogLockPath);
+          try {
+            writeFileSync(pidFile, String(process.pid), "utf-8");
+          } catch {
+            // PID write failed — release the lock to avoid orphan
+            try { rmdirSync(backlogLockPath); } catch { /* ignore */ }
+            await new Promise((r) => setTimeout(r, 100));
+            continue;
+          }
           lockAcquired = true;
           break;
         } catch {
+          // mkdir failed — check for stale lock
+          try {
+            if (existsSync(pidFile)) {
+              const holderPid = Number(readFileSync(pidFile, "utf-8").trim());
+              if (Number.isFinite(holderPid) && holderPid > 0) {
+                try {
+                  process.kill(holderPid, 0); // check if process exists
+                } catch {
+                  // Holder is dead — break the stale lock
+                  try {
+                    rmSync(backlogLockPath, { recursive: true, force: true });
+                  } catch { /* ignore — another process may have cleaned it up */ }
+                  continue; // retry immediately
+                }
+              }
+            } else if (existsSync(backlogLockPath)) {
+              // Lock dir exists but no PID file — likely crashed between mkdir and PID write
+              try {
+                rmdirSync(backlogLockPath);
+              } catch { /* ignore */ }
+              continue; // retry immediately
+            }
+          } catch { /* ignore stale check errors */ }
           await new Promise((r) => setTimeout(r, 100));
         }
       }
@@ -179,6 +214,12 @@ export function createTasksHandlers(config: SkynetConfig) {
         // Write to SQLite first (authoritative source)
         const db = getSkynetDB(devDir);
         db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
+
+        // Record in-memory rate-limit timestamp AFTER successful task creation
+        // so validation failures don't consume a rate-limit slot.
+        if (!_usingSqliteRateLimit) {
+          _postTimestamps.push(Date.now());
+        }
 
         // SQLite is authoritative — backlog.md is a best-effort regeneration for legacy compatibility.
         // If exportBacklog fails, the task is still safely in SQLite.
@@ -231,7 +272,11 @@ export function createTasksHandlers(config: SkynetConfig) {
           error: null,
         });
       } finally {
-        try { rmdirSync(backlogLockPath); } catch { /* lock cleanup failure is non-fatal — lock dir may already be removed by another process */ }
+        try {
+          // Remove PID file first, then the lock directory
+          try { unlinkSync(pidFile); } catch { /* ignore */ }
+          rmdirSync(backlogLockPath);
+        } catch { /* lock cleanup failure is non-fatal — lock dir may already be removed by another process */ }
       }
     } catch (err) {
       return Response.json(

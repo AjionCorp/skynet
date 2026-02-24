@@ -8,6 +8,9 @@ vi.mock("fs", () => ({
   renameSync: vi.fn(),
   mkdirSync: vi.fn(),
   rmdirSync: vi.fn(),
+  existsSync: vi.fn(() => false),
+  unlinkSync: vi.fn(),
+  rmSync: vi.fn(),
 }));
 vi.mock("../lib/db", () => ({
   getSkynetDB: vi.fn(() => ({
@@ -18,9 +21,10 @@ vi.mock("../lib/db", () => ({
   })),
 }));
 
-import { readFileSync, writeFileSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, rmdirSync, unlinkSync } from "fs";
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
+const _mockUnlinkSync = vi.mocked(unlinkSync);
 const mockMkdirSync = vi.mocked(mkdirSync);
 const mockRmdirSync = vi.mocked(rmdirSync);
 
@@ -86,7 +90,10 @@ describe("createTasksHandlers", () => {
       expect(res.status).toBe(200);
       expect(body.data.inserted).toBe("- [ ] [FEAT] New feature");
       expect(body.data.position).toBe("top");
-      const written = mockWriteFileSync.mock.calls[0][1] as string;
+      // Find the backlog write (skip PID file write which is calls[0])
+      const backlogCall = mockWriteFileSync.mock.calls.find(c => String(c[0]).endsWith(".tmp"));
+      expect(backlogCall).toBeDefined();
+      const written = backlogCall![1] as string;
       const lines = written.split("\n");
       expect(lines.findIndex((l) => l.includes("New feature"))).toBeLessThan(lines.findIndex((l) => l.includes("Add login page")));
     });
@@ -134,7 +141,11 @@ describe("createTasksHandlers", () => {
     });
 
     it("releases lock in finally block even on write failure", async () => {
-      mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
+      // Only throw for backlog file writes, not PID file writes
+      mockWriteFileSync.mockImplementation(((path: string) => {
+        if (String(path).includes("/pid")) return undefined;
+        throw new Error("Disk full");
+      }) as typeof writeFileSync);
       const { POST } = createTasksHandlers(makeConfig());
       await POST(makeRequest({ tag: "FEAT", title: "Should release lock" }));
       expect(mockRmdirSync).toHaveBeenCalled();
@@ -156,7 +167,11 @@ describe("createTasksHandlers", () => {
     });
 
     it("returns 200 with warning when file write fails but SQLite succeeds", async () => {
-      mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
+      // Only throw for backlog file writes, not PID file writes
+      mockWriteFileSync.mockImplementation(((path: string) => {
+        if (String(path).includes("/pid")) return undefined;
+        throw new Error("Disk full");
+      }) as typeof writeFileSync);
       const { POST } = createTasksHandlers(makeConfig());
       const res = await POST(makeRequest({ tag: "FEAT", title: "Write fail" }));
       const body = await res.json();
@@ -197,7 +212,10 @@ describe("createTasksHandlers", () => {
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(body.data.inserted).toContain("First task");
-      const written = mockWriteFileSync.mock.calls[0][1] as string;
+      // Find the backlog write (skip PID file write)
+      const backlogCall = mockWriteFileSync.mock.calls.find(c => String(c[0]).endsWith(".tmp"));
+      expect(backlogCall).toBeDefined();
+      const written = backlogCall![1] as string;
       expect(written).toContain("- [ ] [FEAT] First task");
     });
   });

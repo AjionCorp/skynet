@@ -33,7 +33,7 @@ export function createMetricsHandler(config: SkynetConfig) {
 
       // --- Health score ---
       const maxWorkers = config.maxWorkers ?? 4;
-      const healthScore = db.calculateHealthScore(maxWorkers);
+      const healthScore = db.calculateHealthScore(maxWorkers, config.staleMinutes);
       lines.push("# HELP skynet_health_score Pipeline health score 0-100");
       lines.push("# TYPE skynet_health_score gauge");
       lines.push(`skynet_health_score ${healthScore}`);

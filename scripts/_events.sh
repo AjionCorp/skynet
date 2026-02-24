@@ -33,15 +33,15 @@ emit_event() {
       # NOTE: Pruned events are permanently deleted. For forensic retention,
       # configure an external log sink before enabling aggressive pruning.
       if mkdir "$_rot_lock" 2>/dev/null; then
-        # gzip runs in foreground (not &) so no orphan risk
-        gzip -f "${events_log}.2" 2>/dev/null || true
-        rm -f "${events_log}.2"
+        # Remove old .2 archives first, then shift .1 -> .2, current -> .1, then gzip .2
+        rm -f "${events_log}.2.gz" "${events_log}.2" 2>/dev/null || true
         if [ -f "${events_log}.1" ]; then
           mv "${events_log}.1" "${events_log}.2" 2>/dev/null || echo "events rotation: mv .1->.2 failed (disk full?)" >&2
         fi
         if ! mv "$events_log" "${events_log}.1" 2>/dev/null; then
           echo "events rotation: mv current->.1 failed (disk full?) — events log may grow unbounded" >&2
         fi
+        [ -f "${events_log}.2" ] && gzip -f "${events_log}.2" 2>/dev/null &
         rmdir "$_rot_lock" 2>/dev/null || true
       fi
       # If lock acquisition failed, another writer is rotating — skip this cycle

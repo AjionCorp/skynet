@@ -265,8 +265,9 @@ const configCmd = program
 configCmd
   .command("list", { isDefault: true })
   .description("List all configuration variables (default)")
-  .action(async () => {
-    await configListCommand(configCmd.opts());
+  .option("--reveal", "Show sensitive values in plaintext (masked by default)")
+  .action(async (_opts: Record<string, unknown>) => {
+    await configListCommand({ ...configCmd.opts(), reveal: !!_opts.reveal });
   });
 
 configCmd

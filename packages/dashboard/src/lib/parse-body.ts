@@ -23,7 +23,7 @@ export async function parseBody<T>(
   try {
     // Reject non-JSON content types early (before reading body)
     const contentType = request.headers.get("content-type") || "";
-    if (contentType && !contentType.includes("application/json")) {
+    if (!contentType || !contentType.includes("application/json")) {
       return { data: null, error: "Content-Type must be application/json", status: 415 };
     }
 

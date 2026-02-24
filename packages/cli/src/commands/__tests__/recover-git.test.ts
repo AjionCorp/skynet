@@ -19,6 +19,7 @@ vi.mock("../../utils/sqliteQuery", () => ({
   sqliteRows: vi.fn(() => []),
   sqliteQuery: vi.fn(() => ""),
   sqlEscape: vi.fn((s: string) => s.replace(/'/g, "''")),
+  sqlInt: vi.fn((v: string | number) => { const n = Number(v); return Number.isFinite(n) && Number.isInteger(n) ? n : 0; }),
 }));
 
 import { spawnSync } from "child_process";

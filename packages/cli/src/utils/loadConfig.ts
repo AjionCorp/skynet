@@ -24,8 +24,12 @@ export function loadConfig(projectDir: string): Record<string, string> | null {
       // match[2] = double-quoted value, match[3] = single-quoted value, match[4] = unquoted value
       const isSingleQuoted = match[3] !== undefined;
       let value = match[2] ?? match[3] ?? match[4];
-      // Single-quoted values in shell are literal — no variable expansion
       if (!isSingleQuoted) {
+        // Unescape bash double-quote escape sequences (\\ and \").
+        // NOTE: Only \\ and \" are handled. More exotic escapes (\t, \a, \$, etc.)
+        // are not supported — config values are expected to use simple quoting.
+        value = value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+        // Single-quoted values in shell are literal — no variable expansion
         value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => {
           if (key in vars) return vars[key];
           if (ALLOWED_ENV.has(key)) return sanitizeEnvValue(process.env[key] || "");

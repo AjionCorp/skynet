@@ -18,10 +18,12 @@ vi.mock("os", () => ({
 
 import { readFileSync, existsSync } from "fs";
 import { spawnSync } from "child_process";
+import { platform } from "os";
 
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockSpawnSync = vi.mocked(spawnSync);
+const mockPlatform = vi.mocked(platform);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -408,5 +410,74 @@ describe("createMonitoringAgentsHandler", () => {
     expect(data.agents[0].loaded).toBe(true);
     expect(data.agents[0].pid).toBe("1234");
     expect(data.agents[1].loaded).toBe(false);
+  });
+
+  describe("Linux crontab path", () => {
+    beforeEach(() => {
+      mockPlatform.mockReturnValue("linux");
+    });
+
+    afterEach(() => {
+      mockPlatform.mockReturnValue("darwin");
+    });
+
+    it("parses crontab entries and returns interval for matching workers", async () => {
+      const crontabOutput = [
+        "# crontab entries",
+        "# BEGIN skynet:test-project",
+        "*/30 * * * * SKYNET_DEV_DIR=/home/user/.dev /bin/bash /home/user/.dev/scripts/dev-worker-1.sh >> /tmp/dev-worker-1.log 2>&1",
+        "0 8,20 * * * SKYNET_DEV_DIR=/home/user/.dev /bin/bash /home/user/.dev/scripts/health-check.sh >> /tmp/health-check.log 2>&1",
+        "# END skynet:test-project",
+      ].join("\n");
+
+      mockSpawnSync.mockReturnValue({
+        stdout: crontabOutput,
+        stderr: "",
+        status: 0,
+      } as never);
+
+      const handler = createMonitoringAgentsHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.agents).toHaveLength(2);
+
+      // dev-worker-1: */30 * * * * → 30 min interval
+      const devWorker = data.agents[0];
+      expect(devWorker.loaded).toBe(true);
+      expect(devWorker.interval).toBe(1800);
+      expect(devWorker.intervalHuman).toBe("Every 30 minutes");
+      expect(devWorker.scriptPath).toBe("dev-worker-1.sh");
+      expect(devWorker.logPath).toBe("/tmp/dev-worker-1.log");
+
+      // health-check: 0 8,20 * * * → ~12h interval
+      const healthCheck = data.agents[1];
+      expect(healthCheck.loaded).toBe(true);
+      expect(healthCheck.interval).toBe(43200);
+      expect(healthCheck.intervalHuman).toBe("Daily at 8am and 8pm");
+      expect(healthCheck.scriptPath).toBe("health-check.sh");
+      expect(healthCheck.logPath).toBe("/tmp/health-check.log");
+    });
+
+    it("returns unloaded agents when no crontab entries match", async () => {
+      mockSpawnSync.mockReturnValue({
+        stdout: "# empty crontab\n",
+        stderr: "",
+        status: 0,
+      } as never);
+
+      const handler = createMonitoringAgentsHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.agents).toHaveLength(2);
+      for (const agent of data.agents) {
+        expect(agent.loaded).toBe(false);
+        expect(agent.interval).toBeNull();
+        expect(agent.scriptPath).toBeNull();
+      }
+    });
   });
 });

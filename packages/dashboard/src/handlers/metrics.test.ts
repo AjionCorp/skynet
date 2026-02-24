@@ -178,13 +178,13 @@ describe("createMetricsHandler", () => {
   it("passes maxWorkers from config to calculateHealthScore", async () => {
     const GET = createMetricsHandler(makeConfig({ maxWorkers: 8 }));
     await GET();
-    expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(8);
+    expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(8, undefined);
   });
 
   it("defaults maxWorkers to 4 when not specified", async () => {
     const GET = createMetricsHandler(makeConfig());
     await GET();
-    expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(4);
+    expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(4, undefined);
   });
 
   it("returns valid Prometheus text exposition format", async () => {

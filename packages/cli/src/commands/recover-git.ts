@@ -1,7 +1,7 @@
 import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig.js";
-import { isSqliteReady, sqliteRows, sqliteQuery } from "../utils/sqliteQuery.js";
+import { isSqliteReady, sqliteRows, sqliteQuery, sqlInt } from "../utils/sqliteQuery.js";
 import { sqlEscape } from "../utils/sqliteQuery.js";
 
 interface RecoverOptions {
@@ -130,7 +130,7 @@ export async function recoverGitCommand(options: RecoverOptions) {
         for (const row of rows) {
           const id = row[0];
           sqliteQuery(devDir,
-            `UPDATE tasks SET status='failed', error='push divergence recovery', updated_at=datetime('now') WHERE id=${Number(id)};`
+            `UPDATE tasks SET status='failed', error='push divergence recovery', updated_at=datetime('now') WHERE id=${sqlInt(row[0])};`
           );
           console.log(`    Reset task ${id}: '${title}' -> failed`);
         }

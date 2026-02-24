@@ -6,7 +6,28 @@ import { shellEscape, validateShellValue } from "../utils/shellEscape.js";
 
 interface ConfigOptions {
   dir?: string;
+  reveal?: boolean;
 }
+
+/**
+ * Keys containing secrets that should be masked in `config list` output.
+ * Matches exact names, plus any key containing TOKEN, SECRET, KEY, or WEBHOOK.
+ */
+const SENSITIVE_KEYS = new Set([
+  "SKYNET_TG_BOT_TOKEN",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+  "SKYNET_DASHBOARD_API_KEY",
+]);
+
+const SENSITIVE_PATTERNS = [/TOKEN/i, /SECRET/i, /KEY/i, /WEBHOOK/i];
+
+function isSensitiveKey(name: string): boolean {
+  if (SENSITIVE_KEYS.has(name)) return true;
+  return SENSITIVE_PATTERNS.some((re) => re.test(name));
+}
+
+const MASK = "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022";
 
 /** Known variable descriptions, keyed by variable name. */
 const KNOWN_VARS: Record<string, string> = {
@@ -224,10 +245,16 @@ export async function configListCommand(options: ConfigOptions) {
   let valueWidth = header.value.length;
   let descWidth = header.desc.length;
 
+  const reveal = !!(options as ConfigOptions & { reveal?: boolean }).reveal;
   const rows = vars.map((v) => {
     const desc = KNOWN_VARS[v.name] || "";
+    // Mask sensitive values unless --reveal is passed
+    let rawValue = v.value;
+    if (!reveal && isSensitiveKey(v.name) && rawValue.length > 0) {
+      rawValue = MASK;
+    }
     // Truncate long values for display
-    const displayValue = v.value.length > 50 ? v.value.substring(0, 47) + "..." : v.value;
+    const displayValue = rawValue.length > 50 ? rawValue.substring(0, 47) + "..." : rawValue;
     nameWidth = Math.max(nameWidth, v.name.length);
     valueWidth = Math.max(valueWidth, displayValue.length);
     descWidth = Math.max(descWidth, desc.length);
@@ -354,7 +381,8 @@ export async function configSetCommand(key: string, value: string, options: Conf
   writeFileSync(tmpPath, lines.join("\n"), "utf-8");
   renameSync(tmpPath, configPath);
 
-  console.log(`\n  Updated ${key}="${value}"\n`);
+  const displayValue = SENSITIVE_KEYS.has(key) ? "••••••••" : value;
+  console.log(`\n  Updated ${key}="${displayValue}"\n`);
 }
 
 /**

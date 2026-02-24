@@ -2,11 +2,13 @@ import { timingSafeEqual, createHmac } from "crypto";
 
 /**
  * Timing-safe string comparison to prevent timing attacks on API key validation.
- * Returns false immediately if lengths differ (leaks only length, not content).
+ * Uses HMAC to normalize both inputs to fixed-length digests (32 bytes) before
+ * comparing, which eliminates the length oracle that a naive length check leaks.
  */
 export function safeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+  const ha = createHmac("sha256", "skynet-cmp").update(a).digest();
+  const hb = createHmac("sha256", "skynet-cmp").update(b).digest();
+  return timingSafeEqual(ha, hb);
 }
 
 /**

@@ -501,7 +501,7 @@ EOF
     _modules_mtime=$(file_mtime "$WORKTREE_DIR/node_modules/.modules.yaml")
     if [ "$_lock_mtime" -gt "$_modules_mtime" ]; then
       log "Lock file newer than node_modules — running install"
-      local _install_cmd="${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}"
+      _install_cmd="${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}"
       # Validate install command against allowed character set (defense-in-depth)
       case "$_install_cmd" in *".."*|*";"*|*"|"*|*'$('*|*'`'*) log "ERROR: SKYNET_INSTALL_CMD contains disallowed characters — skipping install" ;; *) (cd "$WORKTREE_DIR" && eval "$_install_cmd") >> "$LOG" 2>&1 ;; esac
     fi

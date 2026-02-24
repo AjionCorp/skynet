@@ -433,7 +433,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       let selfCorrectionRate: number;
 
       if (usingSqlite && db) {
-        healthScore = db.calculateHealthScore(maxW);
+        healthScore = db.calculateHealthScore(maxW, config.staleMinutes);
         const stats = db.getSelfCorrectionStats();
         selfCorrectionStats = stats;
         failedPendingCount = stats.pending;

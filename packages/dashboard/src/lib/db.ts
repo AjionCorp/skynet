@@ -424,9 +424,10 @@ export class SkynetDB {
    *   - packages/cli/src/commands/status.ts (healthScore calculation)
    *   - scripts/watchdog.sh (_health_score_alert)
    */
-  calculateHealthScore(maxWorkers: number): number {
+  calculateHealthScore(maxWorkers: number, staleMinutes?: number): number {
     const safeMax = Math.max(1, Math.min(maxWorkers, 100));
-    const staleEpoch = Math.floor(Date.now() / 1000) - STALE_THRESHOLD_SECONDS;
+    const staleSeconds = staleMinutes != null ? staleMinutes * 60 : STALE_THRESHOLD_SECONDS;
+    const staleEpoch = Math.floor(Date.now() / 1000) - staleSeconds;
     const row = this.db
       .prepare(
         `SELECT
@@ -620,35 +621,41 @@ export class SkynetDB {
    * Check whether a rate limit key has exceeded the allowed count within the window.
    * Returns true if the request is allowed, false if rate-limited.
    * On success, increments the counter atomically.
+   *
+   * Wrapped in a transaction to prevent TOCTOU races: without it, two concurrent
+   * requests could both read under the limit and both increment past it.
    */
   checkRateLimit(key: string, maxCount: number, windowMs: number): boolean {
     this.ensureRateLimitsTable();
-    const nowMs = Date.now();
-    const windowStartThreshold = nowMs - windowMs;
 
-    const row = this.db
-      .prepare("SELECT count, window_start FROM rate_limits WHERE key = ?")
-      .get(key) as { count: number; window_start: number } | undefined;
+    return this.db.transaction(() => {
+      const nowMs = Date.now();
+      const windowStartThreshold = nowMs - windowMs;
 
-    if (!row || row.window_start <= windowStartThreshold) {
-      // No record or window expired — reset the window
+      const row = this.db
+        .prepare("SELECT count, window_start FROM rate_limits WHERE key = ?")
+        .get(key) as { count: number; window_start: number } | undefined;
+
+      if (!row || row.window_start <= windowStartThreshold) {
+        // No record or window expired — reset the window
+        this.db
+          .prepare(
+            "INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)"
+          )
+          .run(key, nowMs);
+        return true;
+      }
+
+      if (row.count >= maxCount) {
+        return false;
+      }
+
+      // Increment within the current window
       this.db
-        .prepare(
-          "INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)"
-        )
-        .run(key, nowMs);
+        .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
+        .run(key);
       return true;
-    }
-
-    if (row.count >= maxCount) {
-      return false;
-    }
-
-    // Increment within the current window
-    this.db
-      .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
-      .run(key);
-    return true;
+    })();
   }
 }
 
