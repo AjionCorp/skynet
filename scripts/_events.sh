@@ -5,6 +5,12 @@
 # Events are appended to $DEV_DIR/events.log in pipe-delimited format:
 #   epoch|event_name|description
 # This mirrors the fixer-stats.log pattern for structured log data.
+#
+# OPS-P2-1: Retention / rotation:
+#   - SQLite (primary): db_prune_old_events() removes events older than 7 days,
+#     called every 10 watchdog cycles from watchdog.sh.
+#   - Flat file (compat): rotated when exceeding SKYNET_MAX_EVENTS_LOG_KB (default
+#     1024 KB). Old files are shifted (.1 -> .2) and gzipped. Max 2 archives kept.
 
 # Emit a named pipeline event with optional description and trace_id.
 # Usage: emit_event "event_name" "description" ["trace_id"]
@@ -42,7 +48,28 @@ emit_event() {
   if command -v flock >/dev/null 2>&1; then
     (flock -x 200; printf '%s\n' "$_line" >> "$events_log") 200>"${events_log}.lock"
   else
-    printf '%s\n' "$_line" >> "$events_log"
+    # SH-P1-1: On macOS (no flock), use mkdir-based lock to prevent interleaved
+    # writes from concurrent workers. Brief spin with 5 retries, 50ms apart.
+    local _emit_lock="${SKYNET_LOCK_PREFIX:-/tmp/skynet}-events-emit.lock"
+    local _emit_locked=false
+    local _emit_i=0
+    while [ "$_emit_i" -lt 5 ]; do
+      if mkdir "$_emit_lock" 2>/dev/null; then
+        _emit_locked=true
+        break
+      fi
+      _emit_i=$((_emit_i + 1))
+      # Brief sleep — perl usleep for sub-second on macOS (bash 3.2 compatible)
+      perl -e 'select(undef,undef,undef,0.05)' 2>/dev/null || sleep 1
+    done
+    if $_emit_locked; then
+      printf '%s\n' "$_line" >> "$events_log"
+      rmdir "$_emit_lock" 2>/dev/null || rm -rf "$_emit_lock" 2>/dev/null || true
+    else
+      # Lock contention after retries — append anyway (partial line risk is
+      # acceptable vs. losing the event entirely; SQLite is the primary store)
+      printf '%s\n' "$_line" >> "$events_log"
+    fi
   fi
 
   # Now check if rotation is needed (after the event is safely persisted)

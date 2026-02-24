@@ -535,6 +535,61 @@ describe("SkynetDB", () => {
       const newId = db.addTask("Bottom task", "FEAT", "desc", "bottom", "");
       expect(newId).toBeGreaterThan(0);
     });
+
+    // ── TEST-P1-3: SQL injection in blockedBy test ──────────────────────
+    it("stores SQL injection payload in blockedBy as literal text without executing it", () => {
+      const sqlInjection = "'; DROP TABLE tasks; --";
+      const newId = db.addTask("Safe task", "FEAT", "desc", "top", sqlInjection);
+      expect(newId).toBeGreaterThan(0);
+
+      // Verify the tasks table still exists and is intact
+      expect(db.countPending()).toBeGreaterThanOrEqual(1);
+
+      // Verify the blockedBy value was stored as literal text
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const row = rawDb.prepare("SELECT blocked_by FROM tasks WHERE id = ?").get(newId) as { blocked_by: string };
+      rawDb.close();
+      expect(row.blocked_by).toBe(sqlInjection);
+    });
+
+    it("stores SQL injection payload in title without executing it", () => {
+      const sqlInjection = "'; DROP TABLE tasks; --";
+      const newId = db.addTask(sqlInjection, "FEAT", "desc", "top", "");
+      expect(newId).toBeGreaterThan(0);
+
+      // Table still exists
+      expect(db.countPending()).toBeGreaterThanOrEqual(1);
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const row = rawDb.prepare("SELECT title FROM tasks WHERE id = ?").get(newId) as { title: string };
+      rawDb.close();
+      expect(row.title).toBe(sqlInjection);
+    });
+
+    it("stores SQL injection in description without executing it", () => {
+      const sqlInjection = "Robert'); DROP TABLE tasks;--";
+      const newId = db.addTask("Normal title", "FEAT", sqlInjection, "top", "");
+      expect(newId).toBeGreaterThan(0);
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const row = rawDb.prepare("SELECT description FROM tasks WHERE id = ?").get(newId) as { description: string };
+      rawDb.close();
+      expect(row.description).toBe(sqlInjection);
+      expect(db.countPending()).toBeGreaterThanOrEqual(1);
+    });
+
+    it("handles UNION SELECT injection attempt in blockedBy", () => {
+      const unionInjection = "' UNION SELECT password FROM users --";
+      const newId = db.addTask("Another safe task", "FIX", "desc", "top", unionInjection);
+      expect(newId).toBeGreaterThan(0);
+      expect(db.countPending()).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe("getFixRate24h", () => {

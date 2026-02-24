@@ -40,7 +40,7 @@ export async function parseBody<T>(
       return { data: null, error: "No request body", status: 400 };
     }
 
-    const chunks: Uint8Array[] = [];
+    const chunks: Buffer[] = [];
     let totalSize = 0;
 
     while (true) {
@@ -51,7 +51,7 @@ export async function parseBody<T>(
         reader.cancel();
         return { data: null, error: "Request body too large", status: 413 };
       }
-      chunks.push(value);
+      chunks.push(Buffer.from(value));
     }
 
     const text = new TextDecoder().decode(

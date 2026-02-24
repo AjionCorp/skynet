@@ -92,4 +92,45 @@ describe("releaseBacklogLock", () => {
     mockRmSync.mockImplementation(() => { throw new Error("ENOENT"); });
     expect(() => releaseBacklogLock("/tmp/test-lock")).not.toThrow();
   });
+
+  // TEST-P2-3: Boundary tests for lock acquisition/release
+  it("re-acquires lock successfully after release", async () => {
+    let callCount = 0;
+    mockMkdirSync.mockImplementation(() => {
+      callCount++;
+      return undefined;
+    });
+
+    // Acquire
+    const first = await acquireBacklogLock("/tmp/test-lock", 1, 10);
+    expect(first).toBe(true);
+
+    // Release
+    releaseBacklogLock("/tmp/test-lock");
+    expect(mockRmSync).toHaveBeenCalledWith("/tmp/test-lock", { recursive: true, force: true });
+
+    // Re-acquire
+    const second = await acquireBacklogLock("/tmp/test-lock", 1, 10);
+    expect(second).toBe(true);
+    expect(callCount).toBe(2);
+  });
+
+  it("releasing when lock is not held does not throw", () => {
+    mockRmSync.mockImplementation(() => {
+      throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    });
+    expect(() => releaseBacklogLock("/tmp/nonexistent-lock")).not.toThrow();
+  });
+
+  it("acquiring when already held returns false without stale break", async () => {
+    const eexist = Object.assign(new Error("EEXIST"), { code: "EEXIST" });
+    mockMkdirSync.mockImplementation(() => { throw eexist; });
+    // Lock is fresh (held for only 1s)
+    mockStatSync.mockReturnValue({ mtimeMs: Date.now() - 1_000 } as never);
+    const result = await acquireBacklogLock("/tmp/test-lock", 2, 10);
+    expect(result).toBe(false);
+    // rmSync should NOT be called since lock is fresh
+    expect(mockRmSync).not.toHaveBeenCalled();
+  });
+
 });

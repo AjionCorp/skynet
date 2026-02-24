@@ -776,4 +776,49 @@ describe("createWorkerScalingHandler", () => {
       expect(typeof body.error).toBe("string");
     });
   });
+
+  // TEST-P2-4: Worker scaling calculation edge cases
+  describe("count validation edge cases", () => {
+    it("rejects zero workers as negative scale (count=0 is valid for scale-down)", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      alivePids = new Set();
+      // count=0 should be accepted (scale down to zero)
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 0 }));
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+    });
+
+    it("rejects negative count", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: -1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("count must be");
+    });
+
+    it("rejects non-integer count", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 2.5 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("count must be");
+    });
+
+    it("rejects count exceeding maxWorkers", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig({ maxWorkers: 2 }));
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 3 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("count must be");
+    });
+
+    it("respects maxWorkers=0 config (no workers allowed)", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig({ maxWorkers: 0 }));
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+  });
+
 });

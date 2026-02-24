@@ -211,6 +211,45 @@ fi
 # Clean up
 rm -rf "$lockdir"
 
+
+# ── Test 7: Lock directory format — pid file contains numeric PID ────
+
+echo ""
+log "=== TEST-P3-4: Lock dir format — contains pid file with numeric PID ==="
+
+lockdir="$SKYNET_LOCK_PREFIX-test-lock-7.lock"
+lock_backend_acquire "test-lock-7" 5
+
+# Verify directory structure
+if [ -d "$lockdir" ]; then
+  pass "lock format: lock path is a directory"
+else
+  fail "lock format: lock path should be a directory"
+fi
+
+if [ -f "$lockdir/pid" ]; then
+  pass "lock format: lock dir contains a 'pid' file"
+else
+  fail "lock format: lock dir should contain a 'pid' file"
+fi
+
+# Verify PID is numeric
+stored_pid=$(cat "$lockdir/pid" 2>/dev/null)
+case "$stored_pid" in
+  ''|*[!0-9]*)
+    fail "lock format: PID file should contain only digits (got '$stored_pid')"
+    ;;
+  *)
+    pass "lock format: PID file contains numeric value ($stored_pid)"
+    ;;
+esac
+
+# Verify PID matches current process
+assert_eq "$stored_pid" "$$" "lock format: PID file matches current process PID"
+
+# Clean up
+rm -rf "$lockdir"
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""

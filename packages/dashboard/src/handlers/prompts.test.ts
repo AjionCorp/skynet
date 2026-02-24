@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPromptsHandler } from "./prompts";
 import type { SkynetConfig } from "../types";
 
@@ -52,6 +52,11 @@ function makeScriptContent(prompt: string): string {
 describe("createPromptsHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   // TS-P2-3: When all prompt files fail to load, a warning error is returned

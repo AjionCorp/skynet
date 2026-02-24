@@ -718,10 +718,13 @@ export class SkynetDB {
 // child_process.fork() consumers, close and reopen the connection in the child.
 
 // ─── Singleton factory ───────────────────────────────────────────────
-// Connection pooling is unnecessary here: the dashboard runs as a single
-// Next.js server process with WAL-mode SQLite, so a single reused
-// connection (with busy_timeout) is sufficient and avoids the complexity
-// of pool management.
+// OPS-P2-4: Connection pooling is intentionally not used. SQLite in WAL mode
+// supports concurrent readers but only a single writer. Since the dashboard is a
+// single Next.js process, a pooled set of connections would not improve throughput —
+// writes are serialized by SQLite regardless. The busy_timeout pragma (15s) handles
+// write contention by retrying internally, which is more efficient than application-
+// level pool management. If this were PostgreSQL or MySQL, a pool would be warranted;
+// for SQLite, a single reused connection is both simpler and optimal.
 
 let _instance: SkynetDB | null = null;
 let _instanceIno: bigint | number | null = null;

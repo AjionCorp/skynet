@@ -6,7 +6,7 @@ vi.mock("../../../../lib/auth", () => ({
   deriveSessionToken: vi.fn(() => "mock-session-token"),
 }));
 
-import { POST } from "./route";
+import { POST, _LOGIN_ATTEMPTS_FOR_TESTING } from "./route";
 
 function makeRequest(body: unknown, headers?: Record<string, string>): Request {
   return new Request("http://localhost/api/auth/login", {
@@ -100,5 +100,126 @@ describe("POST /api/auth/login", () => {
       })
     );
     expect(res.status).toBe(400);
+  });
+
+  // ── TEST-P1-1: Rate limit boundary tests ──────────────────────────────
+  describe("rate limit boundary conditions", () => {
+    it("allows exactly MAX_ATTEMPTS (5) failed attempts", async () => {
+      const ip = uniqueIp();
+      // 5 failed attempts should all return 401 (not 429)
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+        expect(res.status).toBe(401);
+      }
+    });
+
+    it("blocks on attempt 6 (one over the limit)", async () => {
+      const ip = uniqueIp();
+      // 5 failed attempts
+      for (let i = 0; i < 5; i++) {
+        await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      }
+      // 6th attempt should be rate limited
+      const res = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      expect(res.status).toBe(429);
+      const body = await res.json();
+      expect(body.error).toContain("Too many login attempts");
+    });
+
+    it("allows login again after window expires", async () => {
+      const ip = uniqueIp();
+      // Fill up the rate limit
+      for (let i = 0; i < 5; i++) {
+        await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      }
+      // Verify blocked
+      const blocked = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      expect(blocked.status).toBe(429);
+
+      // Manually expire the entry by manipulating the internal map
+      const entry = _LOGIN_ATTEMPTS_FOR_TESTING.get(ip);
+      expect(entry).toBeDefined();
+      // Set resetAt to the past
+      entry!.resetAt = Date.now() - 1;
+
+      // Should now be allowed again
+      const res = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      expect(res.status).toBe(401); // 401 = not rate limited, just wrong key
+    });
+  });
+
+  // ── TEST-P1-4: Concurrent rate limit race test ────────────────────────
+  describe("concurrent rate limit checks", () => {
+    it("handles concurrent requests to the same IP without counter corruption", async () => {
+      const ip = uniqueIp();
+      // Send 5 concurrent failed login requests from the same IP
+      const promises = Array.from({ length: 5 }, () =>
+        POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }))
+      );
+      const results = await Promise.all(promises);
+
+      // All 5 should be 401 (failed auth, not yet rate limited)
+      for (const res of results) {
+        expect(res.status).toBe(401);
+      }
+
+      // The internal counter should reflect all 5 attempts
+      const entry = _LOGIN_ATTEMPTS_FOR_TESTING.get(ip);
+      expect(entry).toBeDefined();
+      expect(entry!.count).toBe(5);
+
+      // The next request should be rate limited (429)
+      const nextRes = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip }));
+      expect(nextRes.status).toBe(429);
+    });
+
+    it("does not corrupt counter when concurrent valid and invalid requests race", async () => {
+      const ip = uniqueIp();
+      // Mix of valid and invalid concurrent requests
+      const promises = [
+        POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip })),
+        POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip })),
+        POST(makeRequest({ apiKey: "test-api-key" }, { "x-real-ip": ip })),
+        POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": ip })),
+      ];
+      const results = await Promise.all(promises);
+
+      // At least one should succeed (200) and some should fail (401)
+      const statuses = results.map(r => r.status);
+      expect(statuses).toContain(200);
+      expect(statuses.filter(s => s === 401).length).toBeGreaterThan(0);
+    });
+  });
+});
+
+
+// TEST-P3-5: CORS headers verification
+describe("CORS headers on API responses", () => {
+  const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+  });
+
+  afterAll(() => {
+    if (originalEnv !== undefined) {
+      process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
+    } else {
+      delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+  });
+
+  it("does not set CORS headers by default (reverse proxy responsibility)", async () => {
+    const res = await POST(makeRequest({ apiKey: "test-api-key" }, { "x-real-ip": "10.0.99.1" }));
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
+    expect(res.headers.get("access-control-allow-methods")).toBeNull();
+    expect(res.headers.get("access-control-allow-headers")).toBeNull();
+  });
+
+  it("401 responses do not leak CORS headers", async () => {
+    const res = await POST(makeRequest({ apiKey: "wrong" }, { "x-real-ip": "10.0.99.2" }));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("access-control-allow-origin")).toBeNull();
   });
 });

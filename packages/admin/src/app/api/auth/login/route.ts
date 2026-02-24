@@ -12,13 +12,28 @@ const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 // TS-P3-4: Lowered from 10000 to 1000 — cleanup should trigger sooner
 const MAX_TRACKED_IPS = 1_000; // prevent unbounded growth
 
+// TS-P1-2: Exported for testing — allows tests to inspect/clear internal state
+export { LOGIN_ATTEMPTS as _LOGIN_ATTEMPTS_FOR_TESTING };
+
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
-  // Periodic cleanup: purge expired entries either when map exceeds threshold
-  // or probabilistically (1 in 10 requests) to keep the map trimmed
+  // TS-P1-2: Deterministic eviction when map exceeds threshold.
+  // Step 1: purge all expired entries.
+  // Step 2: if still over limit, evict oldest entries by resetAt.
+  // Also run probabilistic cleanup (1 in 10) to keep the map trimmed generally.
   if (LOGIN_ATTEMPTS.size > MAX_TRACKED_IPS || (LOGIN_ATTEMPTS.size > 0 && Math.random() < 0.1)) {
+    // Step 1: Remove all expired entries
     for (const [key, entry] of LOGIN_ATTEMPTS) {
       if (now >= entry.resetAt) LOGIN_ATTEMPTS.delete(key);
+    }
+    // Step 2: If still over limit after purging expired, evict oldest entries
+    if (LOGIN_ATTEMPTS.size > MAX_TRACKED_IPS) {
+      const entries = Array.from(LOGIN_ATTEMPTS.entries())
+        .sort((a, b) => a[1].resetAt - b[1].resetAt);
+      const toRemove = LOGIN_ATTEMPTS.size - MAX_TRACKED_IPS;
+      for (let i = 0; i < toRemove; i++) {
+        LOGIN_ATTEMPTS.delete(entries[i][0]);
+      }
     }
   }
   const entry = LOGIN_ATTEMPTS.get(ip);

@@ -75,6 +75,37 @@ describe("extractTimestamp", () => {
       extractTimestamp("prefix [2025-12-31 23:59:59] suffix")
     ).toBe("2025-12-31 23:59:59");
   });
+
+  // TEST-P2-2: Edge-case timestamp parsing
+  it("handles timestamp with epoch 0 (1970-01-01 00:00:00)", () => {
+    expect(
+      extractTimestamp("[1970-01-01 00:00:00] epoch zero event")
+    ).toBe("1970-01-01 00:00:00");
+  });
+
+  it("handles future date timestamps", () => {
+    expect(
+      extractTimestamp("[2099-12-31 23:59:59] far future event")
+    ).toBe("2099-12-31 23:59:59");
+  });
+
+  it("returns null for malformed timestamp (missing seconds)", () => {
+    expect(extractTimestamp("[2024-01-15 10:30] incomplete")).toBeNull();
+  });
+
+  it("returns null for malformed timestamp (wrong separators)", () => {
+    expect(extractTimestamp("[2024/01/15 10:30:00] wrong sep")).toBeNull();
+  });
+
+  it("returns null for timestamp without brackets", () => {
+    expect(extractTimestamp("2024-01-15 10:30:00 no brackets")).toBeNull();
+  });
+
+  it("handles multiple timestamps in a line (returns first)", () => {
+    expect(
+      extractTimestamp("[2024-01-01 00:00:00] then [2025-06-15 12:00:00]")
+    ).toBe("2024-01-01 00:00:00");
+  });
 });
 
 describe("getLastLogLine", () => {

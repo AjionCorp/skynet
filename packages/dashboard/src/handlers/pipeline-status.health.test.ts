@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPipelineStatusHandler } from "./pipeline-status";
 import type { SkynetConfig } from "../types";
 
@@ -59,6 +59,11 @@ describe("health score calculation", () => {
     vi.clearAllMocks();
     mockReadDevFile.mockReturnValue("");
     mockExecSync.mockReturnValue("" as never);
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns 100 when no failures, blockers, stale heartbeats, or stale tasks", async () => {

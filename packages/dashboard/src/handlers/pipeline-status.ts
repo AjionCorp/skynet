@@ -78,6 +78,8 @@ export function parseDurationMinutes(s: string): number | null {
  */
 export function formatDuration(minutes: number): string {
   if (!Number.isFinite(minutes)) return "--";
+  // TEST-P3-1: Clamp negative values to 0 — negative durations are not meaningful
+  if (minutes < 0) return "0m";
   if (minutes < 60) return `${Math.round(minutes)}m`;
   const h = Math.floor(minutes / 60);
   const rem = Math.round(minutes % 60);

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPipelineLogsHandler } from "./pipeline-logs";
 import type { SkynetConfig } from "../types";
 
@@ -61,6 +61,11 @@ describe("createPipelineLogsHandler", () => {
     mockStatSync.mockReturnValue({ size: 0 } as never);
     mockOpenSync.mockReturnValue(99 as never);
     mockReadSync.mockReturnValue(0 as never);
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns 400 when script param is missing", async () => {

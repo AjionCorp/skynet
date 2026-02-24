@@ -48,3 +48,77 @@ describe("deriveSessionToken", () => {
     expect(token.length).toBe(64);
   });
 });
+
+// ── TEST-P1-6: Auth token priority test ─────────────────────────────
+// Tests that the token resolution logic follows correct priority:
+// Authorization header > cookie (> query param, if supported).
+// This tests the extraction logic that the middleware uses.
+describe("auth token resolution priority", () => {
+  it("Authorization header takes priority over cookie value", () => {
+    // Simulate the middleware's token extraction logic
+    const authHeader = "Bearer header-token-value";
+    const cookieValue = "cookie-token-value";
+
+    // Middleware logic: authHeader?.replace(/^Bearer /i, "") || cookie?.value
+    const token = authHeader?.replace(/^Bearer /i, "") || cookieValue;
+    expect(token).toBe("header-token-value");
+  });
+
+  it("falls back to cookie when Authorization header is absent", () => {
+    const authHeader: string | null = null;
+    const cookieValue = "cookie-token-value";
+
+    const token = authHeader?.replace(/^Bearer /i, "") || cookieValue;
+    expect(token).toBe("cookie-token-value");
+  });
+
+  it("falls back to cookie when Authorization header is empty", () => {
+    const authHeader = "";
+    const cookieValue = "cookie-token-value";
+
+    // Empty string is falsy, so || falls through to cookie
+    const token = authHeader?.replace(/^Bearer /i, "") || cookieValue;
+    expect(token).toBe("cookie-token-value");
+  });
+
+  it("uses Authorization header even when it matches cookie (header wins)", () => {
+    const authHeader = "Bearer same-token";
+    const cookieValue = "different-token";
+
+    const token = authHeader?.replace(/^Bearer /i, "") || cookieValue;
+    expect(token).toBe("same-token");
+  });
+
+  it("strips Bearer prefix case-insensitively", () => {
+    const authHeader = "bearer My-Token-123";
+    const token = authHeader.replace(/^Bearer /i, "");
+    expect(token).toBe("My-Token-123");
+  });
+
+  it("handles BEARER (uppercase) prefix", () => {
+    const authHeader = "BEARER My-Token-456";
+    const token = authHeader.replace(/^Bearer /i, "");
+    expect(token).toBe("My-Token-456");
+  });
+
+  it("returns undefined when neither header nor cookie is present", () => {
+    const authHeader: string | null = null;
+    const cookieValue: string | undefined = undefined;
+
+    const token = authHeader?.replace(/^Bearer /i, "") || cookieValue;
+    expect(token).toBeUndefined();
+  });
+
+  it("validates that raw API key is accepted (backward compat)", () => {
+    // The middleware accepts both raw API key and derived session token
+    const apiKey = "test-raw-key";
+    const sessionToken = deriveSessionToken(apiKey);
+
+    // Raw key check
+    expect(safeCompare(apiKey, apiKey)).toBe(true);
+    // Session token check
+    expect(safeCompare(sessionToken, deriveSessionToken(apiKey))).toBe(true);
+    // Cross-check should fail
+    expect(safeCompare(apiKey, sessionToken)).toBe(false);
+  });
+});

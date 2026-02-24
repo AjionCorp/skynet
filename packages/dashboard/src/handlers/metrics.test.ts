@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMetricsHandler } from "./metrics";
 import type { SkynetConfig } from "../types";
 
@@ -58,6 +58,11 @@ describe("createMetricsHandler", () => {
     mockDB.countActiveWorkers.mockReturnValue(2);
     mockDB.getActiveBlockerCount.mockReturnValue(1);
     mockDB.countEvents.mockReturnValue(42);
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns 200 with Prometheus content-type header", async () => {

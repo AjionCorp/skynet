@@ -1223,8 +1223,16 @@ db_maintenance() {
   _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
 
   # Step 2: integrity_check
+  # OPS-P1-4: Wrap integrity_check with a 30-second timeout to prevent runaway
+  # checks on large databases from blocking the maintenance cycle indefinitely.
   local integrity
-  integrity=$(_db "PRAGMA integrity_check;" 2>/dev/null)
+  local _ic_timeout=${SKYNET_INTEGRITY_CHECK_TIMEOUT:-30}
+  integrity=$(run_with_timeout "$_ic_timeout" sqlite3 "$DB_PATH" "PRAGMA integrity_check;" 2>/dev/null)
+  local _ic_rc=$?
+  if [ "$_ic_rc" -eq 124 ] 2>/dev/null; then
+    log "WARNING: db_maintenance — integrity_check timed out after ${_ic_timeout}s"
+    return 1
+  fi
   if [ "$integrity" != "ok" ]; then
     log "ERROR: db_maintenance — integrity_check failed: $integrity"
     return 1
@@ -1262,8 +1270,10 @@ db_maintenance() {
 # Returns 0 if "ok", 1 otherwise.
 db_check_integrity() {
   [ ! -f "$DB_PATH" ] && return 1
+  # OPS-P1-4: Wrap integrity_check with a 30-second timeout
   local integrity
-  integrity=$(_db "PRAGMA integrity_check;" 2>/dev/null)
+  local _ic_timeout=${SKYNET_INTEGRITY_CHECK_TIMEOUT:-30}
+  integrity=$(run_with_timeout "$_ic_timeout" sqlite3 "$DB_PATH" "PRAGMA integrity_check;" 2>/dev/null)
   [ "$integrity" = "ok" ] && return 0 || return 1
 }
 

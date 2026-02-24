@@ -88,11 +88,22 @@ _start_heartbeat() {
     # OPS-P0-1: Poll parent liveness every 5s so the subshell exits quickly
     # after SIGKILL, but only write heartbeat every 60s to avoid DB churn.
     local _hb_counter=0
+    local _hb_last_epoch=0
+    _hb_last_epoch=$(date +%s)
     while kill -0 "$_parent_pid" 2>/dev/null; do
       sleep 5
       _hb_counter=$((_hb_counter + 5))
       if [ "$_hb_counter" -ge 60 ]; then
         _hb_counter=0
+        local _hb_now
+        _hb_now=$(date +%s)
+        # OPS-P2-3: Clock skew detection — if delta is negative or >5min,
+        # the system clock jumped. Log a warning and reset the baseline.
+        local _hb_delta=$((_hb_now - _hb_last_epoch))
+        if [ "$_hb_delta" -lt 0 ] || [ "$_hb_delta" -gt 300 ]; then
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Clock skew detected in heartbeat (delta=${_hb_delta}s) — resetting" >> "${HEARTBEAT_FILE}.skew" 2>/dev/null || true
+        fi
+        _hb_last_epoch=$_hb_now
         date +%s > "$HEARTBEAT_FILE"
         db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       fi
@@ -149,7 +160,8 @@ cleanup_on_exit() {
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed — task may remain stuck as claimed"
+      # OPS-P2-2: Retry on failure to avoid inconsistent claim state
+      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || { sleep 1; db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed twice — watchdog will recover"; }
     fi
     db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: unexpected exit — $_CURRENT_TASK_TITLE"
@@ -307,13 +319,15 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
           fi
         done < "$_claim_tracker"
         printf '%s' "$_kept_lines" > "$_claim_tracker"
-        # OPS-P1-1: Prevent claim tracker from growing unbounded
+        # OPS-P1-1: Prevent claim tracker from growing unbounded.
+        # Rotate to .1 backup instead of truncating to preserve data for debugging.
         if [ -f "$_claim_tracker" ]; then
           local _tracker_size
           _tracker_size=$(wc -c < "$_claim_tracker" 2>/dev/null || echo 0)
           if [ "$_tracker_size" -gt 10240 ]; then
+            mv "$_claim_tracker" "${_claim_tracker}.1" 2>/dev/null || true
             : > "$_claim_tracker"
-            log "WARNING: Claim tracker exceeded 10KB — truncated"
+            log "WARNING: Claim tracker exceeded 10KB — rotated to .1 backup"
           fi
         fi
         if [ "$_recent_claims" -ge 3 ]; then

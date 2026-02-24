@@ -54,6 +54,13 @@ const PENALTY_STALE_TASK = 1;    // -1 per task in_progress >24h
  * See scoring model documentation at the top of this file.
  */
 export function calculateHealthScore(opts: HealthScoreParams): number {
+  // TEST-P3-3: Formula documentation
+  // score = 100 - (failed * 5) - (blockers * 10) - (staleHB * 2) - (staleTasks * 1)
+  // Result is clamped to [0, 100]. Weight rationale:
+  //   Blockers (10): halt all progress — highest impact
+  //   Failed (5):    consume fixer capacity, indicate systemic issues
+  //   Stale HB (2):  transient — watchdog will recover soon
+  //   Stale 24h (1): may be legitimate long tasks
   let score = 100;
   score -= opts.failedPendingCount * PENALTY_FAILED_TASK;
   score -= opts.blockerCount * PENALTY_BLOCKER;

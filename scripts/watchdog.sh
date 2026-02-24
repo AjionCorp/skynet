@@ -333,6 +333,65 @@ IDLE_EOF
   fi
 }
 
+# Minimum expected command length for a skynet worker process. If ps output is
+# shorter, it may be truncated and we cannot safely verify the PID identity.
+_SKYNET_PS_MIN_CMD_LEN=40
+
+# _validate_skynet_orphan_pid PID WORKTREE_PATH
+# Returns 0 if the PID is a genuine skynet worker process in the given worktree.
+# Returns 1 (skip) if the process is unrelated, recycled, or ps output is truncated.
+# Uses exact path matching anchored to path separators and requires a recognizable
+# skynet worker pattern (dev-worker, task-fixer, claude, skynet) in the command.
+_validate_skynet_orphan_pid() {
+  local pid="$1" wt_path="$2"
+  local cmd
+  cmd=$(ps -ww -p "$pid" -o command= 2>/dev/null || echo "")
+
+  # Empty command — process already exited
+  [ -z "$cmd" ] && return 1
+
+  # Truncation guard: if command is suspiciously short, we cannot trust the match.
+  # macOS ps can truncate to terminal width or COLUMNS; the full worktree path
+  # alone is typically 50+ chars, so a short command likely lost critical context.
+  if [ "${#cmd}" -lt "$_SKYNET_PS_MIN_CMD_LEN" ]; then
+    log "WARNING: ps output for PID $pid is only ${#cmd} chars (< ${_SKYNET_PS_MIN_CMD_LEN}), may be truncated — skipping kill"
+    return 1
+  fi
+
+  # Exact path match: the worktree path must appear as a complete path component,
+  # bounded by start-of-string, space, or path separator — not as a substring of
+  # a longer path. We check for the path followed by end-of-string, space, or '/'.
+  local path_matched=false
+  case "$cmd" in
+    # Path at end of command
+    *" ${wt_path}") path_matched=true ;;
+    # Path followed by space (argument separator)
+    *" ${wt_path} "*) path_matched=true ;;
+    # Path followed by / (subpath reference)
+    *" ${wt_path}/"*) path_matched=true ;;
+    # Path at start of command (unlikely but defensive)
+    "${wt_path} "*|"${wt_path}/"*) path_matched=true ;;
+  esac
+  if ! $path_matched; then
+    log "PID $pid cmd does not contain exact worktree path (now: ${cmd:0:80}), skipping"
+    return 1
+  fi
+
+  # Skynet worker pattern: the command must also contain a recognizable skynet
+  # identifier. This prevents killing unrelated processes that happen to reference
+  # the worktree path (e.g., an editor, a file manager, a log tailer).
+  local pattern_matched=false
+  case "$cmd" in
+    *dev-worker*|*task-fixer*|*claude*|*skynet*|*watchdog*) pattern_matched=true ;;
+  esac
+  if ! $pattern_matched; then
+    log "PID $pid in worktree but not a skynet worker (cmd: ${cmd:0:80}), skipping"
+    return 1
+  fi
+
+  return 0
+}
+
 # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
 _cr_phase3_orphan_worktrees() {
   local worktree_dirs=()
@@ -376,31 +435,25 @@ _cr_phase3_orphan_worktrees() {
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
-      # OPS-P1-3/P1-4: Re-validate each PID before killing to guard against PID
-      # wraparound race — PIDs from pgrep may be reused between pgrep and kill.
-      # Verify the process command still references the expected worktree path.
+      # OPS-P1-3/P1-4 + P0-1: Re-validate each PID before killing to guard against
+      # PID wraparound race AND substring match false positives. Each PID must pass:
+      # (1) process still alive, (2) exact worktree path match (not substring),
+      # (3) recognized skynet worker pattern, (4) ps output not truncated.
       while read -r _opid; do
         [ -z "$_opid" ] && continue
         kill -0 "$_opid" 2>/dev/null || continue
-        # Verify process is still the expected bash process (not a recycled PID)
-        local _cmd
-        _cmd=$(ps -p "$_opid" -o args= 2>/dev/null || echo "")
-        case "$_cmd" in
-          *"$wt_dir"*) kill -TERM "$_opid" 2>/dev/null; log "Killed orphan process $_opid" ;;
-          *) log "PID $_opid recycled (now: ${_cmd:0:60}), skipping" ;;
-        esac
+        if _validate_skynet_orphan_pid "$_opid" "$resolved_wt_dir"; then
+          kill -TERM "$_opid" 2>/dev/null; log "Killed orphan process $_opid"
+        fi
       done <<< "$orphan_pids"
       sleep 1
       while read -r _opid; do
         [ -z "$_opid" ] && continue
         kill -0 "$_opid" 2>/dev/null || continue
-        # Re-verify before SIGKILL escalation
-        local _cmd
-        _cmd=$(ps -p "$_opid" -o args= 2>/dev/null || echo "")
-        case "$_cmd" in
-          *"$wt_dir"*) kill -9 "$_opid" 2>/dev/null; log "Force-killed orphan process $_opid" ;;
-          *) ;; # Already logged in SIGTERM pass or recycled since
-        esac
+        # Re-verify before SIGKILL escalation (same strict validation)
+        if _validate_skynet_orphan_pid "$_opid" "$resolved_wt_dir"; then
+          kill -9 "$_opid" 2>/dev/null; log "Force-killed orphan process $_opid"
+        fi
       done <<< "$orphan_pids"
     fi
 
@@ -441,8 +494,10 @@ crash_recovery() {
   fi
 
   if [ "$recovered" -gt 0 ]; then
-    log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees cleaned"
-    tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees"
+    # SH-P2-2: Cumulative summary — totals tasks recovered, orphan worktrees cleaned, locks released
+    log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} locks released, ${_cr_orphaned_tasks} tasks recovered, ${_cr_cleaned_worktrees} worktrees cleaned"
+    emit_event "crash_recovery_summary" "recovered=$recovered locks=${_cr_stale_pids} tasks=${_cr_orphaned_tasks} worktrees=${_cr_cleaned_worktrees}" 2>/dev/null || true
+    tg "🔄 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery — ${_cr_stale_pids} locks released, ${_cr_orphaned_tasks} tasks recovered, ${_cr_cleaned_worktrees} worktrees"
   fi
 
   # Alert operators when the 500-item safety limit was hit — recovery may be incomplete
@@ -990,7 +1045,11 @@ _archive_old_completions() {
     # Truncate entry_date to 10 chars (YYYY-MM-DD) for safe string comparison
     entry_date="${entry_date:0:10}"
     # SH-P2-10: Skip entries with empty or malformed dates (not exactly 10 chars YYYY-MM-DD)
-    [ ${#entry_date} -ne 10 ] && continue
+    # OPS-P1-3: Log a warning for malformed dates so operators notice data quality issues
+    if [ ${#entry_date} -ne 10 ]; then
+      log "WARNING: Skipping completed task with malformed date (got '$entry_date'): $(echo "$line" | cut -c1-120)"
+      continue
+    fi
     # If date is older than cutoff, mark for archival
     if [ -n "$entry_date" ] && [ "$entry_date" \< "$cutoff_date" ]; then
       archive_lines="${archive_lines}${line}

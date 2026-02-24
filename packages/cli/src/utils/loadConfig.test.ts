@@ -197,4 +197,30 @@ describe("loadConfig", () => {
     expect(result!.SKYNET_ROOT).toBe("/usr/local");
     expect(result!.SKYNET_PATH).toBe("/usr/local/bin");
   });
+
+
+  // TEST-P2-1: escaped characters in config values
+  it("handles escaped backslash in value", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_VAL="path\\\\dir"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_VAL).toBe("path\\dir");
+  });
+
+  it("warns on unrecognized escape sequences (TS-P3-3)", () => {
+    mockExistsSync.mockReturnValue(true);
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_VAL="line1\\nline2\\ttab"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    // \n and \t are unrecognized bash double-quote escapes — warning should fire
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
 });

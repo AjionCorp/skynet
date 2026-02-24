@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMissionRawHandler } from "./mission-raw";
 import type { SkynetConfig } from "../types";
 
@@ -22,6 +22,11 @@ describe("createMissionRawHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadDevFile.mockReturnValue("");
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns { data, error: null } envelope on success", async () => {

@@ -755,13 +755,164 @@ describe("formatDuration", () => {
     expect(formatDuration(0)).toBe("0m");
   });
 
-  // TEST-P3-5: Negative input should return "0m" (clamped) or "--"
-  it("returns -- for negative input", () => {
-    // Negative duration is not meaningful; formatDuration should handle gracefully
-    const result = formatDuration(-10);
-    // formatDuration passes through Math.round, so -10 becomes "-10m"
-    // This test documents the current behavior
+  // TEST-P3-1: Negative input should return "0m" (clamped)
+  it("returns 0m for negative input", () => {
+    expect(formatDuration(-10)).toBe("0m");
+    expect(formatDuration(-0.5)).toBe("0m");
+    expect(formatDuration(-100)).toBe("0m");
+  });
+});
+
+// ── TEST-P1-2: Duration parse edge cases ─────────────────────────────
+describe("parseDurationMinutes edge cases", () => {
+  it("returns 0 for zero duration '0m'", () => {
+    expect(parseDurationMinutes("0m")).toBe(0);
+  });
+
+  it("returns 0 for zero hours '0h'", () => {
+    expect(parseDurationMinutes("0h")).toBe(0);
+  });
+
+  it("returns 0 for '0h 0m'", () => {
+    expect(parseDurationMinutes("0h 0m")).toBe(0);
+  });
+
+  it("handles very large durations", () => {
+    expect(parseDurationMinutes("999h 59m")).toBe(999 * 60 + 59);
+  });
+
+  it("handles very large minutes-only value", () => {
+    expect(parseDurationMinutes("99999m")).toBe(99999);
+  });
+
+  it("returns null for negative values", () => {
+    expect(parseDurationMinutes("-5m")).toBeNull();
+  });
+
+  it("returns null for negative hours", () => {
+    expect(parseDurationMinutes("-1h")).toBeNull();
+  });
+
+  it("returns null for non-numeric input", () => {
+    expect(parseDurationMinutes("abc")).toBeNull();
+  });
+
+  it("returns null for mixed non-numeric input", () => {
+    expect(parseDurationMinutes("1.5h")).toBeNull();
+  });
+
+  it("returns null for decimal minutes", () => {
+    expect(parseDurationMinutes("30.5m")).toBeNull();
+  });
+
+  it("returns null for just whitespace", () => {
+    expect(parseDurationMinutes("   ")).toBeNull();
+  });
+
+  it("returns null for units without numbers", () => {
+    expect(parseDurationMinutes("h")).toBeNull();
+    expect(parseDurationMinutes("m")).toBeNull();
+  });
+});
+
+// ── TEST-P1-2: formatDuration edge cases ─────────────────────────────
+describe("formatDuration edge cases", () => {
+  it("formats zero as '0m'", () => {
+    expect(formatDuration(0)).toBe("0m");
+  });
+
+  it("formats very large durations", () => {
+    const result = formatDuration(99999);
+    expect(result).toBe("1666h 39m");
+  });
+
+  it("handles negative values without crashing", () => {
+    const result = formatDuration(-60);
     expect(typeof result).toBe("string");
-    expect(result).not.toBe("--"); // It's not NaN/Infinity, so it's not "--"
+  });
+
+  it("returns '--' for -Infinity", () => {
+    expect(formatDuration(-Infinity)).toBe("--");
+  });
+});
+
+// ── TEST-P1-5: parseCurrentTask multi-line description test ──────────
+describe("parseCurrentTask multi-line description", () => {
+  it("parses title from first ## heading even with multi-line content below", async () => {
+    const multiLineTask = [
+      "## Implement user authentication",
+      "",
+      "This is a multi-line description",
+      "that spans several lines and includes",
+      "various details about the task.",
+      "",
+      "**Status:** implementing",
+      "**Branch:** feat/auth",
+      "**Started:** 2026-02-24 10:00",
+      "**Worker:** 1",
+      "**Note:** Working on OAuth integration",
+    ].join("\n");
+
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return multiLineTask;
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.currentTask.title).toBe("Implement user authentication");
+    expect(data.currentTask.status).toBe("implementing");
+    expect(data.currentTask.branch).toBe("feat/auth");
+    expect(data.currentTask.started).toBe("2026-02-24 10:00");
+    expect(data.currentTask.worker).toBe("1");
+    expect(data.currentTask.lastInfo).toBe("Working on OAuth integration");
+  });
+
+  it("handles task with description containing markdown formatting", async () => {
+    const formattedTask = [
+      "## Fix database connection pooling",
+      "",
+      "The connection pool is leaking connections when:",
+      "- Worker crashes mid-query",
+      "- Multiple concurrent transactions overlap",
+      "",
+      "```sql",
+      "SELECT * FROM connections WHERE state = 'idle';",
+      "```",
+      "",
+      "**Status:** implementing",
+      "**Branch:** fix/db-pool",
+    ].join("\n");
+
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return formattedTask;
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.currentTask.title).toBe("Fix database connection pooling");
+    expect(data.currentTask.status).toBe("implementing");
+    expect(data.currentTask.branch).toBe("fix/db-pool");
+  });
+
+  it("parses only the first ## heading as title when multiple exist", async () => {
+    const multiHeadingTask = [
+      "## Primary task title",
+      "",
+      "## This is not a title - it's a section heading",
+      "",
+      "**Status:** implementing",
+    ].join("\n");
+
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return multiHeadingTask;
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    // The regex /^## (.+)/m captures the FIRST match
+    expect(data.currentTask.title).toBe("Primary task title");
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createMonitoringLogsHandler } from "./monitoring-logs";
 import type { SkynetConfig } from "../types";
 
@@ -37,6 +37,11 @@ describe("createMonitoringLogsHandler", () => {
     mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
     mockStatSync.mockReturnValue({ size: 0 } as never);
     mockReadFileSync.mockReturnValue("");
+  });
+
+  // TEST-P3-2: Ensure test isolation with mock cleanup
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("returns { data, error } envelope shape", async () => {

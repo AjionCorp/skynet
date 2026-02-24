@@ -30,8 +30,15 @@ export function loadConfig(projectDir: string): Record<string, string> | null {
       let value = match[2] ?? match[3];
       if (!isSingleQuoted) {
         // Unescape bash double-quote escape sequences (\\ and \").
-        // NOTE: Only \\ and \" are handled. More exotic escapes (\t, \a, \$, etc.)
-        // are not supported — config values are expected to use simple quoting.
+        // TS-P3-3: Warn on unrecognized escape sequences before processing known ones.
+        // Known sequences: \" and \\. Everything else (\t, \n, \a, etc.) is
+        // passed through but logged as a warning so operators notice potential issues.
+        const unrecognized = value.match(/\\[^"\\]/g);
+        if (unrecognized) {
+          console.warn(
+            `[loadConfig] Unrecognized escape sequence(s) in ${match[1]}: ${unrecognized.join(", ")}. Only \\\\ and \\" are supported.`
+          );
+        }
         value = value.replace(/\\"/g, '"').replace(/\\\\/g, '\\');
         // First pass: resolve references to already-collected vars and ALLOWED_ENV.
         // Unknown vars are kept as-is (e.g., "$SKYNET_BASE") for the second pass

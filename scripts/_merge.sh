@@ -56,17 +56,31 @@
 # Internal state shared with caller after return
 _MERGE_STATE_COMMITTED=false
 
-# OPS-P2-3: Merge lock acquisition timestamp (set inside do_merge_to_main)
-_MERGE_LOCK_ACQUIRED_AT=0
+# OPS-P1-2: Merge lock acquisition timestamp (set inside do_merge_to_main).
+# Uses SECONDS delta (not wall-clock) — captures baseline at lock acquisition
+# and computes elapsed = SECONDS - baseline, which is correct regardless of
+# total shell uptime.
+_MERGE_LOCK_ACQUIRED_AT=-1
 
-# OPS-P2-3: Release merge lock with duration logging
+# OPS-P1-2: Release merge lock with duration logging
 _release_merge_lock_with_duration() {
-  local duration=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
-  release_merge_lock
-  log "Merge lock held for ${duration}s"
-  if [ "$duration" -gt 300 ]; then
-    log "WARNING: Merge lock held for ${duration}s (>300s threshold)"
+  local duration
+  if [ "$_MERGE_LOCK_ACQUIRED_AT" -ge 0 ] 2>/dev/null; then
+    duration=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
+  else
+    # Lock was never acquired (safety fallback) — report unknown duration
+    duration=-1
   fi
+  release_merge_lock
+  if [ "$duration" -ge 0 ]; then
+    log "Merge lock held for ${duration}s"
+    if [ "$duration" -gt 300 ]; then
+      log "WARNING: Merge lock held for ${duration}s (>300s threshold)"
+    fi
+  else
+    log "WARNING: Merge lock released but acquisition timestamp was not recorded"
+  fi
+  _MERGE_LOCK_ACQUIRED_AT=-1
 }
 
 # _do_revert — Revert HEAD commit(s), optionally commit and push.
