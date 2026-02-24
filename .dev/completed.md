@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-24 | [FEAT] Add dark/light theme toggle to AdminLayout | merged to main | 6m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task search and tag filter to Tasks page | merged to main | 2m | success |
 | 2026-02-20 | [DOCS] Update README CLI reference with run, watch, upgrade, and metrics commands | merged to main | 0m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unblock dashboard backlog-parser DRY extraction root | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Unblock CLI shared helper DRY root for `readFile`/`isProcessRunning` | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Supersede legacy duplicate pending failed roots after canonicalization pass | merged to main | 1m | success |
-| 2026-02-20 | [TEST] Unblock CLI operational E2E smoke root in one canonical task | merged to main | 2m | success |
