@@ -1,4 +1,5 @@
 import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { homedir, platform } from "os";
 import type { SkynetConfig } from "../types";
@@ -40,8 +41,10 @@ function parsePlist(content: string) {
     /<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/
   );
   // logPath is read from the plist file; React auto-escapes in JSX so no XSS risk in the dashboard.
+  // Validate resolved path starts with home dir or /tmp/ to prevent path traversal (e.g. /etc/passwd).
   const rawLogPath = logMatch?.[1] ?? null;
-  const logPath = rawLogPath && !rawLogPath.includes('..') ? rawLogPath : null;
+  const resolvedLog = rawLogPath ? resolve(rawLogPath) : null;
+  const logPath = resolvedLog && (resolvedLog.startsWith(homedir()) || resolvedLog.startsWith('/tmp/')) ? resolvedLog : null;
 
   return { interval, runAtLoad, scriptPath, logPath };
 }
@@ -195,7 +198,10 @@ function parseCrontab(
     entries.set(agentName, {
       schedule,
       scriptPath: relScript ? relScript[1] : `${agentName}.sh`,
-      logPath: fullLogPath && !fullLogPath.includes('..') ? fullLogPath : null,
+      logPath: (() => {
+        const resolved = fullLogPath ? resolve(fullLogPath) : null;
+        return resolved && (resolved.startsWith(homedir()) || resolved.startsWith('/tmp/')) ? resolved : null;
+      })(),
     });
   }
 

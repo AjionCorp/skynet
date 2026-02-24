@@ -122,8 +122,8 @@ export function PipelineDashboard() {
           setStatus(json.data);
           setError(null);
           setConnectionStatus('connected');
-        } catch {
-          /* ignore malformed frames */
+        } catch (err) {
+          console.error('[SSE] Failed to parse event data:', err, 'raw:', event.data?.substring(0, 200));
         } finally {
           setLoading(false);
         }

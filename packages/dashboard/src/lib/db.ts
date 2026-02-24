@@ -435,6 +435,22 @@ export class SkynetDB {
     return Math.max(0, Math.min(100, score));
   }
 
+  /** Count workers currently in_progress. */
+  countActiveWorkers(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) as cnt FROM workers WHERE status = 'in_progress'")
+      .get() as { cnt: number };
+    return row.cnt;
+  }
+
+  /** Count total events recorded. */
+  countEvents(): number {
+    const row = this.db
+      .prepare("SELECT COUNT(*) as cnt FROM events")
+      .get() as { cnt: number };
+    return row.cnt;
+  }
+
   // ── Fixer Stats ────────────────────────────────────────────────────
 
   getFixRate24h(): number {

@@ -1,9 +1,9 @@
 /**
  * Stale threshold for worker heartbeats, in seconds.
  * A heartbeat older than this is considered stale/stuck.
- * Default matches SKYNET_STALE_MINUTES (45 min) from skynet.config.sh.
+ * Default matches SKYNET_STALE_MINUTES (30 min) from skynet.config.sh.
  */
-export const STALE_THRESHOLD_SECONDS = 45 * 60;
+export const STALE_THRESHOLD_SECONDS = 30 * 60;
 
 /**
  * Validates script names and worker types: lowercase alphanumeric and hyphens only.

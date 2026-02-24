@@ -646,7 +646,7 @@ _handle_stale_worker() {
       task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
     fi
     if [ -n "$task_title" ]; then
-      db_unclaim_task_by_title "$task_title" 2>/dev/null || true
+      db_unclaim_task_by_title "$task_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$task_title' — task may remain stuck as claimed"
       log "Unclaimed task: $task_title"
     fi
 
@@ -659,7 +659,7 @@ _handle_stale_worker() {
     fi
 
     # Reset current-task-N.md and SQLite worker status to idle
-    db_set_worker_idle "$wid" "stale worker killed after ${age_min}m" 2>/dev/null || true
+    db_set_worker_idle "$wid" "stale worker killed after ${age_min}m" 2>/dev/null || log "WARNING: db_set_worker_idle failed for worker $wid — dashboard may show stale status"
     cat > "$task_file" <<EOF
 # Current Task
 **Status:** idle
@@ -1138,6 +1138,12 @@ if $_canary_active; then
   emit_event "canary_started" "commit=$_canary_commit"
 fi
 
+# Warn if excess workers are active during canary (don't kill — too aggressive)
+if $_canary_active && [ "$dev_workers_running" -gt 1 ]; then
+  log "CANARY WARNING: $dev_workers_running workers active during canary validation — only 1 should be running"
+  tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: $dev_workers_running workers active during canary — excess workers may interfere with validation"
+fi
+
 # --- Pipeline pause check (skip dispatch but still run health checks above) ---
 pipeline_paused=false
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
@@ -1156,7 +1162,11 @@ elif $agent_auth_ok && ! $pipeline_paused; then
     if [ "$backlog_count" -ge "$_wid" ] && ! is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock"; then
       log "Backlog has $backlog_count tasks (>=$_wid), worker $_wid idle. Kicking off."
       tg "👁 *WATCHDOG*: Kicking off dev-worker $_wid ($backlog_count tasks waiting)"
-      SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/dev-worker.sh" "$_wid" >> "$SCRIPTS_DIR/dev-worker-${_wid}.log" 2>&1 &
+      if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
+        log "DRY-RUN: Would kick off dev-worker $_wid"
+      else
+        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/dev-worker.sh" "$_wid" >> "$SCRIPTS_DIR/dev-worker-${_wid}.log" 2>&1 &
+      fi
     fi
   done
 
@@ -1191,7 +1201,11 @@ elif $agent_auth_ok && ! $pipeline_paused; then
         if ! is_running "$_fixer_lock"; then
           log "Failed tasks pending ($failed_pending, >=$_fid), task-fixer $_fid idle. Kicking off."
           tg "👁 *WATCHDOG*: Kicking off task-fixer $_fid ($failed_pending failed tasks)"
-          SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/task-fixer.sh" "$_fid" >> "$_fixer_log" 2>&1 &
+          if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
+            log "DRY-RUN: Would kick off task-fixer $_fid"
+          else
+            SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/task-fixer.sh" "$_fid" >> "$_fixer_log" 2>&1 &
+          fi
         fi
       fi
     done
@@ -1216,7 +1230,11 @@ elif $agent_auth_ok && ! $pipeline_paused; then
       date +%s > "$last_kick_file"
       log "Project-driver idle (backlog: $backlog_count). Kicking off."
       tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)"
-      SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+      if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
+        log "DRY-RUN: Would kick off project-driver"
+      else
+        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+      fi
     fi
   fi
 fi
@@ -1258,6 +1276,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     else
       log "WARNING: WAL checkpoint failed"
     fi
+    # Prune events older than 7 days to prevent unbounded table growth
+    db_prune_old_events 7
   fi
 
   # (b) Stale worktree cleanup — remove worktrees with no corresponding worker lock

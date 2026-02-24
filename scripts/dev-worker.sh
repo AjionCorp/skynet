@@ -125,9 +125,9 @@ cleanup_on_exit() {
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || true
+      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed — task may remain stuck as claimed"
     fi
-    db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: unexpected exit — $_CURRENT_TASK_TITLE"
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
@@ -313,7 +313,7 @@ EOF
 
   # Write current task status for this worker
   task_start_epoch=$(date +%s)
-  db_set_worker_status "$WORKER_ID" "dev" "in_progress" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || true
+  db_set_worker_status "$WORKER_ID" "dev" "in_progress" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
   cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
 ## $task_title
@@ -333,7 +333,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
-        [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
@@ -343,7 +343,7 @@ EOF
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
@@ -357,7 +357,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
-        [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
@@ -367,7 +367,7 @@ EOF
       log "Failed to create worktree for $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
@@ -409,6 +409,18 @@ If you encounter a blocker you cannot resolve (missing API keys, unclear require
 
 ${SKYNET_WORKER_CONVENTIONS:-}"
 
+  # --- Dry-run mode: skip agent execution ---
+  if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
+    log "DRY-RUN: Would execute agent for task: $task_title"
+    log "DRY-RUN: Skipping agent execution, unclaiming task"
+    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
+    _stop_heartbeat
+    cleanup_worktree "$branch_name"
+    continue
+  fi
+
   (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
   _stop_heartbeat
   if [ "$exit_code" -eq 124 ]; then
@@ -421,7 +433,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree "$branch_name"
-    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed after claude failure — dashboard may show stale status"
     emit_event "worker_idle" "Worker $WORKER_ID: claude failed — $task_title"
     _CURRENT_TASK_TITLE=""
@@ -449,8 +461,8 @@ EOF
       emit_event "task_failed" "Worker $WORKER_ID: $task_title (worktree missing)"
       tasks_failed=$((tasks_failed + 1))
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || true
-      db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: worktree missing — $task_title"
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -505,8 +517,8 @@ EOF
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree  # Keep branch for task-fixer
-    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || true
-    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || true
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: gate failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
@@ -550,8 +562,8 @@ EOF
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: bash-n)"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree
-    [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || true
-    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || true
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: bash-n failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
@@ -569,7 +581,7 @@ EOF
   # --- Graceful shutdown checkpoint (before merge) ---
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested before merge — unclaiming task and exiting cleanly"
-    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
 
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
@@ -603,7 +615,7 @@ EOF
   _worker_state_commit() {
     # SQLite: mark task completed
     if [ -n "${_db_task_id:-}" ]; then
-      db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || true
+      db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || log "WARNING: db_complete_task failed — task may not be recorded as completed"
     fi
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       # Regenerate state files from SQLite (authoritative source)
@@ -663,7 +675,7 @@ WEOF
       log "MERGE FAILED for $branch_name — moving to failed."
       emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -676,9 +688,9 @@ WEOF
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)" || true
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)" || true
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files || true
-      db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || true
+      db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title" || true
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -689,7 +701,7 @@ WEOF
       # Critical failure (revert failed, main may be broken)
       tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken" || true
       emit_event "revert_failed" "Worker $WORKER_ID: $task_title — critical merge failure" || true
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       exit 1
@@ -697,7 +709,7 @@ WEOF
     4)
       # Merge lock contention
       emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title"
-      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
       db_export_state_files 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -706,7 +718,7 @@ WEOF
       ;;
     5)
       # Pull failed
-      [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       continue
@@ -716,7 +728,7 @@ WEOF
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (push failed)"
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -724,7 +736,7 @@ WEOF
       ;;
     7)
       # Smoke test failed (reverted + pushed)
-      [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || true
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -745,13 +757,13 @@ WEOF
   tasks_completed=$((tasks_completed + 1))
 
   # Reset worker to idle between tasks so dashboard shows accurate status
-  db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || true
+  db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
   # Reset progress epoch so next task starts fresh (prevents false hung-worker detection)
   db_update_progress "$WORKER_ID" 2>/dev/null || true
 done
 
 # Worker loop finished — ensure status is idle before exit
-db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || true
+db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
 
 log "Dev worker $WORKER_ID finished: $tasks_attempted attempted, $tasks_completed completed, $tasks_failed failed."
 emit_event "worker_session_end" "Worker $WORKER_ID: $tasks_completed completed, $tasks_failed failed of $tasks_attempted attempted"

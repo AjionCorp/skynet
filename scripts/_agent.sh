@@ -85,6 +85,12 @@ _load_plugin_as() {
   local prefix="$1"
   local plugin_path="$2"
 
+  # Safety: validate prefix is alphanumeric+underscore only (it's always a hardcoded
+  # internal value like "_claude", but defense-in-depth prevents injection if callers change)
+  case "$prefix" in
+    *[!a-zA-Z0-9_]*) log "ERROR: Invalid plugin prefix '$prefix'"; return 1 ;;
+  esac
+
   if [ ! -f "$plugin_path" ]; then
     eval "${prefix}_agent_check() { return 1; }"
     eval "${prefix}_agent_run() { echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent plugin not found: $plugin_path\" >> \"\${2:-/dev/null}\"; return 1; }"
@@ -108,7 +114,10 @@ _load_plugin_as() {
     agent_check() { return 0; }
   fi
 
-  # Rename into prefixed functions
+  # Rename functions under prefixed names. sed "1s/..." only modifies the declaration
+  # line (always "agent_check ()"), not the function body, so internal string matches
+  # are safe. eval is required because bash 3.2 lacks nameref for dynamic function names.
+  # Prefix values are hardcoded constants ("_claude", "_codex", "_gemini") validated above.
   eval "$(declare -f agent_check | sed "1s/agent_check/${prefix}_agent_check/")"
   eval "$(declare -f agent_run | sed "1s/agent_run/${prefix}_agent_run/")"
 

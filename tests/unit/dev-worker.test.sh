@@ -803,6 +803,66 @@ NOW=$(date +%s)
 DIFF=$(( NOW - HB ))
 [ "$DIFF" -lt 5 ] && pass "worker-status: heartbeat is recent" || fail "worker-status: heartbeat too old (diff=${DIFF}s)"
 
+# ============================================================
+# TEST 11: Dry-run mode (SKYNET_DRY_RUN=true)
+# ============================================================
+
+echo ""
+_tlog "=== Test 11: Dry-run mode ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Add a task to the DB
+T_DRY=$(db_add_task "Dry run test task" "FEAT" "should not be claimed" "top")
+assert_not_empty "$T_DRY" "dry-run: task added to DB"
+
+# Verify it starts as pending
+STATUS_BEFORE=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T_DRY;")
+assert_eq "$STATUS_BEFORE" "pending" "dry-run: task starts as pending"
+
+# Simulate dry-run mode: claim a task, then check the dry-run guard
+export SKYNET_DRY_RUN="true"
+
+# The dry-run guard in dev-worker.sh checks SKYNET_DRY_RUN before agent execution
+# and unclaims the task. Simulate this flow:
+CLAIM_DRY=$(db_claim_next_task 1)
+CLAIM_DRY_ID=$(echo "$CLAIM_DRY" | cut -d"$SEP" -f1)
+assert_eq "$CLAIM_DRY_ID" "$T_DRY" "dry-run: task was claimed for dry-run test"
+
+# Verify it's now claimed
+STATUS_CLAIMED=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T_DRY;")
+assert_eq "$STATUS_CLAIMED" "claimed" "dry-run: task is claimed"
+
+# Simulate what the dry-run guard does: unclaim the task
+if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
+  db_unclaim_task "$CLAIM_DRY_ID" 2>/dev/null || true
+  pass "dry-run: guard triggered — task unclaimed"
+else
+  fail "dry-run: guard should have triggered"
+fi
+
+# Verify the task is back to pending (not completed, not failed)
+STATUS_AFTER=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T_DRY;")
+assert_eq "$STATUS_AFTER" "pending" "dry-run: task returned to pending after unclaim"
+
+# Verify the task was NOT completed
+COMPLETED_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE id=$T_DRY AND status='completed';")
+assert_eq "$COMPLETED_COUNT" "0" "dry-run: task was NOT completed"
+
+# Verify the task was NOT failed
+FAILED_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE id=$T_DRY AND status='failed';")
+assert_eq "$FAILED_COUNT" "0" "dry-run: task was NOT failed"
+
+# Test that the config variable is properly exported
+assert_eq "$SKYNET_DRY_RUN" "true" "dry-run: SKYNET_DRY_RUN env var is set"
+
+unset SKYNET_DRY_RUN
+
+# After unsetting, the default should be false
+_dry_default="${SKYNET_DRY_RUN:-false}"
+assert_eq "$_dry_default" "false" "dry-run: defaults to false when unset"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

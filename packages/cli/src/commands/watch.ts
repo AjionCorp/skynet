@@ -9,7 +9,7 @@ interface WatchOptions {
   dir?: string;
 }
 
-const STALE_THRESHOLD_SECONDS = 45 * 60;
+const STALE_THRESHOLD_SECONDS = 30 * 60;
 
 // ANSI color codes
 const GREEN = "\x1b[32m";

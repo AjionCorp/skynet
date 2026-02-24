@@ -165,9 +165,10 @@ _acquire_file_lock() {
     ' "$lockfile" "$timeout" "$_ready_pipe" &
     _FLOCK_PID=$!
 
-    # Wait for ready signal
+    # Wait for ready signal (with timeout slightly longer than perl lock timeout
+    # to avoid hanging forever if perl crashes before writing to the pipe)
     local _result
-    _result=$(cat "$_ready_pipe" 2>/dev/null || echo "ERROR")
+    _result=$(run_with_timeout "$((timeout + 5))" cat "$_ready_pipe" 2>/dev/null || echo "ERROR")
     rm -f "$_ready_pipe"
 
     if [ "$_result" = "LOCKED" ]; then

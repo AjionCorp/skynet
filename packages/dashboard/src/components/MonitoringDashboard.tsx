@@ -447,8 +447,8 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         }
         setStatus(json.data);
         setError(null);
-      } catch {
-        /* ignore malformed frames */
+      } catch (err) {
+        console.error('[SSE] Failed to parse event data:', err, 'raw:', event.data?.substring(0, 200));
       } finally {
         setLoading(false);
       }

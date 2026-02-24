@@ -53,7 +53,7 @@ export SKYNET_MAIN_BRANCH="${SKYNET_MAIN_BRANCH:-main}"
 export SKYNET_MAX_WORKERS="${SKYNET_MAX_WORKERS:-4}"
 export SKYNET_MAX_FIXERS="${SKYNET_MAX_FIXERS:-3}"
 export SKYNET_MAX_TASKS_PER_RUN="${SKYNET_MAX_TASKS_PER_RUN:-5}"
-export SKYNET_STALE_MINUTES="${SKYNET_STALE_MINUTES:-45}"
+export SKYNET_STALE_MINUTES="${SKYNET_STALE_MINUTES:-30}"
 export SKYNET_AGENT_TIMEOUT_MINUTES="${SKYNET_AGENT_TIMEOUT_MINUTES:-45}"
 export SKYNET_MAX_FIX_ATTEMPTS="${SKYNET_MAX_FIX_ATTEMPTS:-3}"
 export SKYNET_FIXER_IGNORE_USAGE_LIMIT="${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-true}"
@@ -93,6 +93,10 @@ export SKYNET_DB_SLOW_QUERY_MS="${SKYNET_DB_SLOW_QUERY_MS:-100}"
 export SKYNET_LOCK_BACKEND="${SKYNET_LOCK_BACKEND:-file}"
 # Redis URL for distributed locking (only used when SKYNET_LOCK_BACKEND=redis)
 export SKYNET_REDIS_URL="${SKYNET_REDIS_URL:-}"
+
+# Dry-run mode: run the full pipeline loop without executing agents,
+# claiming tasks, or pushing to git. Useful for testing config changes.
+export SKYNET_DRY_RUN="${SKYNET_DRY_RUN:-false}"
 
 # Quality gates defaults (just typecheck by default)
 export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"

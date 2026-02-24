@@ -103,17 +103,17 @@ cleanup_on_exit() {
     local _claimed_fixer
     _claimed_fixer=$(_db "SELECT fixer_id FROM tasks WHERE id=$(_sql_int "$_db_task_id") AND status='fixing-$FIXER_ID';" 2>/dev/null || echo "")
     if [ "$_claimed_fixer" = "$FIXER_ID" ]; then
-      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
       db_export_state_files 2>/dev/null || true
       log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE (fixer $FIXER_ID)"
     fi
   elif [ -n "$_CURRENT_TASK_TITLE" ]; then
-    db_unclaim_failure "${_db_task_id:-0}" "$FIXER_ID" 2>/dev/null || true
+    db_unclaim_failure "${_db_task_id:-0}" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
     db_export_state_files 2>/dev/null || true
     log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
   fi
   # Ensure fixer status is idle on exit (normal or abnormal)
-  db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || true
+  db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale fixer status"
   emit_event "fixer_idle" "Fixer $FIXER_ID: exit handler (code $exit_code)" 2>/dev/null || true
   # Release PID lock
   rm -rf "$LOCKFILE"
@@ -181,8 +181,8 @@ if [ -n "$_db_failures" ]; then
     if ! echo "$_fattempts" | grep -Eq '^[0-9]+$'; then _fattempts=0; fi
     if [ "$_fattempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
       log "Task '$_ftitle' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
-      db_block_task "$_fid" 2>/dev/null || true
-      db_add_blocker "Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" "$_ftitle" 2>/dev/null || true
+      db_block_task "$_fid" 2>/dev/null || log "WARNING: db_block_task failed for task '$_ftitle' — task may remain in failed state"
+      db_add_blocker "Task '$_ftitle' failed $MAX_FIX_ATTEMPTS times. Needs human review. Error: $_ferror" "$_ftitle" 2>/dev/null || log "WARNING: db_add_blocker failed — blocker may not be recorded"
       tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $_ftitle"
       emit_event "task_blocked" "Fixer $FIXER_ID: $_ftitle (max attempts)"
       continue
@@ -213,8 +213,8 @@ fi
 # Check if max attempts reached
 if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   log "Task '$task_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
-  [ -n "$_db_task_id" ] && db_block_task "$_db_task_id" 2>/dev/null || true
-  [ -n "$_db_task_id" ] && db_add_blocker "Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Error: $error_summary" "$task_title" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && { db_block_task "$_db_task_id" 2>/dev/null || log "WARNING: db_block_task failed — task may remain in failed state"; }
+  [ -n "$_db_task_id" ] && { db_add_blocker "Task '$task_title' failed $MAX_FIX_ATTEMPTS times. Error: $error_summary" "$task_title" 2>/dev/null || log "WARNING: db_add_blocker failed — blocker may not be recorded"; }
   tg "🚫 *${SKYNET_PROJECT_NAME_UPPER} TASK-FIXER F${FIXER_ID}* task BLOCKED after $MAX_FIX_ATTEMPTS attempts — $task_title"
   emit_event "task_blocked" "Fixer $FIXER_ID: $task_title (max attempts)"
   log "Moved to blockers. Exiting."
@@ -246,7 +246,7 @@ fix_start_epoch=$(date +%s)
 # --- Set up worktree for the failed branch ---
 _handle_worktree_failure() {
   log "Failed to create worktree for $branch_name (${WORKTREE_LAST_ERROR:-unknown}). Returning task to pending."
-  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
+  [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
   _CURRENT_TASK_TITLE=""
   emit_event "fixer_idle" "Fixer $FIXER_ID: worktree failure (${WORKTREE_LAST_ERROR:-unknown})"
   exit 0
@@ -389,7 +389,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
 # --- Graceful shutdown checkpoint (before fix attempt) ---
 if $SHUTDOWN_REQUESTED; then
   log "Shutdown requested before fix attempt — unclaiming and exiting cleanly"
-  [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+  [ -n "$_db_task_id" ] && { db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"; }
   _CURRENT_TASK_TITLE=""
   cleanup_worktree "$branch_name"
   emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown before fix attempt"
@@ -401,7 +401,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested after fix — unclaiming and exiting cleanly"
     cleanup_worktree
-    db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+    db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown after fix"
     exit 0
@@ -466,7 +466,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     log "GATE FAILED: $_gate_failed. Branch NOT merged."
     cleanup_worktree  # Keep branch for next attempt
     new_attempts=$((fix_attempts + 1))
-    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" || true
+    [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "$_gate_label failed after fix attempt $new_attempts" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
     _CURRENT_TASK_TITLE=""
     db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
   else
@@ -474,7 +474,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     if $SHUTDOWN_REQUESTED; then
       log "Shutdown requested before merge — reverting claim and exiting cleanly"
       cleanup_worktree  # Keep branch for next attempt
-      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
       _CURRENT_TASK_TITLE=""
       emit_event "fixer_idle" "Fixer $FIXER_ID: shutdown before merge"
       exit 0
@@ -502,7 +502,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       _fix_new_attempts=$((fix_attempts + 1))
       fix_duration_secs=$(( $(date +%s) - fix_start_epoch ))
       _fix_duration=$(format_duration $fix_duration_secs)
-      [ -n "$_db_task_id" ] && db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || true
+      [ -n "$_db_task_id" ] && { db_fix_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$_fix_new_attempts" "$error_summary" || log "WARNING: db_fix_task failed — task may not be recorded as fixed"; }
       # Regenerate state files from SQLite (authoritative source)
       db_export_state_files 2>/dev/null || true
 
@@ -534,7 +534,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       1)
         # Merge conflict
         log "MERGE FAILED for $branch_name after rebase recovery — keeping as failed."
-        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || true
+        [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "merge conflict after fix attempt $new_attempts" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
         _CURRENT_TASK_TITLE=""
         tg "❌ *$SKYNET_PROJECT_NAME_UPPER FIX MERGE FAILED*: $task_title (attempt $new_attempts)"
         emit_event "fix_merge_failed" "Fixer $FIXER_ID: $task_title"
@@ -544,7 +544,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         # Typecheck failed post-merge (already reverted + pushed)
         emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (typecheck failed post-merge)"
         tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (typecheck failed post-merge)"
-        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || true
+        [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "typecheck failed post-merge" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
         _CURRENT_TASK_TITLE=""
         db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
         ;;
@@ -558,28 +558,28 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
         # Merge lock contention — do not increment attempts (infra issue, not fix failure)
         emit_event "merge_lock_contention" "Fixer $FIXER_ID: $task_title"
         cleanup_worktree
-        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || true
+        [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "$error_summary" "$fix_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
         _CURRENT_TASK_TITLE=""
         emit_event "fixer_idle" "Fixer $FIXER_ID: merge lock contention"
         exit 0
         ;;
       5)
         # Pull failed
-        [ -n "$_db_task_id" ] && db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || true
+        [ -n "$_db_task_id" ] && { db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"; }
         _CURRENT_TASK_TITLE=""
         ;;
       6)
         # Push failed (reverted + pushed revert)
         tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} FIXER REVERTED*: $task_title (push failed)"
         emit_event "fix_reverted" "Fixer $FIXER_ID: $task_title (push failed post-merge)"
-        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || true
+        [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "push failed post-merge" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
         db_export_state_files 2>/dev/null || true
         _CURRENT_TASK_TITLE=""
         db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true
         ;;
       7)
         # Smoke test failed (reverted + pushed)
-        [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "smoke test failed after fix" "$new_attempts" "failed" || true
+        [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "smoke test failed after fix" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
         db_export_state_files 2>/dev/null || true
         _CURRENT_TASK_TITLE=""
         tg "🔄 *$SKYNET_PROJECT_NAME_UPPER FIXER REVERTED*: $task_title (smoke test failed)"
@@ -597,7 +597,7 @@ else
   if [ "${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-false}" = "true" ] && usage_limit_hit "$LOG"; then
     log "Usage limit detected — not counting failure toward cooldown/attempts."
     cleanup_worktree  # Keep branch for next attempt
-    [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || true
+    [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
     emit_event "fixer_idle" "Fixer $FIXER_ID: usage limit hit"
@@ -610,7 +610,7 @@ else
 
   cleanup_worktree  # Keep branch for next attempt
   new_attempts=$((fix_attempts + 1))
-  [ -n "$_db_task_id" ] && db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" || true
+  [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "$error_summary (fix attempt $new_attempts failed)" "$new_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
 
   _CURRENT_TASK_TITLE=""
   db_add_fixer_stat "failure" "$task_title" "$FIXER_ID" 2>/dev/null || true

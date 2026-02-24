@@ -855,6 +855,45 @@ assert_eq "$STRESS8_DOUBLE_CLAIMS" "0" "stress8: 0 double-claims detected"
 STRESS8_UNCLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='pending';")
 assert_eq "$STRESS8_UNCLAIMED" "0" "stress8: 0 unclaimed tasks remain"
 
+# ============================================================
+# TEST: db_detect_circular_deps
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== db_detect_circular_deps ==="
+
+# Clean slate
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Non-circular: A blocks B, B blocks C (linear chain, no cycle)
+db_add_task "Lin A" "TEST" "" "bottom" >/dev/null
+db_add_task "Lin B" "TEST" "" "bottom" "Lin A" >/dev/null
+db_add_task "Lin C" "TEST" "" "bottom" "Lin B" >/dev/null
+
+CIRC_NONE=$(db_detect_circular_deps)
+assert_empty "$CIRC_NONE" "db_detect_circular_deps: no cycles in linear chain"
+
+# Circular: X blocks Y, Y blocks X
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Cycle X" "TEST" "" "bottom" "Cycle Y" >/dev/null
+db_add_task "Cycle Y" "TEST" "" "bottom" "Cycle X" >/dev/null
+
+CIRC_FOUND=$(db_detect_circular_deps)
+assert_not_empty "$CIRC_FOUND" "db_detect_circular_deps: detects X<->Y cycle"
+
+# ============================================================
+# TEST: db_explain_claim returns non-empty query plan
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== db_explain_claim (extended) ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Explain plan task" "FEAT" "" "top" >/dev/null
+EPLAN=$(db_explain_claim 1)
+assert_not_empty "$EPLAN" "db_explain_claim: returns non-empty query plan"
+assert_contains "$EPLAN" "SCAN" "db_explain_claim: plan contains SCAN operation"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

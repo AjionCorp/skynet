@@ -367,11 +367,37 @@ db_count_by_status() {
   _db "SELECT COUNT(*) FROM tasks WHERE status = '$status';"
 }
 
+# --- Retry wrapper for critical mutations under SQLITE_BUSY ---
+# Retries a function up to 3 times with jitter on failure.
+# Usage: _db_retry <function_name> [args...]
+_db_retry() {
+  local func="$1"; shift
+  local attempt=1
+  local max_attempts=3
+  local rc=0
+  local output=""
+  while [ "$attempt" -le "$max_attempts" ]; do
+    output=$("$func" "$@") && rc=0 || rc=$?
+    if [ "$rc" -eq 0 ]; then
+      [ -n "$output" ] && printf '%s\n' "$output"
+      return 0
+    fi
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      local jitter=$(( RANDOM % 3 + 1 ))
+      log "RETRY: $func failed (attempt $attempt/$max_attempts), retrying in ${jitter}s..." 2>/dev/null || true
+      sleep "$jitter"
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$output" ] && printf '%s\n' "$output"
+  return "$rc"
+}
+
 # Find + atomically claim the next unblocked pending task for a worker.
 # Output: id|title|tag|description|branch  or empty string if none available.
 # Uses a single SQL statement with BEGIN IMMEDIATE + recursive CTE to resolve
 # blocker dependencies and claim atomically — no race window between check and claim.
-db_claim_next_task() {
+_db_claim_next_task_inner() {
   local worker_id; worker_id=$(_sql_int "$1")
 
   # ── Claim Algorithm ──────────────────────────────────────────────
@@ -427,6 +453,7 @@ db_claim_next_task() {
     _db_sep "SELECT id, title, tag, description, branch FROM tasks WHERE worker_id = $worker_id AND status = 'claimed' ORDER BY claimed_at DESC LIMIT 1;"
   fi
 }
+db_claim_next_task() { _db_retry _db_claim_next_task_inner "$@"; }
 
 # Diagnostic: show query plan for the claim CTE.
 # Usage: db_explain_claim 1
@@ -484,7 +511,7 @@ db_unclaim_task_by_title() {
 }
 
 # Complete a task (successful merge)
-db_complete_task() {
+_db_complete_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" duration="$3" duration_secs; duration_secs=$(_sql_int "${4:-0}")
   local notes="${5:-success}"
@@ -500,9 +527,10 @@ db_complete_task() {
     WHERE id=$task_id AND status='claimed';
   "
 }
+db_complete_task() { _db_retry _db_complete_task_inner "$@"; }
 
 # Record task failure
-db_fail_task() {
+_db_fail_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" error="$3"
   local _cur_status; _cur_status=$(_get_task_status "$task_id")
@@ -515,6 +543,7 @@ db_fail_task() {
     WHERE id=$task_id AND (status='claimed' OR status LIKE 'fixing-%' OR status='completed');
   "
 }
+db_fail_task() { _db_retry _db_fail_task_inner "$@"; }
 
 # Add a new task. Echoes the new task ID.
 db_add_task() {
@@ -1037,10 +1066,48 @@ db_export_state_files() {
 }
 
 # ============================================================
+# DIAGNOSTICS
+# ============================================================
+
+# Detect circular blocked_by dependencies (A blocks B, B blocks A).
+# Returns rows of "task_id|path" for tasks involved in cycles, or empty if none.
+# Uses a recursive CTE with depth limit to walk the dependency graph.
+# origin_id tracks the starting task through the chain so we detect when the
+# walk returns to its starting point.
+db_detect_circular_deps() {
+  _db "
+    WITH RECURSIVE dep_chain(origin_id, cur_title, dep_title, path, depth) AS (
+      SELECT id, title,
+        TRIM(SUBSTR(blocked_by, 1, INSTR(blocked_by || ',', ',') - 1)),
+        title, 1
+      FROM tasks WHERE status = 'pending' AND blocked_by != ''
+      UNION ALL
+      SELECT dc.origin_id, t.title,
+        TRIM(SUBSTR(t.blocked_by, 1, INSTR(t.blocked_by || ',', ',') - 1)),
+        dc.path || ' -> ' || t.title, dc.depth + 1
+      FROM dep_chain dc
+      JOIN tasks t ON t.title = dc.dep_title AND t.status = 'pending' AND t.blocked_by != ''
+      WHERE dc.depth < 10
+    )
+    SELECT DISTINCT origin_id, path || ' -> ' || dep_title FROM dep_chain
+    WHERE dep_title = (SELECT title FROM tasks WHERE id = origin_id);
+  "
+}
+
+# ============================================================
 # MAINTENANCE
 # ============================================================
 
-# Run integrity check, optimize, optional VACUUM, and WAL checkpoint.
+# Prune events older than N days (default 7). Returns silently on no-op.
+db_prune_old_events() {
+  local days="${1:-7}"
+  local cutoff_epoch=$(( $(date +%s) - days * 86400 ))
+  local deleted
+  deleted=$(_db "DELETE FROM events WHERE epoch < $cutoff_epoch; SELECT changes();")
+  [ "${deleted:-0}" -gt 0 ] && log "Pruned $deleted events older than ${days} days" 2>/dev/null || true
+}
+
+# Run integrity check, optimize, optional VACUUM, WAL checkpoint, and event pruning.
 # Returns 0 on success, 1 if integrity check fails.
 db_maintenance() {
   [ ! -f "$DB_PATH" ] && { log "ERROR: db_maintenance — database not found"; return 1; }
@@ -1071,6 +1138,19 @@ db_maintenance() {
 
   # Step 4: WAL checkpoint
   _db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || true
+
+  # Step 5: Check for circular blocked_by dependencies
+  local circular
+  circular=$(db_detect_circular_deps 2>/dev/null) || true
+  if [ -n "$circular" ]; then
+    log "WARNING: Circular blocked_by dependencies detected — these tasks will never be claimed:"
+    echo "$circular" | while IFS= read -r _line; do
+      log "  circular dep: $_line"
+    done
+  fi
+
+  # Step 6: Prune old events
+  db_prune_old_events 7
 
   return 0
 }

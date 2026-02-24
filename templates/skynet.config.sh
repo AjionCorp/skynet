@@ -21,6 +21,10 @@ export SKYNET_TYPECHECK_CMD="pnpm typecheck"  # Type-check command, also used as
 export SKYNET_LINT_CMD="pnpm lint"            # Lint command (not used as a gate by default)
 export SKYNET_INSTALL_CMD="pnpm install --frozen-lockfile"  # Package install command — change for npm/yarn/bun projects
 
+# Dry-run mode: set to "true" to run the full pipeline loop without executing
+# agents, claiming tasks, or pushing to git. Useful for testing config changes.
+# SKYNET_DRY_RUN="true"
+
 # ---- Quality Gates (run in order before merge) ----
 # Define quality gates as numbered SKYNET_GATE_N variables.
 # Each gate is a command run from the worktree directory.

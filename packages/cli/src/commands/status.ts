@@ -11,7 +11,7 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
-const STALE_THRESHOLD_SECONDS = 45 * 60;
+const STALE_THRESHOLD_SECONDS = 30 * 60;
 
 function decodeJwtExp(token: string): number | null {
   try {

@@ -49,6 +49,9 @@ jobs:
       - run: bash tests/unit/merge.test.sh
       - run: bash tests/unit/dev-worker.test.sh
       - run: bash tests/unit/task-fixer.test.sh
+      - run: bash tests/unit/db-backup-restore.test.sh
+      - run: bash tests/unit/auth-check.test.sh
+      - run: bash tests/unit/redis-lock.test.sh
 
   lint-sh:
     runs-on: ubuntu-latest
