@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | dev/add-keyboard-shortcuts-to-dashboard | worktree missing before gates | 0 | failed |
 | 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | failed |
 | 2026-02-20 | [TEST] Add EventsDashboard component tests | merged to main | merge conflict | 1 | fixed |
 | 2026-02-20 | [FIX] Fix codex.sh to pipe prompt via stdin instead of CLI argument | fix/fix-codexsh-to-pipe-prompt-via-stdin-ins | typecheck failed after fix attempt 3 | 3 | fixed |

@@ -80,23 +80,16 @@
 
 - **2026-02-20 20:00**: Watchdog auto-supersede exact title matching couldn't catch variant titles. **Fixed** — `_normalize_title()` function added to strip tags, "FRESH implementation" suffix, lowercase, and compare first 50 chars. (Uncommitted in working directory, pending commit task.)
 
-- **2026-02-20 20:00**: CLI `isProcessRunning`/`readFile` DRY extraction. **Fixed** — shared utilities created in `packages/cli/src/utils/`, all 7 CLI files updated to import. (Uncommitted in working directory, pending commit task.)
+- **2026-02-20 20:00**: CLI `isProcessRunning`/`readFile` DRY extraction. **Fixed** — shared utilities created in `packages/cli/src/utils/`, all 7 CLI files updated to import.
+
+- **2026-02-24**: All previously-active blockers from 2026-02-20 confirmed resolved. Orphaned working directory changes committed (git status clean). Shell injection in `config set` fixed (no `execSync`). Health score and `SKYNET_STALE_MINUTES` parity fixed across CLI/dashboard/watchdog. All 21 stale pending entries cleared (0 pending/blocked in failed-tasks.md). Config template includes all discoverable knobs.
 
 ## Active
 
-
-- **2026-02-20 22:00**: Working directory on `main` has ~20 files with correct but uncommitted changes from killed workers. Includes DRY extraction (isProcessRunning/readFile), watchdog auto-supersede improvement, config template INSTALL_CMD, and E2E tests. All changes pass typecheck. Highest-priority task queued to verify and commit.
-
-- **2026-02-20 22:00**: Shell injection vulnerability in `skynet config set` — `execSync` with template literal passes user input to shell. Queued as P2 security fix.
-
-- **2026-02-20 22:00**: Health score formula mismatch — watchdog.sh omits `staleTasks24h * 1` deduction present in CLI/dashboard. Alerts fire at a different score than what users see.
-
-- **2026-02-20 22:00**: `status.ts`, `watch.ts`, and `pipeline-status.ts` all hardcode stale heartbeat threshold to 45 minutes instead of reading `SKYNET_STALE_MINUTES` from config. `doctor.ts` correctly reads config.
-
-- **2026-02-20 22:00**: 21 stale `pending` entries in failed-tasks.md — 12+ are for already-completed tasks (isProcessRunning DRY x5, Node.js README x2, INSTALL_CMD, codex.sh stdin, auto-supersede x2, files field). Task-fixer wastes cycles retrying these. Auto-supersede with fuzzy matching is implemented but uncommitted. Once commit task lands, watchdog should clear them.
+_No active blockers._
 
 ## Mission Status
 
-All 6 mission success criteria evaluate as **MET** (as of 2026-02-20). 224+ tasks completed, 97% self-correction rate. Pipeline is in final hardening/polish phase.
+All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 530+ tasks completed, 97% self-correction rate, 0 active retries. Pipeline is in polish/portability phase.
 
-**Current focus**: (1) Commit orphaned working directory changes — this is the critical unblock that enables auto-supersede of 12+ stale failed entries. (2) Fix shell injection vulnerability. (3) Align health score formula and STALE_MINUTES reading across all components. (4) Complete config template coverage for remaining undiscoverable variables. Typecheck passes clean (0 errors) — all worker merges are unblocked.
+**Current focus**: (1) Test coverage for core scripts — dev-worker.sh and task-fixer.sh have zero shell tests. (2) Configurability — quality gates are hardcoded to `pnpm typecheck`, blocking non-TypeScript adoption. (3) Robustness — worker context size guardrail, doctor auto-repair. (4) Quality gates — remaining telemetry parity tests.

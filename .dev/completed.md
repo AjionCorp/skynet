@@ -2,7 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
-| 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
+| 2026-02-24 | [FEAT] [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task search and tag filter to Tasks page | merged to main | 2m | success |
 | 2026-02-20 | [DOCS] Update README CLI reference with run, watch, upgrade, and metrics commands | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add pipeline velocity metrics to project-driver.sh prompt context | merged to main | 0m | echo 0)`, `total_completed=$(grep -c '^ |
