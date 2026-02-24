@@ -63,7 +63,8 @@ export function createEventsHandler(config: SkynetConfig) {
 
         const detail = parts.slice(2).join("|");
         const workerMatch = detail.match(/^(?:Worker|Fixer)\s+(\d+):/);
-        const worker = workerMatch ? Number(workerMatch[1]) : undefined;
+        const rawWorker = workerMatch ? Number(workerMatch[1]) : undefined;
+        const worker = rawWorker !== undefined && rawWorker >= 0 && rawWorker <= 999 ? rawWorker : undefined;
 
         entries.push({
           ts: new Date(epoch * 1000).toISOString(),

@@ -891,10 +891,28 @@ WEOF
       ;;
   esac
 
-  # OPS-P1-3: Clear claim tracker for this task on successful completion
+  # OPS-P1-3: Clear claim tracker for this task on successful completion.
+  # P0-FIX: Wrap in the same mkdir lock used for claim tracker reads (lines 337-384)
+  # to prevent concurrent workers from overwriting each other's pruning.
   if [ -n "${_db_task_id:-}" ] && [ -f "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" ]; then
-    grep -v "|${_db_task_id}$" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" > "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" 2>/dev/null || true
-    mv "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" 2>/dev/null || true
+    _ct_cleanup_lock="/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.lock"
+    _ct_cleanup_locked=false
+    _ct_cleanup_i=0
+    while [ "$_ct_cleanup_i" -lt 5 ]; do
+      if mkdir "$_ct_cleanup_lock" 2>/dev/null; then
+        _ct_cleanup_locked=true
+        break
+      fi
+      _ct_cleanup_i=$((_ct_cleanup_i + 1))
+      perl -e 'select(undef,undef,undef,0.1)' 2>/dev/null || sleep 1
+    done
+    if $_ct_cleanup_locked; then
+      grep -v "|${_db_task_id}$" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" > "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" 2>/dev/null || true
+      mv "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" 2>/dev/null || true
+      rmdir "$_ct_cleanup_lock" 2>/dev/null || rm -rf "$_ct_cleanup_lock" 2>/dev/null || true
+    else
+      log "WARNING: Claim tracker lock contention during cleanup — skipping prune for task $_db_task_id"
+    fi
   fi
 
   log "TRACE=$TRACE_ID Task completed"

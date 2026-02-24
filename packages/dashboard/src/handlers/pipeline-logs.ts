@@ -91,7 +91,9 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
           maxBuffer: 1_000_000,
         });
         const grepOutput = grepResult.stdout || "";
+        const grepTruncated = grepResult.error?.message?.includes("maxBuffer") ?? false;
         const allLines = grepOutput.split("\n").filter(Boolean);
+        if (grepTruncated) allLines.push("[...output truncated — results exceeded 1MB buffer]");
         output = allLines.slice(-lines).join("\n");
       } else {
         const tailResult = spawnSync("tail", ["-n", String(lines), logPath], {

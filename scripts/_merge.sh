@@ -231,18 +231,14 @@ do_merge_to_main() {
 
   _MERGE_STATE_COMMITTED=false
 
-  # --- Pre-lock pull: fetch latest main before acquiring the merge lock ---
-  # This reduces lock hold time because the post-lock pull will be a fast
-  # no-op (or near-instant) if no other worker pushed in between.
-  # NOTE: No --rebase flag — rebase can rewrite commits and cause issues
-  # when multiple workers are merging concurrently.
-  cd "$PROJECT_DIR"
-  git pull origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
-
   # --- Compute dynamic TTL (OPS-R21-P1-1) ---
   _compute_dynamic_merge_ttl
 
   # --- Acquire merge mutex ---
+  # NOTE: Pre-lock pull removed (P1-FIX). The post-lock pull at line 267
+  # is authoritative. Pre-lock pull created a stale-main window where another
+  # worker could push between pre-lock pull and lock acquisition, causing
+  # unnecessary merge conflicts and rebase recovery cycles.
   if ! acquire_merge_lock; then
     local _ml_holder=""
     [ -f "$MERGE_LOCK/pid" ] && _ml_holder=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "unknown")
@@ -494,7 +490,11 @@ do_merge_to_main() {
       #   3. The next pull will re-incorporate the other worker's commit.
       # The hard reset is the last-resort recovery — do NOT remove it.
       log "WARNING: Executing git reset --hard to origin/$SKYNET_MAIN_BRANCH — local unpushed commits (if any) will be discarded. This is last-resort recovery after double push failure."
-      git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
+      if ! git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
+        log "CRITICAL: git fetch failed during last-resort recovery — local main may be diverged from origin"
+      elif ! git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
+        log "CRITICAL: git reset --hard failed during last-resort recovery — local main is in unknown state, manual intervention required"
+      fi
       _release_merge_lock_with_duration
       return 3
     fi
