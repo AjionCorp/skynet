@@ -481,6 +481,64 @@ describe("createPipelineStatusHandler", () => {
     expect(data.heartbeats["worker-1"].isStale).toBe(true);
   });
 
+  // ── TEST-P1-2: Heartbeat stale detection edge cases ─────────────────
+  it("handles heartbeat epoch = 0 without crashing", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "worker-1.heartbeat") return "0";
+      return "";
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig({ maxWorkers: 1 }));
+    const res = await handler();
+    const { data } = await res.json();
+    // epoch=0 (1970-01-01) should be treated as no heartbeat or extremely stale
+    const hb = data.heartbeats["worker-1"];
+    expect(hb).toBeDefined();
+    // epoch 0 will produce a huge ageMs (>50 years), so isStale should be true
+    if (hb.lastEpoch === 0) {
+      expect(hb.isStale).toBe(true);
+    } else {
+      // Alternatively, implementation may treat 0 as null
+      expect(hb.lastEpoch).toBeNull();
+    }
+  });
+
+  it("handles very large heartbeat epoch values (far future)", async () => {
+    // Epoch for year 2100: ~4102444800
+    const futureEpoch = 4102444800;
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "worker-1.heartbeat") return String(futureEpoch);
+      return "";
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig({ maxWorkers: 1 }));
+    const res = await handler();
+    const { data } = await res.json();
+    const hb = data.heartbeats["worker-1"];
+    expect(hb).toBeDefined();
+    // A future epoch produces negative ageMs — should NOT be considered stale
+    if (hb.ageMs !== null) {
+      expect(hb.ageMs).toBeLessThan(0);
+    }
+    expect(hb.isStale).toBe(false);
+  });
+
+  it("handles heartbeat with non-numeric content gracefully", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "worker-1.heartbeat") return "not-a-number";
+      return "";
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig({ maxWorkers: 1 }));
+    const res = await handler();
+    const { data } = await res.json();
+    const hb = data.heartbeats["worker-1"];
+    expect(hb).toBeDefined();
+    // Non-numeric epoch should be treated as null/missing
+    expect(hb.lastEpoch).toBeNull();
+    expect(hb.isStale).toBe(false);
+  });
+
   it("populates currentTasks from per-worker files when present", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
       if (filename === "current-task-2.md") {
@@ -812,6 +870,24 @@ describe("parseDurationMinutes edge cases", () => {
   it("returns null for units without numbers", () => {
     expect(parseDurationMinutes("h")).toBeNull();
     expect(parseDurationMinutes("m")).toBeNull();
+  });
+});
+
+// ── TEST-P2-2: Duration parsing whitespace variations ────────────────
+describe("parseDurationMinutes whitespace variations", () => {
+  it("parses double-space between hours and minutes (\\s+ matches)", () => {
+    // "1h  12m" — \s+ in the regex matches multiple whitespace chars
+    expect(parseDurationMinutes("1h  12m")).toBe(72);
+  });
+
+  it("returns null for leading/trailing whitespace", () => {
+    // " 1h 12m " — anchors (^ and $) reject leading/trailing spaces
+    expect(parseDurationMinutes(" 1h 12m ")).toBeNull();
+  });
+
+  it("parses leading zeros in hours/minutes (\\d+ matches)", () => {
+    // "01h 012m" — \d+ matches digits including leading zeros; Number() strips them
+    expect(parseDurationMinutes("01h 012m")).toBe(72);
   });
 });
 

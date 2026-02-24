@@ -218,4 +218,40 @@ describe("createMetricsHandler", () => {
       }
     }
   });
+
+  // TEST-P2-4: Partial failure — some DB calls succeed, others fail
+  it("returns valid prometheus output when some DB calls throw", async () => {
+    // countByStatus succeeds but calculateHealthScore and countActiveWorkers throw
+    mockDB.calculateHealthScore.mockImplementationOnce(() => {
+      throw new Error("health calc failed");
+    });
+
+    const GET = createMetricsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.text();
+
+    // Should still return 200 (Prometheus convention: always return what you can)
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toBe(
+      "text/plain; version=0.0.4; charset=utf-8"
+    );
+    // When calculateHealthScore throws, the entire try block fails, so we get skynet_up 0
+    expect(body).toContain("skynet_up 0");
+  });
+
+  it("returns skynet_up 0 when countByStatus throws mid-iteration", async () => {
+    // Simulate countByStatus throwing on one status
+    mockDB.countByStatus.mockImplementation((status: string) => {
+      if (status === "failed") throw new Error("DB locked for failed count");
+      return 0;
+    });
+
+    const GET = createMetricsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.text();
+
+    expect(res.status).toBe(200);
+    // The entire metrics block is in one try/catch, so partial failure = skynet_up 0
+    expect(body).toContain("skynet_up 0");
+  });
 });

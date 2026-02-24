@@ -84,4 +84,36 @@ describe("createMonitoringLogsHandler", () => {
     expect(mockSpawnSync).toHaveBeenCalledWith("grep", expect.arrayContaining(["-i", "error"]), expect.any(Object));
     expect(body.data.count).toBe(50);
   });
+
+  // TEST-P2-1: Empty/whitespace responses
+  it("returns empty lines when stdout is only whitespace", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "   \n  \n\n", stderr: "", status: 0 } as never);
+    const handler = createMonitoringLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "dev-worker-1" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.error).toBeNull();
+    // Lines array should contain the whitespace-only strings (not filtered out)
+    expect(body.data.lines).toBeDefined();
+  });
+
+  it("returns empty lines when both stdout and stderr are empty", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
+    const handler = createMonitoringLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "dev-worker-1" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.error).toBeNull();
+    expect(body.data.lines).toEqual([]);
+  });
+
+  it("returns empty lines when stderr is populated but stdout is empty", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "some error output", status: 1 } as never);
+    const handler = createMonitoringLogsHandler(makeConfig());
+    const res = await handler(makeRequest({ script: "dev-worker-1" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.error).toBeNull();
+    expect(body.data.lines).toEqual([]);
+  });
 });

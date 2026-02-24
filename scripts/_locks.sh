@@ -19,6 +19,15 @@ SKYNET_USE_FLOCK="${SKYNET_USE_FLOCK:-true}"
 # approach 10 minutes under load. 900s gives a safe margin.
 SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-900}"  # 15 minutes
 
+# P0-6: Lightweight disk space check before PID write.
+# Returns 0 if disk has >10MB free, 1 otherwise.
+# Uses POSIX df — no dependencies on _db.sh functions.
+_lock_check_disk_space() {
+  local _avail_mb
+  _avail_mb=$(df -Pm . 2>/dev/null | awk 'NR==2{print $4}')
+  [ -n "$_avail_mb" ] && [ "$_avail_mb" -gt 10 ] 2>/dev/null
+}
+
 # Acquire merge lock.
 # Delegates to the pluggable lock backend (file/redis).
 # Before delegating, checks for stale merge locks older than the TTL
@@ -77,6 +86,13 @@ acquire_worker_lock() {
   local label="$3"
 
   if mkdir "$lockfile" 2>/dev/null; then
+    # P0-6: Check disk space before PID write — if disk is full, the lock dir
+    # exists with no PID file, blocking all workers until watchdog reclaims it.
+    if ! _lock_check_disk_space; then
+      rmdir "$lockfile" 2>/dev/null || true
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] CRITICAL: Low disk space (<10MB) — skipping lock acquisition to prevent empty lock dir." >> "${logfile:-/dev/stderr}"
+      return 1
+    fi
     # OPS-P0-3: Atomic PID write — write to temp file then rename so readers
     # never see a partially-written or empty PID file.
     local _tmp_pid="${lockfile}/pid.$$"
@@ -89,18 +105,39 @@ acquire_worker_lock() {
     return 0
   fi
 
-  # Lock dir exists — check for stale lock (owner PID no longer running)
+  # Lock dir exists — check for stale lock (owner PID no longer running or PID reused)
   if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
-    local _existing_pid
+    local _existing_pid _lock_mtime _lock_age _stale_threshold
     _existing_pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+    # P0-3: PID reuse guard — also check lock mtime. If the PID is alive but
+    # the lock is older than the stale threshold, it is likely a reused PID from
+    # a dead process. Default 120s matches SKYNET_STALE_MINUTES * 60.
+    _stale_threshold="${SKYNET_WORKER_LOCK_STALE_SECS:-120}"
+    if [ "$(uname -s)" = "Darwin" ]; then
+      _lock_mtime=$(stat -f %m "$lockfile/pid" 2>/dev/null || echo 0)
+    else
+      _lock_mtime=$(stat -c %Y "$lockfile/pid" 2>/dev/null || echo 0)
+    fi
+    _lock_age=$(( $(date +%s) - _lock_mtime ))
     if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Already running (PID $_existing_pid). Exiting." >> "$logfile"
-      return 1
+      # PID is alive — but if lock is older than threshold, assume PID reuse
+      if [ "$_lock_age" -gt "$_stale_threshold" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Stale lock detected: PID $_existing_pid alive but lock age ${_lock_age}s > ${_stale_threshold}s (likely PID reuse). Reclaiming." >> "$logfile"
+      else
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Already running (PID $_existing_pid, age ${_lock_age}s). Exiting." >> "$logfile"
+        return 1
+      fi
     fi
     # Stale lock — reclaim atomically
     mv "$lockfile" "$lockfile.stale.$$" 2>/dev/null || true
     rm -rf "$lockfile.stale.$$" 2>/dev/null || true
     if mkdir "$lockfile" 2>/dev/null; then
+      # P0-6: Disk space check on stale-lock reclaim path
+      if ! _lock_check_disk_space; then
+        rmdir "$lockfile" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] CRITICAL: Low disk space (<10MB) — skipping lock acquisition to prevent empty lock dir." >> "${logfile:-/dev/stderr}"
+        return 1
+      fi
       # OPS-P0-3: Atomic PID write on stale-lock reclaim path
       local _tmp_pid="${lockfile}/pid.$$"
       if ! echo "$$" > "$_tmp_pid" 2>/dev/null || ! mv "$_tmp_pid" "$lockfile/pid" 2>/dev/null; then

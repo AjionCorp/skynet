@@ -77,7 +77,7 @@ format_duration() {
 }
 
 # --- Heartbeat helpers ---
-# Background loop writes epoch timestamp to .dev/worker-N.heartbeat every 60s
+# Background loop writes epoch timestamp to .dev/worker-N.heartbeat every 30s
 # so the watchdog can detect stuck workers even if the process is alive.
 HEARTBEAT_FILE="$DEV_DIR/worker-${WORKER_ID}.heartbeat"
 _heartbeat_pid=""
@@ -86,14 +86,14 @@ _start_heartbeat() {
   local _parent_pid=$$
   (
     # OPS-P0-1: Poll parent liveness every 5s so the subshell exits quickly
-    # after SIGKILL, but only write heartbeat every 60s to avoid DB churn.
+    # after SIGKILL, but only write heartbeat every 30s to reduce stale lock detection delay.
     local _hb_counter=0
     local _hb_last_epoch=0
     _hb_last_epoch=$(date +%s)
     while kill -0 "$_parent_pid" 2>/dev/null; do
       sleep 5
       _hb_counter=$((_hb_counter + 5))
-      if [ "$_hb_counter" -ge 60 ]; then
+      if [ "$_hb_counter" -ge 30 ]; then
         _hb_counter=0
         local _hb_now
         _hb_now=$(date +%s)
@@ -102,6 +102,12 @@ _start_heartbeat() {
         local _hb_delta=$((_hb_now - _hb_last_epoch))
         if [ "$_hb_delta" -lt 0 ] || [ "$_hb_delta" -gt 300 ]; then
           echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Clock skew detected in heartbeat (delta=${_hb_delta}s) — resetting" >> "${HEARTBEAT_FILE}.skew" 2>/dev/null || true
+          # SH-P2-3: Rotate .skew file to prevent unbounded growth
+          local _skew_lines
+          _skew_lines=$(wc -l < "${HEARTBEAT_FILE}.skew" 2>/dev/null || echo 0)
+          if [ "$_skew_lines" -gt 50 ]; then
+            tail -25 "${HEARTBEAT_FILE}.skew" > "${HEARTBEAT_FILE}.skew.tmp" 2>/dev/null && mv "${HEARTBEAT_FILE}.skew.tmp" "${HEARTBEAT_FILE}.skew" 2>/dev/null || rm -f "${HEARTBEAT_FILE}.skew.tmp" 2>/dev/null
+          fi
         fi
         _hb_last_epoch=$_hb_now
         date +%s > "$HEARTBEAT_FILE"

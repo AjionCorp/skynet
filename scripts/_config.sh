@@ -244,10 +244,24 @@ _validate_config_numerics() {
     eval "local val=\${${var_name}:-}"
     case "$val" in ''|*[!0-9]*) return ;; esac  # skip non-numeric
     if [ "$val" -lt "$min" ]; then
-      echo "ERROR: ${var_name}=${val} below minimum ${min} — clamping to ${min}. Update your config to silence this." >&2
+      local _msg="ERROR: ${var_name}=${val} below minimum ${min} — clamping to ${min}. Update your config to silence this."
+      echo "$_msg" >&2
+      # SH-P1-5: Also log to main log file so operators see clamping in persistent logs
+      if declare -f log >/dev/null 2>&1; then
+        log "$_msg"
+      elif [ -n "${SCRIPTS_DIR:-}" ] && [ -d "${SCRIPTS_DIR:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${SCRIPTS_DIR}/watchdog.log" 2>/dev/null || true
+      fi
       eval "export ${var_name}=${min}"
     elif [ "$val" -gt "$max" ]; then
-      echo "ERROR: ${var_name}=${val} above maximum ${max} — clamping to ${max}. Update your config to silence this." >&2
+      local _msg="ERROR: ${var_name}=${val} above maximum ${max} — clamping to ${max}. Update your config to silence this."
+      echo "$_msg" >&2
+      # SH-P1-5: Also log to main log file so operators see clamping in persistent logs
+      if declare -f log >/dev/null 2>&1; then
+        log "$_msg"
+      elif [ -n "${SCRIPTS_DIR:-}" ] && [ -d "${SCRIPTS_DIR:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${SCRIPTS_DIR}/watchdog.log" 2>/dev/null || true
+      fi
       eval "export ${var_name}=${max}"
     fi
   }
@@ -404,7 +418,15 @@ git_pull_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
   local backoff=1
+  local _gpr_start
+  _gpr_start=$(date +%s)
   while [ "$attempt" -le "$max_attempts" ]; do
+    # SH-P2-2: Cap total elapsed time across all retries to 180s
+    local _gpr_elapsed=$(( $(date +%s) - _gpr_start ))
+    if [ "$_gpr_elapsed" -gt 180 ]; then
+      log "ERROR: git pull total time exceeded 180s (${_gpr_elapsed}s) — aborting"
+      return 1
+    fi
     [ "$attempt" -gt 1 ] && log "git pull attempt $attempt/$max_attempts..."
     if run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git pull origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
@@ -425,7 +447,15 @@ git_push_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
   local backoff=1
+  local _gps_start
+  _gps_start=$(date +%s)
   while [ "$attempt" -le "$max_attempts" ]; do
+    # SH-P2-2: Cap total elapsed time across all retries to 180s
+    local _gps_elapsed=$(( $(date +%s) - _gps_start ))
+    if [ "$_gps_elapsed" -gt 180 ]; then
+      log "ERROR: git push total time exceeded 180s (${_gps_elapsed}s) — aborting"
+      return 1
+    fi
     [ "$attempt" -gt 1 ] && log "git push attempt $attempt/$max_attempts..."
     if run_with_timeout "$SKYNET_GIT_PUSH_TIMEOUT" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0

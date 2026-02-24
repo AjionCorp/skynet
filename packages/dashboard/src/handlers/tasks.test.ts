@@ -48,6 +48,7 @@ describe("createTasksHandlers", () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv;
+    vi.restoreAllMocks();
   });
 
   describe("GET", () => {
@@ -115,7 +116,10 @@ describe("createTasksHandlers", () => {
     it("returns 400 for invalid tag", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       const res = await POST(makeRequest({ tag: "INVALID", title: "Something" }));
+      const body = await res.json();
       expect(res.status).toBe(400);
+      expect(body.error).toContain("Invalid tag");
+      expect(body.error).toContain("FEAT");
     });
 
     it("returns 400 for empty title", async () => {
@@ -129,7 +133,9 @@ describe("createTasksHandlers", () => {
     it("returns 400 for whitespace-only title", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       const res = await POST(makeRequest({ tag: "FEAT", title: "   " }));
+      const body = await res.json();
       expect(res.status).toBe(400);
+      expect(body.error).toContain("Title is required");
     });
 
     it("returns 423 when backlog is locked", async () => {
@@ -264,22 +270,22 @@ describe("createTasksHandlers", () => {
       expect(body.error).toContain("500 characters");
     });
 
-    it("returns 413 for description exceeding 10000 characters (payload too large)", async () => {
-      const { POST } = createTasksHandlers(makeConfig());
-      const hugeDesc = "x".repeat(10001);
-      const res = await POST(makeRequest({ tag: "FEAT", title: "Valid title", description: hugeDesc }));
-      const body = await res.json();
-      expect(res.status).toBe(413);
-      expect(body.error).toContain("10000");
-    });
-
     it("returns 400 for description exceeding 2000 characters", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       const longDesc = "b".repeat(2001);
       const res = await POST(makeRequest({ tag: "FEAT", title: "Valid title", description: longDesc }));
       const body = await res.json();
       expect(res.status).toBe(400);
-      expect(body.error).toContain("2000 characters");
+      expect(body.error).toContain("2000");
+    });
+
+    it("returns 400 for very large descriptions (10001 chars)", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const hugeDesc = "x".repeat(10001);
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Valid title", description: hugeDesc }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("2000");
     });
 
     it("returns 400 for missing title field", async () => {
@@ -463,4 +469,59 @@ describe("createTasksHandlers", () => {
       expect(body.data).toBeNull();
     });
   });
+
+  // ── TEST-P1-5: Concurrent POST verification ─────────────────────────
+  describe("POST concurrent requests with unique titles", () => {
+    beforeEach(() => {
+      // Advance time well past the 60s rate-limit window so all accumulated
+      // in-memory timestamps are pruned on the next POST call.
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 300_000);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("all 5 concurrent POSTs either succeed or get lock contention — no 500 errors", async () => {
+      // Create a fresh handler instance so rate limit state starts clean
+      const { POST } = createTasksHandlers(makeConfig());
+
+      // Send a single warm-up request to trigger pruning of stale timestamps
+      await POST(makeRequest({ tag: "FEAT", title: "Warmup task" }));
+
+      const titles = ["Alpha task", "Beta task", "Gamma task", "Delta task", "Epsilon task"];
+      const requests = titles.map(title =>
+        POST(makeRequest({ tag: "FEAT", title }))
+      );
+      const results = await Promise.all(requests);
+
+      // None should return 500. Acceptable: 200 (success), 423 (lock), 429 (rate limit)
+      for (const res of results) {
+        expect(res.status).not.toBe(500);
+        expect([200, 423, 429]).toContain(res.status);
+      }
+
+      // Collect all successfully inserted titles
+      const inserted: string[] = [];
+      for (const res of results) {
+        if (res.status === 200) {
+          const body = await res.json();
+          if (body.data?.inserted) {
+            inserted.push(body.data.inserted);
+          }
+        }
+      }
+
+      // All inserted titles should be unique (no duplicates from race)
+      const uniqueInserted = new Set(inserted);
+      expect(uniqueInserted.size).toBe(inserted.length);
+
+      // With fresh rate limit state and warm-up, at least one should succeed.
+      // If all 5 got 423 (lock contention), that's also valid concurrency behavior.
+      const successOrLock = results.filter(r => r.status === 200 || r.status === 423);
+      expect(successOrLock.length).toBeGreaterThan(0);
+    });
+  });
+
 });

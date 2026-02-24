@@ -12,6 +12,10 @@
 #   - Flat file (compat): rotated when exceeding SKYNET_MAX_EVENTS_LOG_KB (default
 #     1024 KB). Old files are shifted (.1 -> .2) and gzipped. Max 2 archives kept.
 
+# SH-P2-1: Track consecutive rotation skips due to lock contention.
+# If the counter reaches 5+, emit a warning via stderr.
+_EVENTS_ROTATION_SKIPS=0
+
 # Emit a named pipeline event with optional description and trace_id.
 # Usage: emit_event "event_name" "description" ["trace_id"]
 emit_event() {
@@ -97,6 +101,7 @@ emit_event() {
         fi
         [ -f "${events_log}.2" ] && gzip -f "${events_log}.2" 2>/dev/null &
         rmdir "$_rot_lock" 2>/dev/null || rm -rf "$_rot_lock" 2>/dev/null || true
+        _EVENTS_ROTATION_SKIPS=0
       else
         # Stale lock recovery: if holder PID is dead or lock is older than 60s, reclaim
         local _rot_force=false
@@ -127,6 +132,10 @@ emit_event() {
         # If lock was stale and reclaimed, next emit will pick up rotation
       fi
       # If lock acquisition failed, another writer is rotating — skip this cycle
+      _EVENTS_ROTATION_SKIPS=$((_EVENTS_ROTATION_SKIPS + 1))
+      if [ "$_EVENTS_ROTATION_SKIPS" -ge 5 ]; then
+        echo "WARNING: events rotation skipped $_EVENTS_ROTATION_SKIPS times due to lock contention" >&2
+      fi
     fi
   fi
 }

@@ -57,11 +57,14 @@ _agent_exec() {
   # child git/node processes are forcefully terminated.
   # OPS-P3-4: Exit with 142 (SIGALRM=14 + 128) to avoid collision with natural
   # exit code 124. Callers check both 124 (GNU timeout) and 142 (perl fallback).
+  # SH-P1-2: Use process groups to kill grandchildren (git, npm, node) on timeout.
+  # setpgrp(0,0) in the child creates a new process group. Negative PID in kill()
+  # sends the signal to the entire process group, preventing zombie grandchildren.
   perl -e '
     use POSIX ":sys_wait_h";
     my $timeout = shift;
     my $pid = fork();
-    if ($pid == 0) { exec @ARGV; exit(127); }
+    if ($pid == 0) { setpgrp(0,0); exec @ARGV; exit(127); }
     eval {
       local $SIG{ALRM} = sub { die "alarm\n" };
       alarm $timeout;
@@ -69,10 +72,10 @@ _agent_exec() {
       alarm 0;
     };
     if ($@ eq "alarm\n") {
-      kill "TERM", $pid;
-      # Wait up to 30s for graceful shutdown, then SIGKILL
+      kill "TERM", -$pid;
+      # Wait up to 30s for graceful shutdown, then SIGKILL the process group
       for (1..30) { last if waitpid($pid, WNOHANG) > 0; sleep 1; }
-      if (waitpid($pid, WNOHANG) == 0) { kill "KILL", $pid; waitpid($pid, 0); }
+      if (waitpid($pid, WNOHANG) == 0) { kill "KILL", -$pid; waitpid($pid, 0); }
       exit 142;
     }
     exit ($? >> 8);
@@ -81,7 +84,6 @@ _agent_exec() {
   # Normalize exit code 142 to 124 for consistent timeout detection across platforms
   [ "$_perl_rc" -eq 142 ] && return 124
   return $_perl_rc
-  return $?
 }
 
 # Agent plugin selection (default: auto)

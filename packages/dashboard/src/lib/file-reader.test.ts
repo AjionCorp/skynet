@@ -160,4 +160,52 @@ describe("getLastLogLine", () => {
       rmSync(logDir, { recursive: true, force: true });
     }
   });
+
+// ── TEST-P1-4: File path traversal with symlinks and encodings ────────
+describe("readDevFile path traversal edge cases", () => {
+  let devDir: string;
+
+  beforeAll(() => {
+    devDir = mkdtempSync(join(tmpdir(), "skynet-test-traverse-"));
+    writeFileSync(join(devDir, "safe.md"), "safe content");
+    mkdirSync(join(devDir, "sub"));
+    writeFileSync(join(devDir, "sub", "nested.md"), "nested");
+  });
+
+  afterAll(() => {
+    rmSync(devDir, { recursive: true, force: true });
+  });
+
+  it("returns empty string for double-encoded path traversal (%2e%2e)", () => {
+    // %2e%2e/%2e%2e/etc/passwd — these are literal characters, not URL-decoded
+    expect(readDevFile(devDir, "%2e%2e/%2e%2e/etc/passwd")).toBe("");
+  });
+
+  it("returns empty string for null bytes in filename", () => {
+    expect(readDevFile(devDir, "safe.md\x00.txt")).toBe("");
+  });
+
+  it("returns empty string for very long paths (4096+ chars)", () => {
+    const longPath = "a".repeat(4096) + ".md";
+    expect(readDevFile(devDir, longPath)).toBe("");
+  });
+
+  it("returns empty string for path with encoded dot-dot (%2e%2e%2f)", () => {
+    expect(readDevFile(devDir, "%2e%2e%2fetc%2fpasswd")).toBe("");
+  });
+
+  it("returns empty string for path starting with tilde (~)", () => {
+    expect(readDevFile(devDir, "~/../../etc/passwd")).toBe("");
+  });
+
+  it("returns empty string for path with consecutive slashes", () => {
+    // Even if resolved, should not escape devDir
+    expect(readDevFile(devDir, "sub///../../../../etc/passwd")).toBe("");
+  });
+
+  it("returns empty string for windows-style path traversal with mixed separators", () => {
+    expect(readDevFile(devDir, "sub\\..\\..\\etc\\passwd")).toBe("");
+  });
+});
+
 });

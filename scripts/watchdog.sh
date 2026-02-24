@@ -124,6 +124,12 @@ _SKYNET_DB_INITIALIZED=1 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 # The full TRUNCATE checkpoint runs in db_maintenance() every 10 cycles.
 db_wal_checkpoint
 
+# P0-2: Check WAL health flag each cycle — log CRITICAL if degraded so operators
+# see the warning in every cycle's output, not just the cycle where it failed.
+if [ "$_db_wal_healthy" = "false" ]; then
+  log "CRITICAL: WAL checkpoint previously failed — database may degrade. See .dev/db-wal-unhealthy sentinel."
+fi
+
 is_running() {
   local lockfile="$1"
   local pid=""
@@ -475,6 +481,11 @@ _cr_phase3_orphan_worktrees() {
   done
 }
 
+# SH-P1-4: Track consecutive cycles where the 500-item cap is hit.
+# If 3+ consecutive cycles hit the cap, remaining items are silently skipped
+# forever — escalate with a CRITICAL event so operators investigate.
+_cr_consecutive_caps=${_cr_consecutive_caps:-0}
+
 crash_recovery() {
   local recovered=0
   local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
@@ -504,6 +515,16 @@ crash_recovery() {
   if [ "$recovered" -gt 500 ]; then
     emit_event "crash_recovery_limit" "Crash recovery hit 500-item limit — some items may not have been recovered"
     tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery hit 500-item limit — recovery may be incomplete. Investigate immediately."
+    # SH-P1-4: Track consecutive cap hits and escalate if persistent
+    _cr_consecutive_caps=$((_cr_consecutive_caps + 1))
+    if [ "$_cr_consecutive_caps" -ge 3 ]; then
+      log "CRITICAL: Crash recovery hit 500-item cap for ${_cr_consecutive_caps} consecutive cycles — items are being permanently skipped"
+      emit_event "crash_recovery_cascade" "500-item cap hit ${_cr_consecutive_caps} consecutive cycles — possible unbounded stale state" 2>/dev/null || true
+      tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: CRITICAL — Crash recovery cap hit ${_cr_consecutive_caps} consecutive cycles. Stale items are accumulating. Investigate immediately."
+    fi
+  else
+    # SH-P1-4: Reset consecutive cap counter when a cycle completes without hitting the cap
+    _cr_consecutive_caps=0
   fi
 
   # OPS-P2-2: Escalate when multiple phases fail — indicates systemic issue
@@ -1686,6 +1707,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
           log "CRITICAL: TRUNCATE checkpoint failed on oversized WAL"
           emit_event "db_wal_checkpoint_failed" "TRUNCATE checkpoint failed — WAL is ${_wal_size} bytes"
           _db_wal_healthy=false
+          # P0-2: Write sentinel file so dashboard can detect WAL degradation
+          echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
         fi
       fi
     fi
@@ -1697,10 +1720,14 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     if [ -n "$_wal_result" ]; then
       log "WAL checkpoint: $_wal_result"
       _db_wal_healthy=true
+      # P0-2: Clear sentinel file on recovery
+      rm -f "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
     else
       log "CRITICAL: WAL checkpoint(RESTART) failed — database may be degraded"
       emit_event "db_wal_checkpoint_failed" "WAL checkpoint failed — database may be degraded"
       _db_wal_healthy=false
+      # P0-2: Write sentinel file so dashboard can detect WAL degradation
+      echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
     fi
     # Run PRAGMA optimize to keep query planner statistics up-to-date
     _db "PRAGMA optimize;" 2>/dev/null || true

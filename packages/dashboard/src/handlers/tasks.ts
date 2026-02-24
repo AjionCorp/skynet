@@ -4,6 +4,8 @@ import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
+const MAX_DESCRIPTION_LENGTH = 2000;
+
 // Rate limiting for POST requests: max 30 per 60 seconds.
 // Uses SQLite-backed rate limiting for cross-process accuracy.
 // Falls back to in-memory limiting if DB is unavailable.
@@ -142,16 +144,9 @@ export function createTasksHandlers(config: SkynetConfig) {
           { status: 400 }
         );
       }
-      // OPS-P1-5: Hard payload size limit — reject oversized descriptions early
-      if (description && description.length > 10000) {
+      if (description && description.length > MAX_DESCRIPTION_LENGTH) {
         return Response.json(
-          { data: null, error: "Description payload too large (max 10000 characters)" },
-          { status: 413 }
-        );
-      }
-      if (description && description.length > 2000) {
-        return Response.json(
-          { data: null, error: "Description must be 2000 characters or fewer" },
+          { data: null, error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer` },
           { status: 400 }
         );
       }

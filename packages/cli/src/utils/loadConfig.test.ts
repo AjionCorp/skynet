@@ -223,4 +223,43 @@ describe("loadConfig", () => {
     warnSpy.mockRestore();
   });
 
+  // TEST-P2-3: Forward reference cycles should not infinite loop
+  it("handles circular reference (A=$B, B=$A) without infinite loop", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_A="$SKYNET_B"\nexport SKYNET_B="$SKYNET_A"\n' as never
+    );
+    // Should complete without hanging — the two-pass resolver terminates
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    // Circular refs: A resolves to B's value which still contains a $ref.
+    // The key point: loadConfig does NOT infinite loop.
+    expect(typeof result!.SKYNET_A).toBe("string");
+    expect(typeof result!.SKYNET_B).toBe("string");
+  });
+
+  it("handles self-reference (X=$X) without infinite loop", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_X="$SKYNET_X"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    // Self-reference terminates — the key point is no infinite loop
+    expect(typeof result!.SKYNET_X).toBe("string");
+  });
+
+  it("handles transitive forward reference cycle (A->B->C->A) without infinite loop", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_A="$SKYNET_B"\nexport SKYNET_B="$SKYNET_C"\nexport SKYNET_C="$SKYNET_A"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    // Transitive cycle terminates — no infinite loop
+    expect(typeof result!.SKYNET_A).toBe("string");
+    expect(typeof result!.SKYNET_B).toBe("string");
+    expect(typeof result!.SKYNET_C).toBe("string");
+  });
+
 });

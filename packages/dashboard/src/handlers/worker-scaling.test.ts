@@ -3,6 +3,21 @@ import { createWorkerScalingHandler } from "./worker-scaling";
 import type { SkynetConfig } from "../types";
 
 // ---------------------------------------------------------------------------
+// Test constants — named values replacing magic numbers for clarity
+// ---------------------------------------------------------------------------
+
+/** Simulated PID for the first test worker */
+const TEST_PID_WORKER_1 = 1001;
+/** Simulated PID for the second test worker */
+const TEST_PID_WORKER_2 = 1002;
+/** Simulated PID for the third test worker */
+const TEST_PID_WORKER_3 = 1003;
+/** PID that is guaranteed to not be alive (dead process scenario) */
+const TEST_PID_DEAD = 99999;
+/** Negative PID to test invalid PID handling */
+const TEST_PID_NEGATIVE = -1234;
+
+// ---------------------------------------------------------------------------
 // Mocks
 // ---------------------------------------------------------------------------
 
@@ -151,9 +166,9 @@ describe("createWorkerScalingHandler", () => {
 
     it("counts running workers by reading PID files", async () => {
       // Simulate dev-worker-1 running with PID 1001
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
 
@@ -163,7 +178,7 @@ describe("createWorkerScalingHandler", () => {
 
       const devWorker = data.workers[0];
       expect(devWorker.count).toBe(1);
-      expect(devWorker.pids).toEqual([1001]);
+      expect(devWorker.pids).toEqual([TEST_PID_WORKER_1]);
     });
   });
 
@@ -232,12 +247,12 @@ describe("createWorkerScalingHandler", () => {
   describe("POST scale-down cleans PID files", () => {
     it("kills workers and cleans up lock files", async () => {
       // Simulate 2 running dev-workers
-      alivePids.add(1001);
-      alivePids.add(1002);
+      alivePids.add(TEST_PID_WORKER_1);
+      alivePids.add(TEST_PID_WORKER_2);
       mockReadFileSync.mockImplementation((path: unknown) => {
         const p = String(path);
-        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
-        if (p === "/tmp/skynet-test-dev-worker-2.lock") return "1002";
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
+        if (p === "/tmp/skynet-test-dev-worker-2.lock") return String(TEST_PID_WORKER_2);
         throw new Error("ENOENT");
       });
 
@@ -261,7 +276,7 @@ describe("createWorkerScalingHandler", () => {
       expect(body.data.currentCount).toBe(1);
 
       // Should kill highest-numbered worker (worker 2)
-      expect(process.kill).toHaveBeenCalledWith(1002, "SIGTERM");
+      expect(process.kill).toHaveBeenCalledWith(TEST_PID_WORKER_2, "SIGTERM");
 
       // P1-15: Lock directory is NOT removed by the dashboard — the worker's
       // EXIT trap owns cleanup. Verify rmSync was NOT called on the lock file.
@@ -272,9 +287,9 @@ describe("createWorkerScalingHandler", () => {
     });
 
     it("cleans up heartbeat files for dev-workers on scale-down", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
 
@@ -288,14 +303,14 @@ describe("createWorkerScalingHandler", () => {
     });
 
     it("kills highest-numbered workers first on scale-down", async () => {
-      alivePids.add(1001);
-      alivePids.add(1002);
-      alivePids.add(1003);
+      alivePids.add(TEST_PID_WORKER_1);
+      alivePids.add(TEST_PID_WORKER_2);
+      alivePids.add(TEST_PID_WORKER_3);
       mockReadFileSync.mockImplementation((path: unknown) => {
         const p = String(path);
-        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
-        if (p === "/tmp/skynet-test-dev-worker-2.lock") return "1002";
-        if (p === "/tmp/skynet-test-dev-worker-3.lock") return "1003";
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
+        if (p === "/tmp/skynet-test-dev-worker-2.lock") return String(TEST_PID_WORKER_2);
+        if (p === "/tmp/skynet-test-dev-worker-3.lock") return String(TEST_PID_WORKER_3);
         throw new Error("ENOENT");
       });
 
@@ -306,9 +321,9 @@ describe("createWorkerScalingHandler", () => {
       const killCalls = (process.kill as ReturnType<typeof vi.fn>).mock.calls
         .filter((c: unknown[]) => c[1] === "SIGTERM")
         .map((c: unknown[]) => c[0]);
-      expect(killCalls).toContain(1003);
-      expect(killCalls).toContain(1002);
-      expect(killCalls).not.toContain(1001);
+      expect(killCalls).toContain(TEST_PID_WORKER_3);
+      expect(killCalls).toContain(TEST_PID_WORKER_2);
+      expect(killCalls).not.toContain(TEST_PID_WORKER_1);
     });
   });
 
@@ -402,9 +417,9 @@ describe("createWorkerScalingHandler", () => {
   describe("scale to same count is a no-op", () => {
     it("does not spawn or kill when count matches current", async () => {
       // Simulate 1 running dev-worker
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
 
@@ -481,7 +496,7 @@ describe("createWorkerScalingHandler", () => {
 
     it("GET ignores PID files containing negative PIDs", async () => {
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "-1234";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_NEGATIVE);
         throw new Error("ENOENT");
       });
 
@@ -510,7 +525,7 @@ describe("createWorkerScalingHandler", () => {
     it("GET ignores PID files for dead processes", async () => {
       // PID file exists but process is dead (not in alivePids)
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "99999";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_DEAD);
         throw new Error("ENOENT");
       });
 
@@ -522,9 +537,9 @@ describe("createWorkerScalingHandler", () => {
     });
 
     it("scale-down gracefully handles already-cleaned lock files", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
       // rmSync and unlinkSync throw as if files were already deleted
@@ -562,9 +577,9 @@ describe("createWorkerScalingHandler", () => {
   // -----------------------------------------------------------------------
   describe("concurrent scale requests don't corrupt state", () => {
     it("parallel GET requests return consistent data", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
-        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (String(path) === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
 
@@ -576,7 +591,7 @@ describe("createWorkerScalingHandler", () => {
       for (const res of results) {
         const { data } = await res.json();
         expect(data.workers[0].count).toBe(1);
-        expect(data.workers[0].pids).toEqual([1001]);
+        expect(data.workers[0].pids).toEqual([TEST_PID_WORKER_1]);
       }
     });
 
@@ -622,12 +637,12 @@ describe("createWorkerScalingHandler", () => {
   // -----------------------------------------------------------------------
   describe("merge lock 409 on scale-down", () => {
     it("returns 409 when worker is currently merging", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
         const p = String(path);
-        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         // Simulate merge lock with this worker's PID
-        if (p.includes("merge.lock/pid")) return "1001";
+        if (p.includes("merge.lock/pid")) return String(TEST_PID_WORKER_1);
         throw new Error("ENOENT");
       });
       // existsSync returns true for merge lock dir and pid file
@@ -647,10 +662,10 @@ describe("createWorkerScalingHandler", () => {
     });
 
     it("allows scale-down when merge lock is held by a different PID", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
         const p = String(path);
-        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         // Merge lock is held by a different process
         if (p.includes("merge.lock/pid")) return "9999";
         throw new Error("ENOENT");
@@ -707,10 +722,10 @@ describe("createWorkerScalingHandler", () => {
     });
 
     it("does not reset task file when worker is alive", async () => {
-      alivePids.add(1001);
+      alivePids.add(TEST_PID_WORKER_1);
       mockReadFileSync.mockImplementation((path: unknown) => {
         const p = String(path);
-        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return String(TEST_PID_WORKER_1);
         if (p.includes("current-task-1.md")) return "# Current Task\n**Status:** in_progress";
         throw new Error("ENOENT");
       });
@@ -816,6 +831,69 @@ describe("createWorkerScalingHandler", () => {
     it("respects maxWorkers=0 config (no workers allowed)", async () => {
       const { POST } = createWorkerScalingHandler(makeConfig({ maxWorkers: 0 }));
       const res = await POST(makePostRequest({ workerType: "dev-worker", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ── TEST-P1-3: Worker type validation fuzzing ──────────────────────
+  describe("workerType input validation fuzzing", () => {
+    it("rejects SQL injection in workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker'; DROP TABLE tasks;--", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Invalid workerType");
+    });
+
+    it("rejects Unicode characters in workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-wörker", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Invalid workerType");
+    });
+
+    it("rejects emoji in workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker😀", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects very long workerType string (1000+ chars)", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const longType = "a".repeat(1001);
+      const res = await POST(makePostRequest({ workerType: longType, count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Invalid workerType");
+    });
+
+    it("rejects path traversal in workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "../../../etc/passwd", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects null bytes in workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker\x00extra", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects empty string workerType", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "", count: 1 }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects workerType with shell metacharacters", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker; rm -rf /", count: 1 }));
       const body = await res.json();
       expect(res.status).toBe(400);
     });

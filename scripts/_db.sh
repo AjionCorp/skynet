@@ -462,10 +462,14 @@ _db_claim_next_task_inner() {
   #      terminal state (completed/done/fixed/superseded)
   #   4. target CTE — selects highest-priority pending task that is
   #      either unblocked or has all dependencies resolved
-  #   5. UPDATE + SELECT changes() — atomically claims the target
+  #   5. UPDATE + SELECT — atomically claims the target and returns
+  #      task details inside the same transaction (P0-1 fix: prevents
+  #      another worker from modifying the task between COMMIT and SELECT)
   # ─────────────────────────────────────────────────────────────────
-  local changed
-  changed=$(_db "
+  # P0-1: The SELECT now runs INSIDE the transaction, before COMMIT.
+  # Previously, the SELECT ran after COMMIT in a separate query, creating
+  # a race window where another worker could modify the claimed task.
+  _db_sep "
     BEGIN IMMEDIATE;
     WITH RECURSIVE dep_split(task_id, dep, rest) AS (
       SELECT id,
@@ -497,14 +501,11 @@ _db_claim_next_task_inner() {
     UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
       claimed_at = datetime('now'), updated_at = datetime('now')
     WHERE id = (SELECT id FROM target) AND status = 'pending';
-    SELECT changes();
+    SELECT id, title, tag, description, branch FROM tasks
+      WHERE worker_id = $worker_id AND status = 'claimed'
+      ORDER BY claimed_at DESC LIMIT 1;
     COMMIT;
-  ")
-
-  if [ "$changed" = "1" ]; then
-    # Fetch the claimed task details
-    _db_sep "SELECT id, title, tag, description, branch FROM tasks WHERE worker_id = $worker_id AND status = 'claimed' ORDER BY claimed_at DESC LIMIT 1;"
-  fi
+  "
 }
 db_claim_next_task() { _db_retry _db_claim_next_task_inner "$@"; }
 
@@ -1208,6 +1209,24 @@ db_prune_old_events() {
   [ "${deleted:-0}" -gt 0 ] && log "Pruned $deleted events older than ${days} days" 2>/dev/null || true
 }
 
+# --- WAL Checkpoint Strategy ---
+# SQLite WAL (Write-Ahead Logging) accumulates changes in a separate WAL file.
+# Two checkpoint modes are used:
+#
+#   PASSIVE (db_wal_checkpoint) — called every watchdog cycle (~60s).
+#     Non-blocking: transfers WAL pages to the DB file only if no readers hold
+#     those pages. Does not wait for readers. Safe to call frequently. Prevents
+#     WAL file from growing unbounded during normal operation.
+#
+#   TRUNCATE (db_maintenance) — called every 10 watchdog cycles (~10min).
+#     Blocking: waits for all readers to finish, copies all WAL pages to the
+#     DB file, then truncates the WAL file to zero length, reclaiming disk
+#     space. More expensive but necessary to prevent WAL file from growing
+#     monotonically even after PASSIVE checkpoints transfer all pages.
+#
+# Both modes are safe for concurrent readers in WAL mode. Only one writer can
+# run at a time (enforced by SQLite's internal locking + busy_timeout).
+
 # Lightweight WAL checkpoint — call every watchdog cycle to prevent WAL growth.
 # Uses PASSIVE mode (non-blocking) unlike the TRUNCATE in db_maintenance().
 db_wal_checkpoint() {
@@ -1229,7 +1248,7 @@ db_maintenance() {
   local _ic_timeout=${SKYNET_INTEGRITY_CHECK_TIMEOUT:-30}
   integrity=$(run_with_timeout "$_ic_timeout" sqlite3 "$DB_PATH" "PRAGMA integrity_check;" 2>/dev/null)
   local _ic_rc=$?
-  if [ "$_ic_rc" -eq 124 ] 2>/dev/null; then
+  if [ "$_ic_rc" -eq 124 ] 2>/dev/null || [ "$_ic_rc" -eq 142 ] 2>/dev/null; then
     log "WARNING: db_maintenance — integrity_check timed out after ${_ic_timeout}s"
     return 1
   fi
@@ -1274,6 +1293,11 @@ db_check_integrity() {
   local integrity
   local _ic_timeout=${SKYNET_INTEGRITY_CHECK_TIMEOUT:-30}
   integrity=$(run_with_timeout "$_ic_timeout" sqlite3 "$DB_PATH" "PRAGMA integrity_check;" 2>/dev/null)
+  local _ic_rc=$?
+  # SH-P1-1: Handle both GNU timeout (124) and macOS perl SIGALRM (142) exit codes
+  if [ "$_ic_rc" -eq 124 ] 2>/dev/null || [ "$_ic_rc" -eq 142 ] 2>/dev/null; then
+    return 1
+  fi
   [ "$integrity" = "ok" ] && return 0 || return 1
 }
 

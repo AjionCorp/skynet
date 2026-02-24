@@ -79,7 +79,10 @@ export function parseDurationMinutes(s: string): number | null {
 export function formatDuration(minutes: number): string {
   if (!Number.isFinite(minutes)) return "--";
   // TEST-P3-1: Clamp negative values to 0 — negative durations are not meaningful
-  if (minutes < 0) return "0m";
+  if (minutes < 0) {
+    console.warn(`[formatDuration] Negative duration encountered: ${minutes}m — clamping to 0`);
+    return "0m";
+  }
   if (minutes < 60) return `${Math.round(minutes)}m`;
   const h = Math.floor(minutes / 60);
   const rem = Math.round(minutes % 60);
@@ -156,6 +159,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
   return async function GET(): Promise<Response> {
     try {
+      const warnings: string[] = [];
+
       // Worker statuses
       const workers = workerDefs.map((w) => {
         const lockFile = `${lockPrefix}-${w.name}.lock`;
@@ -184,6 +189,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       } catch (sqliteErr) {
         db = null;
         console.warn(`[pipeline-status] SQLite init failed, using files: ${sqliteErr instanceof Error ? sqliteErr.message : String(sqliteErr)}`);
+        warnings.push("SQLite unavailable, using file fallback");
       }
 
       const maxW = config.maxWorkers ?? 4;
@@ -573,6 +579,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             lastTime: postCommitLastTime,
           },
           missionProgress,
+          warnings,
           timestamp: new Date().toISOString(),
         },
         error: null,

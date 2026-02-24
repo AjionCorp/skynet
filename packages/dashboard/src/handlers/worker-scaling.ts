@@ -290,8 +290,13 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             );
           }
 
-          // TOCTOU: A worker may acquire the merge lock between our check and kill.
-          // Mitigated by: worker's merge lock extends past kill, watchdog detects orphaned locks.
+          // TS-P1-3: TOCTOU — A worker may acquire the merge lock between our check
+          // and the kill() call. This is a known limitation that is acceptable with the
+          // current architecture: (1) the worker's EXIT trap releases the merge lock on
+          // SIGTERM, (2) the watchdog's crash_recovery() detects orphaned merge locks and
+          // force-releases them on the next cycle, (3) the double-check pattern above
+          // narrows the window to <1ms. Full elimination would require kernel-level
+          // atomic check-and-kill which is not available in user space.
           try {
             process.kill(instance.pid, "SIGTERM");
           } catch (err: unknown) {

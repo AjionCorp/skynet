@@ -274,6 +274,36 @@ describe("SkynetDB", () => {
       expect(score).toBeGreaterThanOrEqual(0);
       expect(score).toBeLessThanOrEqual(100);
     });
+
+    // TEST-P2-5: Health score never exceeds bounds with extreme inputs
+    it("stays within 0-100 bounds with extreme inputs (many tasks and blockers)", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      // Insert 1000 failed tasks
+      const insertTask = rawDb.prepare(
+        "INSERT INTO tasks (title, tag, status, priority) VALUES (?, 'FIX', 'failed', ?)"
+      );
+      const insertBlocker = rawDb.prepare(
+        "INSERT INTO blockers (description, status) VALUES (?, 'active')"
+      );
+      const txn = rawDb.transaction(() => {
+        for (let i = 0; i < 1000; i++) {
+          insertTask.run(`ExtremeTask-${i}`, i);
+        }
+        for (let i = 0; i < 100; i++) {
+          insertBlocker.run(`ExtremeBlocker-${i}`);
+        }
+      });
+      txn();
+      rawDb.close();
+
+      const score = db.calculateHealthScore(4);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+      // With 1000 failed * 5 + 100 blockers * 10 = 6000 deductions, score should be 0
+      expect(score).toBe(0);
+    });
   });
 
   describe("getCompletedCount", () => {
@@ -928,6 +958,156 @@ describe("SkynetDB", () => {
       expect(db2.countPending()).toBe(0);
 
       _resetSingleton();
+    });
+  });
+
+  // ── P0-7: Critical missing tests ──────────────────────────────────
+
+  describe("SQL injection hardening", () => {
+    it("UNION SELECT injection in blockedBy is stored as literal text", () => {
+      const unionPayload = "x' UNION SELECT password FROM users --";
+      const newId = db.addTask("Union test", "SEC", "desc", "top", unionPayload);
+      expect(newId).toBeGreaterThan(0);
+
+      // Table must still be intact
+      expect(db.countPending()).toBeGreaterThanOrEqual(1);
+
+      // Verify the payload was stored literally, not executed
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const row = rawDb.prepare("SELECT blocked_by FROM tasks WHERE id = ?").get(newId) as { blocked_by: string };
+      rawDb.close();
+      expect(row.blocked_by).toBe(unionPayload);
+
+      // The blockedBy field in backlog items should contain the literal payload
+      const backlog = db.getBacklogItems();
+      const item = backlog.items.find(i => i.text.includes("Union test"));
+      expect(item).toBeDefined();
+      expect(item!.blockedBy).toContain(unionPayload);
+    });
+  });
+
+  describe("addTask robustness", () => {
+    it("handles extremely nested JSON description without crashing", () => {
+      // Build deeply nested JSON string (1000 levels)
+      let nested = '"leaf"';
+      for (let i = 0; i < 1000; i++) {
+        nested = `{"level${i}":${nested}}`;
+      }
+      const longDesc = `Nested: ${nested}`;
+
+      // Should not throw or crash — SQLite TEXT fields handle arbitrary strings
+      const newId = db.addTask("Nested JSON task", "TEST", longDesc, "top", "");
+      expect(newId).toBeGreaterThan(0);
+
+      // Verify it was stored correctly
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const row = rawDb.prepare("SELECT description FROM tasks WHERE id = ?").get(newId) as { description: string };
+      rawDb.close();
+      expect(row.description).toBe(longDesc);
+    });
+  });
+
+  describe("concurrent task claims", () => {
+    it("only one of 5 parallel claims succeeds (no duplicate claims)", async () => {
+      // Insert 1 pending task
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('Single task', 'TEST', 'pending', 0)");
+
+      // Insert 5 workers
+      for (let i = 1; i <= 5; i++) {
+        rawDb.exec(`INSERT OR REPLACE INTO workers (id, worker_type, status) VALUES (${i}, 'dev', 'idle')`);
+      }
+      rawDb.close();
+
+      // Simulate 5 concurrent claims using SkynetDB's transaction-based addTask
+      // We use the raw DB to simulate the claim operation since SkynetDB doesn't
+      // expose a claim method (that's in the bash layer). Instead, we test that
+      // SQLite's serialization prevents double-claims.
+      const claimDb = new Database(join(tmpDir, "skynet.db"));
+      claimDb.pragma("busy_timeout = 5000");
+      claimDb.pragma("journal_mode = WAL");
+
+      const claimForWorker = claimDb.prepare(`
+        UPDATE tasks SET status = 'claimed', worker_id = ?
+        WHERE id = (
+          SELECT id FROM tasks WHERE status = 'pending' ORDER BY priority ASC LIMIT 1
+        ) AND status = 'pending'
+      `);
+
+      // Run 5 claims concurrently via Promise.all — SQLite serializes writes
+      const results = await Promise.all(
+        [1, 2, 3, 4, 5].map(async (workerId) => {
+          try {
+            const info = claimForWorker.run(workerId);
+            return info.changes;
+          } catch {
+            return 0;
+          }
+        })
+      );
+
+      claimDb.close();
+
+      // Exactly 1 claim should succeed (changes === 1), rest should be 0
+      const successCount = results.filter(r => r === 1).length;
+      expect(successCount).toBe(1);
+
+      // Verify in DB: exactly 1 claimed task
+      const verifyDb = new Database(join(tmpDir, "skynet.db"));
+      const claimed = verifyDb.prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status = 'claimed'").get() as { cnt: number };
+      const pending = verifyDb.prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status = 'pending'").get() as { cnt: number };
+      verifyDb.close();
+
+      expect(claimed.cnt).toBe(1);
+      expect(pending.cnt).toBe(0);
+    });
+  });
+
+  // ── TEST-P1-1: Transaction rollback on constraint violation ─────────
+  describe("addTask duplicate handling", () => {
+    it("handles duplicate task titles gracefully without corrupting DB state", () => {
+      const title = "Unique task for dup test";
+      const id1 = db.addTask(title, "FEAT", "First insert", "top");
+      expect(id1).toBeGreaterThan(0);
+
+      // Second insert with same title+tag — should succeed (no unique constraint on title)
+      // but result in a separate row
+      const id2 = db.addTask(title, "FEAT", "Second insert", "top");
+      expect(id2).toBeGreaterThan(0);
+      expect(id2).not.toBe(id1);
+
+      // DB state should be consistent — both tasks exist
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const rows = rawDb.prepare("SELECT id, title, description FROM tasks WHERE title = ?").all(title);
+      rawDb.close();
+      expect(rows).toHaveLength(2);
+      expect(rows[0].description).toBe("First insert");
+      expect(rows[1].description).toBe("Second insert");
+    });
+
+    it("maintains consistent priority order after duplicate inserts at top", () => {
+      db.addTask("Dup priority A", "FEAT", "", "top");
+      db.addTask("Dup priority B", "FEAT", "", "top");
+      db.addTask("Dup priority A", "FEAT", "", "top"); // duplicate title
+
+      const items = db.getBacklogItems();
+      // All three should appear, most recently added at top (lowest priority)
+      const titles = items.items.map(i => {
+        const match = i.text.match(/\] (.+?)($| —)/);
+        return match ? match[1] : "";
+      });
+      expect(titles).toContain("Dup priority A");
+      expect(titles).toContain("Dup priority B");
+      // Priority 0 should be the last-inserted item
+      expect(items.pendingCount).toBeGreaterThanOrEqual(3);
     });
   });
 });

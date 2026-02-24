@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vitest";
 
 // Mock auth module before importing route
 vi.mock("../../../../lib/auth", () => ({
@@ -33,6 +33,12 @@ describe("POST /api/auth/login", () => {
     process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
   });
 
+  // TEST-P1-6: Clear rate limit state between tests to prevent leakage between describe blocks.
+  // Without this, failed login attempts from one test can cause unexpected 429 responses in later tests.
+  afterEach(() => {
+    _LOGIN_ATTEMPTS_FOR_TESTING.clear();
+  });
+
   afterAll(() => {
     if (originalEnv !== undefined) {
       process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
@@ -52,7 +58,7 @@ describe("POST /api/auth/login", () => {
     const res = await POST(makeRequest({ apiKey: "test-api-key" }, { "x-real-ip": uniqueIp() }));
     const body = await res.json();
     expect(res.status).toBe(200);
-    expect(body.ok).toBe(true);
+    expect(body.data.ok).toBe(true);
     // Check Set-Cookie header exists
     const setCookie = res.headers.get("set-cookie");
     expect(setCookie).toBeTruthy();
@@ -221,5 +227,119 @@ describe("CORS headers on API responses", () => {
     const res = await POST(makeRequest({ apiKey: "wrong" }, { "x-real-ip": "10.0.99.2" }));
     expect(res.status).toBe(401);
     expect(res.headers.get("access-control-allow-origin")).toBeNull();
+  });
+});
+
+// ── P0-7: Critical missing tests ──────────────────────────────────
+
+describe("POST /api/auth/login — missing fields", () => {
+  const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  let testIpCounter = 200;
+  function uniqueIp(): string {
+    testIpCounter++;
+    return `10.0.200.${testIpCounter}`;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+  });
+
+  afterAll(() => {
+    if (originalEnv !== undefined) {
+      process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
+    } else {
+      delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+  });
+
+  it("returns 400 when body has no apiKey and no password", async () => {
+    const res = await POST(makeRequest({}, { "x-real-ip": uniqueIp() }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when apiKey is a number instead of string", async () => {
+    const res = await POST(makeRequest({ apiKey: 12345 }, { "x-real-ip": uniqueIp() }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when apiKey is null", async () => {
+    const res = await POST(makeRequest({ apiKey: null }, { "x-real-ip": uniqueIp() }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when body is an empty object", async () => {
+    const res = await POST(makeRequest({}, { "x-real-ip": uniqueIp() }));
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 400 when body has password field instead of apiKey", async () => {
+    const res = await POST(makeRequest({ password: "test-api-key" }, { "x-real-ip": uniqueIp() }));
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("rate limit map cleanup determinism", () => {
+  const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  let testIpCounter = 300;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+    // Clear the rate limit map before this test suite
+    _LOGIN_ATTEMPTS_FOR_TESTING.clear();
+  });
+
+  afterAll(() => {
+    _LOGIN_ATTEMPTS_FOR_TESTING.clear();
+    if (originalEnv !== undefined) {
+      process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
+    } else {
+      delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+  });
+
+  it("cleanup removes expired entries when map exceeds MAX_TRACKED_IPS", async () => {
+    // MAX_TRACKED_IPS is 1000 — fill with 1001 expired entries
+    const now = Date.now();
+    for (let i = 0; i < 1001; i++) {
+      _LOGIN_ATTEMPTS_FOR_TESTING.set(`expired-${i}`, {
+        count: 1,
+        resetAt: now - 1000, // expired 1 second ago
+      });
+    }
+
+    expect(_LOGIN_ATTEMPTS_FOR_TESTING.size).toBe(1001);
+
+    // Next request should trigger cleanup of all expired entries
+    const ip = `10.0.${300 + (testIpCounter++)}.1`;
+    await POST(makeRequest({ apiKey: "wrong" }, { "x-real-ip": ip }));
+
+    // All 1001 expired entries should have been purged, leaving only the new one
+    // (The new request creates a fresh entry for its IP)
+    expect(_LOGIN_ATTEMPTS_FOR_TESTING.size).toBeLessThanOrEqual(2);
+  });
+
+  it("cleanup evicts oldest non-expired entries when over limit after purge", async () => {
+    // Fill with 1001 non-expired entries (future resetAt)
+    const now = Date.now();
+    for (let i = 0; i < 1001; i++) {
+      _LOGIN_ATTEMPTS_FOR_TESTING.set(`active-${i}`, {
+        count: 1,
+        resetAt: now + 60000 + i, // expires in the future, ascending order
+      });
+    }
+
+    expect(_LOGIN_ATTEMPTS_FOR_TESTING.size).toBe(1001);
+
+    // Next request triggers cleanup: expired purge removes 0, then oldest eviction kicks in
+    const ip = `10.0.${300 + (testIpCounter++)}.1`;
+    await POST(makeRequest({ apiKey: "wrong" }, { "x-real-ip": ip }));
+
+    // Map should be at or below MAX_TRACKED_IPS (1000) + the new entry
+    expect(_LOGIN_ATTEMPTS_FOR_TESTING.size).toBeLessThanOrEqual(1001);
+
+    // The oldest entry (active-0 with lowest resetAt) should have been evicted
+    expect(_LOGIN_ATTEMPTS_FOR_TESTING.has("active-0")).toBe(false);
   });
 });

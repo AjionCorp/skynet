@@ -62,6 +62,23 @@ _MERGE_STATE_COMMITTED=false
 # total shell uptime.
 _MERGE_LOCK_ACQUIRED_AT=-1
 
+# SH-P1-3: Check remaining TTL before each major merge operation.
+# Returns 0 if at least $1 seconds (default 180) remain, 1 if insufficient.
+_check_merge_lock_ttl() {
+  local _min_remaining="${1:-180}"
+  if [ "$_MERGE_LOCK_ACQUIRED_AT" -lt 0 ] 2>/dev/null; then
+    # Lock not acquired — cannot check TTL
+    return 1
+  fi
+  local _lock_age=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
+  local _remaining=$(( SKYNET_MERGE_LOCK_TTL - _lock_age ))
+  if [ "$_remaining" -lt "$_min_remaining" ]; then
+    log "ERROR: Merge lock TTL insufficient — ${_remaining}s remaining (need ${_min_remaining}s). Lock held for ${_lock_age}s of ${SKYNET_MERGE_LOCK_TTL}s TTL."
+    return 1
+  fi
+  return 0
+}
+
 # OPS-P1-2: Release merge lock with duration logging
 _release_merge_lock_with_duration() {
   local duration
@@ -228,6 +245,12 @@ do_merge_to_main() {
 
   # --- Post-merge typecheck gate (validates main still builds) ---
   if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
+    # SH-P1-3: Verify sufficient TTL before starting typecheck (can take 5+ minutes)
+    if ! _check_merge_lock_ttl 180; then
+      log "ERROR: Insufficient merge lock TTL before typecheck — aborting merge"
+      _release_merge_lock_with_duration
+      return 3
+    fi
     extend_merge_lock 2>/dev/null || true
     log "Running post-merge typecheck on main..."
     # Ensure deps are fresh if lock file changed in merge
@@ -264,6 +287,12 @@ do_merge_to_main() {
         _release_merge_lock_with_duration
         return 3
       fi
+      # SH-P1-3: Check TTL before pushing revert
+      if ! _check_merge_lock_ttl 180; then
+        log "WARNING: Insufficient TTL for revert push — releasing lock without push"
+        _release_merge_lock_with_duration
+        return 3
+      fi
       git_push_with_retry || log "WARNING: push of revert commit failed"
       _release_merge_lock_with_duration
       return 2
@@ -289,6 +318,12 @@ do_merge_to_main() {
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$log_file" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge"
       if ! _do_revert "$_MERGE_STATE_COMMITTED" "smoke test failed" "$log_file"; then
+        _release_merge_lock_with_duration
+        return 3
+      fi
+      # SH-P1-3: Check TTL before pushing smoke test revert
+      if ! _check_merge_lock_ttl 180; then
+        log "WARNING: Insufficient TTL for smoke revert push — releasing lock without push"
         _release_merge_lock_with_duration
         return 3
       fi
