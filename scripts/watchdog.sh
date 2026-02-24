@@ -1166,6 +1166,10 @@ fi
 # Alerts once when score drops below threshold; clears sentinel when score recovers.
 _health_score_alert() {
   local threshold="${SKYNET_HEALTH_ALERT_THRESHOLD:-50}"
+  # SH-P3-3: This sentinel path is predictable (/tmp/skynet-<project>-health-alert-sent).
+  # On shared hosts another user could pre-create this file to suppress health alerts.
+  # Mitigation: SKYNET_LOCK_PREFIX already namespaces to the project; on shared hosts,
+  # operators should set SKYNET_LOCK_PREFIX to a user-private directory (e.g., under $HOME).
   local sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-health-alert-sent"
 
   # Prefer SQLite health score, fallback to file-based calculation
@@ -1391,6 +1395,26 @@ pipeline_paused=false
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
   pipeline_paused=true
   log "Pipeline is paused. Skipping worker dispatch."
+  # OPS-P2-2: Periodic re-notification while pipeline remains paused (every 30 min)
+  _pause_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-pause-notify"
+  _pause_renotify=false
+  if [ -f "$_pause_sentinel" ]; then
+    _last_notify=$(cat "$_pause_sentinel" 2>/dev/null || echo 0)
+    case "$_last_notify" in ''|*[!0-9]*) _last_notify=0 ;; esac
+    _now_epoch=$(date +%s)
+    if [ $((_now_epoch - _last_notify)) -ge 1800 ]; then
+      _pause_renotify=true
+    fi
+  else
+    _pause_renotify=true
+  fi
+  if $_pause_renotify; then
+    tg "⏸ *WATCHDOG*: Pipeline is still paused. Manual intervention may be needed."
+    (umask 077; date +%s > "$_pause_sentinel")
+  fi
+else
+  # Pipeline is not paused — clean up sentinel if it exists
+  rm -f "/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-pause-notify" 2>/dev/null || true
 fi
 
 # --- Only kick Claude-dependent workers if auth is OK and DB is healthy ---
@@ -1510,6 +1534,9 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
 fi
 
 # --- Periodic maintenance (every 10 cycles ≈ 30 minutes) ---
+# NOTE: If the cycle counter file is corrupted (e.g., concurrent write), the
+# case-sanitize below resets it to 0. At worst, one maintenance cycle is skipped;
+# the counter self-heals on the next cycle write.
 _maint_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)
 # Sanitize cycle counter to numeric value
 case "$_maint_cycle" in ''|*[!0-9]*) _maint_cycle=0 ;; esac
@@ -1652,7 +1679,15 @@ else
   (umask 077; echo 300 > "$_adaptive_file")
 fi
 
-) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
+) || {
+  log "Watchdog cycle failed (exit $?) — will retry next cycle"
+  # OPS-P1-1: Reset adaptive interval to default on cycle failure so a failed
+  # cycle doesn't leave a stale (possibly very short) interval value that causes
+  # rapid-fire retries of a broken cycle.
+  _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
+  (umask 077; echo "$WATCHDOG_INTERVAL" > "$_adaptive_file") 2>/dev/null || true
+  true
+}
 
 # Increment cycle counter (outside subshell so it persists)
 _cur_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)

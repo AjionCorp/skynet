@@ -1,4 +1,9 @@
-import { timingSafeEqual, createHmac } from "crypto";
+import { timingSafeEqual, createHmac, randomBytes } from "crypto";
+
+// TS-P3-1: Per-process random HMAC key instead of hardcoded string.
+// Regenerated on each process start — only needs to be consistent within a
+// single comparison call (both HMACs use the same key).
+const CMP_KEY = randomBytes(32);
 
 /**
  * Timing-safe string comparison to prevent timing attacks on API key validation.
@@ -6,8 +11,8 @@ import { timingSafeEqual, createHmac } from "crypto";
  * comparing, which eliminates the length oracle that a naive length check leaks.
  */
 export function safeCompare(a: string, b: string): boolean {
-  const ha = createHmac("sha256", "skynet-cmp").update(a).digest();
-  const hb = createHmac("sha256", "skynet-cmp").update(b).digest();
+  const ha = createHmac("sha256", CMP_KEY).update(a).digest();
+  const hb = createHmac("sha256", CMP_KEY).update(b).digest();
   return timingSafeEqual(ha, hb);
 }
 

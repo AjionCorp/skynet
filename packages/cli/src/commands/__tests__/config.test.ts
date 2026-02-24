@@ -7,6 +7,8 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
   mkdirSync: vi.fn(),
   rmdirSync: vi.fn(),
+  rmSync: vi.fn(),
+  statSync: vi.fn(() => ({ mtimeMs: Date.now() })),
 }));
 
 vi.mock("child_process", () => ({
@@ -70,6 +72,57 @@ describe("configListCommand", () => {
     // Known vars should have descriptions
     expect(logCalls).toContain("Project name identifier");
     expect(logCalls).toContain("Max parallel workers");
+  });
+});
+
+const CONFIG_WITH_SENSITIVE = `export SKYNET_PROJECT_NAME="test-project"
+export SKYNET_PROJECT_DIR="/tmp/test"
+export SKYNET_DEV_DIR="/tmp/test/.dev"
+export SKYNET_MAX_WORKERS="2"
+export SKYNET_TG_BOT_TOKEN="secret-bot-token-12345"
+export SKYNET_MAIN_BRANCH="main"
+`;
+
+describe("configListCommand sensitive key masking", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "exit").mockImplementation(() => {
+      throw new Error("process.exit");
+    });
+
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(CONFIG_WITH_SENSITIVE as never);
+  });
+
+  it("masks SKYNET_TG_BOT_TOKEN value with bullet characters by default", async () => {
+    await configListCommand({ dir: "/tmp/test" });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+
+    // The sensitive key name should be visible
+    expect(logCalls).toContain("SKYNET_TG_BOT_TOKEN");
+    // The actual value must NOT appear
+    expect(logCalls).not.toContain("secret-bot-token-12345");
+    // Masked bullet characters should appear
+    expect(logCalls).toContain("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
+  });
+
+  it("reveals SKYNET_TG_BOT_TOKEN value when --reveal is passed", async () => {
+    await configListCommand({ dir: "/tmp/test", reveal: true });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+
+    // With --reveal, the actual value should be shown
+    expect(logCalls).toContain("SKYNET_TG_BOT_TOKEN");
+    expect(logCalls).toContain("secret-bot-token-12345");
+    // Bullets should NOT appear for this key
+    // (other sensitive keys with empty values won't have bullets either)
   });
 });
 
@@ -174,7 +227,13 @@ describe("configSetCommand", () => {
   it("updates the value in the config content", async () => {
     await configSetCommand("SKYNET_MAX_WORKERS", "8", { dir: "/tmp/test" });
 
-    const writtenContent = mockWriteFileSync.mock.calls[0][1] as string;
+    // First writeFileSync call is the PID file inside the lock dir (TS-P1-2),
+    // second call is the actual config content write to .tmp
+    const configWriteCall = mockWriteFileSync.mock.calls.find(
+      (c) => String(c[0]).endsWith(".tmp")
+    );
+    expect(configWriteCall).toBeDefined();
+    const writtenContent = configWriteCall![1] as string;
     expect(writtenContent).toContain('export SKYNET_MAX_WORKERS="8"');
     expect(writtenContent).not.toContain('export SKYNET_MAX_WORKERS="2"');
   });

@@ -21,7 +21,7 @@ if [ -z "${SKYNET_SYNC_ENDPOINTS+x}" ]; then
   log "WARNING: SKYNET_SYNC_ENDPOINTS is not defined"
   exit 0
 fi
-if ! declare -p SKYNET_SYNC_ENDPOINTS 2>/dev/null | grep -q '^declare -a'; then
+if ! declare -p SKYNET_SYNC_ENDPOINTS 2>/dev/null | grep -q 'declare -a'; then
   log "WARNING: SKYNET_SYNC_ENDPOINTS is not an array — check skynet.config.sh"
   exit 0
 fi

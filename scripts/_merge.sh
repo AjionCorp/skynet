@@ -70,11 +70,16 @@ _do_revert() {
     # HEAD is state commit, HEAD~1 is merge — revert both
     if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
       log "CRITICAL: git revert failed — main may be broken."
+      # SH-P3-1: Clean up partial revert state so the working tree is not
+      # left dirty (half-applied revert). reset --hard restores HEAD cleanly.
+      git reset --hard HEAD 2>/dev/null || true
       return 1
     fi
   else
     if ! git revert --no-commit HEAD 2>>"$log_file"; then
       log "CRITICAL: git revert failed — main may be broken."
+      # SH-P3-1: Clean up partial revert state (see above).
+      git reset --hard HEAD 2>/dev/null || true
       return 1
     fi
   fi
@@ -281,6 +286,17 @@ do_merge_to_main() {
       # has diverged from remote. Resetting to origin ensures consistency.
       # Any merged code that couldn't be pushed will be retried by the worker.
       # The watchdog's next cycle will detect and handle any main-branch issues.
+      #
+      # OPS-P1-2: RISK SCENARIO — In an extreme edge case, if the merge lock TTL
+      # expired during a push timeout, another worker could have acquired the lock,
+      # merged, and pushed its own commit to main. A subsequent `git pull` would
+      # incorporate that commit into local main. The `git reset --hard` below would
+      # then discard that worker's commit from local main. This is acceptable because:
+      #   1. The commit exists on origin (it was pushed by the other worker).
+      #   2. Local main is a throwaway recovery state at this point.
+      #   3. The next pull will re-incorporate the other worker's commit.
+      # The hard reset is the last-resort recovery — do NOT remove it.
+      log "WARNING: Executing git reset --hard to origin/$SKYNET_MAIN_BRANCH — local unpushed commits (if any) will be discarded. This is last-resort recovery after double push failure."
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
       release_merge_lock
       return 3

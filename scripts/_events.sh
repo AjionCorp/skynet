@@ -20,6 +20,32 @@ emit_event() {
   # Also append to flat file for backward compat during transition
   local events_log="$DEV_DIR/events.log"
   local max_kb="${SKYNET_MAX_EVENTS_LOG_KB:-1024}"
+
+  # SH-P1-1: Write the event BEFORE checking rotation. This ensures the event
+  # is always persisted regardless of what happens during rotation (e.g., process
+  # killed between mv and write would lose the event in the old ordering).
+  # Truncate to 3000 characters (not bytes). Bash ${var:0:N} operates on
+  # characters in the current locale, so multi-byte UTF-8 sequences are
+  # preserved intact — no mid-codepoint splits.
+  local _safe_desc="${description:0:3000}"
+  # Strip trailing backslash to avoid corrupted escape sequences after truncation
+  case "$_safe_desc" in *'\\') _safe_desc="${_safe_desc%?}" ;; esac
+  # Sanitize pipes in description to prevent column corruption in pipe-delimited format.
+  # Uses tr instead of ${var//|/-} for bash 3.2 compatibility (pattern replacement with
+  # literal pipe is unreliable in older bash versions).
+  _safe_desc="$(printf '%s' "$_safe_desc" | tr '|' '-')"
+  # Flat-file format: timestamp|event|description (pipe-delimited).
+  # Description field has pipes sanitized to prevent column corruption.
+  # The SQLite path (primary) does not have this limitation.
+  local _line
+  _line=$(printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc")
+  if command -v flock >/dev/null 2>&1; then
+    (flock -x 200; printf '%s\n' "$_line" >> "$events_log") 200>"${events_log}.lock"
+  else
+    printf '%s\n' "$_line" >> "$events_log"
+  fi
+
+  # Now check if rotation is needed (after the event is safely persisted)
   if [ -f "$events_log" ]; then
     # Size check uses bytes (wc -c) for file rotation threshold,
     # while truncation uses characters (${var:0:N}) to avoid mid-codepoint splits.
@@ -75,25 +101,5 @@ emit_event() {
       fi
       # If lock acquisition failed, another writer is rotating — skip this cycle
     fi
-  fi
-  # Truncate to 3000 characters (not bytes). Bash ${var:0:N} operates on
-  # characters in the current locale, so multi-byte UTF-8 sequences are
-  # preserved intact — no mid-codepoint splits.
-  local _safe_desc="${description:0:3000}"
-  # Strip trailing backslash to avoid corrupted escape sequences after truncation
-  case "$_safe_desc" in *'\\') _safe_desc="${_safe_desc%?}" ;; esac
-  # Sanitize pipes in description to prevent column corruption in pipe-delimited format.
-  # Uses tr instead of ${var//|/-} for bash 3.2 compatibility (pattern replacement with
-  # literal pipe is unreliable in older bash versions).
-  _safe_desc="$(printf '%s' "$_safe_desc" | tr '|' '-')"
-  # Flat-file format: timestamp|event|description (pipe-delimited).
-  # Description field has pipes sanitized to prevent column corruption.
-  # The SQLite path (primary) does not have this limitation.
-  local _line
-  _line=$(printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc")
-  if command -v flock >/dev/null 2>&1; then
-    (flock -x 200; printf '%s\n' "$_line" >> "$events_log") 200>"${events_log}.lock"
-  else
-    printf '%s\n' "$_line" >> "$events_log"
   fi
 }

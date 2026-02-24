@@ -106,7 +106,7 @@ export interface PipelineStatus {
     items: BacklogItem[];
     pendingCount: number;
     claimedCount: number;
-    doneCount: number;
+    manualDoneCount: number;
   };
   completed: CompletedTask[];
   completedCount: number;
@@ -196,7 +196,7 @@ export interface TaskBacklogData {
   items: BacklogItem[];
   pendingCount: number;
   claimedCount: number;
-  doneCount: number;
+  manualDoneCount: number;
 }
 
 export interface TaskCreatePayload {

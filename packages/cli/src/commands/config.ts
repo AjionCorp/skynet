@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, renameSync, existsSync, mkdirSync, rmdirSync, rmSync, statSync } from "fs";
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
@@ -261,25 +261,8 @@ export async function configSetCommand(key: string, value: string, options: Conf
 
   const projectDir = resolve(options.dir || process.cwd());
   const configPath = getConfigPath(projectDir);
-  const content = readConfigFile(projectDir);
-  const lines = content.split("\n");
 
-  // Find the line containing this key
-  let targetLine = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const match = lines[i].match(/^(?:export\s+)?(\w+)="/);
-    if (match && match[1] === key) {
-      targetLine = i;
-      break;
-    }
-  }
-
-  if (targetLine === -1) {
-    console.error(`\n  Error: Variable "${key}" not found in skynet.config.sh.\n`);
-    process.exit(1);
-  }
-
-  // Validate the new value for known keys
+  // Validate the new value for known keys (does not depend on file content)
   const validationError = validateValue(key, value, projectDir);
   if (validationError) {
     console.error(`\n  Validation error: ${validationError}\n`);
@@ -311,32 +294,92 @@ export async function configSetCommand(key: string, value: string, options: Conf
     }
   }
 
-  // Replace the value on the target line, preserving export prefix and comments
-  const line = lines[targetLine];
-  const hasExport = line.startsWith("export ");
-  const prefix = hasExport ? "export " : "";
-
-  // Preserve any inline comment after the closing quote
-  const commentMatch = line.match(/"[^"]*"\s*(#.*)$/);
-  const inlineComment = commentMatch ? `  ${commentMatch[1]}` : "";
-
-  lines[targetLine] = `${prefix}${key}="${shellEscape(value)}"${inlineComment}`;
-
-  // TS-P2-2: Acquire mkdir-based mutex lock around read-modify-write cycle
+  // TS-P1-1/P1-2: Acquire mkdir-based mutex lock BEFORE reading the file.
+  // The read-modify-write cycle must be fully inside the lock to prevent
+  // TOCTOU data loss when concurrent processes update the config.
   const lockPath = configPath + ".lock";
-  try {
-    mkdirSync(lockPath);
-  } catch {
+  const lockPidFile = join(lockPath, "pid");
+  const LOCK_TTL_MS = 30_000;
+  let lockAcquired = false;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      mkdirSync(lockPath);
+      writeFileSync(lockPidFile, String(process.pid), "utf-8");
+      lockAcquired = true;
+      break;
+    } catch {
+      // TS-P1-2: Stale lock detection — check if holder PID is dead or lock is too old
+      try {
+        const pidStr = readFileSync(lockPidFile, "utf-8").trim();
+        const holderPid = Number(pidStr);
+        let isStale = false;
+
+        // Check if holder PID is dead
+        if (!isNaN(holderPid) && holderPid > 0) {
+          try { process.kill(holderPid, 0); } catch { isStale = true; }
+        }
+
+        // Check lock age > TTL (30 seconds)
+        if (!isStale) {
+          try {
+            const mtime = statSync(lockPidFile).mtimeMs;
+            if (Date.now() - mtime > LOCK_TTL_MS) isStale = true;
+          } catch { /* stat failed — lock dir may have been released */ }
+        }
+
+        if (isStale) {
+          try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* ignore */ }
+          continue; // Retry acquisition immediately
+        }
+      } catch { /* No PID file — lock dir may be partially created, retry */ }
+
+      // Brief sleep before retry (100ms) — use sync busy-wait since this is CLI
+      const start = Date.now();
+      while (Date.now() - start < 100) { /* spin */ }
+    }
+  }
+  if (!lockAcquired) {
     console.error(`\n  Error: Config file is locked by another process.\n`);
     process.exit(1);
   }
+
   try {
+    // TS-P1-1: File read, line finding, modification, and write all inside the lock
+    const content = readConfigFile(projectDir);
+    const lines = content.split("\n");
+
+    // Find the line containing this key
+    let targetLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+      const match = lines[i].match(/^(?:export\s+)?(\w+)="/);
+      if (match && match[1] === key) {
+        targetLine = i;
+        break;
+      }
+    }
+
+    if (targetLine === -1) {
+      console.error(`\n  Error: Variable "${key}" not found in skynet.config.sh.\n`);
+      process.exit(1);
+    }
+
+    // Replace the value on the target line, preserving export prefix and comments
+    const line = lines[targetLine];
+    const hasExport = line.startsWith("export ");
+    const prefix = hasExport ? "export " : "";
+
+    // Preserve any inline comment after the closing quote
+    const commentMatch = line.match(/"[^"]*"\s*(#.*)$/);
+    const inlineComment = commentMatch ? `  ${commentMatch[1]}` : "";
+
+    lines[targetLine] = `${prefix}${key}="${shellEscape(value)}"${inlineComment}`;
+
     // Atomic write: write to .tmp then rename
     const tmpPath = configPath + ".tmp";
     writeFileSync(tmpPath, lines.join("\n"), "utf-8");
     renameSync(tmpPath, configPath);
   } finally {
-    try { rmdirSync(lockPath); } catch { /* lock cleanup failure is non-fatal */ }
+    try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* lock cleanup failure is non-fatal */ }
   }
 
   const displayValue = SENSITIVE_KEYS.has(key) ? "••••••••" : value;
@@ -397,6 +440,14 @@ function parseTemplateBlocks(content: string): Array<{ varName: string; block: s
 /**
  * `skynet config migrate` — Add new config variables from the template.
  * Returns the list of added variable names (useful for programmatic callers).
+ *
+ * NOTE: The process.exit(1) calls in the error paths below terminate the
+ * process before the Promise<string[]> return value is produced. This means
+ * programmatic callers (e.g., `const names = await configMigrateCommand(opts)`)
+ * will never receive a return value on error — the process exits instead.
+ * This is intentional for CLI usage where error → exit is the expected behavior.
+ * If this function is ever called from a long-lived server context, the
+ * process.exit calls should be replaced with thrown errors.
  */
 export async function configMigrateCommand(options: ConfigOptions): Promise<string[]> {
   const projectDir = resolve(options.dir || process.cwd());
@@ -429,10 +480,26 @@ export async function configMigrateCommand(options: ConfigOptions): Promise<stri
     return [];
   }
 
-  // Append missing variables to the user's config
+  // Append missing variables to the user's config using atomic write with lock
   const additions = missing.map((m) => m.block).join("\n\n");
   const separator = userContent.endsWith("\n") ? "\n" : "\n\n";
-  appendFileSync(configPath, separator + additions + "\n", "utf-8");
+  const lockPath = configPath + ".lock";
+  try {
+    mkdirSync(lockPath);
+  } catch {
+    console.error(`\n  Error: Config file is locked by another process.\n`);
+    process.exit(1);
+  }
+  try {
+    // Atomic write: read full file, append missing vars, write to tmp, rename
+    const current = readFileSync(configPath, "utf-8");
+    const updated = current + separator + additions + "\n";
+    const tmpPath = configPath + ".tmp";
+    writeFileSync(tmpPath, updated, "utf-8");
+    renameSync(tmpPath, configPath);
+  } finally {
+    try { rmdirSync(lockPath); } catch { /* lock cleanup failure is non-fatal */ }
+  }
 
   const names = missing.map((m) => m.varName);
   console.log(`  Added ${names.length} new config variable${names.length > 1 ? "s" : ""}: ${names.join(", ")}`);

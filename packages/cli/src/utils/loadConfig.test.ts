@@ -131,4 +131,14 @@ describe("loadConfig", () => {
     expect(result!.SKYNET_VAL).toBe(process.env.HOME);
     expect(result!.SKYNET_SECRET).toBe("");
   });
+
+  it("single-quoted values are literal (no variable expansion)", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      "export SKYNET_FOO='bar $HOME'\n" as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_FOO).toBe("bar $HOME");
+  });
 });

@@ -23,7 +23,7 @@ const MOCK_STATUS: PipelineStatus = {
     items: [{ text: "[FEAT] Build dashboard", tag: "FEAT", status: "pending", blockedBy: [], blocked: false }],
     pendingCount: 3,
     claimedCount: 1,
-    doneCount: 10,
+    manualDoneCount: 10,
   },
   completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "" }],
   completedCount: 15,

@@ -165,14 +165,14 @@ describe("backlogCounts", () => {
     const counts = backlogCounts(items);
     expect(counts.pendingCount).toBe(2);
     expect(counts.claimedCount).toBe(1);
-    expect(counts.doneCount).toBe(3);
+    expect(counts.manualDoneCount).toBe(3);
   });
 
   it("returns zeros for empty array", () => {
     const counts = backlogCounts([]);
     expect(counts.pendingCount).toBe(0);
     expect(counts.claimedCount).toBe(0);
-    expect(counts.doneCount).toBe(0);
+    expect(counts.manualDoneCount).toBe(0);
   });
 });
 
@@ -215,7 +215,7 @@ describe("parseBacklogWithBlocked", () => {
     const result = parseBacklogWithBlocked(content);
     expect(result.pendingCount).toBe(1);
     expect(result.claimedCount).toBe(1);
-    expect(result.doneCount).toBe(1);
+    expect(result.manualDoneCount).toBe(1);
   });
 
   it("handles empty string", () => {

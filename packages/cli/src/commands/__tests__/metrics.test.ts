@@ -125,6 +125,21 @@ describe("metricsCommand", () => {
       expect(output).toContain("40m");
     });
 
+    it("parses standalone 'Nh' format correctly", async () => {
+      setupFiles(
+        makeCompleted([
+          "| 2026-01-01 | [FEAT] Task A | branch-a | 2h | done |",
+        ]),
+        makeFailed([]),
+      );
+
+      await metricsCommand({ dir: "/tmp/test" });
+
+      const output = getLogOutput();
+      // 2h = 120 minutes → "2h 0m"
+      expect(output).toContain("2h 0m");
+    });
+
     it("computes tasks per hour correctly", async () => {
       setupFiles(
         makeCompleted([

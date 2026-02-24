@@ -185,6 +185,43 @@ describe("stopCommand", () => {
     expect(logCalls).toContain("Invalid PID");
   });
 
+  it("reads PID from dir-based lock (lockFile/pid) and kills the process", async () => {
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      if (path.endsWith("-dev-worker-1.lock")) return true;
+      return false;
+    });
+
+    // Dir-based lock: readFileSync(join(lockFile, "pid")) succeeds
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return CONFIG_CONTENT as never;
+      // Return a valid PID when reading the dir-based lock's pid file
+      if (path.includes("-dev-worker-1.lock/pid")) return "44444" as never;
+      return "" as never;
+    });
+
+    // process.kill succeeds (process is running)
+    vi.mocked(process.kill).mockImplementation(() => true);
+
+    await stopCommand({ dir: "/tmp/test-project" });
+
+    // Should read PID from dir-based lock path and send SIGTERM
+    expect(process.kill).toHaveBeenCalledWith(44444, 0);
+    expect(process.kill).toHaveBeenCalledWith(44444, "SIGTERM");
+
+    // Should clean up the lock dir
+    const rmCalls = mockRmSync.mock.calls.map((c) => String(c[0]));
+    expect(rmCalls.some((p) => p.includes("-dev-worker-1.lock"))).toBe(true);
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    expect(logCalls).toContain("Stopped");
+    expect(logCalls).toContain("44444");
+  });
+
   it("exits when SKYNET_PROJECT_NAME is not set", async () => {
     mockReadFileSync.mockImplementation((p) => {
       const path = String(p);

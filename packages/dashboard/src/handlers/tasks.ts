@@ -11,6 +11,9 @@ const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_KEY = "task_create";
 // In-memory rate limit fallback (used only when SQLite is unavailable).
+// NOTE: This in-memory array resets on process restart and is secondary to
+// SQLite-backed rate limiting which persists across restarts. It exists only
+// as a safety net when the DB is unreachable.
 // Uses shift() on a max-30-element array — O(n) reindex is negligible at this scale.
 const _postTimestamps: number[] = [];
 
@@ -38,7 +41,7 @@ export function createTasksHandlers(config: SkynetConfig) {
             items,
             pendingCount: backlog.pendingCount,
             claimedCount: backlog.claimedCount,
-            doneCount: backlog.doneCount,
+            manualDoneCount: backlog.manualDoneCount,
           },
           error: null,
         });
@@ -54,7 +57,7 @@ export function createTasksHandlers(config: SkynetConfig) {
           items,
           pendingCount: backlog.pendingCount,
           claimedCount: backlog.claimedCount,
-          doneCount: backlog.doneCount,
+          manualDoneCount: backlog.manualDoneCount,
         },
         error: null,
       });

@@ -111,7 +111,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
         // Watch .dev/ directory for .md file changes
         try {
           watcher = watch(devDir, (_event, filename) => {
-            if (!filename?.endsWith(".md")) return;
+            if (!filename?.endsWith(".md") && !filename?.endsWith(".db-wal")) return;
             if (debounceTimer) clearTimeout(debounceTimer);
             debounceTimer = setTimeout(() => { pushStatus().catch(() => cleanup()); }, 500);
           });

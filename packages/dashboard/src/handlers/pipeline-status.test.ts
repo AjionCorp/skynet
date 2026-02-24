@@ -136,7 +136,7 @@ describe("createPipelineStatusHandler", () => {
     const { data } = await res.json();
     expect(data.backlog.pendingCount).toBe(1);
     expect(data.backlog.claimedCount).toBe(1);
-    expect(data.backlog.doneCount).toBe(1);
+    expect(data.backlog.manualDoneCount).toBe(1);
   });
 
   it("detects blockers", async () => {

@@ -401,7 +401,7 @@ _check_token_expiry() {
 
   # Decode JWT exp claim via python3 (available on macOS + most Linux)
   local exp
-  exp=$(echo "$token" | cut -d. -f2 | python3 -c "
+  exp=$(echo "$token" | tr -d '\n' | cut -d. -f2 | python3 -c "
 import base64,json,sys
 p=sys.stdin.read().strip()
 p+='='*(-len(p)%4)

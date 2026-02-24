@@ -164,6 +164,19 @@ describe("runCommand", () => {
     );
   });
 
+  it("rejects task description longer than 500 characters", async () => {
+    const longTask = "A".repeat(501);
+
+    await expect(
+      runCommand(longTask, { dir: "/tmp/test-project" }),
+    ).rejects.toThrow("process.exit");
+
+    expect(process.exit).toHaveBeenCalledWith(1);
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("500 characters"),
+    );
+  });
+
   it("errors when SKYNET_PROJECT_NAME is not set", async () => {
     mockReadFileSync.mockImplementation((p) => {
       const path = String(p);

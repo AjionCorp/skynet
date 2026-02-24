@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("fs", () => ({
   readFileSync: vi.fn(() => ""),
   writeFileSync: vi.fn(),
-  appendFileSync: vi.fn(),
   renameSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  rmdirSync: vi.fn(),
   existsSync: vi.fn(() => false),
 }));
 
@@ -12,11 +13,11 @@ vi.mock("child_process", () => ({
   execSync: vi.fn(),
 }));
 
-import { readFileSync, appendFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { configMigrateCommand } from "../config";
 
 const mockReadFileSync = vi.mocked(readFileSync);
-const mockAppendFileSync = vi.mocked(appendFileSync);
+const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 
 const USER_CONFIG = `export SKYNET_PROJECT_NAME="my-app"
@@ -82,14 +83,15 @@ describe("configMigrateCommand", () => {
 
     await configMigrateCommand({ dir: "/tmp/test" });
 
-    expect(mockAppendFileSync).toHaveBeenCalledTimes(1);
-    const appended = mockAppendFileSync.mock.calls[0][1] as string;
+    // Atomic write: writeFileSync writes the full updated content to a .tmp file
+    expect(mockWriteFileSync).toHaveBeenCalledTimes(1);
+    const written = mockWriteFileSync.mock.calls[0][1] as string;
 
     // Should include comment + variable definition for each missing var
-    expect(appended).toContain("# Max parallel fixers");
-    expect(appended).toContain("export SKYNET_MAX_FIXERS=2");
-    expect(appended).toContain("# Stale task timeout in minutes");
-    expect(appended).toContain("export SKYNET_STALE_MINUTES=45");
+    expect(written).toContain("# Max parallel fixers");
+    expect(written).toContain("export SKYNET_MAX_FIXERS=2");
+    expect(written).toContain("# Stale task timeout in minutes");
+    expect(written).toContain("export SKYNET_STALE_MINUTES=45");
   });
 
   it('reports "Added N new config variables: VAR1, VAR2" when variables are missing', async () => {
@@ -132,7 +134,7 @@ export SKYNET_STALE_MINUTES=45
     const result = await configMigrateCommand({ dir: "/tmp/test" });
 
     expect(result).toEqual([]);
-    expect(mockAppendFileSync).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
 
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
       .flat()

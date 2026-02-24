@@ -17,7 +17,7 @@ const MOCK_BACKLOG: TaskBacklogData = {
   ],
   pendingCount: 5,
   claimedCount: 2,
-  doneCount: 10,
+  manualDoneCount: 10,
 };
 
 function renderWithProvider(ui: React.ReactElement) {
@@ -104,7 +104,7 @@ describe("TasksDashboard", () => {
   });
 
   it("shows empty state when no tasks", async () => {
-    mockFetchWith({ items: [], pendingCount: 0, claimedCount: 0, doneCount: 0 });
+    mockFetchWith({ items: [], pendingCount: 0, claimedCount: 0, manualDoneCount: 0 });
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
       expect(screen.getByText("No pending or claimed tasks")).toBeDefined();

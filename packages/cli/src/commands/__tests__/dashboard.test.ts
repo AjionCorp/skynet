@@ -86,6 +86,31 @@ describe("dashboardCommand", () => {
     expect(openCalls[0][1]).toEqual([expect.stringContaining("http://localhost:")]);
   });
 
+  // TEST-P3-1: Port validation tests
+  it("rejects port 0 with process.exit(1)", async () => {
+    await expect(dashboardCommand({ port: "0" })).rejects.toThrow("process.exit");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Port must be a number between 1 and 65535"),
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("rejects port above 65535 with process.exit(1)", async () => {
+    await expect(dashboardCommand({ port: "99999" })).rejects.toThrow("process.exit");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Port must be a number between 1 and 65535"),
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
+  it("rejects non-numeric port with process.exit(1)", async () => {
+    await expect(dashboardCommand({ port: "abc" })).rejects.toThrow("process.exit");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("Port must be a number between 1 and 65535"),
+    );
+    expect(process.exit).toHaveBeenCalledWith(1);
+  });
+
   it("opens browser via 'xdg-open' on Linux", async () => {
     mockPlatform.mockReturnValue("linux");
 

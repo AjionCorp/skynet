@@ -102,17 +102,17 @@ export function parseBacklog(content: string): ParsedBacklogItem[] {
 export function backlogCounts(items: ParsedBacklogItem[]): {
   pendingCount: number;
   claimedCount: number;
-  doneCount: number;
+  manualDoneCount: number;
 } {
   let pendingCount = 0;
   let claimedCount = 0;
-  let doneCount = 0;
+  let manualDoneCount = 0;
   for (const item of items) {
     if (item.status === "pending") pendingCount++;
     else if (item.status === "claimed") claimedCount++;
-    else if (item.status === "done") doneCount++;
+    else if (item.status === "done") manualDoneCount++;
   }
-  return { pendingCount, claimedCount, doneCount };
+  return { pendingCount, claimedCount, manualDoneCount };
 }
 
 export interface BacklogItemWithBlocked {
@@ -136,7 +136,7 @@ export function parseBacklogWithBlocked(raw: string): {
   items: BacklogItemWithBlocked[];
   pendingCount: number;
   claimedCount: number;
-  doneCount: number;
+  manualDoneCount: number;
 } {
   const parsed = parseBacklog(raw);
   const counts = backlogCounts(parsed);

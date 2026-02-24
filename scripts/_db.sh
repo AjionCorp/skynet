@@ -719,6 +719,12 @@ db_supersede_task() {
 # Also resolves orphaned blockers linked to newly-superseded tasks.
 # Both UPDATEs are wrapped in a single transaction for atomicity.
 # Returns a single number (task changes) — the caller in watchdog.sh expects one number.
+#
+# SH-P3-4: The subquery `SELECT normalized_root FROM tasks WHERE status IN
+# ('completed','fixed') AND normalized_root != ''` is duplicated in both UPDATE
+# statements. This is intentional for simplicity — the tasks table is small
+# (typically < 200 rows), so the cost of re-running the subquery is negligible
+# compared to the complexity of a CTE or temp table approach in sqlite3 CLI.
 db_auto_supersede_completed() {
   _db "
     BEGIN IMMEDIATE;
@@ -984,7 +990,7 @@ db_task_exists() {
   if [ -n "$norm_root" ]; then
     local norm_esc; norm_esc=$(_sql_escape "$norm_root")
     local norm_count
-    norm_count=$(_sql_query "SELECT COUNT(*) FROM tasks WHERE normalized_root='$norm_esc' AND status IN ('pending','claimed','fixing-1','fixing-2','fixing-3');")
+    norm_count=$(_sql_query "SELECT COUNT(*) FROM tasks WHERE normalized_root='$norm_esc' AND (status IN ('pending','claimed') OR status LIKE 'fixing-%');")
     [ "${norm_count:-0}" != "0" ] && return 0
   fi
 

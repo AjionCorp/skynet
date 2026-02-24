@@ -57,4 +57,19 @@ describe("isProcessRunning", () => {
     const result = isProcessRunning("/tmp/test.lock");
     expect(result.running).toBe(false);
   });
+
+  it("returns running via dir-based lock (lockPath/pid) with active PID", () => {
+    // First call (join(lockPath, "pid")) succeeds with a valid PID
+    mockReadFileSync.mockReturnValue(String(process.pid) as never);
+    const result = isProcessRunning("/tmp/test.lock");
+    expect(result.running).toBe(true);
+    expect(result.pid).toBe(String(process.pid));
+  });
+
+  it("returns not running via dir-based lock with dead PID", () => {
+    // First call (join(lockPath, "pid")) succeeds with a dead PID
+    mockReadFileSync.mockReturnValue("99999999" as never);
+    const result = isProcessRunning("/tmp/test.lock");
+    expect(result.running).toBe(false);
+  });
 });

@@ -36,6 +36,11 @@ function parseCurrentTask(raw: string) {
 /**
  * Parse a human-readable duration string (e.g., "23m", "1h 12m") into minutes.
  * Returns null if the string cannot be parsed.
+ *
+ * NOTE: This only handles integer durations (e.g., "23m", "1h 12m") matching
+ * the bash pipeline's format_duration() output in dev-worker.sh, which always
+ * produces integer hours and minutes from whole-second epoch arithmetic.
+ * Decimal inputs like "1.5h" will return null — this is intentional.
  */
 // NOTE: duration parsing also exists in packages/cli/src/commands/metrics.ts
 export function parseDurationMinutes(s: string): number | null {
@@ -93,6 +98,12 @@ function readCodexAuthStatus(
 /**
  * Create a GET handler for the pipeline/status endpoint.
  * Returns full monitoring status including workers, tasks, backlog, sync health, auth, and git.
+ *
+ * TS-P3-6: Any JSON.parse calls for external files (e.g., codex auth.json,
+ * watchdog-telemetry.json) must be wrapped in try/catch to handle malformed
+ * JSON gracefully. The codex auth read (readCodexAuthStatus) is already
+ * protected. If watchdog-telemetry.json consumption is added in the future,
+ * ensure it follows the same pattern.
  */
 export function createPipelineStatusHandler(config: SkynetConfig) {
   const { devDir, lockPrefix, workers: workerDefs } = config;

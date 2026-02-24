@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { completionsCommand } from "../completions";
 
 // All registered commands from the COMMANDS record in completions.ts
+// TEST-P3-2: Keep in sync with the COMMANDS record — validate and changelog added.
 const EXPECTED_COMMANDS = [
   "init",
   "setup-agents",
@@ -26,6 +27,8 @@ const EXPECTED_COMMANDS = [
   "config",
   "completions",
   "test-notify",
+  "validate",
+  "changelog",
 ];
 
 describe("completionsCommand", () => {

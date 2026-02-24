@@ -103,6 +103,8 @@ function parseCronSchedule(
 ): { intervalSeconds: number; human: string } | null {
   const intervalSeconds = cronToIntervalSeconds(expr);
   if (intervalSeconds === null) return null;
+  // TS-P3-5: Floor check — step values like */0 would produce zero interval
+  if (intervalSeconds <= 0) return null;
   // Cap at 24 hours — step values like */999999 would produce enormous intervals
   if (intervalSeconds > 86400) return null;
 

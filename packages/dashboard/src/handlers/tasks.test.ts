@@ -60,7 +60,7 @@ describe("createTasksHandlers", () => {
       expect(body.data.items.filter((i: { status: string }) => i.status === "done")).toHaveLength(0);
       expect(body.data.pendingCount).toBe(2);
       expect(body.data.claimedCount).toBe(1);
-      expect(body.data.doneCount).toBe(1);
+      expect(body.data.manualDoneCount).toBe(1);
     });
 
     it("parses tags from backlog items", async () => {
@@ -310,7 +310,7 @@ describe("createTasksHandlers", () => {
       const res = await GET();
       const { data } = await res.json();
       expect(data.items).toHaveLength(0);
-      expect(data.doneCount).toBe(2);
+      expect(data.manualDoneCount).toBe(2);
     });
 
     it("returns empty items from empty backlog file", async () => {
@@ -321,7 +321,7 @@ describe("createTasksHandlers", () => {
       expect(data.items).toHaveLength(0);
       expect(data.pendingCount).toBe(0);
       expect(data.claimedCount).toBe(0);
-      expect(data.doneCount).toBe(0);
+      expect(data.manualDoneCount).toBe(0);
     });
 
     it("parses items without tags gracefully", async () => {

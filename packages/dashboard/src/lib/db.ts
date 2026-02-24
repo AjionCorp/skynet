@@ -15,14 +15,26 @@ type BetterSqlite3 = typeof import("better-sqlite3");
 type Database = import("better-sqlite3").Database;
 
 let _betterSqlite3: BetterSqlite3 | null = null;
+// OPS-P3-3: Cache load failure so subsequent calls don't retry require() on
+// every request. Once the native addon fails to load (e.g., missing binary),
+// retrying on each request just wastes time and logs noise.
+let _loadFailed = false;
 function loadDriver(): BetterSqlite3 {
+  if (_loadFailed) {
+    throw new Error("better-sqlite3 previously failed to load — skipping retry");
+  }
   if (!_betterSqlite3) {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    // require() is synchronous but only executes once (Node caches modules).
-    // The native addon load time is ~5ms on first require. Switching to dynamic
-    // import() would require making the constructor async, adding complexity
-    // for negligible benefit in a server-side context.
-    _betterSqlite3 = require("better-sqlite3") as BetterSqlite3;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      // require() is synchronous but only executes once (Node caches modules).
+      // The native addon load time is ~5ms on first require. Switching to dynamic
+      // import() would require making the constructor async, adding complexity
+      // for negligible benefit in a server-side context.
+      _betterSqlite3 = require("better-sqlite3") as BetterSqlite3;
+    } catch (err) {
+      _loadFailed = true;
+      throw err;
+    }
   }
   return _betterSqlite3;
 }
@@ -114,9 +126,11 @@ export class SkynetDB {
   constructor(dbPath: string) {
     const Database = loadDriver();
     this.db = new Database(dbPath);
+    // Set busy_timeout first so that the journal_mode = WAL pragma does not
+    // fail with SQLITE_BUSY if another process holds the database lock.
+    this.db.pragma("busy_timeout = 15000");
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
-    this.db.pragma("busy_timeout = 15000");
     // Lightweight call that only runs ANALYZE when statistics are stale.
     // Safe to call on every connection — no-op when stats are fresh.
     this.db.pragma("optimize");
@@ -133,30 +147,39 @@ export class SkynetDB {
     items: BacklogItem[];
     pendingCount: number;
     claimedCount: number;
-    doneCount: number;
+    manualDoneCount: number;
   } {
     const rows = this.db
       .prepare(
         `SELECT id, title, tag, description, status, blocked_by, priority
          FROM tasks
-         WHERE status IN ('pending','claimed','done')
+         WHERE status IN ('pending','claimed')
          ORDER BY priority ASC`
       )
       .all() as Pick<TaskRow, "id" | "title" | "tag" | "description" | "status" | "blocked_by" | "priority">[];
 
-    // Build title→status map for blocked resolution
+    // Compute manualDoneCount separately — these rows are not needed for backlog display
+    const doneRow = this.db
+      .prepare(`SELECT COUNT(*) AS cnt FROM tasks WHERE status='done'`)
+      .get() as { cnt: number } | undefined;
+    const manualDoneCount = doneRow?.cnt ?? 0;
+
+    // Build title→status map for blocked resolution (include done items for dependency checks)
     const titleToStatus = new Map<string, string>();
     for (const r of rows) titleToStatus.set(r.title, r.status);
+    // Also load done titles so blockedBy resolution can find them
+    const doneRows = this.db
+      .prepare(`SELECT title FROM tasks WHERE status='done'`)
+      .all() as Pick<TaskRow, "title">[];
+    for (const r of doneRows) titleToStatus.set(r.title, "done");
 
     let pendingCount = 0;
     let claimedCount = 0;
-    let doneCount = 0;
 
     const items: BacklogItem[] = rows.map((r) => {
-      const status = r.status as "pending" | "claimed" | "done";
+      const status = r.status as "pending" | "claimed";
       if (status === "pending") pendingCount++;
       else if (status === "claimed") claimedCount++;
-      else if (status === "done") doneCount++;
 
       const blockedBy = r.blocked_by
         ? r.blocked_by.split(",").map((s) => s.trim()).filter(Boolean)
@@ -177,7 +200,7 @@ export class SkynetDB {
       };
     });
 
-    return { items, pendingCount, claimedCount, doneCount };
+    return { items, pendingCount, claimedCount, manualDoneCount };
   }
 
   /** Completed tasks (most recent first). */

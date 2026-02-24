@@ -142,7 +142,7 @@ describe("SkynetDB", () => {
         items: [],
         pendingCount: 0,
         claimedCount: 0,
-        doneCount: 0,
+        manualDoneCount: 0,
       });
     });
 
@@ -158,8 +158,9 @@ describe("SkynetDB", () => {
       const result = db.getBacklogItems();
       expect(result.pendingCount).toBe(1);
       expect(result.claimedCount).toBe(1);
-      expect(result.doneCount).toBe(1);
-      expect(result.items).toHaveLength(3);
+      expect(result.manualDoneCount).toBe(1);
+      // Only pending and claimed items are returned (done items are excluded)
+      expect(result.items).toHaveLength(2);
       expect(result.items[0]).toMatchObject({
         tag: "FIX",
         status: "pending",
@@ -566,6 +567,18 @@ describe("SkynetDB", () => {
 
       const avg = db.getAverageTaskDuration();
       expect(avg).toBe("1h 30m"); // avg of 60m and 120m = 90m
+    });
+
+    // TEST-P3-3: Exact-hour boundary — verify output is "1h" not "1h 0m"
+    it("formats exact hour boundary as '1h' without trailing 0m", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, duration_secs, priority) VALUES ('T1', 'FIX', 'completed', 3600, 0)"); // exactly 3600s = 1h
+      rawDb.close();
+
+      const avg = db.getAverageTaskDuration();
+      expect(avg).toBe("1h");
     });
   });
 

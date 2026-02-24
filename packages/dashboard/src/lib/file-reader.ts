@@ -35,6 +35,13 @@ export function readDevFile(devDir: string, filename: string): string {
  * Read the last line of a script log file. Returns null if the log does not exist.
  * Uses a pure Node.js implementation that reads the last ~4KB of the file
  * instead of spawning a `tail` subprocess.
+ *
+ * NOTE: If a multi-byte UTF-8 character straddles the 4KB read boundary, the
+ * first character of the returned text may be garbled (U+FFFD replacement).
+ * This is cosmetic only — it can only affect the first line in the 4KB window,
+ * and we only return the *last* line, so it would only matter if the entire
+ * file is a single line longer than 4KB with a multi-byte char at position
+ * (fileSize - 4096). Acceptable for display-only log tail output.
  */
 export function getLastLogLine(
   devDir: string,

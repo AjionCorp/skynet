@@ -128,7 +128,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
             Completed
           </div>
           <div className="mt-1 text-2xl font-bold text-white">
-            {backlog?.doneCount ?? "\u2014"}
+            {backlog?.manualDoneCount ?? "\u2014"}
           </div>
         </div>
       </div>
