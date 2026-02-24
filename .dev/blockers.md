@@ -82,7 +82,17 @@
 
 - **2026-02-20 20:00**: CLI `isProcessRunning`/`readFile` DRY extraction. **Fixed** — shared utilities created in `packages/cli/src/utils/`, all 7 CLI files updated to import.
 
-- **2026-02-24**: All previously-active blockers from 2026-02-20 confirmed resolved. Orphaned working directory changes committed (git status clean). Shell injection in `config set` fixed (no `execSync`). Health score and `SKYNET_STALE_MINUTES` parity fixed across CLI/dashboard/watchdog. All 21 stale pending entries cleared (0 pending/blocked in failed-tasks.md). Config template includes all discoverable knobs.
+- **2026-02-24**: Orphaned working directory changes from killed workers left uncommitted on `main`. **Fixed** — landed in atomic commits via "Land orphaned main hardening changes" (multiple passes, all merged to main).
+
+- **2026-02-24**: Shell injection risk in `skynet config set` — `execSync` allowed arbitrary command execution via crafted config values. **Fixed** — shell-execution path removed entirely. See completed tasks: "Remove shell-execution path from skynet config set", "Patch shell injection risk in skynet config set".
+
+- **2026-02-24**: Health score formula mismatch — watchdog, CLI `status`, and dashboard `pipeline-status` handler each used different health score math and hardcoded `SKYNET_STALE_MINUTES=45`. **Fixed** — unified stale-threshold and health-score parity across all three surfaces. See completed tasks: "Unify stale-threshold and health-score parity across CLI/dashboard/watchdog", "Align watchdog health score math with CLI/dashboard".
+
+- **2026-02-24**: Stale heartbeat threshold hardcoded in multiple locations instead of reading `SKYNET_STALE_MINUTES` from config. **Fixed** — all consumer sites now read from config with fallback default. See completed task: "Make stale heartbeat threshold config-consistent everywhere".
+
+- **2026-02-24**: 21 stale `pending` entries in `failed-tasks.md` for tasks already completed via fresh implementations. **Fixed** — all 21 entries superseded. Watchdog auto-supersede with fuzzy title normalization prevents recurrence. See completed tasks: "Supersede 21 stale pending entries in failed-tasks.md", "Improve watchdog auto-supersede to catch stale failed-tasks with title variations".
+
+- **2026-02-24 16:52**: Claude Code authentication expired, pausing all pipeline jobs. **Resolved** — authentication restored, pipeline resumed.
 
 ## Active
 
@@ -90,6 +100,6 @@ _No active blockers._
 
 ## Mission Status
 
-All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 440+ tasks completed (442 pipeline commits on main), 99% self-correction rate (263 of 266 failures resolved), 3 active retries (recent 2026-02-24 task failures pending task-fixer). Pipeline is in polish/portability phase.
+All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 200 tasks in completed.md (933 pipeline commits on main), 99% self-correction rate (264 of 267 failures resolved), 3 active retries (sparkline merge-conflict, keyboard shortcuts worktree-missing, velocity chart merge-failure — pending task-fixer). Pipeline is in polish/portability phase.
 
-**Current focus**: (1) State file hygiene — archive 267 resolved failed-task rows to bound file size, deduplicate completed.md entries. (2) Code quality — extract duplicated mission evaluation logic to shared module, separate rate-limit write path from read-only DB. (3) Test coverage — handler unit tests for mission-raw and pipeline-stream (last 2 untested handlers), watchdog crash recovery integration test, Linux cron setup-agents regression. (4) Extensibility — complete echo agent dry-run lifecycle, add pipeline idle detection and completion signaling.
+**Current focus**: (1) State hygiene — deduplicate completed.md entries, archive resolved failed-task rows. (2) Code quality — extract duplicated mission evaluation to shared module, separate rate-limit write path. (3) Test coverage — handler unit tests for mission-raw and pipeline-stream (last 2 untested handlers), shell regression tests for dev-worker.sh and task-fixer.sh. (4) Extensibility — complete echo agent dry-run lifecycle, pipeline idle detection/signaling.

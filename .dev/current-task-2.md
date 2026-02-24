@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard
+## [DATA] [DATA] Refresh blockers.md Active section to match current resolved state
 **Status:** completed
-**Started:** 2026-02-24 16:48
+**Started:** 2026-02-24 16:54
 **Completed:** 2026-02-24
-**Branch:** dev/add-worker-efficiency-cards-to-pipeline-
+**Branch:** dev/refresh-blockersmd-active-section-to-mat
 **Worker:** 2
 
 ### Changes

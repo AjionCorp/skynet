@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-24 | [DATA] [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
 | 2026-02-24 | [INFRA] [INFRA] Prune stale local dev/* branches from resolved failed tasks | merged to main | 5m | success |
 | 2026-02-24 | [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size | merged to main | 4m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unblock config template parity root for one-shot/watchdog vars | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Land orphaned `main` hardening changes with clean commit split | merged to main | 2m | fixed (attempt 2) |
 | 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity | merged to main | 3m | success |
-| 2026-02-20 | [INFRA] Canonicalize active failed-task roots and collapse duplicate variants | fixing-* | 0m | blocked`), supersede redundant variants, and emit before/after root counts to logs/events. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state. |
