@@ -13,7 +13,7 @@ mkdir -p "$(dirname "$LOG")"
 
 cd "$PROJECT_DIR"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+log() { _log "info" "SYNC" "$*" "$LOG"; _log "info" "SYNC" "$*"; }
 
 # Guard: validate SKYNET_SYNC_ENDPOINTS is defined and is an array with elements
 # SH-P2-6: Use declare -p check to verify it is actually an array

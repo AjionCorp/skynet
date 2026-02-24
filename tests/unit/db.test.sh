@@ -894,6 +894,43 @@ EPLAN=$(db_explain_claim 1)
 assert_not_empty "$EPLAN" "db_explain_claim: returns non-empty query plan"
 assert_contains "$EPLAN" "SCAN" "db_explain_claim: plan contains SCAN operation"
 
+# ============================================================
+# TEST: SKYNET_DB_DEBUG produces timing log output
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== DB debug mode timing ===="
+
+# Enable debug mode and capture log output
+SKYNET_DB_DEBUG=true
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Debug timing task" "FEAT" "" "top" >/dev/null
+
+# Override log() to capture output to a temp file
+_DBG_LOG_FILE="$(mktemp)"
+log() { printf '%s\n' "$*" >> "$_DBG_LOG_FILE"; }
+
+# Run a simple query with debug enabled
+_db "SELECT COUNT(*) FROM tasks;" >/dev/null 2>/dev/null
+
+_DBG_LOG_CONTENT="$(cat "$_DBG_LOG_FILE" 2>/dev/null || true)"
+assert_contains "$_DBG_LOG_CONTENT" "SQL DEBUG" "DB_DEBUG=true: produces SQL DEBUG log line"
+assert_contains "$_DBG_LOG_CONTENT" "ms" "DB_DEBUG=true: log contains timing in ms"
+
+# Test slow query warning (set threshold to 0ms so any query triggers it)
+SKYNET_DB_SLOW_QUERY_MS=0
+> "$_DBG_LOG_FILE"
+_db "SELECT COUNT(*) FROM tasks;" >/dev/null 2>/dev/null
+_DBG_SLOW_CONTENT="$(cat "$_DBG_LOG_FILE" 2>/dev/null || true)"
+assert_contains "$_DBG_SLOW_CONTENT" "SQL SLOW" "DB_DEBUG=true + threshold=0: produces SQL SLOW warning"
+
+# Restore defaults
+SKYNET_DB_DEBUG=false
+SKYNET_DB_SLOW_QUERY_MS=100
+log() { :; }
+rm -f "$_DBG_LOG_FILE"
+
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
