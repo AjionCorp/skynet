@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 export async function POST() {
-  const response = NextResponse.json({ ok: true });
+  const response = NextResponse.json({ data: { ok: true }, error: null });
   response.cookies.set("skynet-api-key", "", {
     httpOnly: true,
     sameSite: "strict",

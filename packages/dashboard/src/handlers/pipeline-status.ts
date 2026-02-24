@@ -38,7 +38,7 @@ function parseCurrentTask(raw: string) {
  * Returns null if the string cannot be parsed.
  */
 // NOTE: duration parsing also exists in packages/cli/src/commands/metrics.ts
-function parseDurationMinutes(s: string): number | null {
+export function parseDurationMinutes(s: string): number | null {
   const hm = s.match(/^(\d+)h\s+(\d+)m$/);
   if (hm) return Number(hm[1]) * 60 + Number(hm[2]);
   const hOnly = s.match(/^(\d+)h$/);
@@ -53,7 +53,7 @@ function parseDurationMinutes(s: string): number | null {
 /**
  * Format minutes as a human-readable duration string (e.g., "23m", "1h 12m").
  */
-function formatDuration(minutes: number): string {
+export function formatDuration(minutes: number): string {
   if (!Number.isFinite(minutes)) return "--";
   if (minutes < 60) return `${Math.round(minutes)}m`;
   const h = Math.floor(minutes / 60);

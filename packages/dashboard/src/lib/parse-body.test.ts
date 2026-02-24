@@ -27,6 +27,14 @@ describe("parseBody", () => {
     expect(result.status).toBe(400);
   });
 
+  it("rejects array of objects (not a plain object)", async () => {
+    const req = makeRequest(JSON.stringify([{ key: "val" }, { key: "val2" }]));
+    const result = await parseBody(req);
+    expect(result.error).toBe("Request body must be a JSON object");
+    expect(result.status).toBe(400);
+    expect(result.data).toBeNull();
+  });
+
   it("rejects non-object JSON (string)", async () => {
     const req = makeRequest('"hello"');
     const result = await parseBody(req);

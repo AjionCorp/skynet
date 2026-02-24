@@ -4,9 +4,11 @@
 
 set -euo pipefail
 
-# Seed $RANDOM with PID and nanosecond timestamp to reduce thundering herd
-# when multiple workers start simultaneously from watchdog
-RANDOM=$((RANDOM ^ $$ ^ $(date +%N 2>/dev/null || echo 0)))
+# Seed $RANDOM with PID, nanosecond timestamp, and parent PID to reduce
+# thundering herd when multiple workers start simultaneously from watchdog.
+# date +%N provides nanosecond resolution on Linux; macOS lacks %N so falls
+# back to 0. The XOR with $$ and $PPID ensures uniqueness even without %N.
+RANDOM=$((RANDOM ^ $$ ^ ${PPID:-0} ^ $(date +%N 2>/dev/null || echo 0)))
 
 # Resolve the scripts directory (where this file lives)
 SKYNET_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -221,6 +223,17 @@ SKYNET_PROJECT_NAME_UPPER="$(to_upper "$SKYNET_PROJECT_NAME")"
 # Source notification helpers
 source "$SKYNET_SCRIPTS_DIR/_notify.sh"
 
+# One-time warning if no notification channels are configured.
+# Uses a sentinel file so the warning appears once per project, not on every script invocation.
+_notify_warn_sentinel="$SKYNET_DEV_DIR/.notify-warn-shown"
+if [ -z "${SKYNET_NOTIFY_CHANNELS:-}" ] || [ "${SKYNET_NOTIFY_CHANNELS:-}" = "none" ]; then
+  if [ ! -f "$_notify_warn_sentinel" ]; then
+    echo "WARNING: No notification channels configured (SKYNET_NOTIFY_CHANNELS is empty)." >&2
+    echo "  Pipeline events will only be logged. Set SKYNET_NOTIFY_CHANNELS in skynet.config.sh." >&2
+    touch "$_notify_warn_sentinel" 2>/dev/null || true
+  fi
+fi
+
 # Source structured event logging
 source "$SKYNET_SCRIPTS_DIR/_events.sh"
 
@@ -254,6 +267,9 @@ fi
 # Each script's log() delegates to _log() with its worker label and log file.
 _json_escape() {
   local s="$1"
+  # NOTE: Forward slashes (/) are NOT escaped. JSON spec (RFC 8259 §7) allows
+  # but does not require \/ escaping. Omitting it keeps output readable and
+  # is safe for all JSON parsers.
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
   s="${s//$'\n'/\\n}"
@@ -270,8 +286,14 @@ _log() {
   if [ "${SKYNET_LOG_FORMAT:-text}" = "json" ]; then
     local ts
     ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-    line=$(printf '{"ts":"%s","level":"%s","worker":"%s","msg":"%s"}' \
-      "$ts" "$level" "$(_json_escape "$label")" "$(_json_escape "$msg")")
+    # Include trace_id in JSON output when TRACE_ID is set (task lifecycle tracing).
+    # TRACE_ID is set by dev-worker.sh and task-fixer.sh per claimed task.
+    local _trace_field=""
+    if [ -n "${TRACE_ID:-}" ]; then
+      _trace_field=$(printf ',"trace_id":"%s"' "$(_json_escape "$TRACE_ID")")
+    fi
+    line=$(printf '{"ts":"%s","level":"%s","worker":"%s","msg":"%s"%s}' \
+      "$ts" "$level" "$(_json_escape "$label")" "$(_json_escape "$msg")" "$_trace_field")
   else
     line="[$(date '+%Y-%m-%d %H:%M:%S')]"
     [ -n "$label" ] && line="$line [$label]"

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmdirSync } from "fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmdirSync, rmSync, statSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { VALID_CONFIG_KEY } from "../lib/constants";
@@ -110,7 +110,7 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): s
  * 2. Stability: template changes shouldn't auto-expose new keys
  * 3. Auditability: git blame shows when each key was added
  */
-const MUTABLE_KEYS = new Set([
+export const MUTABLE_KEYS = new Set([
   "SKYNET_MAX_WORKERS",
   "SKYNET_MAX_FIXERS",
   "SKYNET_MAX_TASKS_PER_RUN",
@@ -245,7 +245,7 @@ function validateUpdates(updates: Record<string, string>): string | null {
  * Keys containing secrets that should be masked in GET responses.
  * These values are write-only from the dashboard's perspective.
  */
-const SENSITIVE_KEYS = new Set([
+export const SENSITIVE_KEYS = new Set([
   "SKYNET_TG_BOT_TOKEN",
   "SKYNET_SLACK_WEBHOOK_URL",
   "SKYNET_DISCORD_WEBHOOK_URL",
@@ -318,14 +318,42 @@ export function createConfigHandler(config: SkynetConfig) {
       }
 
       // Acquire mkdir-based mutex lock around the read-modify-write cycle
+      // OPS-P2-3: Add PID file inside lock dir and stale detection (TTL 30s)
       const lockPath = `${config.devDir}/config.lock`;
+      const lockPidFile = `${lockPath}/pid`;
+      const LOCK_TTL_MS = 30_000;
       let lockAcquired = false;
       for (let attempt = 0; attempt < 30; attempt++) {
         try {
           mkdirSync(lockPath);
+          writeFileSync(lockPidFile, String(process.pid), "utf-8");
           lockAcquired = true;
           break;
         } catch {
+          // Check for stale lock: PID dead or lock older than TTL
+          try {
+            const pidStr = readFileSync(lockPidFile, "utf-8").trim();
+            const holderPid = Number(pidStr);
+            let isStale = false;
+
+            // Check if holder PID is dead
+            if (!isNaN(holderPid) && holderPid > 0) {
+              try { process.kill(holderPid, 0); } catch { isStale = true; }
+            }
+
+            // Check lock age > TTL
+            if (!isStale) {
+              try {
+                const mtime = statSync(lockPidFile).mtimeMs;
+                if (Date.now() - mtime > LOCK_TTL_MS) isStale = true;
+              } catch { /* stat failed — lock dir may have been released */ }
+            }
+
+            if (isStale) {
+              try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* ignore */ }
+              continue; // Retry acquisition immediately
+            }
+          } catch { /* No PID file — lock dir may be partially created, retry */ }
           await new Promise((r) => setTimeout(r, 100));
         }
       }

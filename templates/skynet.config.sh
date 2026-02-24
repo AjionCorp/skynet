@@ -67,7 +67,7 @@ export SKYNET_ONE_SHOT=""                # Set to 1 for single-task mode — wor
 export SKYNET_POST_MERGE_SMOKE=false        # Run post-merge smoke test (default: false)
 export SKYNET_SMOKE_TIMEOUT=10              # Smoke test timeout in seconds (default: 10)
 export SKYNET_POST_MERGE_TYPECHECK=true     # Validate main builds after merge; auto-reverts on failure (default: true)
-export SKYNET_GIT_PUSH_TIMEOUT=30           # Timeout in seconds for each git push attempt (default: 30)
+export SKYNET_GIT_PUSH_TIMEOUT=120          # Timeout in seconds for each git push attempt (default: 120)
 
 # ── Canary Deployment ──────────────────────────────────────────────
 # When enabled, changes to scripts/*.sh trigger single-worker validation

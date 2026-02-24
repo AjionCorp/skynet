@@ -78,6 +78,9 @@ _do_revert() {
       return 1
     fi
   fi
+  # --no-verify skips pre-commit hooks intentionally: revert commits are
+  # auto-generated emergency rollbacks and must not be blocked by linters
+  # or typecheck hooks that may themselves fail on the reverted code.
   if ! git commit -m "revert: auto-revert ($reason)" --no-verify 2>/dev/null; then
     log "CRITICAL: git commit for revert failed"
     return 1
@@ -207,13 +210,14 @@ do_merge_to_main() {
     fi
     # Validate typecheck command before eval (defense-in-depth)
     local _tc_cmd="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
+    local _tc_cmd_valid=true
     case "$_tc_cmd" in
       *".."*|*";"*|*"|"*|*'$('*|*'`'*)
         log "ERROR: SKYNET_TYPECHECK_CMD contains disallowed characters — failing typecheck"
-        false
+        _tc_cmd_valid=false
         ;;
     esac
-    if ! eval "$_tc_cmd" >> "$log_file" 2>&1; then
+    if ! $_tc_cmd_valid || ! eval "$_tc_cmd" >> "$log_file" 2>&1; then
       log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
       if ! _do_revert "false" "typecheck failed" "$log_file"; then
         release_merge_lock

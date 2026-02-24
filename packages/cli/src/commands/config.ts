@@ -1,24 +1,14 @@
-import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync, renameSync, existsSync, mkdirSync, rmdirSync } from "fs";
 import { resolve, join } from "path";
 import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
 import { shellEscape, validateShellValue } from "../utils/shellEscape.js";
+import { SENSITIVE_KEYS, MUTABLE_KEYS } from "@ajioncorp/skynet";
 
 interface ConfigOptions {
   dir?: string;
   reveal?: boolean;
 }
-
-/**
- * Keys containing secrets that should be masked in `config list` output.
- * Matches exact names, plus any key containing TOKEN, SECRET, KEY, or WEBHOOK.
- */
-const SENSITIVE_KEYS = new Set([
-  "SKYNET_TG_BOT_TOKEN",
-  "SKYNET_SLACK_WEBHOOK_URL",
-  "SKYNET_DISCORD_WEBHOOK_URL",
-  "SKYNET_DASHBOARD_API_KEY",
-]);
 
 const SENSITIVE_PATTERNS = [/TOKEN/i, /SECRET/i, /KEY/i, /WEBHOOK/i];
 
@@ -93,56 +83,8 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_ONE_SHOT_TASK: "Task description for single-task mode (set automatically by skynet run)",
 };
 
-/**
- * Keys that `config set` is allowed to modify.
- * CANONICAL SOURCE: packages/dashboard/src/handlers/config.ts (MUTABLE_KEYS).
- * Keep these two lists in sync when adding or removing keys.
- */
-const MUTABLE_KEYS = new Set([
-  "SKYNET_MAX_WORKERS",
-  "SKYNET_MAX_FIXERS",
-  "SKYNET_MAX_TASKS_PER_RUN",
-  "SKYNET_STALE_MINUTES",
-  "SKYNET_AGENT_TIMEOUT_MINUTES",
-  "SKYNET_MAX_FIX_ATTEMPTS",
-  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
-  "SKYNET_DRIVER_BACKLOG_THRESHOLD",
-  "SKYNET_HEALTH_ALERT_THRESHOLD",
-  "SKYNET_MAX_LOG_SIZE_KB",
-  "SKYNET_MAX_EVENTS_LOG_KB",
-  "SKYNET_WATCHDOG_INTERVAL",
-  "SKYNET_ONE_SHOT",
-  "SKYNET_POST_MERGE_SMOKE",
-  "SKYNET_SMOKE_TIMEOUT",
-  "SKYNET_POST_MERGE_TYPECHECK",
-  "SKYNET_GIT_PUSH_TIMEOUT",
-  "SKYNET_TG_ENABLED",
-  "SKYNET_TG_BOT_TOKEN",
-  "SKYNET_TG_CHAT_ID",
-  "SKYNET_SLACK_WEBHOOK_URL",
-  "SKYNET_DISCORD_WEBHOOK_URL",
-  "SKYNET_NOTIFY_CHANNELS",
-  "SKYNET_DEV_SERVER_CMD",
-  "SKYNET_DEV_SERVER_URL",
-  "SKYNET_DEV_PORT",
-  "SKYNET_TYPECHECK_CMD",
-  "SKYNET_LINT_CMD",
-  "SKYNET_INSTALL_CMD",
-  "SKYNET_GATE_1",
-  "SKYNET_GATE_2",
-  "SKYNET_GATE_3",
-  "SKYNET_BRANCH_PREFIX",
-  "SKYNET_MAIN_BRANCH",
-  "SKYNET_CLAUDE_BIN",
-  "SKYNET_CODEX_BIN",
-  "SKYNET_CODEX_SUBCOMMAND",
-  "SKYNET_CODEX_MODEL",
-  "SKYNET_GEMINI_BIN",
-  "SKYNET_GEMINI_FLAGS",
-  "SKYNET_GEMINI_MODEL",
-  "SKYNET_WORKER_CONTEXT",
-  "SKYNET_WORKER_CONVENTIONS",
-]);
+// MUTABLE_KEYS and SENSITIVE_KEYS are imported from @ajioncorp/skynet
+// (canonical source: packages/dashboard/src/handlers/config.ts).
 
 interface ParsedVar {
   name: string;
@@ -363,6 +305,10 @@ export async function configSetCommand(key: string, value: string, options: Conf
       console.error(`\n  Error: Executable config "${key}" contains disallowed characters.\n`);
       process.exit(1);
     }
+    if (/\.\.\//.test(value)) {
+      console.error(`\n  Error: Executable config "${key}" must not contain path traversal (../).\n`);
+      process.exit(1);
+    }
   }
 
   // Replace the value on the target line, preserving export prefix and comments
@@ -376,10 +322,22 @@ export async function configSetCommand(key: string, value: string, options: Conf
 
   lines[targetLine] = `${prefix}${key}="${shellEscape(value)}"${inlineComment}`;
 
-  // Atomic write: write to .tmp then rename
-  const tmpPath = configPath + ".tmp";
-  writeFileSync(tmpPath, lines.join("\n"), "utf-8");
-  renameSync(tmpPath, configPath);
+  // TS-P2-2: Acquire mkdir-based mutex lock around read-modify-write cycle
+  const lockPath = configPath + ".lock";
+  try {
+    mkdirSync(lockPath);
+  } catch {
+    console.error(`\n  Error: Config file is locked by another process.\n`);
+    process.exit(1);
+  }
+  try {
+    // Atomic write: write to .tmp then rename
+    const tmpPath = configPath + ".tmp";
+    writeFileSync(tmpPath, lines.join("\n"), "utf-8");
+    renameSync(tmpPath, configPath);
+  } finally {
+    try { rmdirSync(lockPath); } catch { /* lock cleanup failure is non-fatal */ }
+  }
 
   const displayValue = SENSITIVE_KEYS.has(key) ? "••••••••" : value;
   console.log(`\n  Updated ${key}="${displayValue}"\n`);

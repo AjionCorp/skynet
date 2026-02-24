@@ -9,7 +9,7 @@ interface WatchOptions {
   dir?: string;
 }
 
-const STALE_THRESHOLD_SECONDS = 30 * 60;
+const DEFAULT_STALE_THRESHOLD_SECONDS = 30 * 60;
 
 // ANSI color codes
 const GREEN = "\x1b[32m";
@@ -60,7 +60,7 @@ interface DashboardData {
   source: "sqlite" | "files";
 }
 
-function fetchFromSqlite(devDir: string): DashboardData | null {
+function fetchFromSqlite(devDir: string, staleThresholdSecs: number = DEFAULT_STALE_THRESHOLD_SECONDS): DashboardData | null {
   if (!isSqliteReady(devDir)) return null;
 
   try {
@@ -100,8 +100,8 @@ function fetchFromSqlite(devDir: string): DashboardData | null {
     }
 
     // Stale heartbeats + stale tasks
-    // staleSecs is derived from STALE_THRESHOLD_SECONDS (hardcoded constant) — safe for interpolation
-    const staleSecs = STALE_THRESHOLD_SECONDS;
+    // staleSecs is derived from staleThresholdSecs parameter — safe for interpolation
+    const staleSecs = staleThresholdSecs;
     const hbRow = sqliteRows(devDir,
       `SELECT
         (SELECT COUNT(*) FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs}) as c0,
@@ -113,7 +113,10 @@ function fetchFromSqlite(devDir: string): DashboardData | null {
       staleTasks24hCount = Number(hbRow[0][1]) || 0;
     }
 
-    // Health score
+    // TODO(tech-debt): This health score formula is inlined and duplicated from
+    // packages/dashboard/src/lib/health.ts (calculateHealthScore). Import and
+    // use calculateHealthScore from @ajioncorp/skynet instead — see status.ts
+    // for the canonical import pattern.
     let healthScore = 100;
     healthScore -= failedPending * 5;
     healthScore -= blockerCount * 10;
@@ -156,7 +159,7 @@ function fetchFromSqlite(devDir: string): DashboardData | null {
   }
 }
 
-function fetchFromFiles(devDir: string, maxWorkers: number): DashboardData {
+function fetchFromFiles(devDir: string, maxWorkers: number, staleThresholdSecs: number = DEFAULT_STALE_THRESHOLD_SECONDS): DashboardData {
   const now = Date.now();
 
   // Task counts
@@ -180,7 +183,7 @@ function fetchFromFiles(devDir: string, maxWorkers: number): DashboardData {
   // Health score inputs
   let staleHeartbeatCount = 0;
   let staleTasks24hCount = 0;
-  const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
+  const staleThresholdMs = staleThresholdSecs * 1000;
   const twentyFourHoursMs = 24 * 60 * 60 * 1000;
 
   const workers: DashboardData["workers"] = [];
@@ -229,6 +232,7 @@ function fetchFromFiles(devDir: string, maxWorkers: number): DashboardData {
     ? 0
     : (blockersContent.match(/^- /gm) || []).length;
 
+  // TODO(tech-debt): Same inlined health score formula — see fetchFromSqlite above.
   let healthScore = 100;
   healthScore -= failedPending * 5;
   healthScore -= blockerCount * 10;
@@ -269,11 +273,13 @@ function renderDashboard(projectDir: string, vars: Record<string, string>) {
   const devDir = vars.SKYNET_DEV_DIR || `${projectDir}/.dev`;
   const lockPrefix = vars.SKYNET_LOCK_PREFIX || `/tmp/skynet-${projectName}`;
   const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
+  const staleMinutes = Number(vars.SKYNET_STALE_MINUTES) || 30;
+  const staleThresholdSecs = staleMinutes * 60;
   const now = Date.now();
-  const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
+  const staleThresholdMs = staleThresholdSecs * 1000;
 
   // Try SQLite first, fall back to .md files
-  const data = fetchFromSqlite(devDir) ?? fetchFromFiles(devDir, maxWorkers);
+  const data = fetchFromSqlite(devDir, staleThresholdSecs) ?? fetchFromFiles(devDir, maxWorkers, staleThresholdSecs);
 
   const { pending, claimed, completedCount, failedPending, failedFixed,
     healthScore, scrFixed, scrBlocked, scrSuperseded, events } = data;

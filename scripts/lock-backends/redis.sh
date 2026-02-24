@@ -71,13 +71,14 @@ lock_backend_release() {
 
 lock_backend_extend() {
   local name="$1"
-  local timeout="${2:-30}"
+  # SH-P2-13: Use SKYNET_REDIS_LOCK_TTL (default 300) instead of the short $timeout (30s)
+  local extend_ttl="${SKYNET_REDIS_LOCK_TTL:-300}"
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value="$_REDIS_LOCK_VALUE"
   # Only extend if we still own the lock (atomic check + extend via Lua)
   _redis_cmd EVAL \
     "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end" \
-    1 "$key" "$value" "$timeout" >/dev/null || return 1
+    1 "$key" "$value" "$extend_ttl" >/dev/null || return 1
 }
 
 lock_backend_check() {

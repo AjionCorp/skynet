@@ -5,6 +5,8 @@ vi.mock("fs", () => ({
   writeFileSync: vi.fn(),
   renameSync: vi.fn(),
   existsSync: vi.fn(() => false),
+  mkdirSync: vi.fn(),
+  rmdirSync: vi.fn(),
 }));
 
 vi.mock("child_process", () => ({

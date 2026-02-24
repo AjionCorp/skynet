@@ -10,15 +10,17 @@ vi.mock("fs", () => ({
 
 vi.mock("child_process", () => ({
   execSync: vi.fn(() => Buffer.from("")),
+  spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
 }));
 
 import { readFileSync, existsSync, readdirSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { doctorCommand } from "../doctor";
 
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExistsSync = vi.mocked(existsSync);
 const mockExecSync = vi.mocked(execSync);
+const mockSpawnSync = vi.mocked(spawnSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 
 /** Build a valid config file content with all required vars. */
@@ -39,6 +41,52 @@ function makeConfigContent(overrides: Record<string, string> = {}): string {
     .join("\n");
 }
 
+/**
+ * Build a default spawnSync mock that handles both getToolVersion calls
+ * (spawnSync("sh", ["-c", "cmd"])) and git operations (spawnSync("git", [...])).
+ */
+function makeSpawnSyncMock(overrides?: Record<string, string>) {
+  return (cmd: unknown, args?: unknown) => {
+    const cmdStr = String(cmd);
+    const argsArr = Array.isArray(args) ? args.map(String) : [];
+
+    // getToolVersion: spawnSync("sh", ["-c", "<version-cmd>"])
+    if (cmdStr === "sh" && argsArr[0] === "-c") {
+      const shellCmd = argsArr[1] || "";
+      // Check for explicit failure overrides first (value === "FAIL")
+      if (overrides?.[shellCmd] === "FAIL") {
+        return { stdout: "", stderr: "not found", status: 1 };
+      }
+      // Check for explicit output overrides
+      if (overrides?.[shellCmd]) {
+        return { stdout: overrides[shellCmd], stderr: "", status: 0 };
+      }
+      if (shellCmd.includes("git --version")) return { stdout: "git version 2.39.0", stderr: "", status: 0 };
+      if (shellCmd.includes("node --version")) return { stdout: "v20.0.0", stderr: "", status: 0 };
+      if (shellCmd.includes("pnpm --version")) return { stdout: "8.0.0", stderr: "", status: 0 };
+      if (shellCmd.includes("shellcheck --version")) return { stdout: "0.9.0", stderr: "", status: 0 };
+      if (shellCmd.includes("claude --version")) return { stdout: "1.0.0", stderr: "", status: 0 };
+      if (shellCmd.includes("codex --version")) return { stdout: "0.5.0", stderr: "", status: 0 };
+      if (shellCmd.includes("command -v")) {
+        // Default: tool found
+        const toolName = shellCmd.split("command -v ")[1]?.trim();
+        return { stdout: `/usr/bin/${toolName}`, stderr: "", status: 0 };
+      }
+      return { stdout: "", stderr: "", status: 0 };
+    }
+
+    // Git operations: spawnSync("git", [...])
+    if (cmdStr === "git") {
+      if (argsArr.includes("rev-parse")) return { stdout: "main\n", stderr: "", status: 0 };
+      if (argsArr.includes("--porcelain")) return { stdout: "", stderr: "", status: 0 };
+      if (argsArr.includes("worktree")) return { stdout: "", stderr: "", status: 0 };
+      return { stdout: "", stderr: "", status: 0 };
+    }
+
+    return { stdout: "", stderr: "", status: 0 };
+  };
+}
+
 describe("doctorCommand", () => {
   let exitSpy: ReturnType<typeof vi.spyOn>;
 
@@ -49,6 +97,8 @@ describe("doctorCommand", () => {
     });
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
+    // Default spawnSync mock for getToolVersion and git operations
+    mockSpawnSync.mockImplementation(makeSpawnSyncMock() as never);
   });
 
   it("outputs PASS for healthy config with all checks passing", async () => {
@@ -74,21 +124,6 @@ describe("doctorCommand", () => {
       return "" as never;
     });
 
-    // All tools found, git works
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
-    });
-
     await doctorCommand({ dir: "/tmp/test-project" });
 
     // Should NOT call process.exit (no failures)
@@ -106,21 +141,6 @@ describe("doctorCommand", () => {
     // Everything returns false for existsSync — no config file
     mockExistsSync.mockReturnValue(false);
 
-    // Tools work fine
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
-    });
-
     await expect(doctorCommand({ dir: "/tmp/test-project" })).rejects.toThrow("process.exit");
 
     const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
@@ -133,20 +153,6 @@ describe("doctorCommand", () => {
   it("outputs FAIL when .dev/ directory is missing", async () => {
     // existsSync returns false for everything — no .dev/ dir, no config
     mockExistsSync.mockReturnValue(false);
-
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
-    });
 
     await expect(doctorCommand({ dir: "/tmp/test-project" })).rejects.toThrow("process.exit");
 
@@ -183,20 +189,6 @@ describe("doctorCommand", () => {
       return "" as never;
     });
 
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
-    });
-
     mockReaddirSync.mockReturnValue([] as never);
 
     await doctorCommand({ dir: "/tmp/test-project" });
@@ -229,20 +221,6 @@ describe("doctorCommand", () => {
       const path = String(p);
       if (path.endsWith("skynet.config.sh")) return configContent as never;
       return "" as never;
-    });
-
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
     });
 
     mockReaddirSync.mockReturnValue([] as never);
@@ -279,21 +257,10 @@ describe("doctorCommand", () => {
       return "" as never;
     });
 
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      // command -v nonexistent-tool fails
-      if (cmdStr.includes("command -v nonexistent-tool")) throw new Error("not found");
-      return Buffer.from("") as never;
-    });
+    // Override spawnSync to make `command -v nonexistent-tool` fail
+    mockSpawnSync.mockImplementation(makeSpawnSyncMock({
+      "command -v nonexistent-tool": "FAIL",
+    }) as never);
 
     mockReaddirSync.mockReturnValue([] as never);
 
@@ -332,20 +299,6 @@ describe("doctorCommand", () => {
       if (path.endsWith("skynet.config.sh")) return configContent as never;
       if (path.endsWith("worker-1.heartbeat")) return String(staleEpoch) as never;
       return "" as never;
-    });
-
-    mockExecSync.mockImplementation((cmd) => {
-      const cmdStr = String(cmd);
-      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
-      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
-      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
-      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
-      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
-      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
-      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
-      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
-      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
-      return Buffer.from("") as never;
     });
 
     mockReaddirSync.mockReturnValue([] as never);

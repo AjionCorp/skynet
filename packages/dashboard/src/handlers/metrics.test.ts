@@ -187,6 +187,12 @@ describe("createMetricsHandler", () => {
     expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(4, undefined);
   });
 
+  it("passes staleMinutes from config to calculateHealthScore", async () => {
+    const GET = createMetricsHandler(makeConfig({ staleMinutes: 15 }));
+    await GET();
+    expect(mockDB.calculateHealthScore).toHaveBeenCalledWith(4, 15);
+  });
+
   it("returns valid Prometheus text exposition format", async () => {
     const GET = createMetricsHandler(makeConfig());
     const res = await GET();

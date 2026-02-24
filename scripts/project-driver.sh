@@ -30,7 +30,11 @@ _normalize_task_line() {
 # --- PID lock ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver.lock"
 if mkdir "$LOCKFILE" 2>/dev/null; then
-  echo $$ > "$LOCKFILE/pid"
+  if ! echo "$$" > "$LOCKFILE/pid" 2>/dev/null; then
+    rmdir "$LOCKFILE" 2>/dev/null || true
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] PID write failed. Exiting." >> "$LOG"
+    exit 1
+  fi
 else
   # Lock dir exists — check for stale lock (owner PID no longer running)
   if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
@@ -43,7 +47,11 @@ else
     mv "$LOCKFILE" "$LOCKFILE.stale.$$" 2>/dev/null || true
     rm -rf "$LOCKFILE.stale.$$" 2>/dev/null || true
     if mkdir "$LOCKFILE" 2>/dev/null; then
-      echo $$ > "$LOCKFILE/pid"
+      if ! echo "$$" > "$LOCKFILE/pid" 2>/dev/null; then
+        rmdir "$LOCKFILE" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] PID write failed. Exiting." >> "$LOG"
+        exit 1
+      fi
     else
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Lock contention. Exiting." >> "$LOG"
       exit 0
@@ -139,8 +147,10 @@ case "$failed_count" in ''|*[!0-9]*) failed_count=0 ;; esac
 
 # Get codebase structure summary (guard directories that may not exist yet)
 if [ -d "$PROJECT_DIR" ]; then
-  api_routes=$(find "$PROJECT_DIR" -maxdepth 8 -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
-  pages=$(find "$PROJECT_DIR" -maxdepth 8 -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+  # Use -prune to skip node_modules entirely (avoids descending into them,
+  # much faster than -not -path which still traverses the directory tree).
+  api_routes=$(find "$PROJECT_DIR" -maxdepth 8 -name node_modules -prune -o -path "*/app/api/*/route.ts" -print 2>/dev/null | sort || true)
+  pages=$(find "$PROJECT_DIR" -maxdepth 8 -name node_modules -prune -o -path "*/app/*/page.tsx" -print 2>/dev/null | sort || true)
 else
   api_routes="(project directory not found)"
   pages="(project directory not found)"

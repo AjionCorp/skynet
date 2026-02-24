@@ -125,9 +125,9 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           });
         } catch {
           // fs.watch not available or failed to initialize —
-          // ensure partial state is cleaned up, then client will rely
-          // on EventSource reconnect via the polling interval below.
-          cleanup();
+          // watcher remains null, polling interval below will still function.
+          // Do NOT call cleanup() here — it would set closed=true and prevent polling.
+          watcher = null;
         }
 
         // Poll every 10s to catch lock file changes (worker start/stop)
@@ -149,6 +149,8 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
         if (!closed) {
           const MAX_LIFETIME_MS = 5 * 60 * 1000;
           lifetimeTimeout = setTimeout(() => {
+            // Notify clients that the stream is closing due to session lifetime expiry
+            send("event: auth-expired\ndata: {\"reason\":\"session-lifetime\"}\n\n");
             cleanup();
             try { controller.close(); } catch { /* already closed */ }
           }, MAX_LIFETIME_MS);

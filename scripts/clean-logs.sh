@@ -4,6 +4,8 @@
 # find the first timestamped line within the cutoff window, keep everything from there.
 # Log timestamps are formatted as: [YYYY-MM-DD HH:MM:SS]
 
+# OPS-P2-1: Skip DB re-initialization when already initialized by parent (watchdog)
+: "${_SKYNET_DB_INITIALIZED:=0}"
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 CUTOFF=$(date_24h_ago)

@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, unlinkSync, writeFileSync, rmSync, statSync } from "fs";
 import { resolve, join } from "path";
-import { execSync } from "child_process";
+import { execSync, spawnSync } from "child_process";
 import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
@@ -15,12 +15,16 @@ interface DoctorOptions {
 // section (SKYNET_GATE_* checks) passes `command -v <cmdName>` where cmdName is
 // the first word of a config value. This is acceptable because skynet.config.sh
 // is a trusted operator-controlled file, not user input.
+// Uses spawnSync with shell:true to avoid execSync string concatenation issues.
 function getToolVersion(cmd: string): string | null {
   try {
-    return execSync(cmd, { stdio: ["ignore", "pipe", "ignore"], timeout: 10000 })
-      .toString()
-      .trim()
-      .split("\n")[0];
+    const result = spawnSync("sh", ["-c", cmd], {
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 10000,
+      encoding: "utf-8",
+    });
+    if (result.status !== 0 || !result.stdout) return null;
+    return result.stdout.trim().split("\n")[0] || null;
   } catch {
     return null;
   }
@@ -338,21 +342,29 @@ export async function doctorCommand(options: DoctorOptions) {
   console.log("\n  Git:");
 
   try {
-    const branch = execSync("git rev-parse --abbrev-ref HEAD", {
+    const branchResult = spawnSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
       cwd: projectDir,
+      encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
+    });
+    const branch = branchResult.status === 0 ? (branchResult.stdout?.trim() || "unknown") : "unknown";
 
-    const status = execSync("git status --porcelain", {
+    const statusResult = spawnSync("git", ["status", "--porcelain"], {
       cwd: projectDir,
+      encoding: "utf-8",
       stdio: ["ignore", "pipe", "ignore"],
-    }).toString().trim();
+    });
+    const status = statusResult.status === 0 ? (statusResult.stdout?.trim() || "") : "";
 
-    const isDirty = status.length > 0;
-    console.log(`    Branch: ${branch}`);
-    console.log(`    Status: ${isDirty ? "dirty" : "clean"}`);
-
-    results.push({ name: "Git", status: isDirty ? "WARN" : "PASS" });
+    if (branchResult.status !== 0) {
+      console.log("    Not a git repository");
+      results.push({ name: "Git", status: "FAIL" });
+    } else {
+      const isDirty = status.length > 0;
+      console.log(`    Branch: ${branch}`);
+      console.log(`    Status: ${isDirty ? "dirty" : "clean"}`);
+      results.push({ name: "Git", status: isDirty ? "WARN" : "PASS" });
+    }
   } catch {
     console.log("    Not a git repository");
     results.push({ name: "Git", status: "FAIL" });

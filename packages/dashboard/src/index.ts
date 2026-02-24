@@ -60,6 +60,8 @@ export {
   createMissionStatusHandler,
   createMissionRawHandler,
   createConfigHandler,
+  MUTABLE_KEYS,
+  SENSITIVE_KEYS,
   createEventsHandler,
   createMetricsHandler,
 } from "./handlers";

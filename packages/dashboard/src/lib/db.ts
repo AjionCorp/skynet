@@ -98,6 +98,15 @@ interface FixerStatRow {
 // which is controlled by db_init() in _db.sh. Runtime validation would add
 // overhead with no practical benefit since the schema is deterministic.
 
+/**
+ * SkynetDB opens the database in read-write mode because the `rate_limits` table
+ * requires write access for POST rate-limit tracking. All other dashboard queries
+ * are read-only. If rate limiting is moved to a separate mechanism (e.g., in-memory
+ * or Redis), this class should be refactored to accept a `readonly?: boolean` option
+ * and open with `{ readonly: true }` for read-only consumers.
+ *
+ * TODO: Separate rate_limits writes from read-only query path to allow readonly DB access.
+ */
 export class SkynetDB {
   private db: Database;
 
@@ -683,6 +692,12 @@ export function getSkynetDB(devDir: string): SkynetDB {
   //
   // Check if the database file's inode has changed (e.g., restored from backup).
   // If so, close the stale connection and create a fresh one.
+  // TS-P2-1: Close stale instance when devDir changes (different dbPath)
+  if (_instance && _instancePath !== dbPath) {
+    _instance.close();
+    _instance = null;
+    _instanceIno = null;
+  }
   if (_instance && _instancePath === dbPath) {
     try {
       const { statSync } = require("fs") as typeof import("fs");
@@ -710,3 +725,11 @@ export function getSkynetDB(devDir: string): SkynetDB {
 }
 
 process.on("exit", () => { _instance?.close(); _instance = null; });
+
+/** @internal — Reset singleton for tests only. */
+export function _resetSingleton() {
+  if (_instance) { _instance.close(); }
+  _instance = null;
+  _instancePath = null;
+  _instanceIno = null;
+}

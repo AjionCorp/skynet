@@ -138,12 +138,14 @@ _acquire_file_lock() {
     # macOS: use perl Fcntl as flock helper
     # The perl process holds the lock; killing it releases the lock.
     # We use a ready-pipe so we know when the lock is actually acquired.
-    local _ready_pipe
-    _ready_pipe=$(mktemp /tmp/skynet-flock-pipe-XXXXXX)
-    rm -f "$_ready_pipe"
-    # FIFO is cleaned up at rm -f below. If the process is killed between
-    # mkfifo and rm, the orphaned FIFO in /tmp is harmless (cleaned on reboot).
-    mkfifo "$_ready_pipe" 2>/dev/null || { rm -f "$_ready_pipe"; return 1; }
+    # SH-P2-9: Create FIFO in a private directory with restrictive permissions
+    local _pipe_dir
+    _pipe_dir=$(mktemp -d /tmp/skynet-flock-XXXXXX)
+    chmod 700 "$_pipe_dir"
+    local _ready_pipe="$_pipe_dir/ready"
+    # FIFO directory is cleaned up at rm -rf below. If the process is killed between
+    # mkfifo and rm, the orphaned dir in /tmp is harmless (cleaned on reboot).
+    mkfifo "$_ready_pipe" 2>/dev/null || { rm -rf "$_pipe_dir"; return 1; }
 
     perl -e '
       use Fcntl qw(:flock);
@@ -179,7 +181,7 @@ _acquire_file_lock() {
     # to avoid hanging forever if perl crashes before writing to the pipe)
     local _result
     _result=$(run_with_timeout "$((timeout + 5))" cat "$_ready_pipe" 2>/dev/null || echo "ERROR")
-    rm -f "$_ready_pipe"
+    rm -rf "$_pipe_dir"
 
     if [ "$_result" = "LOCKED" ]; then
       echo $$ > "$lockfile.owner" 2>/dev/null || true

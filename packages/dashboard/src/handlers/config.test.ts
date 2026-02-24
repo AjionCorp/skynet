@@ -9,6 +9,8 @@ vi.mock("fs", () => ({
   renameSync: vi.fn(),
   mkdirSync: vi.fn(),
   rmdirSync: vi.fn(),
+  rmSync: vi.fn(),
+  statSync: vi.fn(() => ({ mtimeMs: Date.now() })),
 }));
 
 import { existsSync, readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync } from "fs";
@@ -294,7 +296,10 @@ describe("createConfigHandler", () => {
     it("returns 500 with error envelope on write failure", async () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
-      mockWriteFileSync.mockImplementation(() => { throw new Error("Disk full"); });
+      // Only throw for the config .tmp write, not for the lock PID file write
+      mockWriteFileSync.mockImplementation(((path: string) => {
+        if (String(path).endsWith(".tmp")) throw new Error("Disk full");
+      }) as typeof writeFileSync);
 
       const { POST } = createConfigHandler(makeConfig());
       const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "8" } }));
@@ -397,6 +402,24 @@ describe("createConfigHandler", () => {
       expect(workersEntry.value).toBe("4");
     });
 
+    // ── TEST-P2-9: writeConfigFile missing key warning ──────────────────
+    it("returns warning when POSTing a mutable key not present in config file", async () => {
+      mockExistsSync.mockReturnValue(true);
+      // Config file only has SKYNET_MAX_WORKERS — SKYNET_STALE_MINUTES is not present
+      mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+      // SKYNET_STALE_MINUTES is a valid mutable key but not in the config file content
+      const res = await POST(makeRequest({ updates: { SKYNET_STALE_MINUTES: "30" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.warning).toBeDefined();
+      expect(body.data.warning).toContain("Keys not found");
+      expect(body.data.warning).toContain("SKYNET_STALE_MINUTES");
+    });
+
     it("returns generic error in production mode", async () => {
       process.env.NODE_ENV = "production";
       mockExistsSync.mockReturnValue(true);
@@ -409,6 +432,54 @@ describe("createConfigHandler", () => {
       expect(res.status).toBe(500);
       expect(body.error).toBe("Internal server error");
       expect(body.error).not.toContain("Secret");
+    });
+
+    it("returns 423 when lock cannot be acquired after 30 attempts", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
+      _mockMkdirSync.mockImplementation(() => {
+        const err = new Error("EEXIST") as NodeJS.ErrnoException;
+        err.code = "EEXIST";
+        throw err;
+      });
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "8" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(423);
+      expect(body.error).toContain("locked");
+      expect(body.data).toBeNull();
+    });
+
+    it("rejects non-printable characters (NUL byte) in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_FOO: "val\x00ue" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Non-printable characters");
+    });
+
+    it("rejects zero-width space (U+200B) in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_FOO: "val\u200Bue" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Non-printable characters");
+    });
+
+    it("rejects BOM (U+FEFF) in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_FOO: "\uFEFFvalue" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Non-printable characters");
     });
   });
 });

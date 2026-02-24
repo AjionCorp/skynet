@@ -320,6 +320,7 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_events_epoch ON events(epoch);
+CREATE INDEX IF NOT EXISTS idx_events_event ON events(event);
 
 CREATE TABLE IF NOT EXISTS fixer_stats (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -583,13 +584,15 @@ db_add_task() {
   local blocked_esc; blocked_esc=$(_sql_escape "$blocked_by")
   local norm_root
   norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+  # SH-P2-8: Capture _sql_escape result before embedding in SQL string
+  local norm_root_esc; norm_root_esc=$(_sql_escape "$norm_root")
 
   if [ "$position" = "top" ]; then
     _db "
       BEGIN IMMEDIATE;
       UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$norm_root_esc', 0);
       SELECT last_insert_rowid();
       COMMIT;
     "
@@ -598,7 +601,7 @@ db_add_task() {
     # INSERT could race with another worker inserting between the two statements.
     _db "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")',
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$norm_root_esc',
               (SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed')));
       SELECT last_insert_rowid();
     "
@@ -717,6 +720,7 @@ db_supersede_task() {
 
 # Auto-supersede failed tasks matching completed roots. Returns count of changes.
 # Also resolves orphaned blockers linked to newly-superseded tasks.
+# OPS-P2-4: Capture changes() after each UPDATE separately to report combined count.
 db_auto_supersede_completed() {
   _db "
     UPDATE blockers SET status='resolved', resolved_at=datetime('now')
@@ -726,6 +730,7 @@ db_auto_supersede_completed() {
         SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
       )
     );
+    SELECT changes();
     UPDATE tasks SET status='superseded', updated_at=datetime('now')
     WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
       SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed') AND normalized_root != ''
@@ -967,11 +972,24 @@ db_get_cleanup_branches() {
 }
 
 # Check if a task title already exists (for dedup)
+# OPS-P2-8: Check both title and normalized_root for deduplication
 db_task_exists() {
   local title; title=$(_sql_escape "$1")
   local count
   count=$(_sql_query "SELECT COUNT(*) FROM tasks WHERE title='$title';")
-  [ "${count:-0}" != "0" ] && return 0 || return 1
+  [ "${count:-0}" != "0" ] && return 0
+
+  # Also check against normalized_root for active tasks to catch semantic duplicates
+  local norm_root
+  norm_root=$(echo "$1" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
+  if [ -n "$norm_root" ]; then
+    local norm_esc; norm_esc=$(_sql_escape "$norm_root")
+    local norm_count
+    norm_count=$(_sql_query "SELECT COUNT(*) FROM tasks WHERE normalized_root='$norm_esc' AND status IN ('pending','claimed','fixing-1','fixing-2','fixing-3');")
+    [ "${norm_count:-0}" != "0" ] && return 0
+  fi
+
+  return 1
 }
 
 # Get all tasks for export (pipe-delimited)
@@ -1047,7 +1065,8 @@ db_export_completed() {
       "SELECT COALESCE(completed_at,''), tag, title, COALESCE(branch,''), COALESCE(duration,''), COALESCE(notes,'')
        FROM tasks
        WHERE status IN ('completed','fixed')
-       ORDER BY completed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
+       ORDER BY completed_at DESC
+       LIMIT 200;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
       _task="[${_tag}] ${_title}"

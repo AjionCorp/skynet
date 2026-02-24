@@ -12,7 +12,13 @@ lock_backend_acquire() {
 
   if [ "${SKYNET_USE_FLOCK:-true}" = "true" ] && { command -v flock >/dev/null 2>&1 || command -v perl >/dev/null 2>&1; }; then
     _acquire_file_lock "$flockfile" "$timeout"
-    return $?
+    local _flock_rc=$?
+    if [ "$_flock_rc" -eq 0 ]; then
+      # Also create mkdir lockdir with PID for observability (ps/ls can see who holds the lock)
+      mkdir "$lockdir" 2>/dev/null || true
+      echo "$$" > "$lockdir/pid" 2>/dev/null || true
+    fi
+    return $_flock_rc
   fi
 
   # Fallback: mkdir-based lock
@@ -57,7 +63,7 @@ lock_backend_acquire() {
       if $_force_release; then
         rm -rf "$lockdir" 2>/dev/null || true
         if mkdir "$lockdir" 2>/dev/null; then
-          if ! echo $$ > "$lockdir/pid" 2>/dev/null; then
+          if ! echo "$$" > "$lockdir/pid" 2>/dev/null; then
             rmdir "$lockdir" 2>/dev/null || true
             return 1
           fi
@@ -74,7 +80,7 @@ lock_backend_acquire() {
     # On strict POSIX systems, replace with `sleep 1` or `perl -e 'select(undef,undef,undef,0.5)'`.
     sleep 0.5
   done
-  if ! echo $$ > "$lockdir/pid" 2>/dev/null; then
+  if ! echo "$$" > "$lockdir/pid" 2>/dev/null; then
     rmdir "$lockdir" 2>/dev/null || true
     return 1
   fi
@@ -100,7 +106,14 @@ lock_backend_release() {
   fi
 }
 
-lock_backend_extend() { :; }  # flock doesn't expire — no-op
+# OPS-P2-7: Touch the PID file on extend so watchdog freshness detection sees recent mtime
+lock_backend_extend() {
+  local name="$1"
+  local lockdir="${SKYNET_LOCK_PREFIX}-${name}.lock"
+  if [ -f "$lockdir/pid" ] && [ "$(cat "$lockdir/pid" 2>/dev/null)" = "$$" ]; then
+    touch "$lockdir/pid" 2>/dev/null || true
+  fi
+}
 
 lock_backend_check() {
   local name="$1"

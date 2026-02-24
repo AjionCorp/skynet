@@ -340,6 +340,27 @@ describe("createMonitoringAgentsHandler", () => {
     expect(data.agents).toHaveLength(0);
   });
 
+  // ── TEST-P2-7: Path traversal defense in logPath ────────────────────
+  it("returns null logPath when plist logPath is outside home/tmp", async () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      makePlist({
+        interval: 300,
+        runAtLoad: true,
+        script: "dev-worker-1.sh",
+        logPath: "/etc/shadow",
+      }) as never
+    );
+
+    const handler = createMonitoringAgentsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(res.status).toBe(200);
+    const agent = data.agents[0];
+    expect(agent.logPath).toBeNull();
+  });
+
   it("handles plist read error gracefully when file exists", async () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockImplementation(() => {

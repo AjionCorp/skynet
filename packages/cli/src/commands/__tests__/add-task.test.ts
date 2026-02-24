@@ -172,4 +172,78 @@ describe("addTaskCommand", () => {
       expect.stringContaining("--position must be 'top' or 'bottom'"),
     );
   });
+
+  // ── Newline injection tests ────────────────────────────────────────
+  it("rejects title with newline (\\n)", async () => {
+    await expect(
+      addTaskCommand("Title\nwith newline", { dir: "/tmp/test" }),
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("newlines"),
+    );
+  });
+
+  it("rejects title with carriage return (\\r)", async () => {
+    await expect(
+      addTaskCommand("Title\rwith CR", { dir: "/tmp/test" }),
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("newlines"),
+    );
+  });
+
+  it("rejects description with newline", async () => {
+    await expect(
+      addTaskCommand("Good title", { dir: "/tmp/test", description: "Bad\ndesc" }),
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("newlines"),
+    );
+  });
+
+  // ── Length limit tests ─────────────────────────────────────────────
+  it("rejects title exceeding 500 characters", async () => {
+    const longTitle = "a".repeat(501);
+    await expect(
+      addTaskCommand(longTitle, { dir: "/tmp/test" }),
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("500 characters"),
+    );
+  });
+
+  it("rejects description exceeding 2000 characters", async () => {
+    const longDesc = "b".repeat(2001);
+    await expect(
+      addTaskCommand("Valid title", { dir: "/tmp/test", description: longDesc }),
+    ).rejects.toThrow("process.exit");
+
+    expect(console.error).toHaveBeenCalledWith(
+      expect.stringContaining("2000 characters"),
+    );
+  });
+
+  it("accepts title at exactly 500 characters", async () => {
+    const exactTitle = "a".repeat(500);
+    await addTaskCommand(exactTitle, { dir: "/tmp/test" });
+
+    expect(mockSqliteQuery).toHaveBeenCalledWith(
+      "/tmp/test/.dev",
+      expect.stringContaining("INSERT INTO tasks"),
+    );
+  });
+
+  it("accepts description at exactly 2000 characters", async () => {
+    const exactDesc = "b".repeat(2000);
+    await addTaskCommand("Valid title", { dir: "/tmp/test", description: exactDesc });
+
+    expect(mockSqliteQuery).toHaveBeenCalledWith(
+      "/tmp/test/.dev",
+      expect.stringContaining("INSERT INTO tasks"),
+    );
+  });
 });

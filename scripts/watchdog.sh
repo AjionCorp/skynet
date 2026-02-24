@@ -24,7 +24,7 @@ log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
 
 # --- Singleton enforcement via mkdir-based atomic lock ---
 if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-  if ! echo $$ > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+  if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
     rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
     log "PID write failed. Exiting."
     exit 1
@@ -41,7 +41,7 @@ else
     mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
     rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
     if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-      if ! echo $$ > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+      if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
         rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
         log "PID write failed. Exiting."
         exit 1
@@ -117,7 +117,8 @@ rotate_log_if_needed "$LOG"
 rotate_log_if_needed "$DEV_DIR/agent-metrics.log"
 
 # Trim logs to last 24h on each watchdog run
-bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
+# OPS-P2-1: Export DB-initialized flag so clean-logs.sh skips redundant db_init
+_SKYNET_DB_INITIALIZED=1 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 
 # Lightweight WAL checkpoint every cycle to prevent unbounded WAL growth.
 # The full TRUNCATE checkpoint runs in db_maintenance() every 10 cycles.
@@ -394,8 +395,16 @@ crash_recovery() {
   local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
 
   _cr_phase1_stale_locks
-  _cr_phase2_orphaned_tasks
-  _cr_phase3_orphan_worktrees
+  if [ "$recovered" -gt 500 ]; then
+    log "WARNING: Crash recovery exceeded 500 items after phase 1 — skipping remaining phases"
+  else
+    _cr_phase2_orphaned_tasks
+  fi
+  if [ "$recovered" -gt 500 ]; then
+    [ "$_cr_stale_pids" -gt 0 ] || log "WARNING: Crash recovery exceeded 500 items after phase 2 — skipping phase 3"
+  else
+    _cr_phase3_orphan_worktrees
+  fi
 
   if [ "$recovered" -gt 0 ]; then
     log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees cleaned"
@@ -410,7 +419,8 @@ crash_recovery() {
 }
 
 # --- Run crash recovery before dispatching ---
-crash_recovery
+# OPS-P2-2: Wrap crash_recovery with error isolation so remaining phases run even if it fails
+crash_recovery || { log "Phase: crash_recovery failed, continuing"; true; }
 
 # --- Reconcile orphaned 'claimed' tasks ---
 # NOTE: Reconciliation counters are logged per-event (log + emit_event) rather
@@ -419,6 +429,8 @@ crash_recovery
 # or working on a different task, unclaim it back to 'pending'.
 # Time guard: only reconcile claims older than ORPHAN_CUTOFF to avoid racing with
 # the ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
+# OPS-P2-2: Error isolation — wrap in braces with || to ensure subsequent phases run
+{
 _ORPHAN_CUTOFF="${SKYNET_ORPHAN_CUTOFF_SECONDS:-120}"
 case "$_ORPHAN_CUTOFF" in ''|*[!0-9]*) _ORPHAN_CUTOFF=120 ;; esac
 _orphaned_claimed=$(_db_sep "
@@ -439,11 +451,14 @@ if [ -n "$_orphaned_claimed" ]; then
     emit_event "orphaned_claim_reconciled" "Task '$_oc_title' (id=$_oc_id) unclaimed — worker $_oc_wid not actively working on it" 2>/dev/null || true
   done <<< "$_orphaned_claimed"
 fi
+} || { log "Phase: orphaned-claims reconciliation failed, continuing"; true; }
 
 # --- Reconcile stale 'fixing-N' tasks ---
 # If a fixer crashes, the task stays in 'fixing-N' status forever because
 # db_get_pending_failures() only queries status='failed'. Detect stale fixing
 # tasks where the fixer is dead and reset them to 'failed' for retry.
+# OPS-P2-2: Error isolation — wrap in braces with || to ensure subsequent phases run
+{
 _stale_fixing=$(_db_sep "
   SELECT id, title, fixer_id
   FROM tasks
@@ -473,6 +488,7 @@ if [ -n "$_stale_fixing" ]; then
     emit_event "stale_fixing_reconciled" "Task '$_sf_title' (id=$_sf_id) reset to failed — fixer $_sf_fid is dead" 2>/dev/null || true
   done <<< "$_stale_fixing"
 fi
+} || { log "Phase: stale-fixing reconciliation failed, continuing"; true; }
 
 # --- Proactive merge lock cleanup ---
 # If the merge lock holder's PID is dead (or PID file is missing, indicating a
@@ -628,6 +644,8 @@ claude_auth_ok=false
 if check_claude_auth; then
   claude_auth_ok=true
   agent_auth_ok=true
+  # OPS-P2-5: Clean up token expiry sentinel on successful auth (e.g. after refresh)
+  rm -f "/tmp/skynet-${SKYNET_PROJECT_NAME}-token-expiry-alert" 2>/dev/null || true
 fi
 
 # Also check Codex auth (non-blocking — just sets fail flag for awareness)
@@ -635,6 +653,8 @@ _codex_auth_ok=false
 if check_codex_auth; then
   _codex_auth_ok=true
   agent_auth_ok=true
+  # OPS-P2-5: Clean up codex token expiry sentinel on successful auth
+  rm -f "/tmp/skynet-${SKYNET_PROJECT_NAME}-codex-expiry-alert" 2>/dev/null || true
 fi
 
 # --- Token expiry pre-warning ---
@@ -850,6 +870,9 @@ fi
 # completed-archive.md, keeping only the most recent 100 in the active file.
 # NOTE: Operates on generated completed.md rather than SQLite directly.
 # This is acceptable since completed.md is regenerated at merge time.
+# NOTE: completed-archive.md is NOT auto-pruned — it grows monotonically.
+# For projects with thousands of completed tasks, periodically truncate or
+# rotate this file manually (e.g., `tail -500 completed-archive.md > tmp && mv tmp completed-archive.md`).
 _archive_old_completions() {
   [ -f "$COMPLETED" ] || return 0
 
@@ -885,6 +908,8 @@ _archive_old_completions() {
 
     # Truncate entry_date to 10 chars (YYYY-MM-DD) for safe string comparison
     entry_date="${entry_date:0:10}"
+    # SH-P2-10: Skip entries with empty or malformed dates (not exactly 10 chars YYYY-MM-DD)
+    [ ${#entry_date} -ne 10 ] && continue
     # If date is older than cutoff, mark for archival
     if [ -n "$entry_date" ] && [ "$entry_date" \< "$cutoff_date" ]; then
       archive_lines="${archive_lines}${line}
@@ -1546,13 +1571,25 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     fi
   fi
 
-  # (d) Git garbage collection (uses git's built-in threshold — won't run unless needed)
+  # (d) Daily VACUUM: reclaim disk space from deleted rows.
+  # Uses a sentinel file (same pattern as daily backup) to run at most once per day.
+  # VACUUM rewrites the entire DB, so it's expensive — daily is sufficient.
+  _vacuum_sentinel="$DEV_DIR/.db-vacuum-sentinel-$(date +%Y%m%d)"
+  if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_vacuum_sentinel" ]; then
+    log "Running daily VACUUM on SQLite database"
+    _db "VACUUM;" 2>/dev/null && {
+      (umask 077; touch "$_vacuum_sentinel")
+      log "Daily VACUUM completed"
+    } || log "WARNING: Daily VACUUM failed"
+  fi
+
+  # (e) Git garbage collection (uses git's built-in threshold — won't run unless needed)
   git -C "$PROJECT_DIR" gc --auto 2>/dev/null || log "WARNING: git gc --auto failed"
 
-  # (e) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
+  # (f) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
   find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -exec rm -f {} + 2>/dev/null || true
 
-  # (e2) Stale .stale.PID lock directory cleanup — these are leftover from
+  # (f2) Stale .stale.PID lock directory cleanup — these are leftover from
   # atomic lock reclaim (mv + rm) when a crash occurs between the two operations.
   _stale_cleaned=0
   for _stale_dir in "${SKYNET_LOCK_PREFIX}"-*.lock.stale.*; do
@@ -1564,7 +1601,7 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     log "Maintenance: cleaned $_stale_cleaned stale lock directory(ies)"
   fi
 
-  # (f) Stale branch cleanup — delete merged dev/* branches
+  # (g) Stale branch cleanup — delete merged dev/* branches
   _maint_merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null | grep "^  ${SKYNET_BRANCH_PREFIX}" || true)
   if [ -n "$_maint_merged_branches" ]; then
     _maint_branch_deleted=0
@@ -1587,6 +1624,8 @@ fi
 # NOTE: _adaptive_file path must match between this inner scope (subshell) and the
 # outer scope below that reads it. Both use "/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 # via variable interpolation from the same SKYNET_PROJECT_NAME env var.
+# Adaptive interval file in /tmp uses umask 077 to prevent other users on shared
+# hosts from manipulating the watchdog sleep interval (local DoS vector).
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 if [ "${backlog_count:-0}" -gt 0 ] || [ "${failed_pending:-0}" -gt 0 ]; then
   (umask 077; echo 30 > "$_adaptive_file")

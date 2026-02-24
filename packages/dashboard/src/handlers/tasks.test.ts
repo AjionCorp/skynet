@@ -336,6 +336,37 @@ describe("createTasksHandlers", () => {
     });
   });
 
+  describe("POST exportBacklog fallback", () => {
+    it("falls back to direct file write when exportBacklog throws", async () => {
+      // The default mock already has exportBacklog throwing.
+      // Verify the task is inserted and backlog.md is written with correct position.
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Fallback test", position: "bottom" }));
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.inserted).toContain("Fallback test");
+      expect(body.data.position).toBe("bottom");
+      // Verify a write was attempted (the fallback reads and re-writes backlog.md)
+      const backlogWrite = mockWriteFileSync.mock.calls.find(c => String(c[0]).endsWith(".tmp"));
+      expect(backlogWrite).toBeDefined();
+      const written = backlogWrite![1] as string;
+      expect(written).toContain("Fallback test");
+    });
+
+    it("returns 200 with warning when both exportBacklog and file fallback fail", async () => {
+      // Make all file writes fail (except PID file writes)
+      mockWriteFileSync.mockImplementation(((path: string) => {
+        if (String(path).includes("/pid")) return undefined;
+        throw new Error("Disk full");
+      }) as typeof writeFileSync);
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Double fail" }));
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body.data.warning).toContain("backlog.md sync failed");
+    });
+  });
+
   // -----------------------------------------------------------------------
   // P1-3: Rate limiting tests
   // MUST be the last describe block — the in-memory _postTimestamps array

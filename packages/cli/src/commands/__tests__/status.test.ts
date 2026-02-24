@@ -178,6 +178,18 @@ describe("statusCommand", () => {
     expect(typeof logCalls[0][0]).toBe("number");
   });
 
+  it("--quiet suppresses all formatted output (no section headers)", async () => {
+    await statusCommand({ dir: "/tmp/test-project", quiet: true });
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls;
+    // Should only have one call: the numeric health score
+    expect(logCalls).toHaveLength(1);
+    // No section headers like "Tasks:", "Workers:", etc.
+    const allOutput = logCalls.flat().join("\n");
+    expect(allOutput).not.toContain("Tasks:");
+    expect(allOutput).not.toContain("Workers:");
+    expect(allOutput).not.toContain("Health Score:");
+  });
+
   // --- (c) health score returns 100 with no failures/blockers/stale heartbeats ---
 
   it("health score is 100 with no failures, blockers, or stale heartbeats", async () => {
@@ -355,6 +367,10 @@ describe("statusCommand", () => {
   });
 
   // --- (f) mission progress parsing shows all 6 criteria ---
+  // TODO(tech-debt): These mission evaluation tests duplicate the dashboard's
+  // mission.test.ts assertions. When the mission evaluation logic is unified
+  // (see TODO in status.ts), consolidate these tests to use the shared
+  // evaluateMissionCriteria function and only test the CLI-specific adapter.
 
   it("parses all 6 mission criteria in --json output", async () => {
     mockExistsSync.mockImplementation((p) => {

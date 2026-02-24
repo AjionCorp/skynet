@@ -27,9 +27,14 @@ describe("constants", () => {
       expect(SAFE_SCRIPT_PATH.test("watchdog.sh")).toBe(true);
       expect(SAFE_SCRIPT_PATH.test("my_script-v2.sh")).toBe(true);
     });
-    it("rejects traversal", () => {
+    it("rejects traversal and special characters", () => {
       expect(SAFE_SCRIPT_PATH.test("../etc/passwd")).toBe(false);
       expect(SAFE_SCRIPT_PATH.test("/absolute")).toBe(false);
+      expect(SAFE_SCRIPT_PATH.test("../../root")).toBe(false);
+      expect(SAFE_SCRIPT_PATH.test("foo/bar.sh")).toBe(false);
+      expect(SAFE_SCRIPT_PATH.test("script;rm -rf")).toBe(false);
+      expect(SAFE_SCRIPT_PATH.test("a b.sh")).toBe(false);
+      expect(SAFE_SCRIPT_PATH.test("")).toBe(false);
     });
   });
 

@@ -33,6 +33,7 @@ emit_event() {
       # NOTE: Pruned events are permanently deleted. For forensic retention,
       # configure an external log sink before enabling aggressive pruning.
       if mkdir "$_rot_lock" 2>/dev/null; then
+        echo "$$" > "$_rot_lock/pid" 2>/dev/null || true
         # Remove old .2 archives first, then shift .1 -> .2, current -> .1, then gzip .2
         rm -f "${events_log}.2.gz" "${events_log}.2" 2>/dev/null || true
         if [ -f "${events_log}.1" ]; then
@@ -42,7 +43,35 @@ emit_event() {
           echo "events rotation: mv current->.1 failed (disk full?) — events log may grow unbounded" >&2
         fi
         [ -f "${events_log}.2" ] && gzip -f "${events_log}.2" 2>/dev/null &
-        rmdir "$_rot_lock" 2>/dev/null || true
+        rm -rf "$_rot_lock" 2>/dev/null || true
+      else
+        # Stale lock recovery: if holder PID is dead or lock is older than 60s, reclaim
+        local _rot_force=false
+        if [ -f "$_rot_lock/pid" ]; then
+          local _rot_pid
+          _rot_pid=$(cat "$_rot_lock/pid" 2>/dev/null || echo "")
+          if [ -n "$_rot_pid" ] && ! kill -0 "$_rot_pid" 2>/dev/null; then
+            _rot_force=true
+          fi
+          if ! $_rot_force; then
+            local _rot_mtime
+            if [ "$(uname -s)" = "Darwin" ]; then
+              _rot_mtime=$(stat -f %m "$_rot_lock/pid" 2>/dev/null || echo 0)
+            else
+              _rot_mtime=$(stat -c %Y "$_rot_lock/pid" 2>/dev/null || echo 0)
+            fi
+            if [ $(( $(date +%s) - _rot_mtime )) -gt 60 ]; then
+              _rot_force=true
+            fi
+          fi
+        else
+          # No PID file — crash between mkdir and PID write
+          _rot_force=true
+        fi
+        if $_rot_force; then
+          rm -rf "$_rot_lock" 2>/dev/null || true
+        fi
+        # If lock was stale and reclaimed, next emit will pick up rotation
       fi
       # If lock acquisition failed, another writer is rotating — skip this cycle
     fi

@@ -389,11 +389,12 @@ export async function statusCommand(options: StatusOptions) {
   print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
-  // DUPLICATION: This mission evaluation logic is duplicated from
+  // TODO(tech-debt): This mission evaluation logic is duplicated from
   // packages/dashboard/src/lib/mission.ts. Changes to criteria IDs (1-6),
   // thresholds, or status labels MUST be kept in sync manually.
-  // Tracked: consider exporting parseMissionProgress from @ajioncorp/skynet
-  // with a filesystem-friendly adapter to eliminate this duplication.
+  // To de-duplicate: export evaluateMissionCriteria(ctx: MissionEvaluationContext)
+  // from @ajioncorp/skynet, then build a thin CLI adapter that constructs the
+  // MissionEvaluationContext from filesystem reads (devDir, projectDir).
   // The dashboard version expects MissionEvaluationContext (pre-computed counts),
   // while the CLI version reads directly from the filesystem and computes its
   // own inputs — hence the duplication.

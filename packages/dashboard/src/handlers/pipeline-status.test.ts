@@ -2,7 +2,7 @@
 // console output (e.g., console.warn for SQLite fallback). Console side effects are
 // considered logging concerns and are not part of the handler's contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { createPipelineStatusHandler } from "./pipeline-status";
+import { createPipelineStatusHandler, parseDurationMinutes, formatDuration } from "./pipeline-status";
 import type { SkynetConfig } from "../types";
 
 vi.mock("../lib/file-reader", () => ({
@@ -29,7 +29,7 @@ vi.mock("../lib/db", () => ({
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
-import { existsSync, statSync, readFileSync } from "fs";
+import { existsSync, statSync, readFileSync, readdirSync } from "fs";
 import { execSync, spawnSync } from "child_process";
 
 const mockReadDevFile = vi.mocked(readDevFile);
@@ -41,6 +41,7 @@ const mockStatSync = vi.mocked(statSync);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockExecSync = vi.mocked(execSync);
 const mockSpawnSync = vi.mocked(spawnSync);
+const mockReaddirSync = vi.mocked(readdirSync);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -519,6 +520,31 @@ describe("createPipelineStatusHandler", () => {
     expect(typeof data.selfCorrectionRate).toBe("number");
   });
 
+  it("parseCurrentTask returns defaults when fields are missing", async () => {
+    // Provide a current-task.md with only a title — no Status, Branch, etc.
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return "## Bare task with no metadata";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.currentTask.title).toBe("Bare task with no metadata");
+    expect(data.currentTask.status).toBe("unknown");
+    expect(data.currentTask.branch).toBeNull();
+    expect(data.currentTask.started).toBeNull();
+    expect(data.currentTask.worker).toBeNull();
+    expect(data.currentTask.lastInfo).toBeNull();
+  });
+
+  it("returns unknown git branch when spawnSync fails", async () => {
+    mockSpawnSync.mockReturnValue({ stdout: "", stderr: "fatal: not a git repo", status: 128 } as never);
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.git.branch).toBe("unknown");
+  });
+
   it("returns structured mission items when mission.md has criteria", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
       if (filename === "mission.md") return "# Mission\n\n## Success Criteria\n1. Zero-to-autonomous setup\n2. Self-correction rate >95%";
@@ -535,5 +561,147 @@ describe("createPipelineStatusHandler", () => {
       expect(item).toHaveProperty("evidence");
       expect(["met", "partial", "not-met"]).toContain(item.status);
     }
+  });
+
+  it("computes averageTaskDuration from completed task durations", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "completed.md")
+        return [
+          "| Date | Task | Branch | Duration | Notes |",
+          "| --- | --- | --- | --- | --- |",
+          "| 2026-02-20 | Task A | fix/a | 23m | ok |",
+          "| 2026-02-20 | Task B | fix/b | 1h 12m | ok |",
+        ].join("\n");
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    // (23 + 72) / 2 = 47.5 => "48m" (rounded)
+    expect(data.averageTaskDuration).toBe("48m");
+  });
+
+  // ── TEST-P2-1: Codex auth fallback to env var ──────────────────────
+  it("reads codex auth file from SKYNET_CODEX_AUTH_FILE env var", async () => {
+    const originalKey = process.env.OPENAI_API_KEY;
+    const originalEnvFile = process.env.SKYNET_CODEX_AUTH_FILE;
+    delete process.env.OPENAI_API_KEY;
+    process.env.SKYNET_CODEX_AUTH_FILE = "/custom/path/codex-auth.json";
+
+    // Create a valid JWT token
+    const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+    const payload = Buffer.from(JSON.stringify({ sub: "user" })).toString("base64url");
+    const token = `${header}.${payload}.sig`;
+
+    mockExistsSync.mockImplementation((p) => {
+      if (typeof p === "string" && p === "/custom/path/codex-auth.json") return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p) => {
+      if (typeof p === "string" && p === "/custom/path/codex-auth.json") {
+        return JSON.stringify({ tokens: { id_token: token } });
+      }
+      return "";
+    });
+
+    // No codexAuthFile in config — should fall back to env var
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.auth.codex.status).toBe("ok");
+    expect(data.auth.codex.source).toBe("file");
+
+    process.env.OPENAI_API_KEY = originalKey;
+    if (originalEnvFile) {
+      process.env.SKYNET_CODEX_AUTH_FILE = originalEnvFile;
+    } else {
+      delete process.env.SKYNET_CODEX_AUTH_FILE;
+    }
+  });
+
+  // ── TEST-P2-2: Handler count cache via readdirSync ──────────────────
+  it("calls readdirSync to count handler files for mission evaluation", async () => {
+    mockReaddirSync.mockReturnValue([
+      "pipeline-status.ts", "pipeline-logs.ts", "events.ts",
+      "pipeline-status.test.ts", "index.ts",
+    ] as unknown as ReturnType<typeof readdirSync>);
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    expect(res.status).toBe(200);
+    // readdirSync should have been called (handler count feeds into mission evaluation)
+    expect(mockReaddirSync).toHaveBeenCalled();
+  });
+
+  it("re-reads handler count in development mode on each call", async () => {
+    process.env.NODE_ENV = "development";
+    mockReaddirSync.mockReturnValue([
+      "pipeline-status.ts", "events.ts",
+    ] as unknown as ReturnType<typeof readdirSync>);
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    await handler();
+    const firstCallCount = mockReaddirSync.mock.calls.length;
+
+    // Second call should also invoke readdirSync (no cache in dev mode)
+    await handler();
+    expect(mockReaddirSync.mock.calls.length).toBeGreaterThan(firstCallCount);
+  });
+});
+
+// ── parseDurationMinutes / formatDuration unit tests ─────────────────
+describe("parseDurationMinutes", () => {
+  it("parses minutes only", () => {
+    expect(parseDurationMinutes("23m")).toBe(23);
+  });
+
+  it("parses hours and minutes", () => {
+    expect(parseDurationMinutes("1h 12m")).toBe(72);
+  });
+
+  it("parses hours only", () => {
+    expect(parseDurationMinutes("1h")).toBe(60);
+  });
+
+  it("returns null for NaN input", () => {
+    expect(parseDurationMinutes("NaN")).toBeNull();
+  });
+
+  it("returns null for zero-length string", () => {
+    expect(parseDurationMinutes("")).toBeNull();
+  });
+
+  it("returns null for unparseable format", () => {
+    expect(parseDurationMinutes("5 days")).toBeNull();
+  });
+
+  it("parses zero minutes", () => {
+    expect(parseDurationMinutes("0m")).toBe(0);
+  });
+});
+
+describe("formatDuration", () => {
+  it("formats minutes under 60", () => {
+    expect(formatDuration(23)).toBe("23m");
+  });
+
+  it("formats exactly 60 minutes as 1h", () => {
+    expect(formatDuration(60)).toBe("1h");
+  });
+
+  it("formats hours and minutes", () => {
+    expect(formatDuration(72)).toBe("1h 12m");
+  });
+
+  it("returns -- for NaN", () => {
+    expect(formatDuration(NaN)).toBe("--");
+  });
+
+  it("returns -- for Infinity", () => {
+    expect(formatDuration(Infinity)).toBe("--");
+  });
+
+  it("formats zero minutes", () => {
+    expect(formatDuration(0)).toBe("0m");
   });
 });

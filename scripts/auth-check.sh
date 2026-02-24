@@ -55,9 +55,10 @@ check_claude_auth() {
       log "Claude Code auth restored. Pipeline resuming."
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER AUTH RESTORED* — Claude Code authenticated again. Pipeline resuming."
       # Remove auth blocker from blockers.md
+      # SH-P2-11: Use unique temp suffix to prevent concurrent write races
       if [ -f "$BLOCKERS" ]; then
-        grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" || true
-        mv "$BLOCKERS.tmp" "$BLOCKERS"
+        grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp.$$" || true
+        mv "$BLOCKERS.tmp.$$" "$BLOCKERS"
       fi
     fi
     return 0
@@ -88,8 +89,8 @@ check_claude_auth() {
         log "Auth restored after auto-refresh."
         rm -f "$SKYNET_AUTH_FAIL_FLAG"
         if [ -f "$BLOCKERS" ]; then
-          grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp" || true
-          mv "$BLOCKERS.tmp" "$BLOCKERS"
+          grep -v "Claude Code authentication expired" "$BLOCKERS" > "$BLOCKERS.tmp.$$" || true
+          mv "$BLOCKERS.tmp.$$" "$BLOCKERS"
         fi
         return 0
       fi
@@ -235,8 +236,8 @@ PY
       log "Codex CLI auth restored."
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER CODEX RESTORED* — Codex CLI authenticated again."
       if [ -f "$BLOCKERS" ]; then
-        grep -v "Codex CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp" || true
-        mv "$BLOCKERS.tmp" "$BLOCKERS"
+        grep -v "Codex CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp.$$" || true
+        mv "$BLOCKERS.tmp.$$" "$BLOCKERS"
       fi
     fi
     return 0
@@ -301,8 +302,8 @@ check_gemini_auth() {
       log "Gemini CLI auth restored."
       tg "✅ *$SKYNET_PROJECT_NAME_UPPER GEMINI RESTORED* — Gemini CLI authenticated again."
       if [ -f "$BLOCKERS" ]; then
-        grep -v "Gemini CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp" || true
-        mv "$BLOCKERS.tmp" "$BLOCKERS"
+        grep -v "Gemini CLI authentication" "$BLOCKERS" > "$BLOCKERS.tmp.$$" || true
+        mv "$BLOCKERS.tmp.$$" "$BLOCKERS"
       fi
     fi
     return 0

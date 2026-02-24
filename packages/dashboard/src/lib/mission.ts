@@ -145,8 +145,8 @@ export function evaluateCriterion(
     }
     case 3: {
       // "Workers never lose tasks, deadlock, or produce zombie processes"
-      const scriptsDir = ctx.devDir.replace(/\/+$/, "") + "/scripts";
-      const watchdogLog = readDevFile(scriptsDir, "watchdog.log");
+      // TS-P2-5: Use ctx.devDir with scripts/watchdog.log instead of constructing scriptsDir
+      const watchdogLog = readDevFile(ctx.devDir, "scripts/watchdog.log");
       const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
       const deadlockRefs = (watchdogLog.match(/deadlock/gi) || []).length;
       const totalIssues = zombieRefs + deadlockRefs;

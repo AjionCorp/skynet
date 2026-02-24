@@ -113,9 +113,15 @@ cleanup_on_exit() {
       log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE (fixer $FIXER_ID)"
     fi
   elif [ -n "$_CURRENT_TASK_TITLE" ]; then
-    db_unclaim_failure "${_db_task_id:-0}" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
-    db_export_state_files 2>/dev/null || true
-    log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
+    # Guard: only call db_unclaim_failure when we have a valid task ID.
+    # _db_task_id may be empty if the crash occurred before claiming completed.
+    if [ -n "$_db_task_id" ] && [ "$_db_task_id" != "0" ]; then
+      db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed — task may remain stuck in fixing state"
+      db_export_state_files 2>/dev/null || true
+      log "Crash recovery: unclaimed task: $_CURRENT_TASK_TITLE"
+    else
+      log "WARNING: Crash recovery skipped db_unclaim — no valid task ID for: $_CURRENT_TASK_TITLE"
+    fi
   fi
   # Ensure fixer status is idle on exit (normal or abnormal)
   db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale fixer status"
@@ -136,7 +142,15 @@ trap 'log "ERR on line $LINENO: $BASH_COMMAND"; exit 1' ERR
 # can finish the current phase cleanly and exit at the next safe checkpoint.
 # This prevents mid-merge kills from leaving branches in inconsistent state.
 SHUTDOWN_REQUESTED=false
-trap 'SHUTDOWN_REQUESTED=true; log "Shutdown signal received — will exit at next checkpoint"' SIGTERM SIGINT
+_IN_MERGE=false
+trap '
+  SHUTDOWN_REQUESTED=true
+  if $_IN_MERGE; then
+    log "Shutdown signal received during merge — deferring until merge completes"
+  else
+    log "Shutdown signal received — will exit at next checkpoint"
+  fi
+' SIGTERM SIGINT
 
 # --- Pipeline pause check ---
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
@@ -524,9 +538,11 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     }
     _MERGE_STATE_COMMIT_FN="_fixer_state_commit"
 
-    # Call shared merge function
+    # Call shared merge function (guarded against mid-merge SIGTERM)
     _merge_rc=0
+    _IN_MERGE=true
     do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
+    _IN_MERGE=false
     log "TRACE=$TRACE_ID Merge result: rc=$_merge_rc"
 
     new_attempts=$((fix_attempts + 1))

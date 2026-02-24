@@ -15,9 +15,18 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# Guard: validate SKYNET_SYNC_ENDPOINTS is defined and non-empty
-if [ -z "${SKYNET_SYNC_ENDPOINTS+x}" ] || [ "${#SKYNET_SYNC_ENDPOINTS[@]}" -eq 0 ]; then
-  log "WARNING: SKYNET_SYNC_ENDPOINTS is not defined or empty"
+# Guard: validate SKYNET_SYNC_ENDPOINTS is defined and is an array with elements
+# SH-P2-6: Use declare -p check to verify it is actually an array
+if [ -z "${SKYNET_SYNC_ENDPOINTS+x}" ]; then
+  log "WARNING: SKYNET_SYNC_ENDPOINTS is not defined"
+  exit 0
+fi
+if ! declare -p SKYNET_SYNC_ENDPOINTS 2>/dev/null | grep -q '^declare -a'; then
+  log "WARNING: SKYNET_SYNC_ENDPOINTS is not an array — check skynet.config.sh"
+  exit 0
+fi
+if [ "${#SKYNET_SYNC_ENDPOINTS[@]}" -eq 0 ]; then
+  log "WARNING: SKYNET_SYNC_ENDPOINTS is empty"
   exit 0
 fi
 

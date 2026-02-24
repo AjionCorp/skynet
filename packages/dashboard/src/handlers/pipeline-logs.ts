@@ -84,7 +84,8 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
           });
         }
         // Use spawnSync with explicit argv — no shell injection possible
-        const grepResult = spawnSync("grep", ["-i", sanitized, logPath], {
+        // TS-P2-4: Add --max-count to bound grep output
+        const grepResult = spawnSync("grep", ["-i", "-m", String(lines), sanitized, logPath], {
           encoding: "utf-8",
           timeout: 5000,
         });

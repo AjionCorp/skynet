@@ -23,6 +23,9 @@ export function createEventsHandler(config: SkynetConfig) {
         encoding: "utf-8",
         timeout: 5000,
       });
+      if (tailResult.status !== 0 && tailResult.stderr) {
+        console.warn(`[events] tail failed (rc=${tailResult.status}): ${tailResult.stderr.trim()}`);
+      }
       const raw = tailResult.stdout || "";
       if (!raw.trim()) {
         return Response.json({ data: [] as EventEntry[], error: null });

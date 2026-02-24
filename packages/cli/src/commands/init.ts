@@ -93,6 +93,8 @@ interface InitOptions {
 }
 
 export async function initCommand(options: InitOptions) {
+  // TS-P2-6: Reset module-level flag at function entry to avoid state leakage across invocations
+  nonInteractiveMode = false;
   nonInteractiveMode = !!options.nonInteractive;
 
   // Validate we're inside a git repository

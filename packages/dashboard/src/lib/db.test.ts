@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync, unlinkSync, copyFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { SkynetDB } from "./db";
+import { SkynetDB, getSkynetDB, _resetSingleton } from "./db";
 
 // SQL schema from scripts/_db.sh — enough to exercise SkynetDB methods
 const SCHEMA = `
@@ -812,6 +812,37 @@ describe("SkynetDB", () => {
 
     it("returns empty array for empty DB", () => {
       expect(db.getTaskBranches()).toEqual([]);
+    });
+  });
+
+  // ── TEST-P2-8: Inode-based singleton invalidation ──────────────────
+  describe("getSkynetDB inode invalidation", () => {
+    it("detects inode change when DB file is deleted and recreated", () => {
+      const dbPath = join(tmpDir, "skynet.db");
+      _resetSingleton();
+
+      // First call — establishes singleton with inode
+      const db1 = getSkynetDB(tmpDir);
+      expect(db1).toBeInstanceOf(SkynetDB);
+
+      // Delete and recreate the DB file (new inode)
+      const backupPath = dbPath + ".bak";
+      copyFileSync(dbPath, backupPath);
+      unlinkSync(dbPath);
+      // Recreate from backup (different inode)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(dbPath);
+      rawDb.exec(SCHEMA);
+      rawDb.close();
+
+      // Second call should detect inode change and create new instance
+      const db2 = getSkynetDB(tmpDir);
+      expect(db2).toBeInstanceOf(SkynetDB);
+      // New instance should be functional
+      expect(db2.countPending()).toBe(0);
+
+      _resetSingleton();
     });
   });
 });

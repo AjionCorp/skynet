@@ -85,6 +85,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ data: null, error: "Invalid API key" }, { status: 401 });
     }
 
+    // Successful login — clear any accumulated failed attempts for this IP
+    LOGIN_ATTEMPTS.delete(ip);
+
     const sessionToken = deriveSessionToken(expected);
     const response = NextResponse.json({ data: { ok: true }, error: null });
     response.cookies.set("skynet-api-key", sessionToken, {
