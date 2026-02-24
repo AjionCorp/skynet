@@ -87,7 +87,7 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
 # Cycle counter for periodic maintenance (persists across subshell iterations)
 _CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
-echo 0 > "$_CYCLE_COUNTER_FILE"
+(umask 077; echo 0 > "$_CYCLE_COUNTER_FILE")
 
 # --- Main loop ---
 while ! $_DRAINING; do
@@ -103,6 +103,9 @@ trap 'log "Watchdog cycle failed at line $LINENO: $BASH_COMMAND"' ERR
 
 # Rotate watchdog's own log if it exceeds configurable threshold
 rotate_log_if_needed "$LOG"
+
+# Rotate agent-metrics.log if it exceeds configurable threshold
+rotate_log_if_needed "$DEV_DIR/agent-metrics.log"
 
 # Trim logs to last 24h on each watchdog run
 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
@@ -521,6 +524,15 @@ if [ -f "$DB_PATH" ]; then
     # --- Automatic DB restore from most recent daily backup ---
     # ls -1t sorts by mtime (not locale-dependent lexicographic order), so LC_ALL is not needed
     _restore_backup=$(ls -1t "$DEV_DIR/db-backups"/skynet.db.2* 2>/dev/null | head -1)
+    # Validate restore path: must be non-empty, a regular file, and non-zero size
+    if [ -n "$_restore_backup" ] && [ ! -f "$_restore_backup" ]; then
+      log "WARNING: Restore path '$_restore_backup' is not a regular file — skipping"
+      _restore_backup=""
+    fi
+    if [ -n "$_restore_backup" ] && [ ! -s "$_restore_backup" ]; then
+      log "WARNING: Restore path '$_restore_backup' is empty — skipping"
+      _restore_backup=""
+    fi
     if [ -n "$_restore_backup" ]; then
       log "Attempting automatic DB restore from $_restore_backup"
       _backup_check=$(sqlite3 "$_restore_backup" "PRAGMA quick_check;" 2>/dev/null | head -1)
@@ -578,7 +590,7 @@ if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
     *"'"*|*'\\'*) log "WARNING: Unsafe characters in backup path, skipping backup" ;;
     *)
       if sqlite3 "$DB_PATH" ".backup '${_backup_file}'" 2>/dev/null; then
-        touch "$_backup_sentinel"
+        (umask 077; touch "$_backup_sentinel")
         log "Daily DB backup created: $_backup_file"
         # Rotate: keep 7 days
         # ls -1t sorts by mtime — locale-independent; keeping 7 newest backups
@@ -618,6 +630,7 @@ fi
 
 # --- Token expiry pre-warning ---
 # Check Claude token and Codex token expiry. Alert once if within 24h.
+# Sentinel files use restrictive permissions to prevent local tampering
 _expiry_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-token-expiry-alert"
 if $claude_auth_ok && [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
   _claude_expiry=$(_check_token_expiry "$SKYNET_AUTH_TOKEN_CACHE" 86400)
@@ -630,7 +643,7 @@ if $claude_auth_ok && [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
       if [ ! -f "$_expiry_sentinel" ]; then
         log "Claude token expires in ${_hours}h — consider refreshing"
         tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Claude token expires in ${_hours}h. Run auth-refresh soon."
-        touch "$_expiry_sentinel"
+        (umask 077; touch "$_expiry_sentinel")
       fi
       ;;
     ok:*)
@@ -1092,7 +1105,7 @@ _health_score_alert() {
     if [ ! -f "$sentinel" ]; then
       emit_event "health_alert" "Health score: $score"
       tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Pipeline health alert: score $score/100 (threshold: $threshold)"
-      date +%s > "$sentinel"
+      (umask 077; date +%s > "$sentinel")
       log "Health alert: score $score/100 [${_score_source}] (pending_failed=$pending_failed, blockers=$active_blockers, stale_hb=$_stale_heartbeat_count)"
     fi
   else
@@ -1123,7 +1136,7 @@ if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
       fi
     else
       log "SMOKE CHECK: first failure — will pause on next failure"
-      date +%s > "$_smoke_fail_sentinel"
+      (umask 077; date +%s > "$_smoke_fail_sentinel")
     fi
   else
     # Smoke passed — clear sentinel and auto-unpause if we were the ones who paused
@@ -1382,6 +1395,8 @@ fi
 # --- Periodic maintenance (every 10 cycles ≈ 30 minutes) ---
 _maint_counter_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
 _maint_cycle=$(cat "$_maint_counter_file" 2>/dev/null || echo 0)
+# Sanitize cycle counter to numeric value
+case "$_maint_cycle" in ''|*[!0-9]*) _maint_cycle=0 ;; esac
 if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
   log "Running periodic maintenance (cycle $_maint_cycle)..."
 
@@ -1430,13 +1445,61 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     fi
   fi
 
-  # (c) Git garbage collection (uses git's built-in threshold — won't run unless needed)
+  # (c) Cleanup orphaned .claude/worktrees/ directories
+  # These are created by interactive `claude` sessions and may be abandoned.
+  # Only clean up dirs older than 24 hours whose associated branch no longer exists.
+  _claude_wt_base="$PROJECT_DIR/.claude/worktrees"
+  if [ -d "$_claude_wt_base" ]; then
+    _claude_wt_cleaned=0
+    _now_epoch=$(date +%s)
+    _max_age_secs=86400  # 24 hours
+    for _claude_wt in "$_claude_wt_base"/*/; do
+      [ -d "$_claude_wt" ] || continue
+      _claude_wt_name=$(basename "$_claude_wt")
+      # Check age — only clean up dirs older than 24 hours
+      _claude_wt_mtime=$(file_mtime "$_claude_wt")
+      [ "$_claude_wt_mtime" = "0" ] && continue
+      _claude_wt_age=$(( _now_epoch - _claude_wt_mtime ))
+      [ "$_claude_wt_age" -lt "$_max_age_secs" ] && continue
+      # Check if the associated branch still exists
+      _claude_wt_branch=""
+      if [ -f "$_claude_wt/.git" ]; then
+        _claude_wt_branch=$(git -C "$_claude_wt" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+      fi
+      if [ -n "$_claude_wt_branch" ] && git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$_claude_wt_branch" 2>/dev/null; then
+        continue  # Branch still exists — skip
+      fi
+      # Orphaned: remove the worktree
+      cd "$PROJECT_DIR"
+      git worktree remove "$_claude_wt" --force 2>/dev/null || rm -rf "$_claude_wt" 2>/dev/null || true
+      _claude_wt_cleaned=$((_claude_wt_cleaned + 1))
+      log "Cleaned orphaned .claude/worktrees/$_claude_wt_name (age=${_claude_wt_age}s)"
+    done
+    if [ "$_claude_wt_cleaned" -gt 0 ]; then
+      git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+      log "Maintenance: cleaned $_claude_wt_cleaned orphaned .claude/worktree(s)"
+    fi
+  fi
+
+  # (d) Git garbage collection (uses git's built-in threshold — won't run unless needed)
   git -C "$PROJECT_DIR" gc --auto 2>/dev/null || log "WARNING: git gc --auto failed"
 
-  # (d) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
+  # (e) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
   find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -exec rm -f {} + 2>/dev/null || true
 
-  # (e) Stale branch cleanup — delete merged dev/* branches
+  # (e2) Stale .stale.PID lock directory cleanup — these are leftover from
+  # atomic lock reclaim (mv + rm) when a crash occurs between the two operations.
+  _stale_cleaned=0
+  for _stale_dir in "${SKYNET_LOCK_PREFIX}"-*.lock.stale.*; do
+    [ -d "$_stale_dir" ] || continue
+    rm -rf "$_stale_dir" 2>/dev/null || true
+    _stale_cleaned=$((_stale_cleaned + 1))
+  done
+  if [ "$_stale_cleaned" -gt 0 ]; then
+    log "Maintenance: cleaned $_stale_cleaned stale lock directory(ies)"
+  fi
+
+  # (f) Stale branch cleanup — delete merged dev/* branches
   _maint_merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null | grep "^  ${SKYNET_BRANCH_PREFIX}" || true)
   if [ -n "$_maint_merged_branches" ]; then
     _maint_branch_deleted=0
@@ -1461,11 +1524,11 @@ fi
 # via variable interpolation from the same SKYNET_PROJECT_NAME env var.
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 if [ "${backlog_count:-0}" -gt 0 ] || [ "${failed_pending:-0}" -gt 0 ]; then
-  echo 30 > "$_adaptive_file"
+  (umask 077; echo 30 > "$_adaptive_file")
 elif [ "${dev_workers_running:-0}" -gt 0 ] || [ "${fixers_running:-0}" -gt 0 ]; then
-  echo "$WATCHDOG_INTERVAL" > "$_adaptive_file"
+  (umask 077; echo "$WATCHDOG_INTERVAL" > "$_adaptive_file")
 else
-  echo 300 > "$_adaptive_file"
+  (umask 077; echo 300 > "$_adaptive_file")
 fi
 
 ) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
@@ -1473,7 +1536,9 @@ fi
 # Increment cycle counter (outside subshell so it persists)
 _CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
 _cur_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)
-echo $((_cur_cycle + 1)) > "$_CYCLE_COUNTER_FILE"
+# Sanitize cycle counter to numeric value (P2-13)
+case "$_cur_cycle" in ''|*[!0-9]*) _cur_cycle=0 ;; esac
+(umask 077; echo $((_cur_cycle + 1)) > "$_CYCLE_COUNTER_FILE")
 
 # Read adaptive interval from subshell output (falls back to default).
 # Guard against empty/stale reads: if cat returns empty string (slow write,

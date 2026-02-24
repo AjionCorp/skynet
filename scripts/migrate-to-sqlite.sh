@@ -89,6 +89,8 @@ if _section_done "backlog"; then
 elif [ -f "$DEV_DIR/backlog.md" ]; then
   log "Migrating backlog.md..."
   priority=0
+  _backlog_sql=$(mktemp /tmp/skynet-migrate-backlog-XXXXXX)
+  echo "BEGIN;" > "$_backlog_sql"
   while IFS= read -r line; do
     # Parse status marker
     status=""
@@ -140,13 +142,13 @@ elif [ -f "$DEV_DIR/backlog.md" ]; then
     norm_esc=$(esc "$norm_root")
     tag_esc=$(esc "$tag")
 
-    sqlite3 "$DB_PATH" "
-      INSERT INTO tasks (title, tag, description, status, blocked_by, priority, normalized_root)
-      VALUES ('$title_esc', '$tag_esc', '$desc_esc', '$status', '$blocked_esc', $priority, '$norm_esc');
-    "
+    echo "INSERT INTO tasks (title, tag, description, status, blocked_by, priority, normalized_root) VALUES ('$title_esc', '$tag_esc', '$desc_esc', '$status', '$blocked_esc', $priority, '$norm_esc');" >> "$_backlog_sql"
     priority=$((priority + 1))
     backlog_count=$((backlog_count + 1))
   done < "$DEV_DIR/backlog.md"
+  echo "COMMIT;" >> "$_backlog_sql"
+  sqlite3 "$DB_PATH" < "$_backlog_sql"
+  rm -f "$_backlog_sql"
   log "  Backlog: $backlog_count items migrated"
   _mark_section "backlog"
 fi
@@ -159,6 +161,8 @@ if _section_done "completed"; then
   completed_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed';" 2>/dev/null || echo 0)
 elif [ -f "$DEV_DIR/completed.md" ]; then
   log "Migrating completed.md..."
+  _completed_sql=$(mktemp /tmp/skynet-migrate-completed-XXXXXX)
+  echo "BEGIN;" > "$_completed_sql"
   while IFS= read -r line; do
     # Skip header, separator, empty lines
     echo "$line" | grep -q '^|' || continue
@@ -223,15 +227,12 @@ elif [ -f "$DEV_DIR/completed.md" ]; then
 
     norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
-    sqlite3 "$DB_PATH" "
-      INSERT INTO tasks (title, tag, description, status, branch, duration, duration_secs, notes,
-        completed_at, normalized_root, priority)
-      VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', 'completed',
-        '$(esc "$branch_val")', '$(esc "$duration_val")', $duration_secs, '$(esc "$notes_val")',
-        '$(esc "$date_val")', '$(esc "$norm_root")', 99999);
-    "
+    echo "INSERT INTO tasks (title, tag, description, status, branch, duration, duration_secs, notes, completed_at, normalized_root, priority) VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', 'completed', '$(esc "$branch_val")', '$(esc "$duration_val")', $duration_secs, '$(esc "$notes_val")', '$(esc "$date_val")', '$(esc "$norm_root")', 99999);" >> "$_completed_sql"
     completed_count=$((completed_count + 1))
   done < "$DEV_DIR/completed.md"
+  echo "COMMIT;" >> "$_completed_sql"
+  sqlite3 "$DB_PATH" < "$_completed_sql"
+  rm -f "$_completed_sql"
   log "  Completed: $completed_count tasks migrated"
   _mark_section "completed"
 fi
@@ -244,6 +245,8 @@ if _section_done "failed"; then
   failed_count=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo 0)
 elif [ -f "$DEV_DIR/failed-tasks.md" ]; then
   log "Migrating failed-tasks.md..."
+  _failed_sql=$(mktemp /tmp/skynet-migrate-failed-XXXXXX)
+  echo "BEGIN;" > "$_failed_sql"
   while IFS= read -r line; do
     echo "$line" | grep -q '^|' || continue
     echo "$line" | grep -q 'Date' && continue
@@ -284,15 +287,12 @@ elif [ -f "$DEV_DIR/failed-tasks.md" ]; then
 
     norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
 
-    sqlite3 "$DB_PATH" "
-      INSERT INTO tasks (title, tag, description, status, branch, error, attempts,
-        failed_at, normalized_root, priority)
-      VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', '$(esc "$status_val")',
-        '$(esc "$branch_val")', '$(esc "$error_val")', $attempts_val,
-        '$(esc "$date_val")', '$(esc "$norm_root")', 99999);
-    "
+    echo "INSERT INTO tasks (title, tag, description, status, branch, error, attempts, failed_at, normalized_root, priority) VALUES ('$(esc "$title")', '$(esc "$tag")', '$(esc "$description")', '$(esc "$status_val")', '$(esc "$branch_val")', '$(esc "$error_val")', $attempts_val, '$(esc "$date_val")', '$(esc "$norm_root")', 99999);" >> "$_failed_sql"
     failed_count=$((failed_count + 1))
   done < "$DEV_DIR/failed-tasks.md"
+  echo "COMMIT;" >> "$_failed_sql"
+  sqlite3 "$DB_PATH" < "$_failed_sql"
+  rm -f "$_failed_sql"
   log "  Failed: $failed_count tasks migrated"
   _mark_section "failed"
 fi
@@ -338,6 +338,8 @@ if _section_done "events"; then
   log "  Events: already migrated — skipping"
 elif [ -f "$DEV_DIR/events.log" ]; then
   log "Migrating events.log..."
+  _events_sql=$(mktemp /tmp/skynet-migrate-events-XXXXXX)
+  echo "BEGIN;" > "$_events_sql"
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     epoch=$(echo "$line" | cut -d'|' -f1)
@@ -356,12 +358,12 @@ elif [ -f "$DEV_DIR/events.log" ]; then
       wid="$wid_match"
     fi
 
-    sqlite3 "$DB_PATH" "
-      INSERT INTO events (epoch, event, detail, worker_id)
-      VALUES ($epoch, '$(esc "$event")', '$(esc "$detail")', $wid);
-    "
+    echo "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$(esc "$event")', '$(esc "$detail")', $wid);" >> "$_events_sql"
     event_count=$((event_count + 1))
   done < "$DEV_DIR/events.log"
+  echo "COMMIT;" >> "$_events_sql"
+  sqlite3 "$DB_PATH" < "$_events_sql"
+  rm -f "$_events_sql"
   log "  Events: $event_count entries migrated"
   _mark_section "events"
 fi
@@ -373,6 +375,8 @@ if _section_done "fixer_stats"; then
   log "  Fixer stats: already migrated — skipping"
 elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   log "Migrating fixer-stats.log..."
+  _fixer_sql=$(mktemp /tmp/skynet-migrate-fixer-XXXXXX)
+  echo "BEGIN;" > "$_fixer_sql"
   while IFS= read -r line; do
     [ -z "$line" ] && continue
     epoch=$(echo "$line" | cut -d'|' -f1)
@@ -384,12 +388,12 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
       continue
     fi
 
-    sqlite3 "$DB_PATH" "
-      INSERT INTO fixer_stats (epoch, result, task_title)
-      VALUES ($epoch, '$(esc "$result")', '$(esc "$title")');
-    "
+    echo "INSERT INTO fixer_stats (epoch, result, task_title) VALUES ($epoch, '$(esc "$result")', '$(esc "$title")');" >> "$_fixer_sql"
     fixer_count=$((fixer_count + 1))
   done < "$DEV_DIR/fixer-stats.log"
+  echo "COMMIT;" >> "$_fixer_sql"
+  sqlite3 "$DB_PATH" < "$_fixer_sql"
+  rm -f "$_fixer_sql"
   log "  Fixer stats: $fixer_count entries migrated"
   _mark_section "fixer_stats"
 fi
@@ -472,11 +476,16 @@ log ""
 # (earlier versions did not strip [TAG] prefix before normalizing)
 log "Recomputing normalized_root for all tasks..."
 _recomputed=0
+_norm_sql=$(mktemp /tmp/skynet-migrate-norm-XXXXXX)
+echo "BEGIN;" > "$_norm_sql"
 while IFS='|' read -r _id _title; do
   _norm=$(echo "$_title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
-  sqlite3 "$DB_PATH" "UPDATE tasks SET normalized_root='$(esc "$_norm")' WHERE id=$_id;"
+  echo "UPDATE tasks SET normalized_root='$(esc "$_norm")' WHERE id=$_id;" >> "$_norm_sql"
   _recomputed=$((_recomputed + 1))
 done < <(sqlite3 "$DB_PATH" "SELECT id, title FROM tasks;")
+echo "COMMIT;" >> "$_norm_sql"
+sqlite3 "$DB_PATH" < "$_norm_sql"
+rm -f "$_norm_sql"
 log "Recomputed normalized_root for $_recomputed tasks."
 
 _mark_section "ALL"

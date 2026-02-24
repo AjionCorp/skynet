@@ -239,7 +239,18 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
           }
         }
       } else if (delta < 0) {
-        // Scale down — kill highest-numbered workers first, clean up PID + heartbeat files
+        // Scale down — kill highest-numbered workers first, clean up PID + heartbeat files.
+        //
+        // LIMITATION: Scale-down sends SIGTERM to active workers. It does NOT
+        // gracefully drain them (wait for current task to complete). Workers
+        // handle SIGTERM via their own signal trap (SHUTDOWN_REQUESTED flag)
+        // and will attempt to finish the current phase before exiting, but
+        // there is no guarantee the task completes cleanly. The watchdog's
+        // crash recovery will unclaim orphaned tasks on the next cycle.
+        //
+        // The merge-lock guard below prevents killing workers mid-merge, which
+        // is the most dangerous case. For truly graceful drain, the operator
+        // should use `skynet stop` which sets pipeline-paused and waits.
         const toKill = [...running]
           .sort((a, b) => b.id - a.id)
           .slice(0, Math.abs(delta));

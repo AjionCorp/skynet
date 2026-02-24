@@ -30,9 +30,16 @@ fi
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting dev server..." >> "$LOG"
 
+# Guard against empty or unset command
+if [ -z "${SKYNET_DEV_SERVER_CMD:-}" ]; then
+  echo "ERROR: SKYNET_DEV_SERVER_CMD is not set. Cannot start dev server." >&2
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: SKYNET_DEV_SERVER_CMD is empty — aborting" >> "$LOG"
+  exit 1
+fi
+
 # Start server in background with log capture
 # shellcheck disable=SC2086
-nohup $SKYNET_DEV_SERVER_CMD >> "$LOG" 2>&1 &
+nohup ${SKYNET_DEV_SERVER_CMD} >> "$LOG" 2>&1 &
 echo $! > "$PIDFILE"
 
 echo "Dev server started (PID $!). Logs: $LOG"

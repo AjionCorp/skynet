@@ -169,7 +169,10 @@ export function parseBacklogWithBlocked(raw: string): {
       if (depStatus === undefined) return true;
       // Dependency is done — this path is clear
       if (depStatus === "done") continue;
-      // Dependency is not done — blocked
+      // Dependency is not done — recurse to check transitive cycles
+      // (e.g. A -> B -> C -> A should mark all three as blocked)
+      if (isBlocked(dep, visiting)) return true;
+      // Dep is not done and has no transitive cycle — still blocked
       return true;
     }
 

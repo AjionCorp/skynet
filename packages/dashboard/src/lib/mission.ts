@@ -1,8 +1,18 @@
 /**
  * Mission evaluation logic for the Skynet pipeline.
  *
- * Extracted from pipeline-status.ts for reuse and testability.
- * Parses mission.md success criteria and evaluates each against current pipeline state.
+ * This is the CANONICAL source of truth for mission parsing and evaluation.
+ * All mission-related logic should flow through this module:
+ *   - parseMissionProgress() — full evaluation with criteria status (used by pipeline-status handler)
+ *   - parseMissionCriteria() — extract numbered criteria from mission.md
+ *   - evaluateCriterion() — evaluate a single criterion against pipeline state
+ *
+ * NOTE: The mission-status handler (handlers/mission-status.ts) performs its own
+ * independent parse for the structured mission page (Purpose, Goals, Success Criteria
+ * with checkboxes, cross-referencing with completed tasks). That handler serves a
+ * different shape (MissionCriterion[]) than this module (MissionProgress[]). The two
+ * share the same source file (mission.md) but serve distinct consumer needs and
+ * intentionally do not duplicate each other's logic.
  */
 
 import { existsSync, readdirSync } from "fs";

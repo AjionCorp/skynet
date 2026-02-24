@@ -40,14 +40,21 @@ acquire_lock() {
 }
 
 release_lock() {
-  rm -rf "$LOCKFILE" 2>/dev/null || true
+  # Only release if we own the lock (PID matches $$)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    local lock_pid
+    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ "$lock_pid" = "$$" ]; then
+      rm -rf "$LOCKFILE" 2>/dev/null || true
+    fi
+  fi
 }
 
 if ! acquire_lock; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE/pid" 2>/dev/null || echo '?')). Exiting." >> "$LOG"
   exit 0
 fi
-trap 'release_lock' EXIT
+trap 'release_lock' EXIT INT TERM
 
 log "Feature validator starting."
 tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURE-VALIDATOR* starting — deep page + API tests"

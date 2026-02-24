@@ -16,7 +16,7 @@ export function safeCompare(a: string, b: string): boolean {
  * recomputes the HMAC and compares.
  */
 // Session tokens are deterministic (HMAC of API key) — they are permanent until
-// the API key changes. The 30-day cookie maxAge controls browser-side expiry only.
+// the API key changes. The 7-day cookie maxAge controls browser-side expiry only.
 // For rotation, change the SKYNET_API_KEY in the environment.
 export function deriveSessionToken(apiKey: string): string {
   return createHmac("sha256", apiKey).update("skynet-session").digest("hex");

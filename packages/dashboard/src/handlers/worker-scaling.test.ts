@@ -22,13 +22,15 @@ vi.mock("fs", () => ({
 }));
 
 import { spawn } from "child_process";
-import { readFileSync, openSync, unlinkSync, rmSync } from "fs";
+import { readFileSync, openSync, unlinkSync, rmSync, existsSync, writeFileSync } from "fs";
 
 const mockSpawn = vi.mocked(spawn);
 const mockReadFileSync = vi.mocked(readFileSync);
 const mockUnlinkSync = vi.mocked(unlinkSync);
 const mockRmSync = vi.mocked(rmSync);
 const mockOpenSync = vi.mocked(openSync);
+const mockExistsSync = vi.mocked(existsSync);
+const mockWriteFileSync = vi.mocked(writeFileSync);
 
 // We need to mock process.kill to control which PIDs appear "alive"
 const _originalProcessKill = process.kill.bind(process);
@@ -569,6 +571,127 @@ describe("createWorkerScalingHandler", () => {
       // Both see the same initial state (0 running)
       expect(body1.data.previousCount).toBe(0);
       expect(body2.data.previousCount).toBe(0);
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // (P1-7) Merge lock 409 on scale-down
+  // -----------------------------------------------------------------------
+  describe("merge lock 409 on scale-down", () => {
+    it("returns 409 when worker is currently merging", async () => {
+      alivePids.add(1001);
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        // Simulate merge lock with this worker's PID
+        if (p.includes("merge.lock/pid")) return "1001";
+        throw new Error("ENOENT");
+      });
+      // existsSync returns true for merge lock dir and pid file
+      mockExistsSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        if (p.includes("merge.lock")) return true;
+        return false;
+      });
+
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 0 }));
+      const body = await res.json();
+
+      expect(res.status).toBe(409);
+      expect(body.data).toBeNull();
+      expect(body.error).toContain("merging");
+    });
+
+    it("allows scale-down when merge lock is held by a different PID", async () => {
+      alivePids.add(1001);
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        // Merge lock is held by a different process
+        if (p.includes("merge.lock/pid")) return "9999";
+        throw new Error("ENOENT");
+      });
+      mockExistsSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        if (p.includes("merge.lock")) return true;
+        return false;
+      });
+
+      // Remove killed PIDs from alivePids
+      vi.spyOn(process, "kill").mockImplementation((pid: number, signal?: string | number) => {
+        if (signal === 0) {
+          if (!alivePids.has(pid)) throw new Error("ESRCH");
+          return true;
+        }
+        alivePids.delete(pid);
+        return true;
+      });
+
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      const res = await POST(makePostRequest({ workerType: "dev-worker", count: 0 }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // (P1-8) resetStaleTaskFile behavior
+  // -----------------------------------------------------------------------
+  describe("resetStaleTaskFile on scale-up", () => {
+    it("resets stale task file when worker PID is dead", async () => {
+      // Worker 1 is dead (PID not in alivePids), but task file has in_progress
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        // No live PID lock — both dir-based and file-based lookups throw
+        if (p.includes("dev-worker-1.lock")) throw new Error("ENOENT");
+        // Task file has in_progress content
+        if (p.includes("current-task-1.md")) return "# Current Task\n**Status:** in_progress\n## Fix auth\n**Branch:** fix/auth";
+        throw new Error("ENOENT");
+      });
+
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      await POST(makePostRequest({ workerType: "dev-worker", count: 1 }));
+
+      // writeFileSync should have been called to reset the task file
+      const writeCall = mockWriteFileSync.mock.calls.find(
+        (call) => String(call[0]).includes("current-task-1.md")
+      );
+      expect(writeCall).toBeDefined();
+      expect(String(writeCall![1])).toContain("idle");
+    });
+
+    it("does not reset task file when worker is alive", async () => {
+      alivePids.add(1001);
+      mockReadFileSync.mockImplementation((path: unknown) => {
+        const p = String(path);
+        if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
+        if (p.includes("current-task-1.md")) return "# Current Task\n**Status:** in_progress";
+        throw new Error("ENOENT");
+      });
+
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      // Scale up to 2 workers (worker 1 alive, worker 2 needs to be spawned)
+      await POST(makePostRequest({ workerType: "dev-worker", count: 2 }));
+
+      // writeFileSync should NOT have been called for worker 1's task file
+      const writeCall = mockWriteFileSync.mock.calls.find(
+        (call) => String(call[0]).includes("current-task-1.md")
+      );
+      expect(writeCall).toBeUndefined();
+    });
+
+    it("does not apply to non-dev-worker types", async () => {
+      const { POST } = createWorkerScalingHandler(makeConfig());
+      await POST(makePostRequest({ workerType: "task-fixer", count: 1 }));
+
+      // No writeFileSync calls for task files
+      const writeCall = mockWriteFileSync.mock.calls.find(
+        (call) => String(call[0]).includes("current-task")
+      );
+      expect(writeCall).toBeUndefined();
     });
   });
 

@@ -19,14 +19,19 @@ export function loadConfig(projectDir: string): Record<string, string> | null {
   const vars: Record<string, string> = {};
 
   for (const line of content.split("\n")) {
-    const match = line.match(/^export\s+(\w+)=(?:"(.*)"|(\S+))/);
+    const match = line.match(/^export\s+(\w+)=(?:"(.*)"|'(.*)'|(\S+))/);
     if (match) {
-      let value = match[2] ?? match[3];
-      value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => {
-        if (key in vars) return vars[key];
-        if (ALLOWED_ENV.has(key)) return sanitizeEnvValue(process.env[key] || "");
-        return "";
-      });
+      // match[2] = double-quoted value, match[3] = single-quoted value, match[4] = unquoted value
+      const isSingleQuoted = match[3] !== undefined;
+      let value = match[2] ?? match[3] ?? match[4];
+      // Single-quoted values in shell are literal — no variable expansion
+      if (!isSingleQuoted) {
+        value = value.replace(/\$\{?(\w+)\}?/g, (_, key) => {
+          if (key in vars) return vars[key];
+          if (ALLOWED_ENV.has(key)) return sanitizeEnvValue(process.env[key] || "");
+          return "";
+        });
+      }
       vars[match[1]] = value;
     }
   }

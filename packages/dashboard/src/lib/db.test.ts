@@ -303,6 +303,315 @@ describe("SkynetDB", () => {
     });
   });
 
+  describe("getActiveBlockerLines", () => {
+    it("returns empty array when no active blockers", () => {
+      expect(db.getActiveBlockerLines()).toEqual([]);
+    });
+
+    it("returns formatted blocker lines for active blockers", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('Missing API key', 'active')");
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('Disk full', 'active')");
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('Resolved issue', 'resolved')");
+      rawDb.close();
+
+      const lines = db.getActiveBlockerLines();
+      expect(lines).toHaveLength(2);
+      expect(lines[0]).toBe("- Missing API key");
+      expect(lines[1]).toBe("- Disk full");
+    });
+  });
+
+  describe("getActiveBlockerCount", () => {
+    it("returns 0 when no active blockers", () => {
+      expect(db.getActiveBlockerCount()).toBe(0);
+    });
+
+    it("counts only active blockers", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('B1', 'active')");
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('B2', 'resolved')");
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('B3', 'active')");
+      rawDb.close();
+      expect(db.getActiveBlockerCount()).toBe(2);
+    });
+  });
+
+  describe("getHeartbeats", () => {
+    it("returns entries for all workers up to maxWorkers", () => {
+      const result = db.getHeartbeats(3);
+      expect(Object.keys(result)).toHaveLength(3);
+      expect(result["worker-1"]).toEqual({ lastEpoch: null, ageMs: null, isStale: false });
+      expect(result["worker-2"]).toEqual({ lastEpoch: null, ageMs: null, isStale: false });
+      expect(result["worker-3"]).toEqual({ lastEpoch: null, ageMs: null, isStale: false });
+    });
+
+    it("detects stale heartbeats when epoch is too old", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const oldEpoch = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+      rawDb.exec(`INSERT INTO workers (id, heartbeat_epoch) VALUES (1, ${oldEpoch})`);
+      rawDb.close();
+
+      const result = db.getHeartbeats(2);
+      expect(result["worker-1"].lastEpoch).toBe(oldEpoch);
+      expect(result["worker-1"].isStale).toBe(true);
+      expect(result["worker-1"].ageMs).toBeGreaterThan(0);
+    });
+
+    it("marks fresh heartbeats as not stale", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const freshEpoch = Math.floor(Date.now() / 1000) - 10; // 10 seconds ago
+      rawDb.exec(`INSERT INTO workers (id, heartbeat_epoch) VALUES (1, ${freshEpoch})`);
+      rawDb.close();
+
+      const result = db.getHeartbeats(2);
+      expect(result["worker-1"].isStale).toBe(false);
+    });
+  });
+
+  describe("getRecentEvents", () => {
+    it("returns empty array when no events", () => {
+      expect(db.getRecentEvents()).toEqual([]);
+    });
+
+    it("returns events in descending order with correct shape", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      rawDb.exec(`INSERT INTO events (epoch, event, detail, worker_id) VALUES (${now - 100}, 'task_completed', 'Task A done', 1)`);
+      rawDb.exec(`INSERT INTO events (epoch, event, detail, worker_id) VALUES (${now}, 'worker_killed', 'Stale worker', 2)`);
+      rawDb.close();
+
+      const events = db.getRecentEvents(10);
+      expect(events).toHaveLength(2);
+      expect(events[0].event).toBe("worker_killed"); // most recent first
+      expect(events[1].event).toBe("task_completed");
+      expect(events[0].worker).toBe(2);
+      expect(typeof events[0].ts).toBe("string");
+      expect(typeof events[0].detail).toBe("string");
+    });
+
+    it("respects limit parameter", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      for (let i = 0; i < 5; i++) {
+        rawDb.exec(`INSERT INTO events (epoch, event, detail) VALUES (${now + i}, 'event_${i}', 'detail_${i}')`);
+      }
+      rawDb.close();
+
+      expect(db.getRecentEvents(3)).toHaveLength(3);
+    });
+  });
+
+  describe("countActiveWorkers", () => {
+    it("returns 0 when no active workers", () => {
+      expect(db.countActiveWorkers()).toBe(0);
+    });
+
+    it("counts only in_progress workers", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO workers (id, status) VALUES (1, 'in_progress')");
+      rawDb.exec("INSERT INTO workers (id, status) VALUES (2, 'idle')");
+      rawDb.exec("INSERT INTO workers (id, status) VALUES (3, 'in_progress')");
+      rawDb.close();
+      expect(db.countActiveWorkers()).toBe(2);
+    });
+  });
+
+  describe("countEvents", () => {
+    it("returns 0 when no events", () => {
+      expect(db.countEvents()).toBe(0);
+    });
+
+    it("counts all events", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      rawDb.exec(`INSERT INTO events (epoch, event) VALUES (${now}, 'e1')`);
+      rawDb.exec(`INSERT INTO events (epoch, event) VALUES (${now}, 'e2')`);
+      rawDb.close();
+      expect(db.countEvents()).toBe(2);
+    });
+  });
+
+  describe("getFailedTasks", () => {
+    it("returns empty array when no failed tasks", () => {
+      expect(db.getFailedTasks()).toEqual([]);
+    });
+
+    it("returns failed tasks with correct shape", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec(
+        "INSERT INTO tasks (title, tag, status, branch, error, attempts, failed_at, priority) " +
+        "VALUES ('Bug fix', 'FIX', 'failed', 'fix/bug', 'OOM', 3, '2026-02-20 10:00:00', 0)"
+      );
+      rawDb.close();
+
+      const result = db.getFailedTasks();
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({
+        date: "2026-02-20",
+        task: "Bug fix",
+        branch: "fix/bug",
+        error: "OOM",
+        attempts: "3",
+        status: "failed",
+      });
+    });
+  });
+
+  describe("addTask", () => {
+    it("adds a task at top with priority 0 and shifts others", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('Existing', 'FIX', 'pending', 0)");
+      rawDb.close();
+
+      const newId = db.addTask("New task", "FEAT", "desc", "top", "");
+      expect(newId).toBeGreaterThan(0);
+      expect(db.countPending()).toBe(2);
+    });
+
+    it("adds a task at bottom with next highest priority", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('First', 'FIX', 'pending', 0)");
+      rawDb.close();
+
+      const newId = db.addTask("Bottom task", "FEAT", "desc", "bottom", "");
+      expect(newId).toBeGreaterThan(0);
+    });
+  });
+
+  describe("getFixRate24h", () => {
+    it("returns 0 when no fixer stats", () => {
+      expect(db.getFixRate24h()).toBe(0);
+    });
+
+    it("calculates fix rate from recent stats", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      rawDb.exec(`INSERT INTO fixer_stats (epoch, result, task_title) VALUES (${now}, 'success', 'T1')`);
+      rawDb.exec(`INSERT INTO fixer_stats (epoch, result, task_title) VALUES (${now}, 'success', 'T2')`);
+      rawDb.exec(`INSERT INTO fixer_stats (epoch, result, task_title) VALUES (${now}, 'failure', 'T3')`);
+      rawDb.close();
+
+      const rate = db.getFixRate24h();
+      expect(rate).toBe(67); // 2/3 = 66.67 rounded to 67
+    });
+  });
+
+  describe("getAverageTaskDuration", () => {
+    it("returns null when no completed tasks with duration", () => {
+      expect(db.getAverageTaskDuration()).toBeNull();
+    });
+
+    it("formats average duration correctly", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, duration_secs, priority) VALUES ('T1', 'FIX', 'completed', 600, 0)"); // 10m
+      rawDb.exec("INSERT INTO tasks (title, tag, status, duration_secs, priority) VALUES ('T2', 'FIX', 'completed', 1200, 1)"); // 20m
+      rawDb.close();
+
+      const avg = db.getAverageTaskDuration();
+      expect(avg).toBe("15m"); // avg of 10m and 20m
+    });
+
+    it("formats hours correctly", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, duration_secs, priority) VALUES ('T1', 'FIX', 'completed', 3600, 0)"); // 60m = 1h
+      rawDb.exec("INSERT INTO tasks (title, tag, status, duration_secs, priority) VALUES ('T2', 'FIX', 'completed', 7200, 1)"); // 120m = 2h
+      rawDb.close();
+
+      const avg = db.getAverageTaskDuration();
+      expect(avg).toBe("1h 30m"); // avg of 60m and 120m = 90m
+    });
+  });
+
+  describe("checkRateLimit", () => {
+    it("allows requests within the window", () => {
+      expect(db.checkRateLimit("test_key", 5, 60000)).toBe(true);
+      expect(db.checkRateLimit("test_key", 5, 60000)).toBe(true);
+    });
+
+    it("rejects requests after maxCount is reached", () => {
+      for (let i = 0; i < 5; i++) {
+        expect(db.checkRateLimit("limit_key", 5, 60000)).toBe(true);
+      }
+      expect(db.checkRateLimit("limit_key", 5, 60000)).toBe(false);
+    });
+
+    it("resets counter after window expires", () => {
+      // Use a very short window so it expires immediately
+      expect(db.checkRateLimit("expire_key", 1, 1)).toBe(true);
+      // Wait a tiny bit for the window to expire
+      const start = Date.now();
+      while (Date.now() - start < 5) { /* busy wait */ }
+      expect(db.checkRateLimit("expire_key", 1, 1)).toBe(true);
+    });
+  });
+
+  describe("getCurrentTask", () => {
+    it("returns unknown status for non-existent worker", () => {
+      const result = db.getCurrentTask(99);
+      expect(result.status).toBe("unknown");
+      expect(result.title).toBeNull();
+    });
+
+    it("returns worker task info", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO workers (id, status, task_title, branch, started_at) VALUES (1, 'in_progress', 'Fix auth', 'fix/auth', '2026-02-20 10:00:00')");
+      rawDb.close();
+
+      const result = db.getCurrentTask(1);
+      expect(result.status).toBe("in_progress");
+      expect(result.title).toBe("Fix auth");
+      expect(result.branch).toBe("fix/auth");
+      expect(result.worker).toBe("Worker 1");
+    });
+  });
+
+  describe("getAllCurrentTasks", () => {
+    it("returns tasks for all workers up to maxWorkers", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO workers (id, status, task_title) VALUES (1, 'in_progress', 'Task A')");
+      rawDb.exec("INSERT INTO workers (id, status, task_title) VALUES (2, 'idle', '')");
+      rawDb.close();
+
+      const result = db.getAllCurrentTasks(3);
+      expect(result["worker-1"].status).toBe("in_progress");
+      expect(result["worker-1"].title).toBe("Task A");
+      expect(result["worker-2"].status).toBe("idle");
+    });
+  });
+
   describe("close", () => {
     it("closes the underlying database connection without error", () => {
       // Calling close should not throw

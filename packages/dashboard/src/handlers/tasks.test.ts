@@ -202,6 +202,90 @@ describe("createTasksHandlers", () => {
     });
   });
 
+  // -----------------------------------------------------------------------
+  // P1-4: Title/description/newline validation tests
+  // -----------------------------------------------------------------------
+  describe("POST input validation", () => {
+    it("returns 400 for title with newlines", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Title\nwith newline" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("newlines");
+    });
+
+    it("returns 400 for title with carriage return", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Title\rwith CR" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("newlines");
+    });
+
+    it("returns 400 for description with newlines", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Good title", description: "Bad\ndesc" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("newlines");
+    });
+
+    it("returns 400 for blockedBy with newlines", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Good title", blockedBy: "Task\nA" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("newlines");
+    });
+
+    it("returns 400 for title exceeding 500 characters", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const longTitle = "a".repeat(501);
+      const res = await POST(makeRequest({ tag: "FEAT", title: longTitle }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("500 characters");
+    });
+
+    it("returns 400 for description exceeding 2000 characters", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const longDesc = "b".repeat(2001);
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Valid title", description: longDesc }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("2000 characters");
+    });
+
+    it("returns 400 for missing title field", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT" }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Title is required");
+    });
+
+    it("returns 400 for null title", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: null }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+    });
+
+    it("allows title at exactly 500 characters", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const exactTitle = "a".repeat(500);
+      const res = await POST(makeRequest({ tag: "FEAT", title: exactTitle }));
+      expect(res.status).toBe(200);
+    });
+
+    it("allows description at exactly 2000 characters", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const exactDesc = "b".repeat(2000);
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Valid", description: exactDesc }));
+      expect(res.status).toBe(200);
+    });
+  });
+
   describe("GET edge cases", () => {
     it("returns empty items when backlog has only done items", async () => {
       mockReadFileSync.mockReturnValue("# Backlog\n\n- [x] [FEAT] Done task\n- [x] [FIX] Also done" as never);
@@ -231,6 +315,46 @@ describe("createTasksHandlers", () => {
       expect(data.items).toHaveLength(1);
       expect(data.items[0].tag).toBe("");
       expect(data.items[0].text).toBe("No tag here");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // P1-3: Rate limiting tests
+  // MUST be the last describe block — the in-memory _postTimestamps array
+  // is module-level state and exhausting the limit pollutes later tests.
+  // -----------------------------------------------------------------------
+  describe("POST rate limiting", () => {
+    beforeEach(() => {
+      // Advance time past the 60s rate-limit window so any timestamps
+      // accumulated by earlier tests are pruned on the next POST call.
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.now() + 120_000);
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("allows requests within rate limit window", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Within limit" }));
+      expect(res.status).toBe(200);
+    });
+
+    it("returns 429 when rate limit is exceeded (in-memory fallback)", async () => {
+      // Advance time again to guarantee a clean slate for this test
+      vi.setSystemTime(Date.now() + 120_000);
+      // The DB mock throws, so in-memory rate limiting kicks in.
+      // Max 30 per 60s. Send 31 requests — the 31st should be rate-limited.
+      const { POST } = createTasksHandlers(makeConfig());
+      let lastRes: Response | null = null;
+      for (let i = 0; i < 31; i++) {
+        lastRes = await POST(makeRequest({ tag: "FEAT", title: `Task ${i}` }));
+      }
+      expect(lastRes!.status).toBe(429);
+      const body = await lastRes!.json();
+      expect(body.error).toContain("Rate limit");
+      expect(body.data).toBeNull();
     });
   });
 });

@@ -5,6 +5,11 @@ import { createPipelineStatusHandler } from "./pipeline-status";
 let activeConnections = 0;
 const MAX_SSE_CONNECTIONS = 20;
 
+/** Reset active connection counter (for testing only). */
+export function _resetActiveConnections(): void {
+  activeConnections = 0;
+}
+
 /**
  * Create a GET handler for the pipeline/stream SSE endpoint.
  * Watches .dev/ files for changes using fs.watch and streams status updates.
@@ -25,6 +30,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let lifetimeTimeout: ReturnType<typeof setTimeout> | null = null;
     let closed = false;
+    let lastPayloadHash = "";
 
     function cleanup() {
       if (!closed) activeConnections--;
@@ -76,6 +82,13 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           try {
             const response = await getStatus();
             const json = await response.json();
+            // Deduplicate: only push when data has changed from the last push.
+            // Uses JSON.stringify as a simple hash — acceptable for the small
+            // status payload (~2-5 KB). Avoids sending redundant SSE events
+            // during idle periods when nothing has changed.
+            const payload = JSON.stringify(json);
+            if (payload === lastPayloadHash) return;
+            lastPayloadHash = payload;
             sendEvent(json);
           } catch (err) {
             sendEvent({

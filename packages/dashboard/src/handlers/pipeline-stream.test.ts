@@ -15,7 +15,7 @@ vi.mock("./pipeline-status", () => ({
   createPipelineStatusHandler: () => mockGetStatus,
 }));
 
-import { createPipelineStreamHandler } from "./pipeline-stream";
+import { createPipelineStreamHandler, _resetActiveConnections } from "./pipeline-stream";
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -59,6 +59,7 @@ describe("createPipelineStreamHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
+    _resetActiveConnections();
     mockWatcher = createMockWatcher();
     mockWatch.mockReturnValue(mockWatcher);
     mockGetStatus.mockResolvedValue(makeStatusResponse());
@@ -253,5 +254,29 @@ describe("createPipelineStreamHandler", () => {
     await vi.advanceTimersByTimeAsync(600);
     expect(mockGetStatus).toHaveBeenCalledTimes(1);
     reader.cancel();
+  });
+
+  it("returns 503 when MAX_SSE_CONNECTIONS is exceeded", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+    const connections: Response[] = [];
+
+    // Open 20 connections (the maximum)
+    for (let i = 0; i < 20; i++) {
+      mockWatcher = createMockWatcher();
+      mockWatch.mockReturnValue(mockWatcher);
+      const res = await handler();
+      connections.push(res);
+    }
+
+    // The 21st connection should be rejected with 503
+    const rejected = await handler();
+    expect(rejected.status).toBe(503);
+    const body = await rejected.text();
+    expect(body).toBe("Too many SSE connections");
+
+    // Clean up all open connections
+    for (const conn of connections) {
+      conn.body?.cancel();
+    }
   });
 });

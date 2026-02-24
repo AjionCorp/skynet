@@ -336,6 +336,111 @@ describe("createPipelineStatusHandler", () => {
     expect(data.syncHealth.endpoints).toEqual([]);
   });
 
+  // -----------------------------------------------------------------------
+  // P1-6: Codex auth status 5 branches
+  // -----------------------------------------------------------------------
+  describe("codex auth status branches", () => {
+    it("returns 'missing' when no codex auth file and no OPENAI_API_KEY", async () => {
+      const originalKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      mockExistsSync.mockReturnValue(false);
+      const handler = createPipelineStatusHandler(makeConfig({ codexAuthFile: "/tmp/nonexistent/auth.json" }));
+      const res = await handler();
+      const { data } = await res.json();
+      expect(data.auth.codex.status).toBe("missing");
+      expect(data.auth.codex.source).toBe("missing");
+      process.env.OPENAI_API_KEY = originalKey;
+    });
+
+    it("returns 'api_key' when OPENAI_API_KEY is set", async () => {
+      const originalKey = process.env.OPENAI_API_KEY;
+      process.env.OPENAI_API_KEY = "sk-test-key";
+      const handler = createPipelineStatusHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+      expect(data.auth.codex.status).toBe("api_key");
+      expect(data.auth.codex.source).toBe("api_key");
+      expect(data.auth.codex.expiresInMs).toBeNull();
+      if (originalKey) {
+        process.env.OPENAI_API_KEY = originalKey;
+      } else {
+        delete process.env.OPENAI_API_KEY;
+      }
+    });
+
+    it("returns 'invalid' when codex auth file has no token", async () => {
+      const originalKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      mockExistsSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) return true;
+        return false;
+      });
+      mockReadFileSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) return JSON.stringify({ tokens: {} });
+        return "";
+      });
+      const handler = createPipelineStatusHandler(makeConfig({ codexAuthFile: "/tmp/codex-auth.json" }));
+      const res = await handler();
+      const { data } = await res.json();
+      expect(data.auth.codex.status).toBe("invalid");
+      expect(data.auth.codex.source).toBe("invalid");
+      process.env.OPENAI_API_KEY = originalKey;
+    });
+
+    it("returns 'ok' when codex auth file has a valid token without exp", async () => {
+      const originalKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      // Create a JWT without exp field: header.payload.signature
+      const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+      const payload = Buffer.from(JSON.stringify({ sub: "user" })).toString("base64url");
+      const token = `${header}.${payload}.sig`;
+      mockExistsSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) return true;
+        return false;
+      });
+      mockReadFileSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) {
+          return JSON.stringify({ tokens: { id_token: token } });
+        }
+        return "";
+      });
+      const handler = createPipelineStatusHandler(makeConfig({ codexAuthFile: "/tmp/codex-auth.json" }));
+      const res = await handler();
+      const { data } = await res.json();
+      expect(data.auth.codex.status).toBe("ok");
+      expect(data.auth.codex.source).toBe("file");
+      expect(data.auth.codex.expiresInMs).toBeNull();
+      process.env.OPENAI_API_KEY = originalKey;
+    });
+
+    it("returns 'expired' when codex auth file has an expired token", async () => {
+      const originalKey = process.env.OPENAI_API_KEY;
+      delete process.env.OPENAI_API_KEY;
+      // Create a JWT with expired exp field
+      const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url");
+      const expiredEpoch = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
+      const payload = Buffer.from(JSON.stringify({ sub: "user", exp: expiredEpoch })).toString("base64url");
+      const token = `${header}.${payload}.sig`;
+      mockExistsSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) return true;
+        return false;
+      });
+      mockReadFileSync.mockImplementation((p) => {
+        if (typeof p === "string" && p.includes("codex-auth")) {
+          return JSON.stringify({ tokens: { access_token: token, refresh_token: "refresh_tok" } });
+        }
+        return "";
+      });
+      const handler = createPipelineStatusHandler(makeConfig({ codexAuthFile: "/tmp/codex-auth.json" }));
+      const res = await handler();
+      const { data } = await res.json();
+      expect(data.auth.codex.status).toBe("expired");
+      expect(data.auth.codex.expiresInMs).toBe(0);
+      expect(data.auth.codex.hasRefreshToken).toBe(true);
+      process.env.OPENAI_API_KEY = originalKey;
+    });
+  });
+
   it("includes missionProgress field as an array in response", async () => {
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();

@@ -75,4 +75,45 @@ describe("parseBody", () => {
     expect(result.data).toEqual({});
     expect(result.error).toBeNull();
   });
+
+  it("rejects non-JSON Content-Type with 415", async () => {
+    const req = makeRequest('{"name":"test"}', { "content-type": "text/plain" });
+    const result = await parseBody(req);
+    expect(result.error).toBe("Content-Type must be application/json");
+    expect(result.status).toBe(415);
+    expect(result.data).toBeNull();
+  });
+
+  it("rejects XML Content-Type with 415", async () => {
+    const req = makeRequest("<xml/>", { "content-type": "application/xml" });
+    const result = await parseBody(req);
+    expect(result.error).toBe("Content-Type must be application/json");
+    expect(result.status).toBe(415);
+  });
+
+  it("accepts application/json Content-Type", async () => {
+    const req = makeRequest('{"ok":true}', { "content-type": "application/json" });
+    const result = await parseBody(req);
+    expect(result.data).toEqual({ ok: true });
+    expect(result.error).toBeNull();
+  });
+
+  it("accepts application/json with charset parameter", async () => {
+    const req = makeRequest('{"ok":true}', { "content-type": "application/json; charset=utf-8" });
+    const result = await parseBody(req);
+    expect(result.data).toEqual({ ok: true });
+    expect(result.error).toBeNull();
+  });
+
+  it("rejects requests where runtime auto-sets text/plain Content-Type", async () => {
+    // When no explicit content-type is set but body is provided, the runtime
+    // defaults to "text/plain;charset=UTF-8", which should be rejected.
+    const req = new Request("http://localhost/test", {
+      method: "POST",
+      body: '{"ok":true}',
+    });
+    const result = await parseBody(req);
+    expect(result.error).toBe("Content-Type must be application/json");
+    expect(result.status).toBe(415);
+  });
 });

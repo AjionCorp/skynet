@@ -34,7 +34,10 @@ _require_db() {
 _DB_SEP=$'\x1f'
 
 # --- SQL injection prevention ---
-_sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
+# Escapes single quotes for SQL string literals and strips NUL bytes (\0).
+# SQLite does not support NUL bytes in TEXT fields — they silently truncate
+# the value at the NUL position. Stripping them prevents data loss.
+_sql_escape() { printf '%s\n' "$1" | tr -d '\0' | sed "s/'/''/g"; }
 # NOTE: _sql_int intentionally coerces non-numeric input to 0 rather than
 # failing. This is defense-in-depth — callers should validate inputs, but
 # if invalid data reaches SQL, 0 is safer than an injection vector.

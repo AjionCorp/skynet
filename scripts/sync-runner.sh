@@ -40,14 +40,21 @@ acquire_lock() {
 }
 
 release_lock() {
-  rm -rf "$LOCKFILE" 2>/dev/null || true
+  # Only release if we own the lock (PID matches $$)
+  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
+    local lock_pid
+    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
+    if [ "$lock_pid" = "$$" ]; then
+      rm -rf "$LOCKFILE" 2>/dev/null || true
+    fi
+  fi
 }
 
 if ! acquire_lock; then
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE/pid" 2>/dev/null || echo '?')). Exiting." >> "$LOG"
   exit 0
 fi
-trap 'release_lock' EXIT
+trap 'release_lock' EXIT INT TERM
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL/api/admin/pipeline/status" > /dev/null 2>&1; then
@@ -88,7 +95,8 @@ run_sync() {
   log "Syncing: $name"
 
   # Capture both HTTP status code and response body
-  local tmpfile="${SKYNET_LOCK_PREFIX}-sync-$name.tmp"
+  local tmpfile
+  tmpfile=$(mktemp "/tmp/skynet-${SKYNET_PROJECT_NAME}-sync-${name}-XXXXXX")
   local http_code
   http_code=$(curl -s --max-time 120 -o "$tmpfile" -w "%{http_code}" -X POST "$BASE_URL$endpoint" -H "Content-Type: application/json" 2>&1) || {
     log "$name: FAILED (curl error)"

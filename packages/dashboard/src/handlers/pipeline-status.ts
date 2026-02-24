@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { spawnSync } from "child_process";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import type { SkynetConfig, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
@@ -180,7 +180,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // on the file-based values.
       let heartbeats: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
       if (usingSqlite && db) {
-        heartbeats = db.getHeartbeats(maxW);
+        heartbeats = db.getHeartbeats(maxW, config.staleMinutes);
       } else {
         // Use config.staleMinutes if set, otherwise fall back to STALE_THRESHOLD_SECONDS default
         const staleThresholdSeconds = (config.staleMinutes ?? STALE_THRESHOLD_SECONDS / 60) * 60;
@@ -370,7 +370,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.
       // The total cost (~40ms for 4 calls) is acceptable for the status endpoint's ~1s polling
       // interval. Combining them into fewer calls trades readability for ~15ms savings.
-      const projectRoot = devDir.replace(/\/?\.dev\/?$/, "");
+      // Use path.resolve for robustness with spaces and special characters
+      const projectRoot = resolve(devDir, "..");
       let gitBranch = "unknown";
       let commitsAhead = 0;
       let dirtyFiles = 0;

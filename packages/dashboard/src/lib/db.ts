@@ -106,7 +106,7 @@ export class SkynetDB {
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
-    this.db.pragma("busy_timeout = 5000");
+    this.db.pragma("busy_timeout = 15000");
   }
 
   close(): void {
@@ -354,9 +354,13 @@ export class SkynetDB {
     return result;
   }
 
-  /** Get heartbeats for all workers. */
-  getHeartbeats(maxWorkers: number): Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> {
-    const staleMs = STALE_THRESHOLD_SECONDS * 1000;
+  /** Get heartbeats for all workers.
+   *  @param staleMinutes — optional override for the stale threshold (in minutes).
+   *    Falls back to the module-level STALE_THRESHOLD_SECONDS when not provided. */
+  getHeartbeats(maxWorkers: number, staleMinutes?: number): Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> {
+    const staleMs = staleMinutes != null
+      ? staleMinutes * 60 * 1000
+      : STALE_THRESHOLD_SECONDS * 1000;
     const result: Record<string, { lastEpoch: number | null; ageMs: number | null; isStale: boolean }> = {};
     const rows = this.db
       .prepare("SELECT id, heartbeat_epoch FROM workers WHERE id <= ?")
@@ -663,6 +667,13 @@ let _instancePath: string | null = null;
 
 export function getSkynetDB(devDir: string): SkynetDB {
   const dbPath = `${devDir}/skynet.db`;
+  // SINGLETON LIMITATION: This factory caches a single SkynetDB instance keyed
+  // by dbPath. If multiple devDirs are used in the same process (e.g., a future
+  // multi-project dashboard), only the first-opened connection is cached — calls
+  // with a different devDir will create a new instance but the old one remains
+  // cached. For multi-devDir support, this would need a Map<string, SkynetDB>.
+  // Currently the dashboard only serves one project at a time, so this is safe.
+  //
   // Check if the database file's inode has changed (e.g., restored from backup).
   // If so, close the stale connection and create a fresh one.
   if (_instance && _instancePath === dbPath) {

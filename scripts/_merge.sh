@@ -190,10 +190,27 @@ do_merge_to_main() {
       _mods_m=$(file_mtime "node_modules/.modules.yaml")
       if [ "$_lock_m" -gt "$_mods_m" ]; then
         log "Lock file newer than node_modules — installing before typecheck"
-        eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}" >> "$log_file" 2>&1 || true
+        local _install_cmd="${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}"
+        # Validate install command against allowed character set (defense-in-depth)
+        case "$_install_cmd" in
+          *".."*|*";"*|*"|"*|*'$('*|*'`'*)
+            log "ERROR: SKYNET_INSTALL_CMD contains disallowed characters — skipping install"
+            ;;
+          *)
+            eval "$_install_cmd" >> "$log_file" 2>&1 || true
+            ;;
+        esac
       fi
     fi
-    if ! eval "$SKYNET_TYPECHECK_CMD" >> "$log_file" 2>&1; then
+    # Validate typecheck command before eval (defense-in-depth)
+    local _tc_cmd="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
+    case "$_tc_cmd" in
+      *".."*|*";"*|*"|"*|*'$('*|*'`'*)
+        log "ERROR: SKYNET_TYPECHECK_CMD contains disallowed characters — failing typecheck"
+        false
+        ;;
+    esac
+    if ! eval "$_tc_cmd" >> "$log_file" 2>&1; then
       log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
       if ! _do_revert "false" "typecheck failed" "$log_file"; then
         release_merge_lock
