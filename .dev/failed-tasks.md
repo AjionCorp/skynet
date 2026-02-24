@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | failed |
 | 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | dev/add-keyboard-shortcuts-to-dashboard | worktree missing before gates | 0 | failed |
 | 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | failed |
 | 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |

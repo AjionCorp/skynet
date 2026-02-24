@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add dark/light theme toggle to AdminLayout
+## [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size
 **Status:** completed
-**Started:** 2026-02-24 16:40
+**Started:** 2026-02-24 16:49
 **Completed:** 2026-02-24
-**Branch:** dev/add-darklight-theme-toggle-to-adminlayou
+**Branch:** dev/archive-resolved-failed-task-rows-to-bou
 **Worker:** 3
 
 ### Changes

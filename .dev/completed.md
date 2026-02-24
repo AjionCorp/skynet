@@ -2,8 +2,8 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-24 | [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size | merged to main | 4m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
-| 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
 | 2026-02-24 | [FEAT] Add dark/light theme toggle to AdminLayout | merged to main | 6m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task search and tag filter to Tasks page | merged to main | 2m | success |
