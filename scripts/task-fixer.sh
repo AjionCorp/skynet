@@ -58,7 +58,9 @@ usage_limit_hit() {
 # --- Worktree helpers (shared module) ---
 # Task-fixer uses non-strict install (continue on failure) and deletes stale
 # branches before creating worktrees from main.
+# shellcheck disable=SC2034  # read by sourced _worktree.sh
 WORKTREE_INSTALL_STRICT=false
+# shellcheck disable=SC2034
 WORKTREE_DELETE_STALE_BRANCH=true
 source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
 

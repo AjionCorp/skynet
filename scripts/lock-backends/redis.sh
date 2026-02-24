@@ -59,7 +59,8 @@ lock_backend_extend() {
   local name="$1"
   local timeout="${2:-30}"
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
-  local value="$$:$(hostname -s 2>/dev/null || echo unknown)"
+  local value
+  value="$$:$(hostname -s 2>/dev/null || echo unknown)"
   # Only extend if we still own the lock (atomic check + extend via Lua)
   _redis_cmd EVAL \
     "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end" \

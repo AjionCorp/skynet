@@ -20,6 +20,7 @@
 #   cleanup_worktree [DELETE_BRANCH]     — remove worktree, optionally delete branch
 #   WORKTREE_LAST_ERROR                 — set on failure for caller inspection
 
+# shellcheck disable=SC2034  # WORKTREE_LAST_ERROR is read by callers
 WORKTREE_LAST_ERROR=""
 
 # Create a worktree for a feature branch. Installs deps via pnpm.
@@ -79,9 +80,10 @@ setup_worktree() {
 }
 
 # Remove worktree. Optionally delete the branch too.
+# shellcheck disable=SC2120  # args are passed by callers in dev-worker.sh/task-fixer.sh
 cleanup_worktree() {
   local delete_branch="${1:-}"
-  cd "$PROJECT_DIR"  # ensure we're not inside the worktree
+  cd "$PROJECT_DIR" || return  # ensure we're not inside the worktree
   if [ -d "$WORKTREE_DIR" ]; then
     git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
   fi
