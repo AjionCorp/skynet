@@ -46,10 +46,40 @@ else
   fi
 fi
 
+_DRAINING=false
+
 _watchdog_cleanup() {
   rm -rf "$WATCHDOG_LOCK_DIR"
 }
-trap _watchdog_cleanup EXIT INT TERM
+
+_watchdog_drain() {
+  if $_DRAINING; then
+    return  # Already draining, avoid re-entry
+  fi
+  _DRAINING=true
+  log "Received shutdown signal, draining..."
+  # Wait for any in-progress child processes to complete
+  local _drain_timeout=60
+  local _drain_waited=0
+  while [ "$_drain_waited" -lt "$_drain_timeout" ]; do
+    # Check if any child processes are still running
+    if ! jobs -p 2>/dev/null | grep -q .; then
+      break
+    fi
+    sleep 1
+    _drain_waited=$((_drain_waited + 1))
+  done
+  if [ "$_drain_waited" -ge "$_drain_timeout" ]; then
+    log "Drain timeout reached (${_drain_timeout}s), exiting with remaining children"
+  else
+    log "Drain complete, all children finished"
+  fi
+  _watchdog_cleanup
+  exit 0
+}
+
+trap _watchdog_cleanup EXIT
+trap _watchdog_drain INT TERM
 
 log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
@@ -58,7 +88,7 @@ _CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
 echo 0 > "$_CYCLE_COUNTER_FILE"
 
 # --- Main loop ---
-while true; do
+while ! $_DRAINING; do
 (
 set -euo pipefail
 trap 'log "Watchdog cycle failed at line $LINENO"' ERR
@@ -1113,14 +1143,20 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
     if [ -n "$_stale_in_canary" ]; then
       log "CANARY FAILED: Worker crashed during canary validation"
       log "CANARY: Auto-reverting commit $_canary_commit"
-      # Attempt to revert the canary commit
-      if git revert --no-edit "$_canary_commit" 2>/dev/null; then
-        git push origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
-        log "CANARY: Reverted commit $_canary_commit"
-        emit_event "canary_failed" "commit=$_canary_commit action=reverted"
+      # Attempt to revert the canary commit — hold merge lock to avoid conflicts
+      if acquire_merge_lock; then
+        if git revert --no-edit "$_canary_commit" 2>/dev/null; then
+          git push origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+          log "CANARY: Reverted commit $_canary_commit"
+          emit_event "canary_failed" "commit=$_canary_commit action=reverted"
+        else
+          log "CANARY: Auto-revert failed — manual intervention required"
+          emit_event "canary_failed" "commit=$_canary_commit action=revert_failed"
+        fi
+        release_merge_lock
       else
-        log "CANARY: Auto-revert failed — manual intervention required"
-        emit_event "canary_failed" "commit=$_canary_commit action=revert_failed"
+        log "CANARY: Could not acquire merge lock for revert — will retry next cycle"
+        emit_event "canary_failed" "commit=$_canary_commit action=revert_lock_contention"
       fi
       # Alert via notification
       notify "CANARY FAILED: Script changes in commit ${_canary_commit:0:8} caused worker crash. Auto-revert attempted." 2>/dev/null || true

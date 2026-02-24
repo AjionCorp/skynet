@@ -1112,7 +1112,10 @@ db_prune_old_events() {
 db_maintenance() {
   [ ! -f "$DB_PATH" ] && { log "ERROR: db_maintenance — database not found"; return 1; }
 
-  # Step 1: integrity_check
+  # Step 1: WAL checkpoint — prevents unbounded WAL growth
+  _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+
+  # Step 2: integrity_check
   local integrity
   integrity=$(_db "PRAGMA integrity_check;" 2>/dev/null)
   if [ "$integrity" != "ok" ]; then
@@ -1120,10 +1123,10 @@ db_maintenance() {
     return 1
   fi
 
-  # Step 2: PRAGMA optimize (auto-analyze)
+  # Step 3: PRAGMA optimize (auto-analyze)
   _db "PRAGMA optimize;" 2>/dev/null || true
 
-  # Step 3: VACUUM only if DB file > 10MB
+  # Step 4: VACUUM only if DB file > 10MB
   local db_size=0
   if [ "$(uname)" = "Darwin" ]; then
     db_size=$(stat -f%z "$DB_PATH" 2>/dev/null || echo 0)
@@ -1135,9 +1138,6 @@ db_maintenance() {
     log "db_maintenance: DB size ${db_size} > 10MB — running VACUUM"
     _db "VACUUM;" 2>/dev/null || log "WARNING: VACUUM failed"
   fi
-
-  # Step 4: WAL checkpoint
-  _db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || true
 
   # Step 5: Check for circular blocked_by dependencies
   local circular

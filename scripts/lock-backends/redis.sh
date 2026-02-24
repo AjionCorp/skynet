@@ -77,3 +77,9 @@ lock_backend_check() {
   current=$(_redis_cmd GET "$key")
   [ "$current" = "$value" ]
 }
+
+lock_backend_health_check() {
+  local result
+  result=$("${SKYNET_REDIS_CLI:-redis-cli}" -u "$SKYNET_REDIS_URL" PING 2>/dev/null)
+  [ "$result" = "PONG" ]
+}

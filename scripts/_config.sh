@@ -45,8 +45,12 @@ export PATH="${SKYNET_EXTRA_PATH:-/opt/homebrew/bin:/usr/local/bin}:$PATH"
 
 # Derived defaults
 export SKYNET_LOCK_PREFIX="${SKYNET_LOCK_PREFIX:-/tmp/skynet-${SKYNET_PROJECT_NAME}}"
-export SKYNET_AUTH_TOKEN_CACHE="${SKYNET_AUTH_TOKEN_CACHE:-${SKYNET_LOCK_PREFIX}-claude-token}"
-export SKYNET_AUTH_FAIL_FLAG="${SKYNET_AUTH_FAIL_FLAG:-${SKYNET_LOCK_PREFIX}-auth-failed}"
+
+# Auth token cache — stored in user-private directory, NOT world-readable /tmp
+_skynet_token_dir="${HOME}/.cache/skynet"
+mkdir -p "$_skynet_token_dir" 2>/dev/null && chmod 700 "$_skynet_token_dir" 2>/dev/null
+export SKYNET_AUTH_TOKEN_CACHE="${SKYNET_AUTH_TOKEN_CACHE:-${_skynet_token_dir}/claude-token-${SKYNET_PROJECT_NAME}}"
+export SKYNET_AUTH_FAIL_FLAG="${SKYNET_AUTH_FAIL_FLAG:-${_skynet_token_dir}/auth-failed-${SKYNET_PROJECT_NAME}}"
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${SKYNET_AUTH_KEYCHAIN_ACCOUNT:-${USER}}"
 export SKYNET_BRANCH_PREFIX="${SKYNET_BRANCH_PREFIX:-dev/}"
 export SKYNET_MAIN_BRANCH="${SKYNET_MAIN_BRANCH:-main}"
@@ -67,13 +71,13 @@ export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-pe
 export SKYNET_CODEX_MODEL="${SKYNET_CODEX_MODEL:-}"
 export SKYNET_CODEX_SUBCOMMAND="${SKYNET_CODEX_SUBCOMMAND:-exec}"
 export SKYNET_CODEX_AUTH_FILE="${SKYNET_CODEX_AUTH_FILE:-$HOME/.codex/auth.json}"
-export SKYNET_CODEX_AUTH_FAIL_FLAG="${SKYNET_CODEX_AUTH_FAIL_FLAG:-${SKYNET_LOCK_PREFIX}-codex-auth-failed}"
+export SKYNET_CODEX_AUTH_FAIL_FLAG="${SKYNET_CODEX_AUTH_FAIL_FLAG:-${_skynet_token_dir}/codex-auth-failed-${SKYNET_PROJECT_NAME}}"
 export SKYNET_CODEX_REFRESH_BUFFER_SECS="${SKYNET_CODEX_REFRESH_BUFFER_SECS:-900}"
 export SKYNET_CODEX_OAUTH_ISSUER="${SKYNET_CODEX_OAUTH_ISSUER:-}"
 export SKYNET_GEMINI_BIN="${SKYNET_GEMINI_BIN:-gemini}"
 export SKYNET_GEMINI_FLAGS="${SKYNET_GEMINI_FLAGS:--p}"
 export SKYNET_GEMINI_MODEL="${SKYNET_GEMINI_MODEL:-}"
-export SKYNET_GEMINI_AUTH_FAIL_FLAG="${SKYNET_GEMINI_AUTH_FAIL_FLAG:-${SKYNET_LOCK_PREFIX}-gemini-auth-failed}"
+export SKYNET_GEMINI_AUTH_FAIL_FLAG="${SKYNET_GEMINI_AUTH_FAIL_FLAG:-${_skynet_token_dir}/gemini-auth-failed-${SKYNET_PROJECT_NAME}}"
 export SKYNET_GEMINI_NOTIFY_INTERVAL="${SKYNET_GEMINI_NOTIFY_INTERVAL:-3600}"
 export SKYNET_DEV_SERVER_URL="${SKYNET_DEV_SERVER_URL:-http://localhost:3000}"
 export SKYNET_DEV_PORT="${SKYNET_DEV_PORT:-${SKYNET_DEV_SERVER_PORT:-3000}}"
@@ -258,9 +262,19 @@ rotate_log_if_needed() {
   local current_size
   current_size=$(file_size "$logfile")
   if [ "$current_size" -gt "$max_bytes" ]; then
-    rm -f "${logfile}.2"
-    [ -f "${logfile}.1" ] && mv "${logfile}.1" "${logfile}.2"
-    mv "$logfile" "${logfile}.1"
+    # Use mkdir lock to prevent concurrent rotation
+    local _rotate_lock="${logfile}.rotate-lock"
+    if mkdir "$_rotate_lock" 2>/dev/null; then
+      # Re-check size after acquiring lock (another process may have rotated)
+      current_size=$(file_size "$logfile")
+      if [ "$current_size" -gt "$max_bytes" ]; then
+        rm -f "${logfile}.2"
+        [ -f "${logfile}.1" ] && mv "${logfile}.1" "${logfile}.2"
+        mv "$logfile" "${logfile}.1"
+      fi
+      rmdir "$_rotate_lock" 2>/dev/null || true
+    fi
+    # If we didn't get the lock, another process is rotating — skip
   fi
 }
 

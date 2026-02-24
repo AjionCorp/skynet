@@ -1,18 +1,46 @@
 const MAX_BODY_SIZE = 1_000_000; // 1 MB
 
 /**
- * Parse a JSON request body with size validation.
- * Reads the actual body text (not Content-Length header) to prevent spoofing.
+ * Parse a JSON request body with streaming size validation.
+ * Checks Content-Length header first as an early-reject optimization,
+ * then stream-reads with a hard size limit to prevent memory exhaustion.
  * Returns { data, error } — caller should check error before using data.
  */
 export async function parseBody<T>(
   request: Request
 ): Promise<{ data: T | null; error: string | null; status?: number }> {
   try {
-    const text = await request.text();
-    if (text.length > MAX_BODY_SIZE) {
+    // Early reject if Content-Length header exceeds limit (not a security check,
+    // just an optimization — actual body size is enforced below)
+    const cl = request.headers.get("content-length");
+    if (cl && Number(cl) > MAX_BODY_SIZE) {
       return { data: null, error: "Request body too large", status: 413 };
     }
+
+    // Stream-read with size limit to prevent memory exhaustion
+    const reader = request.body?.getReader();
+    if (!reader) {
+      return { data: null, error: "No request body", status: 400 };
+    }
+
+    const chunks: Uint8Array[] = [];
+    let totalSize = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalSize += value.byteLength;
+      if (totalSize > MAX_BODY_SIZE) {
+        reader.cancel();
+        return { data: null, error: "Request body too large", status: 413 };
+      }
+      chunks.push(value);
+    }
+
+    const text = new TextDecoder().decode(
+      chunks.length === 1 ? chunks[0] : Buffer.concat(chunks)
+    );
+
     const parsed = JSON.parse(text);
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       return { data: null, error: "Request body must be a JSON object", status: 400 };

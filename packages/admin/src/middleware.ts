@@ -25,6 +25,7 @@ export function middleware(request: NextRequest) {
   // Login page and auth routes bypass auth
   if (
     pathname === "/login" ||
+    pathname === "/healthz" ||
     pathname.startsWith("/api/auth/") ||
     pathname.startsWith("/_next")
   ) {

@@ -64,7 +64,22 @@ describe("createMissionRawHandler", () => {
     expect(Object.keys(data)).toEqual(["raw"]);
   });
 
-  it("returns 500 with error envelope when readDevFile throws", async () => {
+  it("returns 500 with generic error in production when readDevFile throws", async () => {
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+    mockReadDevFile.mockImplementation(() => { throw new Error("ENOENT: no such file or directory"); });
+    const handler = createMissionRawHandler(makeConfig());
+    const res = await handler();
+    const body = await res.json();
+    expect(res.status).toBe(500);
+    expect(body.data).toBeNull();
+    expect(body.error).toBe("Failed to read mission.md");
+    process.env.NODE_ENV = origEnv;
+  });
+
+  it("returns 500 with detailed error in development when readDevFile throws", async () => {
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
     mockReadDevFile.mockImplementation(() => { throw new Error("ENOENT: no such file or directory"); });
     const handler = createMissionRawHandler(makeConfig());
     const res = await handler();
@@ -72,6 +87,7 @@ describe("createMissionRawHandler", () => {
     expect(res.status).toBe(500);
     expect(body.data).toBeNull();
     expect(body.error).toBe("ENOENT: no such file or directory");
+    process.env.NODE_ENV = origEnv;
   });
 
   it("returns generic error message when non-Error is thrown", async () => {

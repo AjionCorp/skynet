@@ -43,6 +43,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install sqlite3
         run: sudo apt-get update && sudo apt-get install -y sqlite3
+      # NOTE: Tests run sequentially. If this job exceeds 5min, consider
+      # GNU parallel: find tests/unit -name '*.test.sh' | parallel bash {}
       - run: bash tests/unit/db.test.sh
       - run: bash tests/unit/crash-recovery.test.sh
       - run: bash tests/unit/watchdog-reconciliation.test.sh
@@ -52,6 +54,7 @@ jobs:
       - run: bash tests/unit/db-backup-restore.test.sh
       - run: bash tests/unit/auth-check.test.sh
       - run: bash tests/unit/redis-lock.test.sh
+      - run: bash tests/unit/file-lock.test.sh
 
   lint-sh:
     runs-on: ubuntu-latest
@@ -134,7 +137,6 @@ jobs:
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    continue-on-error: true  # devDependency transitive vulns (e.g. eslint tooling) can't be fixed here
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -143,7 +145,10 @@ jobs:
           node-version: 20
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm audit --audit-level=high
+      - name: Audit production dependencies
+        run: pnpm audit --audit-level=high --prod
+      - name: Audit all dependencies (informational)
+        run: pnpm audit --audit-level=high || true
 
   e2e-admin:
     needs: [typecheck, build]

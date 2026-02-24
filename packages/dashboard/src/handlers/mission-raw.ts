@@ -21,7 +21,7 @@ export function createMissionRawHandler(config: SkynetConfig) {
         {
           data: null,
           error:
-            err instanceof Error
+            process.env.NODE_ENV === "development" && err instanceof Error
               ? err.message
               : "Failed to read mission.md",
         },

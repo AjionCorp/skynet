@@ -90,12 +90,10 @@ export SKYNET_LOCK_BACKEND="file"
 export SKYNET_USE_FLOCK="true"
 
 # ---- Auth (Claude Code OAuth) ----
-## SECURITY WARNING: Token cache is written with umask 077 (owner-only) by
-## auth-refresh.sh, but /tmp on shared systems may still expose it via race
-## conditions or sticky-bit bypass. On multi-user production systems, set this
-## path to a directory owned by the pipeline user (e.g., $HOME/.skynet/token).
-export SKYNET_AUTH_TOKEN_CACHE="/tmp/skynet-${SKYNET_PROJECT_NAME}-claude-token"
-export SKYNET_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-auth-failed"     # Sentinel file set when auth fails
+# Auth token cache — stored in user-private directory (~/.cache/skynet/), NOT world-readable /tmp.
+# Override with explicit paths if you need a different location.
+export SKYNET_AUTH_TOKEN_CACHE="$HOME/.cache/skynet/claude-token-${SKYNET_PROJECT_NAME}"
+export SKYNET_AUTH_FAIL_FLAG="$HOME/.cache/skynet/auth-failed-${SKYNET_PROJECT_NAME}"  # Sentinel file set when auth fails
 export SKYNET_AUTH_KEYCHAIN_SERVICE="Claude Code-credentials"                     # macOS Keychain service name
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${USER}"                                     # macOS Keychain account (default: $USER)
 export SKYNET_AUTH_NOTIFY_INTERVAL=3600                                          # Seconds between auth-failure notifications
@@ -121,7 +119,10 @@ export SKYNET_DISCORD_WEBHOOK_URL=""  # Discord webhook URL (empty = disabled)
 
 # ---- Claude Code ----
 export SKYNET_CLAUDE_BIN="claude"                              # Path to Claude Code binary (default: claude)
-export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"  # CLI flags for Claude Code (default: --print --dangerously-skip-permissions)
+# SECURITY: --dangerously-skip-permissions is REQUIRED for autonomous operation.
+# Workers run in isolated git worktrees — they cannot access files outside the project.
+# To disable (interactive mode only): SKYNET_CLAUDE_FLAGS="--print"
+export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
 
 # ---- Agent Plugin ----
 # Which AI agent to use. Built-in: "auto", "claude", "codex"
@@ -139,13 +140,13 @@ export SKYNET_CODEX_SUBCOMMAND="exec"  # Use non-interactive Codex CLI subcomman
 export SKYNET_CODEX_FLAGS="--full-auto"
 export SKYNET_CODEX_MODEL=""             # Optional: pin a model (default: codex's default)
 export SKYNET_CODEX_AUTH_FILE="$HOME/.codex/auth.json"  # Path to Codex CLI auth file
-export SKYNET_CODEX_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-codex-auth-failed"  # Sentinel for Codex auth failure
+export SKYNET_CODEX_AUTH_FAIL_FLAG="$HOME/.cache/skynet/codex-auth-failed-${SKYNET_PROJECT_NAME}"  # Sentinel for Codex auth failure
 
 # ---- Gemini CLI (Google fallback) ----
 export SKYNET_GEMINI_BIN="gemini"
 export SKYNET_GEMINI_FLAGS="-p"                  # -p = accept prompt from stdin
 export SKYNET_GEMINI_MODEL=""                     # Optional: pin a model (default: gemini's default)
-export SKYNET_GEMINI_AUTH_FAIL_FLAG="/tmp/skynet-${SKYNET_PROJECT_NAME}-gemini-auth-failed"
+export SKYNET_GEMINI_AUTH_FAIL_FLAG="$HOME/.cache/skynet/gemini-auth-failed-${SKYNET_PROJECT_NAME}"
 export SKYNET_GEMINI_NOTIFY_INTERVAL=3600         # Seconds between Gemini auth-failure notifications
 
 # ---- Environment ----
