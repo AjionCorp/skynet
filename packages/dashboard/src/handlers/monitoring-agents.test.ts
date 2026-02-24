@@ -433,6 +433,63 @@ describe("createMonitoringAgentsHandler", () => {
     expect(data.agents[1].loaded).toBe(false);
   });
 
+  // ── TEST-P2-1: cronToIntervalSeconds edge cases ───────────────────
+  describe("cron schedule edge cases", () => {
+    beforeEach(() => {
+      mockPlatform.mockReturnValue("linux");
+    });
+
+    afterEach(() => {
+      mockPlatform.mockReturnValue("darwin");
+    });
+
+    it("rejects */0 cron step (zero interval)", async () => {
+      const crontabOutput = [
+        "# BEGIN skynet:test-project",
+        "*/0 * * * * SKYNET_DEV_DIR=/home/user/.dev /bin/bash /home/user/.dev/scripts/dev-worker-1.sh >> /tmp/dev-worker-1.log 2>&1",
+        "# END skynet:test-project",
+      ].join("\n");
+
+      mockSpawnSync.mockReturnValue({
+        stdout: crontabOutput,
+        stderr: "",
+        status: 0,
+      } as never);
+
+      const handler = createMonitoringAgentsHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+
+      // */0 produces 0 seconds interval — should be rejected
+      const devWorker = data.agents[0];
+      expect(devWorker.loaded).toBe(true);
+      expect(devWorker.interval).toBeNull();
+      expect(devWorker.intervalHuman).toBeNull();
+    });
+
+    it("rejects non-5-part cron expressions", async () => {
+      const crontabOutput = [
+        "# BEGIN skynet:test-project",
+        "*/5 * * SKYNET_DEV_DIR=/home/user/.dev /bin/bash /home/user/.dev/scripts/dev-worker-1.sh >> /tmp/dev-worker-1.log 2>&1",
+        "# END skynet:test-project",
+      ].join("\n");
+
+      mockSpawnSync.mockReturnValue({
+        stdout: crontabOutput,
+        stderr: "",
+        status: 0,
+      } as never);
+
+      const handler = createMonitoringAgentsHandler(makeConfig());
+      const res = await handler();
+      const { data } = await res.json();
+
+      // 3-part cron expression — should fail to parse
+      const devWorker = data.agents[0];
+      expect(devWorker.interval).toBeNull();
+    });
+  });
+
   describe("Linux crontab path", () => {
     beforeEach(() => {
       mockPlatform.mockReturnValue("linux");

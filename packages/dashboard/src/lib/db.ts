@@ -18,10 +18,13 @@ let _betterSqlite3: BetterSqlite3 | null = null;
 // OPS-P3-3: Cache load failure so subsequent calls don't retry require() on
 // every request. Once the native addon fails to load (e.g., missing binary),
 // retrying on each request just wastes time and logs noise.
-let _loadFailed = false;
+// TS-P3-3: Use a timestamp instead of boolean — retry after 5 minutes in case
+// the issue was transient (e.g., native addon reinstalled).
+let _loadFailedAt = 0;
+const LOAD_RETRY_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 function loadDriver(): BetterSqlite3 {
-  if (_loadFailed) {
-    throw new Error("better-sqlite3 previously failed to load — skipping retry");
+  if (_loadFailedAt > 0 && (Date.now() - _loadFailedAt) < LOAD_RETRY_INTERVAL_MS) {
+    throw new Error("better-sqlite3 previously failed to load — skipping retry (will retry after 5min)");
   }
   if (!_betterSqlite3) {
     try {
@@ -31,8 +34,9 @@ function loadDriver(): BetterSqlite3 {
       // import() would require making the constructor async, adding complexity
       // for negligible benefit in a server-side context.
       _betterSqlite3 = require("better-sqlite3") as BetterSqlite3;
+      _loadFailedAt = 0; // Reset on successful load
     } catch (err) {
-      _loadFailed = true;
+      _loadFailedAt = Date.now();
       throw err;
     }
   }
@@ -131,6 +135,12 @@ export class SkynetDB {
     this.db.pragma("busy_timeout = 15000");
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
+    // OPS-P2-8: Verify SQLite version supports CTEs (requires >= 3.8.3)
+    const version = this.db.pragma("sqlite_version", { simple: true }) as string;
+    if (version < "3.8.3") {
+      this.db.close();
+      throw new Error(`SQLite ${version} is too old — requires >= 3.8.3 for CTE support`);
+    }
     // Lightweight call that only runs ANALYZE when statistics are stale.
     // Safe to call on every connection — no-op when stats are fresh.
     this.db.pragma("optimize");

@@ -103,7 +103,7 @@ function parseCronSchedule(
 ): { intervalSeconds: number; human: string } | null {
   const intervalSeconds = cronToIntervalSeconds(expr);
   if (intervalSeconds === null) return null;
-  // TS-P3-5: Floor check — step values like */0 would produce zero interval
+  // TS-P3-5: Interval must be positive (prevents zero or negative intervals from malformed cron expressions)
   if (intervalSeconds <= 0) return null;
   // Cap at 24 hours — step values like */999999 would produce enormous intervals
   if (intervalSeconds > 86400) return null;

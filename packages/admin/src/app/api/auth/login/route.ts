@@ -9,12 +9,14 @@ import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_TRACKED_IPS = 10_000; // prevent unbounded growth
+// TS-P3-4: Lowered from 10000 to 1000 — cleanup should trigger sooner
+const MAX_TRACKED_IPS = 1_000; // prevent unbounded growth
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
-  // Periodic cleanup: if map exceeds MAX_TRACKED_IPS, purge expired entries
-  if (LOGIN_ATTEMPTS.size > MAX_TRACKED_IPS) {
+  // Periodic cleanup: purge expired entries either when map exceeds threshold
+  // or probabilistically (1 in 10 requests) to keep the map trimmed
+  if (LOGIN_ATTEMPTS.size > MAX_TRACKED_IPS || (LOGIN_ATTEMPTS.size > 0 && Math.random() < 0.1)) {
     for (const [key, entry] of LOGIN_ATTEMPTS) {
       if (now >= entry.resetAt) LOGIN_ATTEMPTS.delete(key);
     }

@@ -69,6 +69,10 @@ export SKYNET_SMOKE_TIMEOUT=10              # Smoke test timeout in seconds (def
 export SKYNET_POST_MERGE_TYPECHECK=true     # Validate main builds after merge; auto-reverts on failure (default: true)
 export SKYNET_GIT_PUSH_TIMEOUT=120          # Timeout in seconds for each git push attempt (default: 120)
 
+# Merge lock TTL (seconds). Workers warn if lock held > 500s. Must be > push
+# timeout + typecheck time. Default 900s (15 min) gives safe margin.
+# export SKYNET_MERGE_LOCK_TTL=900
+
 # ── Canary Deployment ──────────────────────────────────────────────
 # When enabled, changes to scripts/*.sh trigger single-worker validation
 # before resuming full dispatch. Prevents self-modifying bugs from crashing

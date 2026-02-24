@@ -464,6 +464,23 @@ describe("createPipelineStatusHandler", () => {
     expect(data2.heartbeats["worker-1"].isStale).toBe(true);
   });
 
+  // ── TEST-P2-2: staleMinutes=0 edge case ──────────────────────────
+  it("treats all heartbeats as stale when staleMinutes=0", async () => {
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    // Heartbeat from 1 second ago — should still be stale when threshold is 0
+    const hbEpoch = nowEpoch - 1;
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "worker-1.heartbeat") return String(hbEpoch);
+      return "";
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig({ maxWorkers: 1, staleMinutes: 0 }));
+    const res = await handler();
+    const { data } = await res.json();
+    // staleMinutes=0 means threshold is 0ms — any age > 0 should be stale
+    expect(data.heartbeats["worker-1"].isStale).toBe(true);
+  });
+
   it("populates currentTasks from per-worker files when present", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
       if (filename === "current-task-2.md") {
@@ -531,6 +548,39 @@ describe("createPipelineStatusHandler", () => {
     const { data } = await res.json();
     expect(data.currentTask.title).toBe("Bare task with no metadata");
     expect(data.currentTask.status).toBe("unknown");
+    expect(data.currentTask.branch).toBeNull();
+    expect(data.currentTask.started).toBeNull();
+    expect(data.currentTask.worker).toBeNull();
+    expect(data.currentTask.lastInfo).toBeNull();
+  });
+
+  // ── TEST-P1-3: parseCurrentTask malformed input tests ───────────────
+  it("parseCurrentTask returns sensible default for unexpected status value", async () => {
+    // Provide a current-task.md with an unrecognized status string.
+    // parseCurrentTask should still extract whatever word follows **Status:**
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return "## Some task\n**Status:** banana_split\n**Branch:** dev/test";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    // The regex captures (\w+) after **Status:** — "banana_split" matches \w+
+    expect(data.currentTask.status).toBe("banana_split");
+    expect(data.currentTask.title).toBe("Some task");
+    expect(data.currentTask.branch).toBe("dev/test");
+  });
+
+  it("parseCurrentTask returns all defaults for completely empty current-task.md", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task.md") return "";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.currentTask.status).toBe("unknown");
+    expect(data.currentTask.title).toBeNull();
     expect(data.currentTask.branch).toBeNull();
     expect(data.currentTask.started).toBeNull();
     expect(data.currentTask.worker).toBeNull();

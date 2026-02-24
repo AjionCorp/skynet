@@ -33,14 +33,15 @@ describe("loadConfig", () => {
     expect(result!.SKYNET_MAX_WORKERS).toBe("4");
   });
 
-  it("parses unquoted export lines", () => {
+  it("ignores unquoted values (shell metacharacter safety)", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
-      "export SKYNET_MAX_WORKERS=4\n" as never
+      "export SKYNET_MAX_WORKERS=4\nexport SKYNET_PROJECT_NAME=\"my-project\"\n" as never
     );
     const result = loadConfig("/some/project");
     expect(result).not.toBeNull();
-    expect(result!.SKYNET_MAX_WORKERS).toBe("4");
+    expect(result!.SKYNET_MAX_WORKERS).toBeUndefined();
+    expect(result!.SKYNET_PROJECT_NAME).toBe("my-project");
   });
 
   it("ignores comment lines", () => {
@@ -53,14 +54,14 @@ describe("loadConfig", () => {
     expect(result!.SKYNET_FOO).toBe("bar");
   });
 
-  it("ignores non-export lines", () => {
+  it("parses lines with or without export keyword", () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue(
       'SKYNET_FOO="bar"\nexport SKYNET_BAR="baz"\n' as never
     );
     const result = loadConfig("/some/project");
     expect(result).not.toBeNull();
-    expect(result!.SKYNET_FOO).toBeUndefined();
+    expect(result!.SKYNET_FOO).toBe("bar");
     expect(result!.SKYNET_BAR).toBe("baz");
   });
 
@@ -140,5 +141,60 @@ describe("loadConfig", () => {
     const result = loadConfig("/some/project");
     expect(result).not.toBeNull();
     expect(result!.SKYNET_FOO).toBe("bar $HOME");
+  });
+
+  it("rejects unquoted values with shell metacharacters", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      "export SKYNET_BAD=hello;rm -rf /\nexport SKYNET_GOOD=\"safe\"\n" as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_BAD).toBeUndefined();
+    expect(result!.SKYNET_GOOD).toBe("safe");
+  });
+
+  it("double-quoted values work with escaped characters", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_ESC="path with \\"quotes\\""\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_ESC).toBe('path with "quotes"');
+  });
+
+  it("single-quoted values preserve all characters literally", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      "export SKYNET_LIT='hello $HOME \\n'\n" as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_LIT).toBe("hello $HOME \\n");
+  });
+
+  it("resolves forward references (later var references earlier var defined after it)", () => {
+    mockExistsSync.mockReturnValue(true);
+    // SKYNET_FULL references SKYNET_BASE, but SKYNET_BASE is defined later in the file.
+    // The second pass should resolve this forward reference.
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_FULL="$SKYNET_BASE/sub"\nexport SKYNET_BASE="/opt/skynet"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_BASE).toBe("/opt/skynet");
+    expect(result!.SKYNET_FULL).toBe("/opt/skynet/sub");
+  });
+
+  it("resolves forward references with ${VAR} syntax", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      'export SKYNET_PATH="${SKYNET_ROOT}/bin"\nexport SKYNET_ROOT="/usr/local"\n' as never
+    );
+    const result = loadConfig("/some/project");
+    expect(result).not.toBeNull();
+    expect(result!.SKYNET_ROOT).toBe("/usr/local");
+    expect(result!.SKYNET_PATH).toBe("/usr/local/bin");
   });
 });

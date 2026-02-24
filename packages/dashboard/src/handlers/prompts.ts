@@ -69,6 +69,11 @@ export function createPromptsHandler(config: SkynetConfig) {
         });
       }
 
+      // TS-P2-3: Warn when all prompt files fail to load
+      if (prompts.length === 0) {
+        return Response.json({ data: [], error: "No prompt files could be loaded" });
+      }
+
       return Response.json({ data: prompts, error: null });
     } catch (err) {
       return Response.json(

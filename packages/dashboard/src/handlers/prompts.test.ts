@@ -54,7 +54,8 @@ describe("createPromptsHandler", () => {
     vi.clearAllMocks();
   });
 
-  it("returns { data: [], error: null } when no scripts exist", async () => {
+  // TS-P2-3: When all prompt files fail to load, a warning error is returned
+  it("returns { data: [], error: warning } when no scripts exist", async () => {
     mockReadFileSync.mockImplementation(() => {
       throw new Error("ENOENT");
     });
@@ -64,7 +65,7 @@ describe("createPromptsHandler", () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(body.error).toBeNull();
+    expect(body.error).toBe("No prompt files could be loaded");
     expect(body.data).toEqual([]);
   });
 

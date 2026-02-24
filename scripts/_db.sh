@@ -236,10 +236,32 @@ _get_task_status() {
 }
 
 # ============================================================
+# DISK SPACE CHECK
+# ============================================================
+
+# OPS-P0-2: Check available disk space before writes.
+# Returns 0 if OK, 1 if below threshold (SKYNET_MIN_DISK_MB).
+_db_check_disk_space() {
+  local min_mb="${SKYNET_MIN_DISK_MB:-50}"
+  local db_dir
+  db_dir=$(dirname "$DB_PATH")
+  # df -Pm gives POSIX output in 1MB blocks; skip header with tail.
+  local avail_mb
+  avail_mb=$(df -Pm "$db_dir" 2>/dev/null | tail -1 | awk '{print $4}')
+  if [ -n "$avail_mb" ] && [ "$avail_mb" -lt "$min_mb" ] 2>/dev/null; then
+    log "CRITICAL: Low disk space — ${avail_mb}MB available, minimum ${min_mb}MB required for DB writes" 2>/dev/null || \
+      echo "CRITICAL: Low disk space — ${avail_mb}MB available, minimum ${min_mb}MB required" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ============================================================
 # INITIALIZATION
 # ============================================================
 
 db_init() {
+  _db_check_disk_space || true
   [ -f "$DB_PATH" ] || true  # sqlite3 creates if missing
   local _init_err
   _init_err=$(sqlite3 "$DB_PATH" <<'SCHEMA' 2>&1

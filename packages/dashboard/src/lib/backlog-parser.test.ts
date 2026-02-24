@@ -149,6 +149,16 @@ Some random text that should be skipped
     expect(items[0].title).toBe("valid task");
   });
 
+  // TEST-P2-3: Indented sublists should be ignored
+  it("ignores indented sublists (nested items)", () => {
+    const input = "- [ ] [FEAT] Parent task\n  - [ ] Subtask should be ignored\n    - [ ] Deeply nested also ignored\n- [ ] [FIX] Another task";
+    const items = parseBacklog(input);
+    // Only top-level items (starting at column 0) should be parsed
+    expect(items).toHaveLength(2);
+    expect(items[0].title).toBe("Parent task");
+    expect(items[1].title).toBe("Another task");
+  });
+
   it("handles very long titles by not crashing", () => {
     const longLine = "- [ ] [TAG] " + "A".repeat(200);
     const items = parseBacklog(longLine);

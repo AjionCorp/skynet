@@ -17,6 +17,7 @@ log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 # Guard: validate SKYNET_SYNC_ENDPOINTS is defined and is an array with elements
 # SH-P2-6: Use declare -p check to verify it is actually an array
+# SH-P3-3: bash 3.2 compat — use +x test instead of ${#array[@]} for empty check
 if [ -z "${SKYNET_SYNC_ENDPOINTS+x}" ]; then
   log "WARNING: SKYNET_SYNC_ENDPOINTS is not defined"
   exit 0
@@ -25,7 +26,10 @@ if ! declare -p SKYNET_SYNC_ENDPOINTS 2>/dev/null | grep -q 'declare -a'; then
   log "WARNING: SKYNET_SYNC_ENDPOINTS is not an array — check skynet.config.sh"
   exit 0
 fi
-if [ "${#SKYNET_SYNC_ENDPOINTS[@]}" -eq 0 ]; then
+# bash 3.2 safe empty array check: count elements via for-loop
+_sync_count=0
+for _ep in "${SKYNET_SYNC_ENDPOINTS[@]}"; do _sync_count=$((_sync_count + 1)); done
+if [ "$_sync_count" -eq 0 ]; then
   log "WARNING: SKYNET_SYNC_ENDPOINTS is empty"
   exit 0
 fi

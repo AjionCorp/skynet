@@ -276,6 +276,38 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
         log "ERROR: db_claim_next_task returned malformed result, skipping"
         continue
       fi
+
+      # OPS-P1-3: Rate limit on task claim loops — if the same task has been
+      # claimed >3 times in 5 minutes, it likely fails immediately on each attempt
+      # (e.g., worktree creation fails). Skip it to avoid rapid retry storms.
+      _claim_tracker="/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts"
+      _now_epoch=$(date +%s)
+      _cutoff_epoch=$((_now_epoch - 300))
+      # Prune old entries and count recent claims for this task ID
+      if [ -f "$_claim_tracker" ]; then
+        _recent_claims=0
+        _kept_lines=""
+        while IFS='|' read -r _ct_epoch _ct_id; do
+          [ -z "$_ct_epoch" ] && continue
+          case "$_ct_epoch" in ''|*[!0-9]*) continue ;; esac
+          if [ "$_ct_epoch" -ge "$_cutoff_epoch" ]; then
+            _kept_lines="${_kept_lines}${_ct_epoch}|${_ct_id}
+"
+            if [ "$_ct_id" = "$_db_task_id" ]; then
+              _recent_claims=$((_recent_claims + 1))
+            fi
+          fi
+        done < "$_claim_tracker"
+        printf '%s' "$_kept_lines" > "$_claim_tracker"
+        if [ "$_recent_claims" -ge 3 ]; then
+          log "WARNING: Task $_db_task_id ('$_db_title') claimed $_recent_claims times in 5 min — skipping to prevent rapid retry"
+          db_unclaim_task "$_db_task_id" 2>/dev/null || true
+          continue
+        fi
+      fi
+      # Record this claim attempt
+      echo "${_now_epoch}|${_db_task_id}" >> "$_claim_tracker"
+
       next_task="- [ ] [${_db_tag}] ${_db_title}"
     else
       next_task=""
@@ -769,6 +801,12 @@ WEOF
       continue
       ;;
   esac
+
+  # OPS-P1-3: Clear claim tracker for this task on successful completion
+  if [ -n "${_db_task_id:-}" ] && [ -f "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" ]; then
+    grep -v "|${_db_task_id}$" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" > "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" 2>/dev/null || true
+    mv "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" 2>/dev/null || true
+  fi
 
   log "TRACE=$TRACE_ID Task completed"
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"

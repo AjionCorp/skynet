@@ -142,6 +142,13 @@ export function createTasksHandlers(config: SkynetConfig) {
           { status: 400 }
         );
       }
+      // OPS-P1-5: Hard payload size limit — reject oversized descriptions early
+      if (description && description.length > 10000) {
+        return Response.json(
+          { data: null, error: "Description payload too large (max 10000 characters)" },
+          { status: 413 }
+        );
+      }
       if (description && description.length > 2000) {
         return Response.json(
           { data: null, error: "Description must be 2000 characters or fewer" },

@@ -40,17 +40,42 @@ _agent_exec() {
   fi
 
   if command -v timeout >/dev/null 2>&1; then
-    # Linux: GNU coreutils timeout (returns 124 on timeout)
-    timeout "$timeout_secs" "$@"
+    # Linux: GNU coreutils timeout (returns 124 on timeout).
+    # OPS-P1-6: --kill-after=30 sends SIGKILL 30s after the initial SIGTERM,
+    # ensuring child processes (git, node) are force-killed even if they ignore SIGTERM.
+    if timeout --kill-after=1 0 true 2>/dev/null; then
+      timeout --kill-after=30 "$timeout_secs" "$@"
+    else
+      # Older timeout without --kill-after support — fall through to perl
+      timeout "$timeout_secs" "$@"
+    fi
     return $?
   fi
 
-  # macOS: perl alarm (bash 3.2 compatible, no GNU coreutils dependency)
-  perl -e 'alarm shift; exec @ARGV' "$timeout_secs" "$@" 2>/dev/null
-  local rc=$?
-  # SIGALRM (signal 14) → exit 142 (128+14). Normalize to 124.
-  [ "$rc" -eq 142 ] && return 124
-  return "$rc"
+  # macOS: perl-based timeout with SIGKILL escalation (bash 3.2 compatible).
+  # OPS-P1-6: After SIGTERM timeout, waits 30s then sends SIGKILL to ensure
+  # child git/node processes are forcefully terminated.
+  perl -e '
+    use POSIX ":sys_wait_h";
+    my $timeout = shift;
+    my $pid = fork();
+    if ($pid == 0) { exec @ARGV; exit(127); }
+    eval {
+      local $SIG{ALRM} = sub { die "alarm\n" };
+      alarm $timeout;
+      waitpid($pid, 0);
+      alarm 0;
+    };
+    if ($@ eq "alarm\n") {
+      kill "TERM", $pid;
+      # Wait up to 30s for graceful shutdown, then SIGKILL
+      for (1..30) { last if waitpid($pid, WNOHANG) > 0; sleep 1; }
+      if (waitpid($pid, WNOHANG) == 0) { kill "KILL", $pid; waitpid($pid, 0); }
+      exit 124;
+    }
+    exit ($? >> 8);
+  ' "$timeout_secs" "$@" 2>/dev/null
+  return $?
 }
 
 # Agent plugin selection (default: auto)

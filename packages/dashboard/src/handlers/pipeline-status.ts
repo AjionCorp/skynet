@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync, appendFileSync } from "fs";
 import { spawnSync } from "child_process";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -11,6 +11,24 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
+
+/**
+ * OPS-P2-4: Log unexpected handler errors to a persistent file for debugging.
+ * Only writes if devDir is set. Lightweight — one JSON line per error.
+ */
+function logHandlerError(devDir: string | undefined, handler: string, err: unknown): void {
+  if (!devDir) return;
+  try {
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      handler,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    appendFileSync(`${devDir}/dashboard-errors.log`, line + "\n");
+  } catch {
+    // Best-effort — do not throw if logging itself fails
+  }
+}
 
 /**
  * Parse current-task.md into a structured object.
@@ -109,10 +127,14 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
   const { devDir, lockPrefix, workers: workerDefs } = config;
 
   // Cache handler count — handlers don't change at runtime
+  // OPS-P3-5: Add 1-hour TTL to cached handler count
   let _cachedHandlerCount: number | null = null;
+  let _handlerCountCachedAt = 0;
+  const HANDLER_COUNT_TTL_MS = 60 * 60 * 1000; // 1 hour
   function getHandlerCount(): number {
     // In development, handler files may change via HMR — skip cache
-    if (_cachedHandlerCount !== null && process.env.NODE_ENV !== "development") return _cachedHandlerCount;
+    const now = Date.now();
+    if (_cachedHandlerCount !== null && process.env.NODE_ENV !== "development" && (now - _handlerCountCachedAt) < HANDLER_COUNT_TTL_MS) return _cachedHandlerCount;
     try {
       const handlersDir = dirname(fileURLToPath(import.meta.url));
       _cachedHandlerCount = readdirSync(handlersDir).filter(
@@ -122,8 +144,10 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           f !== "index.ts" &&
           f !== "index.js"
       ).length;
+      _handlerCountCachedAt = now;
     } catch {
       _cachedHandlerCount = 0;
+      _handlerCountCachedAt = now;
     }
     return _cachedHandlerCount;
   }
@@ -275,13 +299,15 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           );
         failed = failedLines.map((l) => {
           const parts = l.split("|").map((p) => p.trim());
+          // TS-P2-2: Bounds check — default to empty string if insufficient parts
+          const hasFullRow = parts.length >= 7;
           return {
             date: parts[1] ?? "",
             task: parts[2] ?? "",
             branch: parts[3] ?? "",
-            error: parts[4] ?? "",
-            attempts: parts[5] ?? "",
-            status: parts[6] ?? "",
+            error: hasFullRow ? (parts[4] ?? "") : "",
+            attempts: hasFullRow ? (parts[5] ?? "") : "",
+            status: hasFullRow ? (parts[6] ?? "") : "",
           };
         });
       }
@@ -550,6 +576,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(devDir, "pipeline-status", err);
       return Response.json(
         {
           data: null,

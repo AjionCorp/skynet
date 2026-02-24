@@ -84,10 +84,11 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
           });
         }
         // Use spawnSync with explicit argv — no shell injection possible
-        // TS-P2-4: Add --max-count to bound grep output
+        // TS-P2-4: Add --max-count to bound grep output, plus maxBuffer to limit total bytes to 1MB
         const grepResult = spawnSync("grep", ["-i", "-m", String(lines), sanitized, logPath], {
           encoding: "utf-8",
           timeout: 5000,
+          maxBuffer: 1_000_000,
         });
         const grepOutput = grepResult.stdout || "";
         const allLines = grepOutput.split("\n").filter(Boolean);

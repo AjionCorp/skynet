@@ -188,7 +188,7 @@ _cr_phase1_stale_locks() {
     else
       continue
     fi
-    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); _cr_stale_pids=$((_cr_stale_pids + 1)); if [ "$recovered" -gt 500 ]; then log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"; break; fi; continue; }
+    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); _cr_stale_pids=$((_cr_stale_pids + 1)); if [ "$recovered" -gt 500 ]; then log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"; emit_event "crash_recovery_cap_hit" "Phase 1 hit 500-item limit" 2>/dev/null || true; break; fi; continue; }
 
     local stale=false
 
@@ -247,6 +247,7 @@ _cr_phase1_stale_locks() {
       _cr_stale_pids=$((_cr_stale_pids + 1))
       if [ "$recovered" -gt 500 ]; then
         log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+        emit_event "crash_recovery_cap_hit" "Phase 1 stale locks hit 500-item limit" 2>/dev/null || true
         break
       fi
     fi
@@ -273,6 +274,7 @@ _cr_phase2_orphaned_tasks() {
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
         if [ "$recovered" -gt 500 ]; then
           log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+          emit_event "crash_recovery_cap_hit" "Phase 2 orphaned tasks hit 500-item limit" 2>/dev/null || true
           break
         fi
       fi
@@ -322,6 +324,7 @@ IDLE_EOF
           _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
           if [ "$recovered" -gt 500 ]; then
             log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+            emit_event "crash_recovery_cap_hit" "Phase 2 orphaned claims hit 500-item limit" 2>/dev/null || true
             break
           fi
         done <<< "$claimed_lines"
@@ -372,9 +375,17 @@ _cr_phase3_orphan_worktrees() {
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
-      echo "$orphan_pids" | xargs kill -TERM 2>/dev/null || true
+      # OPS-P1-4: Re-validate each PID before killing to guard against PID
+      # wraparound race — PIDs from pgrep may be reused between pgrep and kill.
+      while read -r _opid; do
+        [ -z "$_opid" ] && continue
+        kill -0 "$_opid" 2>/dev/null && kill -TERM "$_opid" 2>/dev/null
+      done <<< "$orphan_pids"
       sleep 1
-      echo "$orphan_pids" | xargs kill -9 2>/dev/null || true
+      while read -r _opid; do
+        [ -z "$_opid" ] && continue
+        kill -0 "$_opid" 2>/dev/null && kill -9 "$_opid" 2>/dev/null
+      done <<< "$orphan_pids"
     fi
 
     # Re-check: worker may have started between initial check and now
@@ -389,6 +400,7 @@ _cr_phase3_orphan_worktrees() {
     _cr_cleaned_worktrees=$((_cr_cleaned_worktrees + 1))
     if [ "$recovered" -gt 500 ]; then
       log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"
+      emit_event "crash_recovery_cap_hit" "Phase 3 worktree cleanup hit 500-item limit" 2>/dev/null || true
       break
     fi
   done
@@ -564,7 +576,14 @@ if [ -f "$DB_PATH" ]; then
     fi
     if [ -n "$_restore_backup" ]; then
       log "Attempting automatic DB restore from $_restore_backup"
-      _backup_check=$(sqlite3 "$_restore_backup" "PRAGMA quick_check;" 2>/dev/null | head -1)
+      # OPS-P1-2: Use full integrity_check for backup validation (covers all data pages,
+      # not just ~2% like quick_check). Wrapped with a 30s timeout to prevent hangs on
+      # large or corrupted backup files.
+      if command -v timeout >/dev/null 2>&1; then
+        _backup_check=$(timeout 30 sqlite3 "$_restore_backup" "PRAGMA integrity_check;" 2>/dev/null | head -1)
+      else
+        _backup_check=$(sqlite3 "$_restore_backup" "PRAGMA integrity_check;" 2>/dev/null | head -1)
+      fi
       if [ "$_backup_check" = "ok" ]; then
         # Atomically move corrupted DB out of the way so concurrent workers
         # cannot read partial state during the restore process.
@@ -578,7 +597,12 @@ if [ -f "$DB_PATH" ]; then
           # $_restore_tmp is built from DB_PATH + .restore-tmp.$$ — no special chars possible.
           _restore_tmp="$DB_PATH.restore-tmp.$$"
           sqlite3 "$_restore_backup" ".backup '${_restore_tmp}'" 2>/dev/null
-          _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA quick_check;" 2>/dev/null | head -1)
+          # OPS-P1-2: Full integrity_check for restored DB validation with 30s timeout
+          if command -v timeout >/dev/null 2>&1; then
+            _restore_check=$(timeout 30 sqlite3 "$_restore_tmp" "PRAGMA integrity_check;" 2>/dev/null | head -1)
+          else
+            _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA integrity_check;" 2>/dev/null | head -1)
+          fi
           if [ "$_restore_check" = "ok" ]; then
             if [ -f "$DB_PATH" ]; then
               log "DB recreated by another process during restore — skipping"
@@ -784,6 +808,21 @@ _handle_stale_worker() {
   local hb_age=$(( now_epoch - hb_epoch ))
 
   if [ "$hb_age" -gt "$stale_seconds" ]; then
+    # Defense-in-depth: heartbeat file mtime has 1-second granularity, and the
+    # heartbeat writes every 60s. Before declaring a worker stale based solely on
+    # file age, also verify the worker PID is actually dead. If the PID is alive,
+    # the worker may just be slow to write its heartbeat (e.g., disk I/O stall).
+    local wpid_check=""
+    if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+      wpid_check=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+    elif [ -f "$lockfile" ]; then
+      wpid_check=$(cat "$lockfile" 2>/dev/null || echo "")
+    fi
+    if [ -n "$wpid_check" ] && kill -0 "$wpid_check" 2>/dev/null; then
+      log "Worker $wid heartbeat is stale ($((hb_age / 60))m) but PID $wpid_check is alive — skipping kill"
+      return 0
+    fi
+
     local age_min=$(( hb_age / 60 ))
     log "STALE WORKER $wid: heartbeat is ${age_min}m old (threshold: ${SKYNET_STALE_MINUTES}m). Killing."
 
@@ -1543,8 +1582,26 @@ case "$_maint_cycle" in ''|*[!0-9]*) _maint_cycle=0 ;; esac
 if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
   log "Running periodic maintenance (cycle $_maint_cycle)..."
 
+  # OPS-P3-3: Log DB file size and WAL size for observability
+  if [ -f "$DB_PATH" ]; then
+    _db_size=$(du -h "$DB_PATH" 2>/dev/null | cut -f1)
+    _wal_size=$(du -h "${DB_PATH}-wal" 2>/dev/null | cut -f1)
+    log "DB size: ${_db_size:-unknown}, WAL: ${_wal_size:-none}"
+  fi
+
   # (a) SQLite WAL checkpoint — prevents unbounded WAL growth
   if [ -f "$DB_PATH" ] && $_db_healthy; then
+    # OPS-P0-2: Force TRUNCATE checkpoint if WAL file exceeds 100MB
+    _wal_path="${DB_PATH}-wal"
+    if [ -f "$_wal_path" ]; then
+      _wal_size=$(file_size "$_wal_path")
+      _wal_limit=$((100 * 1024 * 1024))  # 100MB
+      if [ "${_wal_size:-0}" -gt "$_wal_limit" ] 2>/dev/null; then
+        log "WARNING: WAL file is ${_wal_size} bytes (>100MB) — forcing TRUNCATE checkpoint"
+        _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || log "WARNING: TRUNCATE checkpoint failed"
+      fi
+    fi
+
     _wal_result=$(_db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || echo "")
     if [ -n "$_wal_result" ]; then
       log "WAL checkpoint: $_wal_result"
@@ -1557,6 +1614,9 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     db_prune_old_events 7
     # Prune fixer_stats older than 90 days to prevent unbounded table growth
     db_prune_old_fixer_stats 90
+
+    # OPS-P0-2: Periodic disk space check
+    _db_check_disk_space || log "WARNING: Disk space below threshold — DB writes may fail"
   fi
 
   # (b) Stale worktree cleanup — remove worktrees with no corresponding worker lock

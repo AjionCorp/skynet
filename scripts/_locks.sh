@@ -14,9 +14,10 @@ SKYNET_USE_FLOCK="${SKYNET_USE_FLOCK:-true}"
 
 # Auto-TTL: maximum age (seconds) for a merge lock before force-release.
 # Prevents pipeline deadlock when a worker dies while holding the merge lock.
-# OPS-P2-7: Increased from 180s to 600s — 3 minutes was too tight for large merges
-# with typecheck + test gates. The lock is extended during typecheck.
-SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-600}"  # 10 minutes
+# OPS-P2-7: Increased from 180s to 600s, then OPS-P0-1 bumped to 900s.
+# 600s was too close to worst-case: push timeout (120s) + typecheck + merge can
+# approach 10 minutes under load. 900s gives a safe margin.
+SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-900}"  # 15 minutes
 
 # Acquire merge lock.
 # Delegates to the pluggable lock backend (file/redis).

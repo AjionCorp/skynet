@@ -1,6 +1,24 @@
 import { spawnSync } from "child_process";
+import { appendFileSync } from "fs";
 import type { SkynetConfig, EventEntry } from "../types";
 import { getSkynetDB } from "../lib/db";
+
+/**
+ * OPS-P2-4: Log unexpected handler errors to a persistent file for debugging.
+ */
+function logHandlerError(devDir: string | undefined, handler: string, err: unknown): void {
+  if (!devDir) return;
+  try {
+    const line = JSON.stringify({
+      ts: new Date().toISOString(),
+      handler,
+      error: err instanceof Error ? err.message : String(err),
+    });
+    appendFileSync(`${devDir}/dashboard-errors.log`, line + "\n");
+  } catch {
+    // Best-effort
+  }
+}
 
 export function createEventsHandler(config: SkynetConfig) {
   const eventsPath = `${config.devDir}/events.log`;
@@ -57,6 +75,7 @@ export function createEventsHandler(config: SkynetConfig) {
 
       return Response.json({ data: entries, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "events", err);
       return Response.json(
         {
           data: null,

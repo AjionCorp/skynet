@@ -59,6 +59,17 @@ export PATH="${SKYNET_EXTRA_PATH:-/opt/homebrew/bin:/usr/local/bin}:$PATH"
 # (e.g., $HOME/.cache/skynet/locks) to prevent local DoS via pre-created locks.
 export SKYNET_LOCK_PREFIX="${SKYNET_LOCK_PREFIX:-/tmp/skynet-${SKYNET_PROJECT_NAME}}"
 
+# OPS-P2-10: Warn if lock prefix directory is owned by a different user
+_lock_dir_parent="$(dirname "$SKYNET_LOCK_PREFIX" 2>/dev/null || echo "/tmp")"
+for _lock_check in "$_lock_dir_parent"/skynet-*; do
+  [ -e "$_lock_check" ] || continue
+  _lock_owner="$(stat -f%u "$_lock_check" 2>/dev/null || stat -c%u "$_lock_check" 2>/dev/null || echo "")"
+  if [ -n "$_lock_owner" ] && [ "$_lock_owner" != "$(id -u)" ]; then
+    echo "WARNING: Lock path '$_lock_check' is owned by UID $_lock_owner (current user: $(id -u)). Risk of lock contention on shared hosts." >&2
+    break  # One warning is enough
+  fi
+done
+
 # Auth token cache — stored in user-private directory, NOT world-readable /tmp
 _skynet_token_dir="${HOME}/.cache/skynet"
 mkdir -p "$_skynet_token_dir" 2>/dev/null && chmod 700 "$_skynet_token_dir" 2>/dev/null
@@ -106,6 +117,9 @@ export SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"
 # Log format: "text" (default, human-readable) or "json" (machine-parseable JSON lines)
 export SKYNET_LOG_FORMAT="${SKYNET_LOG_FORMAT:-text}"
 
+# Minimum free disk space (MB) before DB writes emit CRITICAL warning
+export SKYNET_MIN_DISK_MB="${SKYNET_MIN_DISK_MB:-50}"
+
 # SQL debug mode: log every query with timing. Default off for zero overhead.
 export SKYNET_DB_DEBUG="${SKYNET_DB_DEBUG:-false}"
 # Slow query warning threshold in milliseconds
@@ -133,6 +147,9 @@ export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 # Timeout (seconds) for each git push attempt (prevents indefinite hang on network stalls).
 # 120s accommodates large diffs and slow networks; override via env var if needed.
 export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-120}"
+
+# OPS-P2-5: General git operation timeout (pull, fetch). Defaults to the push timeout.
+export SKYNET_GIT_TIMEOUT="${SKYNET_GIT_TIMEOUT:-${SKYNET_GIT_PUSH_TIMEOUT:-120}}"
 
 # Orphan process cutoff: processes older than this are considered orphans.
 export SKYNET_ORPHAN_CUTOFF_SECONDS="${SKYNET_ORPHAN_CUTOFF_SECONDS:-120}"
@@ -212,6 +229,27 @@ _validate_config() {
   [ "$critical" -eq 0 ]
 }
 _validate_config
+
+# OPS-P2-11: Validate and clamp numeric config fields to safe bounds
+_validate_config_numerics() {
+  _clamp() {
+    local var_name="$1" min="$2" max="$3"
+    eval "local val=\${${var_name}:-}"
+    case "$val" in ''|*[!0-9]*) return ;; esac  # skip non-numeric
+    if [ "$val" -lt "$min" ]; then
+      echo "WARNING: ${var_name}=${val} below minimum ${min} — clamping to ${min}" >&2
+      eval "export ${var_name}=${min}"
+    elif [ "$val" -gt "$max" ]; then
+      echo "WARNING: ${var_name}=${val} above maximum ${max} — clamping to ${max}" >&2
+      eval "export ${var_name}=${max}"
+    fi
+  }
+  _clamp SKYNET_STALE_MINUTES 5 240
+  _clamp SKYNET_AGENT_TIMEOUT_MINUTES 10 240
+  _clamp SKYNET_MAX_WORKERS 1 16
+  _clamp SKYNET_WATCHDOG_INTERVAL 30 600
+}
+_validate_config_numerics
 
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
@@ -352,34 +390,41 @@ _generate_trace_id() {
 
 # --- Git helpers ---
 # Pull from origin with retry. Returns 0 on success, 1 on failure.
+# OPS-P2-5: Wrapped with SKYNET_GIT_TIMEOUT to prevent indefinite hangs.
+# OPS-P2-9: Uses exponential backoff (1, 2, 4s) between retries.
 # Usage: git_pull_with_retry [max_attempts]
 git_pull_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
+  local backoff=1
   while [ "$attempt" -le "$max_attempts" ]; do
-    if git pull origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+    if run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git pull origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi
     log "git pull failed (attempt $attempt/$max_attempts)"
     attempt=$((attempt + 1))
-    [ "$attempt" -le "$max_attempts" ] && sleep "$((attempt * 2))"
+    [ "$attempt" -le "$max_attempts" ] && sleep "$backoff"
+    backoff=$((backoff * 2))
   done
   log "ERROR: git pull failed after $max_attempts attempts"
   return 1
 }
 
 # Push to origin with retry. Returns 0 on success, 1 on failure.
+# OPS-P2-9: Uses exponential backoff (1, 2, 4s) between retries.
 # Usage: git_push_with_retry [max_attempts]
 git_push_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
+  local backoff=1
   while [ "$attempt" -le "$max_attempts" ]; do
     if run_with_timeout "$SKYNET_GIT_PUSH_TIMEOUT" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi
     log "git push failed (attempt $attempt/$max_attempts)"
     attempt=$((attempt + 1))
-    [ "$attempt" -le "$max_attempts" ] && sleep "$((attempt * 2))"
+    [ "$attempt" -le "$max_attempts" ] && sleep "$backoff"
+    backoff=$((backoff * 2))
   done
   log "ERROR: git push failed after $max_attempts attempts"
   return 1

@@ -264,6 +264,15 @@ describe("createTasksHandlers", () => {
       expect(body.error).toContain("500 characters");
     });
 
+    it("returns 413 for description exceeding 10000 characters (payload too large)", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const hugeDesc = "x".repeat(10001);
+      const res = await POST(makeRequest({ tag: "FEAT", title: "Valid title", description: hugeDesc }));
+      const body = await res.json();
+      expect(res.status).toBe(413);
+      expect(body.error).toContain("10000");
+    });
+
     it("returns 400 for description exceeding 2000 characters", async () => {
       const { POST } = createTasksHandlers(makeConfig());
       const longDesc = "b".repeat(2001);
@@ -378,6 +387,40 @@ describe("createTasksHandlers", () => {
       expect(body.error).toBeNull();
       expect(body.data.inserted).toContain("Read fail too");
       expect(body.data.warning).toContain("backlog.md sync failed");
+    });
+  });
+
+  // -----------------------------------------------------------------------
+  // TEST-P1-2: Concurrent write race test
+  // -----------------------------------------------------------------------
+  describe("POST concurrent writes", () => {
+    it("handles 5 concurrent POST requests without errors or duplication", async () => {
+      const { POST } = createTasksHandlers(makeConfig());
+      const requests = Array.from({ length: 5 }, (_, i) =>
+        POST(makeRequest({ tag: "FEAT", title: `Concurrent task ${i}` }))
+      );
+      const results = await Promise.all(requests);
+
+      // All requests should succeed (200) or get lock contention (423)
+      // but none should error (500)
+      for (const res of results) {
+        expect([200, 423]).toContain(res.status);
+      }
+
+      // Count how many succeeded
+      const successes = results.filter((r) => r.status === 200);
+      expect(successes.length).toBeGreaterThan(0);
+
+      // Verify no duplicated task titles in the written data
+      const insertedTitles: string[] = [];
+      for (const res of successes) {
+        const body = await res.json();
+        if (body.data?.inserted) {
+          insertedTitles.push(body.data.inserted);
+        }
+      }
+      const uniqueTitles = new Set(insertedTitles);
+      expect(uniqueTitles.size).toBe(insertedTitles.length);
     });
   });
 

@@ -56,6 +56,19 @@
 # Internal state shared with caller after return
 _MERGE_STATE_COMMITTED=false
 
+# OPS-P2-3: Merge lock acquisition timestamp (set inside do_merge_to_main)
+_MERGE_LOCK_ACQUIRED_AT=0
+
+# OPS-P2-3: Release merge lock with duration logging
+_release_merge_lock_with_duration() {
+  local duration=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
+  release_merge_lock
+  log "Merge lock held for ${duration}s"
+  if [ "$duration" -gt 300 ]; then
+    log "WARNING: Merge lock held for ${duration}s (>300s threshold)"
+  fi
+}
+
 # _do_revert — Revert HEAD commit(s), optionally commit and push.
 # Cross-ref: watchdog.sh canary revert uses git revert --no-edit --no-verify directly.
 # Args: $1 = state_committed ("true" if state commit exists), $2 = reason, $3 = log_file
@@ -116,8 +129,15 @@ do_merge_to_main() {
     log "Could not acquire merge lock — held by PID ${_ml_holder:-unknown}."
     return 4
   fi
+  # OPS-P2-3: Record lock acquisition time to log hold duration at release
+  _MERGE_LOCK_ACQUIRED_AT=$SECONDS
 
   # --- Clean up worktree (keep branch for merge from main repo) ---
+  # OPS-P2-7: Worktree cleanup happens AFTER acquiring the merge lock but BEFORE
+  # the merge itself. This is safe because: (1) the branch ref is preserved — only
+  # the worktree directory is removed, (2) the merge operates on refs from the main
+  # repo (PROJECT_DIR), not the worktree, (3) cleaning before merge avoids leaving
+  # an orphaned worktree if the merge fails or the process is killed mid-merge.
   if [ -n "$worktree_dir" ] && [ -d "$worktree_dir" ]; then
     cleanup_worktree
   fi
@@ -126,7 +146,7 @@ do_merge_to_main() {
   # --- Pull latest main ---
   if ! git_pull_with_retry; then
     log "Cannot pull main — skipping merge."
-    release_merge_lock
+    _release_merge_lock_with_duration
     return 5
   fi
 
@@ -188,7 +208,7 @@ do_merge_to_main() {
 
   if ! $_merge_succeeded; then
     log "MERGE FAILED for $branch_name."
-    release_merge_lock
+    _release_merge_lock_with_duration
     return 1
   fi
 
@@ -227,11 +247,11 @@ do_merge_to_main() {
     if ! $_tc_cmd_valid || ! eval "$_tc_cmd" >> "$log_file" 2>&1; then
       log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
       if ! _do_revert "false" "typecheck failed" "$log_file"; then
-        release_merge_lock
+        _release_merge_lock_with_duration
         return 3
       fi
       git_push_with_retry || log "WARNING: push of revert commit failed"
-      release_merge_lock
+      _release_merge_lock_with_duration
       return 2
     fi
     log "Post-merge typecheck passed."
@@ -255,11 +275,11 @@ do_merge_to_main() {
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$log_file" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge"
       if ! _do_revert "$_MERGE_STATE_COMMITTED" "smoke test failed" "$log_file"; then
-        release_merge_lock
+        _release_merge_lock_with_duration
         return 3
       fi
       git_push_with_retry || log "WARNING: push of smoke test revert failed"
-      release_merge_lock
+      _release_merge_lock_with_duration
       return 7
     fi
     log "Post-merge smoke test passed."
@@ -270,10 +290,25 @@ do_merge_to_main() {
   # commit may be left on main. The watchdog detects this via commitsAhead > 0
   # and the next worker pull will incorporate the orphaned commit.
   extend_merge_lock 2>/dev/null || true
+
+  # OPS-P0-1: Warn if merge lock has been held for > 500s (approaching TTL)
+  if [ -f "$MERGE_LOCK/pid" ]; then
+    local _lock_mtime _lock_elapsed
+    if [ "$(uname -s)" = "Darwin" ]; then
+      _lock_mtime=$(stat -f %m "$MERGE_LOCK/pid" 2>/dev/null || echo 0)
+    else
+      _lock_mtime=$(stat -c %Y "$MERGE_LOCK/pid" 2>/dev/null || echo 0)
+    fi
+    _lock_elapsed=$(( $(date +%s) - _lock_mtime ))
+    if [ "$_lock_elapsed" -gt 500 ]; then
+      log "WARNING: Merge lock held for ${_lock_elapsed}s (TTL=${SKYNET_MERGE_LOCK_TTL}s) — push may race against TTL expiry"
+    fi
+  fi
+
   if ! git_push_with_retry; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"
     if ! _do_revert "$_MERGE_STATE_COMMITTED" "push failed" "$log_file"; then
-      release_merge_lock
+      _release_merge_lock_with_duration
       return 3
     fi
     # Try to push the revert
@@ -298,10 +333,10 @@ do_merge_to_main() {
       # The hard reset is the last-resort recovery — do NOT remove it.
       log "WARNING: Executing git reset --hard to origin/$SKYNET_MAIN_BRANCH — local unpushed commits (if any) will be discarded. This is last-resort recovery after double push failure."
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
-      release_merge_lock
+      _release_merge_lock_with_duration
       return 3
     fi
-    release_merge_lock
+    _release_merge_lock_with_duration
     return 6
   fi
 
@@ -321,6 +356,6 @@ do_merge_to_main() {
     fi
   fi
 
-  release_merge_lock
+  _release_merge_lock_with_duration
   return 0
 }
