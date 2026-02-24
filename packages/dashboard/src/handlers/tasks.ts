@@ -4,15 +4,13 @@ import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
-// In-memory rate limiting for POST requests: max 30 per 60 seconds.
-// NOTE: This rate limit is per-process, not global across cluster workers.
-// Each Node.js process maintains its own _postTimestamps array, so the
-// effective limit scales linearly with the number of processes. This is
-// acceptable under the single-threaded assumption (one Next.js server process).
-// If the dashboard is ever clustered or load-balanced, this should be replaced
-// with a shared store (e.g. SQLite, Redis) for accurate cross-process limiting.
+// Rate limiting for POST requests: max 30 per 60 seconds.
+// Uses SQLite-backed rate limiting for cross-process accuracy.
+// Falls back to in-memory limiting if DB is unavailable.
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_KEY = "task_create";
+// In-memory fallback when SQLite is unavailable
 const _postTimestamps: number[] = [];
 
 /**
@@ -73,18 +71,29 @@ export function createTasksHandlers(config: SkynetConfig) {
   }
 
   async function POST(request: Request): Promise<Response> {
-    // Rate limiting: prune old timestamps and check threshold
-    const now = Date.now();
-    while (_postTimestamps.length > 0 && _postTimestamps[0] <= now - RATE_LIMIT_WINDOW_MS) {
-      _postTimestamps.shift();
+    // Rate limiting: prefer SQLite-backed (cross-process), fall back to in-memory
+    let rateLimitAllowed = true;
+    try {
+      const db = getSkynetDB(devDir);
+      rateLimitAllowed = db.checkRateLimit(RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+    } catch {
+      // SQLite unavailable — fall back to in-memory rate limiting
+      const now = Date.now();
+      while (_postTimestamps.length > 0 && _postTimestamps[0] <= now - RATE_LIMIT_WINDOW_MS) {
+        _postTimestamps.shift();
+      }
+      if (_postTimestamps.length >= RATE_LIMIT_MAX) {
+        rateLimitAllowed = false;
+      } else {
+        _postTimestamps.push(now);
+      }
     }
-    if (_postTimestamps.length >= RATE_LIMIT_MAX) {
+    if (!rateLimitAllowed) {
       return Response.json(
         { data: null, error: "Rate limit exceeded. Max 30 tasks per minute." },
         { status: 429 }
       );
     }
-    _postTimestamps.push(now);
 
     try {
       const { data: body, error: parseError, status: parseStatus } = await parseBody<{

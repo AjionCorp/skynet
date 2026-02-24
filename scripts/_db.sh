@@ -1035,3 +1035,51 @@ db_export_state_files() {
   return 0
 }
 
+# ============================================================
+# MAINTENANCE
+# ============================================================
+
+# Run integrity check, optimize, optional VACUUM, and WAL checkpoint.
+# Returns 0 on success, 1 if integrity check fails.
+db_maintenance() {
+  [ ! -f "$DB_PATH" ] && { log "ERROR: db_maintenance — database not found"; return 1; }
+
+  # Step 1: integrity_check
+  local integrity
+  integrity=$(_db "PRAGMA integrity_check;" 2>/dev/null)
+  if [ "$integrity" != "ok" ]; then
+    log "ERROR: db_maintenance — integrity_check failed: $integrity"
+    return 1
+  fi
+
+  # Step 2: PRAGMA optimize (auto-analyze)
+  _db "PRAGMA optimize;" 2>/dev/null || true
+
+  # Step 3: VACUUM only if DB file > 10MB
+  local db_size=0
+  if [ "$(uname)" = "Darwin" ]; then
+    db_size=$(stat -f%z "$DB_PATH" 2>/dev/null || echo 0)
+  else
+    db_size=$(stat -c%s "$DB_PATH" 2>/dev/null || echo 0)
+  fi
+  local threshold=10485760  # 10MB
+  if [ "${db_size:-0}" -gt "$threshold" ] 2>/dev/null; then
+    log "db_maintenance: DB size ${db_size} > 10MB — running VACUUM"
+    _db "VACUUM;" 2>/dev/null || log "WARNING: VACUUM failed"
+  fi
+
+  # Step 4: WAL checkpoint
+  _db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || true
+
+  return 0
+}
+
+# Quick integrity check only — used by doctor command.
+# Returns 0 if "ok", 1 otherwise.
+db_check_integrity() {
+  [ ! -f "$DB_PATH" ] && return 1
+  local integrity
+  integrity=$(_db "PRAGMA integrity_check;" 2>/dev/null)
+  [ "$integrity" = "ok" ] && return 0 || return 1
+}
+

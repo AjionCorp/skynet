@@ -568,6 +568,54 @@ export class SkynetDB {
       .prepare("SELECT * FROM fixer_stats ORDER BY id")
       .all() as FixerStatRow[];
   }
+
+  // ── Rate Limiting ────────────────────────────────────────────────────
+
+  /** Ensure the rate_limits table exists (idempotent). */
+  private ensureRateLimitsTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key TEXT PRIMARY KEY,
+        count INTEGER DEFAULT 0,
+        window_start INTEGER DEFAULT 0
+      );
+    `);
+  }
+
+  /**
+   * Check whether a rate limit key has exceeded the allowed count within the window.
+   * Returns true if the request is allowed, false if rate-limited.
+   * On success, increments the counter atomically.
+   */
+  checkRateLimit(key: string, maxCount: number, windowMs: number): boolean {
+    this.ensureRateLimitsTable();
+    const nowMs = Date.now();
+    const windowStartThreshold = nowMs - windowMs;
+
+    const row = this.db
+      .prepare("SELECT count, window_start FROM rate_limits WHERE key = ?")
+      .get(key) as { count: number; window_start: number } | undefined;
+
+    if (!row || row.window_start <= windowStartThreshold) {
+      // No record or window expired — reset the window
+      this.db
+        .prepare(
+          "INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)"
+        )
+        .run(key, nowMs);
+      return true;
+    }
+
+    if (row.count >= maxCount) {
+      return false;
+    }
+
+    // Increment within the current window
+    this.db
+      .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
+      .run(key);
+    return true;
+  }
 }
 
 // ─── Singleton factory ───────────────────────────────────────────────

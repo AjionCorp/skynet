@@ -705,6 +705,87 @@ export async function doctorCommand(options: DoctorOptions) {
     }
   }
 
+  // --- (13) Config Validation ---
+  console.log("\n  Config Validation:");
+
+  if (!vars) {
+    console.log("    Cannot validate — config not loaded");
+    results.push({ name: "Config Validation", status: "WARN" });
+  } else {
+    let configWarnings = 0;
+
+    // (a) SKYNET_GATE_* commands exist in PATH
+    const gateKeys = Object.keys(vars).filter((k) => k.startsWith("SKYNET_GATE_"));
+    for (const gateKey of gateKeys) {
+      const gateCmd = vars[gateKey];
+      if (gateCmd) {
+        // Extract the command name (first word) from the gate command
+        const cmdName = gateCmd.split(/\s+/)[0];
+        const cmdVersion = getToolVersion(`command -v ${cmdName}`);
+        if (cmdVersion) {
+          console.log(`    ${gateKey} (${cmdName}): OK`);
+        } else {
+          console.log(`    ${gateKey} (${cmdName}): NOT FOUND in PATH`);
+          configWarnings++;
+        }
+      }
+    }
+
+    // (b) Numeric config values are actually numbers
+    const numericKeys = [
+      "SKYNET_MAX_WORKERS", "SKYNET_MAX_FIXERS",
+      "SKYNET_STALE_MINUTES", "SKYNET_COOL_DOWN_SECONDS",
+      "SKYNET_MAX_CONSECUTIVE_FAILURES", "SKYNET_DB_SLOW_QUERY_MS",
+    ];
+    for (const numKey of numericKeys) {
+      const val = vars[numKey];
+      if (val !== undefined && val !== "") {
+        if (!/^\d+$/.test(val.trim())) {
+          console.log(`    ${numKey}: NOT a valid number ("${val}")`);
+          configWarnings++;
+        } else {
+          console.log(`    ${numKey}: OK (${val})`);
+        }
+      }
+    }
+
+    // (c) SKYNET_REDIS_URL when SKYNET_LOCK_BACKEND=redis
+    if (vars.SKYNET_LOCK_BACKEND === "redis") {
+      if (!vars.SKYNET_REDIS_URL || vars.SKYNET_REDIS_URL.trim().length === 0) {
+        console.log("    SKYNET_REDIS_URL: MISSING (required when SKYNET_LOCK_BACKEND=redis)");
+        configWarnings++;
+      } else {
+        console.log("    SKYNET_REDIS_URL: OK");
+      }
+    }
+
+    // (d) SKYNET_PROJECT_DIR exists and is a git repository
+    const projDir = vars.SKYNET_PROJECT_DIR;
+    if (projDir) {
+      if (!existsSync(projDir)) {
+        console.log(`    SKYNET_PROJECT_DIR: directory does not exist (${projDir})`);
+        configWarnings++;
+      } else {
+        const gitDir = join(projDir, ".git");
+        if (!existsSync(gitDir)) {
+          console.log(`    SKYNET_PROJECT_DIR: exists but is not a git repository (${projDir})`);
+          configWarnings++;
+        } else {
+          console.log("    SKYNET_PROJECT_DIR: OK (git repo)");
+        }
+      }
+    }
+
+    if (configWarnings === 0) {
+      if (gateKeys.length === 0 && numericKeys.every((k) => !vars[k])) {
+        console.log("    No gate or numeric config values to validate");
+      }
+      results.push({ name: "Config Validation", status: "PASS" });
+    } else {
+      results.push({ name: "Config Validation", status: "WARN" });
+    }
+  }
+
   // --- Summary ---
   console.log("\n  Summary:");
 
