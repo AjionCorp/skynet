@@ -62,6 +62,36 @@ _MERGE_STATE_COMMITTED=false
 # total shell uptime.
 _MERGE_LOCK_ACQUIRED_AT=-1
 
+# OPS-R21-P1-1: Compute dynamic merge lock TTL based on last known typecheck duration.
+# When typecheck takes >300s, the default 900s TTL may expire before push completes.
+# Reads the last duration from .dev/typecheck-duration, computes TTL = max(900, dur*2+300),
+# and caps at 1800s (30 min absolute max).
+_compute_dynamic_merge_ttl() {
+  local _tc_dur_file="${DEV_DIR}/typecheck-duration"
+  local _base_ttl="${SKYNET_MERGE_LOCK_TTL:-900}"
+  if [ -f "$_tc_dur_file" ]; then
+    local _last_dur
+    _last_dur=$(cat "$_tc_dur_file" 2>/dev/null || echo "0")
+    # Validate numeric
+    case "$_last_dur" in
+      ''|*[!0-9]*) _last_dur=0 ;;
+    esac
+    if [ "$_last_dur" -gt 300 ]; then
+      local _dynamic_ttl=$(( _last_dur * 2 + 300 ))
+      # Floor: at least the configured TTL
+      if [ "$_dynamic_ttl" -lt "$_base_ttl" ]; then
+        _dynamic_ttl="$_base_ttl"
+      fi
+      # Cap: 1800s absolute max
+      if [ "$_dynamic_ttl" -gt 1800 ]; then
+        _dynamic_ttl=1800
+      fi
+      log "Dynamic merge TTL: ${_dynamic_ttl}s (last typecheck ${_last_dur}s, base TTL ${_base_ttl}s)"
+      SKYNET_MERGE_LOCK_TTL="$_dynamic_ttl"
+    fi
+  fi
+}
+
 # SH-P1-3: Check remaining TTL before each major merge operation.
 # Returns 0 if at least $1 seconds (default 180) remain, 1 if insufficient.
 _check_merge_lock_ttl() {
@@ -152,6 +182,9 @@ do_merge_to_main() {
   # when multiple workers are merging concurrently.
   cd "$PROJECT_DIR"
   git pull origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+
+  # --- Compute dynamic TTL (OPS-R21-P1-1) ---
+  _compute_dynamic_merge_ttl
 
   # --- Acquire merge mutex ---
   if ! acquire_merge_lock; then
@@ -281,7 +314,11 @@ do_merge_to_main() {
         _tc_cmd_valid=false
         ;;
     esac
+    local _tc_start_seconds=$SECONDS
     if ! $_tc_cmd_valid || ! eval "$_tc_cmd" >> "$log_file" 2>&1; then
+      # OPS-R21-P1-1: Write typecheck duration even on failure (for future TTL computation)
+      local _tc_elapsed=$(( SECONDS - _tc_start_seconds ))
+      echo "$_tc_elapsed" > "${DEV_DIR}/typecheck-duration" 2>/dev/null || true
       log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
       if ! _do_revert "false" "typecheck failed" "$log_file"; then
         _release_merge_lock_with_duration
@@ -297,7 +334,10 @@ do_merge_to_main() {
       _release_merge_lock_with_duration
       return 2
     fi
-    log "Post-merge typecheck passed."
+    # OPS-R21-P1-1: Write typecheck duration for future dynamic TTL computation
+    local _tc_elapsed=$(( SECONDS - _tc_start_seconds ))
+    echo "$_tc_elapsed" > "${DEV_DIR}/typecheck-duration" 2>/dev/null || true
+    log "Post-merge typecheck passed (${_tc_elapsed}s)."
   fi
 
   # --- Delete merged branch ---

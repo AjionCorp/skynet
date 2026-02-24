@@ -138,4 +138,17 @@ emit_event() {
       fi
     fi
   fi
+  # OPS-P2-1: Hard size cap — if events.log exceeds 5MB despite rotation attempts
+  # (e.g., rotation lock permanently contended), force-rotate without the lock.
+  # mv is atomic on most filesystems, so this is safe even under concurrent writes.
+  if [ -f "$events_log" ]; then
+    local _hard_cap=5242880  # 5MB
+    local _hard_sz
+    _hard_sz=$(wc -c < "$events_log" 2>/dev/null || echo 0)
+    if [ "$_hard_sz" -gt "$_hard_cap" ]; then
+      echo "WARNING: events.log exceeded hard cap (${_hard_sz} bytes > 5MB) — force-rotating without lock" >&2
+      mv "$events_log" "${events_log}.1" 2>/dev/null || true
+    fi
+  fi
+
 }

@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync, appendFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync, statSync, appendFileSync, renameSync } from "fs";
 import { spawnSync } from "child_process";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
@@ -19,12 +19,26 @@ import { parseMissionProgress } from "../lib/mission";
 function logHandlerError(devDir: string | undefined, handler: string, err: unknown): void {
   if (!devDir) return;
   try {
+    const logPath = `${devDir}/dashboard-errors.log`;
+
+    // OPS-P2-4: Rotate error log if it exceeds 5MB to prevent unbounded growth.
+    // Uses renameSync (atomic on most filesystems) + truncation pattern.
+    try {
+      const stats = statSync(logPath);
+      if (stats.size > 5 * 1024 * 1024) {
+        renameSync(logPath, `${logPath}.1`);
+        // No need to truncate — renameSync moved the file; next appendFileSync creates a new one
+      }
+    } catch {
+      // File may not exist yet or stat/rename failed — continue with logging
+    }
+
     const line = JSON.stringify({
       ts: new Date().toISOString(),
       handler,
       error: err instanceof Error ? err.message : String(err),
     });
-    appendFileSync(`${devDir}/dashboard-errors.log`, line + "\n");
+    appendFileSync(logPath, line + "\n");
   } catch {
     // Best-effort — do not throw if logging itself fails
   }

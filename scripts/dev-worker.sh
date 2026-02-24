@@ -89,6 +89,8 @@ _start_heartbeat() {
     # after SIGKILL, but only write heartbeat every 30s to reduce stale lock detection delay.
     local _hb_counter=0
     local _hb_last_epoch=0
+    # OPS-R21-P1-3: Track consecutive clock skew events to detect degraded heartbeat
+    local _hb_skew_count=0
     _hb_last_epoch=$(date +%s)
     while kill -0 "$_parent_pid" 2>/dev/null; do
       sleep 5
@@ -108,6 +110,15 @@ _start_heartbeat() {
           if [ "$_skew_lines" -gt 50 ]; then
             tail -25 "${HEARTBEAT_FILE}.skew" > "${HEARTBEAT_FILE}.skew.tmp" 2>/dev/null && mv "${HEARTBEAT_FILE}.skew.tmp" "${HEARTBEAT_FILE}.skew" 2>/dev/null || rm -f "${HEARTBEAT_FILE}.skew.tmp" 2>/dev/null
           fi
+          # OPS-R21-P1-3: Count consecutive skew events — mark heartbeat degraded after 5
+          _hb_skew_count=$((_hb_skew_count + 1))
+          if [ "$_hb_skew_count" -ge 5 ] && [ ! -f "${HEARTBEAT_FILE}.degraded" ]; then
+            echo "$(date +%s)" > "${HEARTBEAT_FILE}.degraded" 2>/dev/null || true
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Worker heartbeat degraded — 5+ clock skew events detected" >> "${HEARTBEAT_FILE}.skew" 2>/dev/null || true
+          fi
+        else
+          # No skew this cycle — reset counter
+          _hb_skew_count=0
         fi
         _hb_last_epoch=$_hb_now
         date +%s > "$HEARTBEAT_FILE"
@@ -125,7 +136,7 @@ _stop_heartbeat() {
     wait "$_heartbeat_pid" 2>/dev/null || true
     _heartbeat_pid=""
   fi
-  rm -f "$HEARTBEAT_FILE"
+  rm -f "$HEARTBEAT_FILE" "${HEARTBEAT_FILE}.degraded"
 }
 
 # --- Worktree helpers (shared module) ---
@@ -287,6 +298,17 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
     log "Shutdown requested, exiting cleanly"
     break
   fi
+
+  # P0-WAL: Block claims while WAL checkpoint circuit breaker is open.
+  # Sleep 30s and retry to avoid burning CPU in a tight loop.
+  while ! db_is_wal_healthy; do
+    log "Waiting for WAL recovery before claiming... ($_db_wal_checkpoint_failures consecutive failures)"
+    sleep 30
+    if $SHUTDOWN_REQUESTED; then
+      log "Shutdown requested during WAL recovery wait"
+      break 2
+    fi
+  done
 
   # Atomically claim next unchecked task (or use provided task in one-shot mode)
   if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then

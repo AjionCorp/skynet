@@ -12,6 +12,10 @@ DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 # for observability via watchdog logs and status surfaces.
 _db_wal_healthy=true
 
+# P0-WAL: Consecutive WAL checkpoint failure counter for circuit breaker.
+# When >= 3, db_is_wal_healthy returns false and new task claims are blocked.
+_db_wal_checkpoint_failures=0
+
 # --- Temp file tracking for leak prevention ---
 # mktemp files created by _sql_exec/_sql_query are normally cleaned inline,
 # but a SIGTERM between mktemp and rm would leak them. _db_cleanup_tmpfiles()
@@ -247,7 +251,7 @@ _get_task_status() {
 # OPS-P0-2: Check available disk space before writes.
 # Returns 0 if OK, 1 if below threshold (SKYNET_MIN_DISK_MB).
 _db_check_disk_space() {
-  local min_mb="${SKYNET_MIN_DISK_MB:-50}"
+  local min_mb="${SKYNET_MIN_DISK_MB:-100}"
   local db_dir
   db_dir=$(dirname "$DB_PATH")
   # df -Pm gives POSIX output in 1MB blocks; skip header with tail.
@@ -258,6 +262,20 @@ _db_check_disk_space() {
       echo "CRITICAL: Low disk space — ${avail_mb}MB available, minimum ${min_mb}MB required" >&2
     return 1
   fi
+
+  # OPS-P2-5: Check WAL growth pressure — if WAL is already >50MB and free space <200MB,
+  # warn about potential disk exhaustion under write-heavy load (WAL can grow 10MB/min).
+  local _wal_file="${DB_PATH}-wal"
+  if [ -f "$_wal_file" ]; then
+    local _wal_bytes
+    _wal_bytes=$(wc -c < "$_wal_file" 2>/dev/null || echo 0)
+    local _wal_mb=$(( _wal_bytes / 1048576 ))
+    if [ "$_wal_mb" -gt 50 ] && [ -n "$avail_mb" ] && [ "$avail_mb" -lt 200 ] 2>/dev/null; then
+      log "WARNING: WAL growth pressure — WAL is ${_wal_mb}MB and only ${avail_mb}MB free. WAL can grow 10MB/min under load." 2>/dev/null || \
+        echo "WARNING: WAL growth pressure — WAL is ${_wal_mb}MB and only ${avail_mb}MB free" >&2
+    fi
+  fi
+
   return 0
 }
 
@@ -507,7 +525,13 @@ _db_claim_next_task_inner() {
     COMMIT;
   "
 }
-db_claim_next_task() { _db_retry _db_claim_next_task_inner "$@"; }
+db_claim_next_task() {
+  if ! db_is_wal_healthy; then
+    log "WARNING: task claim blocked — WAL checkpoint has failed 3+ consecutive cycles, database degraded"
+    return 0
+  fi
+  _db_retry _db_claim_next_task_inner "$@"
+}
 
 # Diagnostic: show query plan for the claim CTE.
 # Usage: db_explain_claim 1
@@ -1231,6 +1255,22 @@ db_prune_old_events() {
 # Uses PASSIVE mode (non-blocking) unlike the TRUNCATE in db_maintenance().
 db_wal_checkpoint() {
   _db "PRAGMA wal_checkpoint(PASSIVE);" 2>/dev/null || true
+}
+
+# P0-WAL: Circuit breaker — returns 0 (healthy) or 1 (degraded).
+# Unhealthy when 3+ consecutive WAL checkpoint failures have occurred.
+db_is_wal_healthy() {
+  [ "$_db_wal_checkpoint_failures" -lt 3 ] 2>/dev/null
+}
+
+# P0-WAL: Status reporter — prints failure count and health string.
+# Used by status surfaces for operator visibility.
+db_wal_status() {
+  local _status="healthy"
+  if ! db_is_wal_healthy; then
+    _status="degraded"
+  fi
+  printf '%s %s\n' "$_db_wal_checkpoint_failures" "$_status"
 }
 
 # Run integrity check, optimize, optional VACUUM, WAL checkpoint, and event pruning.

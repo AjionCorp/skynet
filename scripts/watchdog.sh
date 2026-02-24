@@ -124,9 +124,11 @@ _SKYNET_DB_INITIALIZED=1 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 # The full TRUNCATE checkpoint runs in db_maintenance() every 10 cycles.
 db_wal_checkpoint
 
-# P0-2: Check WAL health flag each cycle — log CRITICAL if degraded so operators
+# P0-WAL: Check circuit breaker each cycle — log CRITICAL if degraded so operators
 # see the warning in every cycle's output, not just the cycle where it failed.
-if [ "$_db_wal_healthy" = "false" ]; then
+if ! db_is_wal_healthy; then
+  log "CRITICAL: WAL circuit breaker OPEN — $_db_wal_checkpoint_failures consecutive checkpoint failures. New task claims are BLOCKED. Run: sqlite3 $DB_PATH 'PRAGMA wal_checkpoint(TRUNCATE);' to recover, or restart the pipeline."
+elif [ "$_db_wal_healthy" = "false" ]; then
   log "CRITICAL: WAL checkpoint previously failed — database may degrade. See .dev/db-wal-unhealthy sentinel."
 fi
 
@@ -484,7 +486,17 @@ _cr_phase3_orphan_worktrees() {
 # SH-P1-4: Track consecutive cycles where the 500-item cap is hit.
 # If 3+ consecutive cycles hit the cap, remaining items are silently skipped
 # forever — escalate with a CRITICAL event so operators investigate.
-_cr_consecutive_caps=${_cr_consecutive_caps:-0}
+# OPS-R21-P1-2: Persist consecutive cap counter to survive process restarts
+_cr_caps_file="${DEV_DIR}/cr-consecutive-caps"
+if [ -f "$_cr_caps_file" ]; then
+  _cr_consecutive_caps=$(cat "$_cr_caps_file" 2>/dev/null || echo "0")
+  # Validate numeric
+  case "$_cr_consecutive_caps" in
+    ''|*[!0-9]*) _cr_consecutive_caps=0 ;;
+  esac
+else
+  _cr_consecutive_caps=0
+fi
 
 crash_recovery() {
   local recovered=0
@@ -517,14 +529,21 @@ crash_recovery() {
     tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery hit 500-item limit — recovery may be incomplete. Investigate immediately."
     # SH-P1-4: Track consecutive cap hits and escalate if persistent
     _cr_consecutive_caps=$((_cr_consecutive_caps + 1))
+    echo "$_cr_consecutive_caps" > "$_cr_caps_file" 2>/dev/null || true
     if [ "$_cr_consecutive_caps" -ge 3 ]; then
       log "CRITICAL: Crash recovery hit 500-item cap for ${_cr_consecutive_caps} consecutive cycles — items are being permanently skipped"
       emit_event "crash_recovery_cascade" "500-item cap hit ${_cr_consecutive_caps} consecutive cycles — possible unbounded stale state" 2>/dev/null || true
       tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: CRITICAL — Crash recovery cap hit ${_cr_consecutive_caps} consecutive cycles. Stale items are accumulating. Investigate immediately."
     fi
   else
-    # SH-P1-4: Reset consecutive cap counter when a cycle completes without hitting the cap
-    _cr_consecutive_caps=0
+    # SH-P1-4 + OPS-R21-P1-2: Only reset consecutive cap counter when recovered < 400,
+    # indicating the situation is truly resolved (not just under the 500 cap by 1-2 items)
+    if [ "$recovered" -lt 400 ]; then
+      _cr_consecutive_caps=0
+      echo "0" > "$_cr_caps_file" 2>/dev/null || true
+    else
+      log "WARNING: Crash recovery completed ($recovered items) but near 500-cap threshold — preserving consecutive cap counter at $_cr_consecutive_caps"
+    fi
   fi
 
   # OPS-P2-2: Escalate when multiple phases fail — indicates systemic issue
@@ -907,6 +926,19 @@ _handle_stale_worker() {
   local now_epoch
   now_epoch=$(date +%s)
   local hb_age=$(( now_epoch - hb_epoch ))
+
+  # OPS-R21-P1-3: When heartbeat is degraded (clock skew), use progress_epoch
+  # as the primary staleness signal — heartbeat timestamps are unreliable.
+  local _hb_degraded=false
+  if [ -f "${hb_file}.degraded" ]; then
+    _hb_degraded=true
+    local _prog_epoch
+    _prog_epoch=$(_db "SELECT COALESCE(progress_epoch, 0) FROM workers WHERE id=$wid;" 2>/dev/null || echo "0")
+    if [ -n "$_prog_epoch" ] && [ "$_prog_epoch" -gt 0 ]; then
+      hb_age=$(( now_epoch - _prog_epoch ))
+      log "Worker $wid heartbeat degraded (clock skew), using progress_epoch for staleness (age=${hb_age}s)"
+    fi
+  fi
 
   if [ "$hb_age" -gt "$stale_seconds" ]; then
     # Defense-in-depth: heartbeat file mtime has 1-second granularity, and the
@@ -1707,6 +1739,7 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
           log "CRITICAL: TRUNCATE checkpoint failed on oversized WAL"
           emit_event "db_wal_checkpoint_failed" "TRUNCATE checkpoint failed — WAL is ${_wal_size} bytes"
           _db_wal_healthy=false
+          _db_wal_checkpoint_failures=$((_db_wal_checkpoint_failures + 1))
           # P0-2: Write sentinel file so dashboard can detect WAL degradation
           echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
         fi
@@ -1719,13 +1752,25 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     _wal_result=$(_db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || echo "")
     if [ -n "$_wal_result" ]; then
       log "WAL checkpoint: $_wal_result"
+      # P0-WAL: Detect recovery — if breaker was open, emit recovery event
+      if [ "$_db_wal_checkpoint_failures" -ge 3 ]; then
+        log "WAL checkpoint recovered after $_db_wal_checkpoint_failures consecutive failures — circuit breaker CLOSED, task claims resumed"
+        emit_event "db_wal_circuit_breaker_closed" "WAL recovered after $_db_wal_checkpoint_failures failures"
+      fi
       _db_wal_healthy=true
+      _db_wal_checkpoint_failures=0
       # P0-2: Clear sentinel file on recovery
       rm -f "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
     else
       log "CRITICAL: WAL checkpoint(RESTART) failed — database may be degraded"
       emit_event "db_wal_checkpoint_failed" "WAL checkpoint failed — database may be degraded"
       _db_wal_healthy=false
+      _db_wal_checkpoint_failures=$((_db_wal_checkpoint_failures + 1))
+      # P0-WAL: Open circuit breaker when threshold reached
+      if [ "$_db_wal_checkpoint_failures" -ge 3 ]; then
+        log "CRITICAL: WAL checkpoint failed $_db_wal_checkpoint_failures consecutive cycles. New task claims are BLOCKED. Run: sqlite3 $DB_PATH 'PRAGMA wal_checkpoint(TRUNCATE);' to recover, or restart the pipeline."
+        emit_event "db_wal_circuit_breaker_open" "WAL checkpoint failed $_db_wal_checkpoint_failures consecutive cycles — claims blocked"
+      fi
       # P0-2: Write sentinel file so dashboard can detect WAL degradation
       echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
     fi
@@ -1841,6 +1886,33 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
 
   # (g) Stale branch cleanup — skipped here; _cleanup_merged_dev_branches()
   # already runs per-cycle (see above). No need for duplicate cleanup.
+
+  # (h) OPS-P2-3: Prune orphaned worker/fixer branch refs left by failed worktree cleanup.
+  # After pruning stale worktree refs, delete dev/worker-* and dev/fixer-* branches
+  # that have no corresponding worktree directory. Cap at 20 per cycle to avoid long holds.
+  git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+  _orphan_branches_deleted=0
+  _orphan_branch_cap=20
+  _orphan_branch_list=$(git -C "$PROJECT_DIR" branch --list 'dev/worker-*' 'dev/fixer-*' 2>/dev/null | sed 's/^[* ]*//')
+  if [ -n "$_orphan_branch_list" ]; then
+    while IFS= read -r _obranch; do
+      [ -z "$_obranch" ] && continue
+      [ "$_orphan_branches_deleted" -ge "$_orphan_branch_cap" ] && break
+      # Check if any worktree is using this branch
+      _obranch_has_wt=false
+      if git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null | grep -q "branch refs/heads/$_obranch\$"; then
+        _obranch_has_wt=true
+      fi
+      if ! $_obranch_has_wt; then
+        git -C "$PROJECT_DIR" branch -D "$_obranch" 2>/dev/null && {
+          _orphan_branches_deleted=$((_orphan_branches_deleted + 1))
+        } || true
+      fi
+    done <<< "$_orphan_branch_list"
+  fi
+  if [ "$_orphan_branches_deleted" -gt 0 ]; then
+    log "Maintenance: pruned $_orphan_branches_deleted orphaned worker/fixer branch(es)"
+  fi
 
   log "Periodic maintenance complete"
 fi

@@ -125,7 +125,8 @@ export SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"
 export SKYNET_LOG_FORMAT="${SKYNET_LOG_FORMAT:-text}"
 
 # Minimum free disk space (MB) before DB writes emit CRITICAL warning
-export SKYNET_MIN_DISK_MB="${SKYNET_MIN_DISK_MB:-50}"
+# OPS-P2-5: Increased from 50MB to 100MB to account for WAL growth under load
+export SKYNET_MIN_DISK_MB="${SKYNET_MIN_DISK_MB:-100}"
 
 # SQL debug mode: log every query with timing. Default off for zero overhead.
 export SKYNET_DB_DEBUG="${SKYNET_DB_DEBUG:-false}"
@@ -447,6 +448,29 @@ git_push_with_retry() {
   local max_attempts="${1:-3}"
   local attempt=1
   local backoff=1
+
+  # OPS-P2-2: Adaptive push timeout — double timeout for large diffs (>5000 lines)
+  # to avoid unnecessary reverts on slow networks. Capped at 300s.
+  local _push_timeout="$SKYNET_GIT_PUSH_TIMEOUT"
+  local _diff_lines=0
+  local _diff_stat
+  _diff_stat=$(git diff --stat --cached 2>/dev/null | tail -1)
+  if [ -n "$_diff_stat" ]; then
+    # Extract insertions and deletions from "N files changed, X insertions(+), Y deletions(-)"
+    local _insertions _deletions
+    _insertions=$(printf '%s' "$_diff_stat" | sed -n 's/.*[[:space:]]\([0-9][0-9]*\) insertion.*/\1/p')
+    _deletions=$(printf '%s' "$_diff_stat" | sed -n 's/.*[[:space:]]\([0-9][0-9]*\) deletion.*/\1/p')
+    _diff_lines=$(( ${_insertions:-0} + ${_deletions:-0} ))
+  fi
+  if [ "$_diff_lines" -gt 5000 ]; then
+    _push_timeout=$(( SKYNET_GIT_PUSH_TIMEOUT * 2 ))
+    # Cap at 300s
+    if [ "$_push_timeout" -gt 300 ]; then
+      _push_timeout=300
+    fi
+    log "Large diff detected (${_diff_lines} lines), using extended push timeout (${_push_timeout}s)"
+  fi
+
   local _gps_start
   _gps_start=$(date +%s)
   while [ "$attempt" -le "$max_attempts" ]; do
@@ -457,7 +481,7 @@ git_push_with_retry() {
       return 1
     fi
     [ "$attempt" -gt 1 ] && log "git push attempt $attempt/$max_attempts..."
-    if run_with_timeout "$SKYNET_GIT_PUSH_TIMEOUT" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+    if run_with_timeout "$_push_timeout" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi
     log "git push failed (attempt $attempt/$max_attempts)"
