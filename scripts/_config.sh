@@ -8,7 +8,12 @@ set -euo pipefail
 # thundering herd when multiple workers start simultaneously from watchdog.
 # date +%N provides nanosecond resolution on Linux; macOS lacks %N so falls
 # back to 0. The XOR with $$ and $PPID ensures uniqueness even without %N.
-RANDOM=$((RANDOM ^ $$ ^ ${PPID:-0} ^ $(date +%N 2>/dev/null || echo 0)))
+# Strip leading zeros from %N to prevent bash octal interpretation (e.g., 090842000)
+_skynet_ns=$(date +%N 2>/dev/null || echo 0)
+_skynet_ns=${_skynet_ns##0}
+_skynet_ns=${_skynet_ns:-0}
+RANDOM=$((RANDOM ^ $$ ^ ${PPID:-0} ^ _skynet_ns))
+unset _skynet_ns
 
 # Resolve the scripts directory (where this file lives)
 SKYNET_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
