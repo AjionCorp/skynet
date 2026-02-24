@@ -57,6 +57,7 @@
 _MERGE_STATE_COMMITTED=false
 
 # _do_revert — Revert HEAD commit(s), optionally commit and push.
+# Cross-ref: watchdog.sh canary revert uses git revert --no-edit --no-verify directly.
 # Args: $1 = state_committed ("true" if state commit exists), $2 = reason, $3 = log_file
 # When state_committed is "true", reverts HEAD (state) and HEAD~1 (merge).
 # When "false", reverts only HEAD (the merge commit).
@@ -223,6 +224,9 @@ do_merge_to_main() {
   fi
 
   # --- Push merged changes to origin (while still holding merge lock) ---
+  # NOTE: If the process is killed between git commit and git push, an un-pushed
+  # commit may be left on main. The watchdog detects this via commitsAhead > 0
+  # and the next worker pull will incorporate the orphaned commit.
   extend_merge_lock 2>/dev/null || true
   if ! git_push_with_retry; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"

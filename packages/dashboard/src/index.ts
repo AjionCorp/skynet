@@ -42,6 +42,8 @@ export { parseBody } from "./lib/parse-body";
 export type { ParsedBacklogItem, BacklogItemWithBlocked } from "./lib/backlog-parser";
 export { decodeJwtExp } from "./lib/jwt";
 export { STALE_THRESHOLD_SECONDS } from "./lib/constants";
+export { calculateHealthScore } from "./lib/health";
+export type { HealthScoreParams } from "./lib/health";
 
 // Handler factories
 export {
@@ -59,6 +61,7 @@ export {
   createMissionRawHandler,
   createConfigHandler,
   createEventsHandler,
+  createMetricsHandler,
 } from "./handlers";
 
 // Dashboard UI components

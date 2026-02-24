@@ -10,7 +10,8 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_KEY = "task_create";
-// In-memory fallback when SQLite is unavailable
+// In-memory rate limit fallback (used only when SQLite is unavailable).
+// Uses shift() on a max-30-element array — O(n) reindex is negligible at this scale.
 const _postTimestamps: number[] = [];
 
 /**

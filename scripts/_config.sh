@@ -45,6 +45,8 @@ done
 export PATH="${SKYNET_EXTRA_PATH:-/opt/homebrew/bin:/usr/local/bin}:$PATH"
 
 # Derived defaults
+# NOTE: Lock paths in /tmp are predictable. On shared hosts, consider using
+# mktemp for unique prefixes or setting SKYNET_LOCK_PREFIX to a private directory.
 export SKYNET_LOCK_PREFIX="${SKYNET_LOCK_PREFIX:-/tmp/skynet-${SKYNET_PROJECT_NAME}}"
 
 # Auth token cache — stored in user-private directory, NOT world-readable /tmp

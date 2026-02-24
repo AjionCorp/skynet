@@ -8,7 +8,9 @@ set -uo pipefail  # no -e: loop must survive individual cycle failures
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-# _config.sh re-enables set -e; disable it again so the loop survives failures
+# _config.sh re-enables set -e; disable it again so the loop survives failures.
+# NOTE: set +e is critical here — crash_recovery must complete all cleanup steps
+# even if individual checks fail. Each cleanup step has its own error handling.
 set +e
 
 LOG="$SCRIPTS_DIR/watchdog.log"
@@ -91,7 +93,7 @@ echo 0 > "$_CYCLE_COUNTER_FILE"
 while ! $_DRAINING; do
 (
 set -euo pipefail
-trap 'log "Watchdog cycle failed at line $LINENO"' ERR
+trap 'log "Watchdog cycle failed at line $LINENO: $BASH_COMMAND"' ERR
 
 # Rotate watchdog's own log if it exceeds configurable threshold
 rotate_log_if_needed "$LOG"
@@ -1012,6 +1014,8 @@ if ! _check_disk_space "$DEV_DIR"; then
 fi
 
 # --- Health score alert ---
+# Bash implementation of the canonical health score formula in packages/dashboard/src/lib/health.ts.
+# Must stay in bash for shell-only environments. Keep weights in sync with that module.
 # Mirrors the pipeline-status handler logic:
 #   Start at 100, -5 per pending failed task, -10 per active blocker, -2 per stale heartbeat.
 # Alerts once when score drops below threshold; clears sentinel when score recovers.
@@ -1128,6 +1132,9 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
   _canary_commit=$(grep '^commit=' "$_canary_file" 2>/dev/null | cut -d= -f2)
   _canary_ts=$(grep '^timestamp=' "$_canary_file" 2>/dev/null | cut -d= -f2)
   _canary_age=$(( $(date +%s) - ${_canary_ts:-0} ))
+  # Sanitize _canary_age for SQL interpolation — value is from date arithmetic
+  # but _canary_ts is read from a file, so validate it's a non-negative integer.
+  case "$_canary_age" in ''|*[!0-9]*) _canary_age=0 ;; esac
   _canary_timeout=$(( ${SKYNET_CANARY_TIMEOUT_MINUTES:-30} * 60 ))
 
   # Check if canary has timed out (auto-clear to prevent pipeline stall)
@@ -1164,7 +1171,7 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
       log "CANARY: Auto-reverting commit $_canary_commit"
       # Attempt to revert the canary commit — hold merge lock to avoid conflicts
       if acquire_merge_lock; then
-        if git revert --no-edit "$_canary_commit" 2>/dev/null; then
+        if git revert --no-edit --no-verify "$_canary_commit" 2>/dev/null; then
           git push origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
           log "CANARY: Reverted commit $_canary_commit"
           emit_event "canary_failed" "commit=$_canary_commit action=reverted"

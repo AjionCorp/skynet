@@ -28,9 +28,9 @@ export SKYNET_AGENT_TIMEOUT_MINUTES="${SKYNET_AGENT_TIMEOUT_MINUTES:-45}"
 # Set SKYNET_AGENT_TIMEOUT_MINUTES=0 to disable.
 _agent_exec() {
   if [ -n "${SKYNET_AGENT_TIMEOUT_MINUTES:-}" ]; then
-    if ! [[ "$SKYNET_AGENT_TIMEOUT_MINUTES" =~ ^[0-9]+$ ]]; then
-      echo "[WARN] SKYNET_AGENT_TIMEOUT_MINUTES is non-numeric: '$SKYNET_AGENT_TIMEOUT_MINUTES'" >&2
-    fi
+    case "$SKYNET_AGENT_TIMEOUT_MINUTES" in
+      ''|*[!0-9]*) echo "[WARN] SKYNET_AGENT_TIMEOUT_MINUTES is non-numeric: '$SKYNET_AGENT_TIMEOUT_MINUTES'" >&2 ;;
+    esac
   fi
   local timeout_secs=$(( SKYNET_AGENT_TIMEOUT_MINUTES * 60 ))
 

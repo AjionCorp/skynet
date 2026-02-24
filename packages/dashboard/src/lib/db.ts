@@ -89,6 +89,10 @@ interface FixerStatRow {
 }
 
 // ─── SkynetDB class ─────────────────────────────────────────────────
+// NOTE: We use `as` type assertions for SQLite results because better-sqlite3's
+// .all()/.get() return `unknown`. The row shapes match our CREATE TABLE schema
+// which is controlled by db_init() in _db.sh. Runtime validation would add
+// overhead with no practical benefit since the schema is deterministic.
 
 export class SkynetDB {
   private db: Database;
@@ -406,7 +410,8 @@ export class SkynetDB {
 
   /**
    * Calculate pipeline health score (0-100) in a single query.
-   * Canonical health score formula -- keep in sync with:
+   * SQL implementation of the canonical formula in packages/dashboard/src/lib/health.ts.
+   * Must stay in SQL for single-query efficiency. Keep weights in sync with:
    *   - packages/dashboard/src/handlers/pipeline-status.ts (calculateHealthScore)
    *   - packages/cli/src/commands/status.ts (healthScore calculation)
    *   - scripts/watchdog.sh (_health_score_alert)
@@ -587,8 +592,10 @@ export class SkynetDB {
 
   // ── Rate Limiting ────────────────────────────────────────────────────
 
-  /** Ensure the rate_limits table exists (idempotent). */
+  /** Ensure the rate_limits table exists (idempotent, runs once per instance). */
+  private _rateLimitsTableCreated = false;
   private ensureRateLimitsTable(): void {
+    if (this._rateLimitsTableCreated) return;
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS rate_limits (
         key TEXT PRIMARY KEY,
@@ -596,6 +603,7 @@ export class SkynetDB {
         window_start INTEGER DEFAULT 0
       );
     `);
+    this._rateLimitsTableCreated = true;
   }
 
   /**

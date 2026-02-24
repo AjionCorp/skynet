@@ -1,7 +1,14 @@
 const MAX_BODY_SIZE = 1_000_000; // 1 MB
 
 /**
- * Parse a JSON request body with streaming size validation.
+ * Parse JSON request body with size validation.
+ *
+ * NOTE: The generic type T is a compile-time assertion only — no runtime validation
+ * is performed on the parsed JSON shape. Callers must validate fields they depend on
+ * (e.g., checking `typeof body.workerType === "string"`). This is intentional: adding
+ * a schema validator (Zod, etc.) would increase bundle size for minimal benefit since
+ * all callers already validate their specific required fields.
+ *
  * Checks Content-Length header first as an early-reject optimization,
  * then stream-reads with a hard size limit to prevent memory exhaustion.
  * Returns { data, error } — caller should check error before using data.

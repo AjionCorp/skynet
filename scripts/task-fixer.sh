@@ -128,7 +128,7 @@ cleanup_on_exit() {
   fi
 }
 trap cleanup_on_exit EXIT
-trap 'log "ERR on line $LINENO"; exit 1' ERR
+trap 'log "ERR on line $LINENO: $BASH_COMMAND"; exit 1' ERR
 
 # --- Graceful shutdown handling ---
 # When SIGTERM/SIGINT is received (e.g. from `skynet stop`), set a flag so we
@@ -434,7 +434,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   _gate_idx=1
   while true; do
     _gate_var="SKYNET_GATE_${_gate_idx}"
-    _gate_cmd="${!_gate_var:-}"
+    eval "_gate_cmd=\${${_gate_var}:-}"
     if [ -z "$_gate_cmd" ]; then break; fi
     log "Running gate $_gate_idx: $_gate_cmd"
     if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then
@@ -516,6 +516,8 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       # Commit pipeline status updates BEFORE smoke test so revert can undo both
       git add "$BACKLOG" "$COMPLETED" "$FAILED" "$BLOCKERS" 2>/dev/null || true
       git commit -m "chore: update pipeline status after fixing $task_title" --no-verify 2>/dev/null || true
+      # Returns 0 unconditionally — state commit failures are non-fatal (the task
+      # will be re-attempted). Logging captures the failure for debugging.
       return 0
     }
     _MERGE_STATE_COMMIT_FN="_fixer_state_commit"

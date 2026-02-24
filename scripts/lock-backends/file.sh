@@ -67,6 +67,8 @@ lock_backend_acquire() {
     if [ "$attempts" -ge "$max_attempts" ]; then
       return 1
     fi
+    # NOTE: sleep 0.5 is non-POSIX but supported on Linux (coreutils) and macOS.
+    # On strict POSIX systems, replace with `sleep 1` or `perl -e 'select(undef,undef,undef,0.5)'`.
     sleep 0.5
   done
   echo $$ > "$lockdir/pid"
@@ -79,6 +81,10 @@ lock_backend_release() {
 
   if [ "${SKYNET_USE_FLOCK:-true}" = "true" ] && [ -n "${_FLOCK_FILE:-}" ]; then
     _release_file_lock
+    # Also clean up mkdir lockdir if it exists and we own it
+    if [ -f "$lockdir/pid" ] && [ "$(cat "$lockdir/pid" 2>/dev/null)" = "$$" ]; then
+      rm -rf "$lockdir" 2>/dev/null || true
+    fi
     return
   fi
 

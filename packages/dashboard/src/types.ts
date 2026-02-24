@@ -23,6 +23,7 @@ export interface SkynetConfig {
   agentPrefix?: string; // for LaunchAgent labels
   maxWorkers?: number; // max dev-worker instances (default 4)
   maxFixers?: number; // max task-fixer instances (default 3)
+  staleMinutes?: number; // stale heartbeat threshold in minutes (default 30)
 }
 
 // ===== Worker / Pipeline Types =====

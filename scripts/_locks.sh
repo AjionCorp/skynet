@@ -59,7 +59,7 @@ acquire_merge_lock() {
     fi
   fi
 
-  lock_backend_acquire "merge" 30
+  lock_backend_acquire "merge" "$SKYNET_MERGE_LOCK_TTL"
   return $?
 }
 

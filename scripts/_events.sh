@@ -27,6 +27,8 @@ emit_event() {
       # Brief mkdir-based lock around rotation to prevent concurrent writers
       # from rotating simultaneously (only the rotation section, not the emit).
       local _rot_lock="${SKYNET_LOCK_PREFIX:-/tmp/skynet}-events-rotate.lock"
+      # NOTE: Pruned events are permanently deleted. For forensic retention,
+      # configure an external log sink before enabling aggressive pruning.
       if mkdir "$_rot_lock" 2>/dev/null; then
         gzip -f "${events_log}.2" 2>/dev/null || true
         rm -f "${events_log}.2"

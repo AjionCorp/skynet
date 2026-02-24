@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { safeCompare, deriveSessionToken } from "./lib/auth";
 
+// NOTE: CORS headers are NOT set here. In production, configure CORS at the
+// reverse proxy level (e.g. nginx, Caddy, Cloudflare). The Next.js middleware
+// handles only authentication. See next.config.ts for allowed origins if needed.
+
 export function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
 

@@ -48,6 +48,8 @@ function parseDurationMinutes(s: string): number | null {
   return null;
 }
 
+// NOTE: This formatDuration takes minutes; the one in packages/cli/src/commands/status.ts takes milliseconds.
+// Keep signature difference intentional — dashboard uses minutes from task duration fields.
 /**
  * Format minutes as a human-readable duration string (e.g., "23m", "1h 12m").
  */
@@ -178,7 +180,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       if (usingSqlite && db) {
         heartbeats = db.getHeartbeats(maxW);
       } else {
-        const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
+        // Use config.staleMinutes if set, otherwise fall back to STALE_THRESHOLD_SECONDS default
+        const staleThresholdSeconds = (config.staleMinutes ?? STALE_THRESHOLD_SECONDS / 60) * 60;
+        const staleThresholdMs = staleThresholdSeconds * 1000;
         for (let wid = 1; wid <= maxW; wid++) {
           const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
           if (hbRaw) {
@@ -361,6 +365,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const backlogLocked = existsSync(backlogLockPath);
 
       // Git status — run in project root (parent of devDir)
+      // NOTE: Four separate spawnSync git calls (~20ms total) run per status request.
+      // Combining them into fewer calls is possible but trades readability for ~15ms savings.
+      // At the current request rate (human-driven, not automated polling), this is acceptable.
       const projectRoot = devDir.replace(/\/?\.dev\/?$/, "");
       let gitBranch = "unknown";
       let commitsAhead = 0;

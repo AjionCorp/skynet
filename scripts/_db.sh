@@ -129,6 +129,8 @@ _sql_query() {
   [ -f "$_sql_errfile" ] && _sql_err=$(cat "$_sql_errfile" 2>/dev/null)
   rm -f "$_sql_errfile"
   if [ $_sql_rc -ne 0 ]; then
+    # NOTE: ${var:0:N} counts bytes, not characters, for multibyte locales.
+    # This is acceptable for SQL error messages (primarily ASCII).
     local _sql_ctx="${1:0:500}"
     log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
     return 1

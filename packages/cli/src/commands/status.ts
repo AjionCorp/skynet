@@ -4,6 +4,7 @@ import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
 import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
+import { decodeJwtExp, calculateHealthScore } from "@ajioncorp/skynet";
 
 interface StatusOptions {
   dir?: string;
@@ -11,19 +12,13 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
-const STALE_THRESHOLD_SECONDS = 30 * 60;
+const STALE_THRESHOLD_SECONDS = 30 * 60; // NOTE: default; should match SKYNET_STALE_MINUTES from config
 
-function decodeJwtExp(token: string): number | null {
-  try {
-    const parts = token.split(".");
-    if (parts.length !== 3) return null;
-    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    return typeof payload.exp === "number" ? payload.exp : null;
-  } catch {
-    return null;
-  }
-}
+// decodeJwtExp imported from @ajioncorp/skynet (see packages/dashboard/src/lib/jwt.ts)
 
+// NOTE: This formatDuration takes milliseconds; the one in pipeline-status.ts takes minutes.
+// Keep signature difference intentional — CLI displays durations from ms timestamps.
+// Cross-ref: packages/dashboard/src/handlers/pipeline-status.ts (formatDuration, minutes)
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
@@ -370,16 +365,13 @@ export async function statusCommand(options: StatusOptions) {
   }
 
   // --- Health Score ---
-  // Keep in sync with canonical formula in:
-  //   packages/dashboard/src/lib/db.ts (SkynetDB.calculateHealthScore)
-  //   packages/dashboard/src/handlers/pipeline-status.ts (calculateHealthScore)
-  //   scripts/watchdog.sh (_health_score_alert)
-  let healthScore = 100;
-  healthScore -= failedPending * 5;
-  healthScore -= blockerCount * 10;
-  healthScore -= staleHeartbeatCount * 2;
-  healthScore -= staleTasks24hCount * 1;
-  healthScore = Math.max(0, Math.min(100, healthScore));
+  // Uses canonical formula from @ajioncorp/skynet (packages/dashboard/src/lib/health.ts)
+  const healthScore = calculateHealthScore({
+    failedPendingCount: failedPending,
+    blockerCount,
+    staleHeartbeatCount,
+    staleTasks24hCount,
+  });
 
   const healthLabel = healthScore > 80 ? "Good" : healthScore > 50 ? "Degraded" : "Critical";
   print(`\n  Health Score: ${healthScore}/100 (${healthLabel})`);
@@ -391,6 +383,9 @@ export async function statusCommand(options: StatusOptions) {
   print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
+  // NOTE: Mission evaluation logic is duplicated from packages/dashboard/src/lib/mission.ts.
+  // Changes to criteria evaluation MUST be kept in sync. The duplication exists because
+  // the CLI evaluates from the filesystem while the dashboard evaluates from its own context.
   const missionRaw = readFile(join(devDir, "mission.md"));
   const missionProgress: { id: number; criterion: string; status: string; evidence: string }[] = [];
   if (missionRaw) {

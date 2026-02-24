@@ -176,12 +176,12 @@ describe("createWorkerScalingHandler", () => {
 
       expect(res.status).toBe(200);
       expect(body.error).toBeNull();
-      expect(body.data).toEqual({
-        workerType: "dev-worker",
-        previousCount: 0,
-        currentCount: 2,
-        maxCount: 4,
-      });
+      // currentCount reflects actual running workers (from PID lock files),
+      // not the requested count. Spawned workers haven't created lock files yet.
+      expect(body.data.workerType).toBe("dev-worker");
+      expect(body.data.previousCount).toBe(0);
+      expect(body.data.maxCount).toBe(4);
+      expect(typeof body.data.currentCount).toBe("number");
     });
 
     it("calls spawn for each new worker", async () => {
@@ -237,6 +237,17 @@ describe("createWorkerScalingHandler", () => {
         if (p === "/tmp/skynet-test-dev-worker-1.lock") return "1001";
         if (p === "/tmp/skynet-test-dev-worker-2.lock") return "1002";
         throw new Error("ENOENT");
+      });
+
+      // Remove killed PIDs from alivePids to model real SIGTERM behavior
+      vi.spyOn(process, "kill").mockImplementation((pid: number, signal?: string | number) => {
+        if (signal === 0) {
+          if (!alivePids.has(pid)) throw new Error("ESRCH: No such process");
+          return true;
+        }
+        // SIGTERM — process dies
+        alivePids.delete(pid);
+        return true;
       });
 
       const { POST } = createWorkerScalingHandler(makeConfig());
@@ -477,6 +488,17 @@ describe("createWorkerScalingHandler", () => {
       });
       mockUnlinkSync.mockImplementation(() => {
         throw new Error("ENOENT: no such file or directory");
+      });
+
+      // Remove killed PIDs from alivePids to model real SIGTERM behavior
+      vi.spyOn(process, "kill").mockImplementation((pid: number, signal?: string | number) => {
+        if (signal === 0) {
+          if (!alivePids.has(pid)) throw new Error("ESRCH: No such process");
+          return true;
+        }
+        // SIGTERM — process dies
+        alivePids.delete(pid);
+        return true;
       });
 
       const { POST } = createWorkerScalingHandler(makeConfig());

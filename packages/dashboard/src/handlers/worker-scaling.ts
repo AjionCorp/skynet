@@ -311,11 +311,14 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         }
       }
 
+      // Report the ACTUAL current count after kills, not the requested count.
+      // Some workers may have already exited or been unkillable.
+      const actualRunning = getRunning(lockPrefix, workerType, maxWorkers, maxFixers);
       return Response.json({
         data: {
           workerType,
           previousCount: currentCount,
-          currentCount: count,
+          currentCount: actualRunning.length,
           maxCount: max,
         },
         error: null,

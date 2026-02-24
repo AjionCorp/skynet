@@ -170,6 +170,20 @@ function validateUpdates(updates: Record<string, string>): string | null {
       errors.push(`Non-printable characters in value for "${key}"`);
       continue;
     }
+    // Executable config keys are eval'd by workers — restrict to simple safe commands.
+    // Only allow: word chars, spaces, hyphens, forward slashes, dots, colons, equals.
+    // This blocks: &&, ||, ;, |, $(), backticks, redirects, etc.
+    const EXECUTABLE_KEYS = new Set([
+      "SKYNET_GATE_1", "SKYNET_GATE_2", "SKYNET_GATE_3",
+      "SKYNET_INSTALL_CMD", "SKYNET_TYPECHECK_CMD", "SKYNET_LINT_CMD",
+      "SKYNET_DEV_SERVER_CMD",
+    ]);
+    if (EXECUTABLE_KEYS.has(key)) {
+      if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
+        errors.push(`Executable config "${key}" contains disallowed characters`);
+        continue;
+      }
+    }
     // Key must be a valid bash variable name
     if (!VALID_CONFIG_KEY.test(key)) {
       errors.push(`Invalid config key "${key}"`);
@@ -183,8 +197,8 @@ function validateUpdates(updates: Record<string, string>): string | null {
     // Key-specific validation
     if (key === "SKYNET_MAX_WORKERS") {
       const n = Number(value);
-      if (!Number.isInteger(n) || n < 1) {
-        errors.push(`SKYNET_MAX_WORKERS must be a positive integer, got "${value}"`);
+      if (!Number.isInteger(n) || n < 1 || n > 16) {
+        errors.push(`SKYNET_MAX_WORKERS must be an integer between 1 and 16, got "${value}"`);
         continue;
       }
     }
@@ -204,6 +218,10 @@ function validateUpdates(updates: Record<string, string>): string | null {
  *
  * GET: Parse skynet.config.sh and return key-value pairs.
  * POST: Validate and write updated values back.
+ *
+ * Error message convention: all user-facing error strings use sentence case
+ * (e.g., "Config file not found", not "Config File Not Found"). This matches
+ * the convention used across all handlers.
  */
 export function createConfigHandler(config: SkynetConfig) {
   const configPath = `${config.devDir}/skynet.config.sh`;

@@ -1,8 +1,38 @@
 import { NextResponse } from "next/server";
 import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 
+// --- In-memory rate limiter for login attempts ---
+const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
+const MAX_ATTEMPTS = 5;
+const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = LOGIN_ATTEMPTS.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    LOGIN_ATTEMPTS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > MAX_ATTEMPTS;
+}
+
 export async function POST(request: Request) {
   try {
+    // Rate limit by IP (X-Forwarded-For behind reverse proxy, fallback to "unknown")
+    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    if (isRateLimited(ip)) {
+      return NextResponse.json(
+        { error: "Too many login attempts. Try again later." },
+        { status: 429 }
+      );
+    }
+
+    // Pre-check Content-Length header before reading body into memory
+    const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
+    if (contentLength > 10_000) {
+      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+    }
     const text = await request.text();
     if (text.length > 10_000) {
       return NextResponse.json({ error: "Request body too large" }, { status: 413 });

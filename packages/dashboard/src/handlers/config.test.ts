@@ -160,7 +160,7 @@ describe("createConfigHandler", () => {
       const body = await res.json();
       expect(res.status).toBe(400);
       expect(body.error).toContain("SKYNET_MAX_WORKERS");
-      expect(body.error).toContain("positive integer");
+      expect(body.error).toContain("between 1 and 16");
     });
 
     it("validates SKYNET_MAX_WORKERS rejects non-integer", async () => {

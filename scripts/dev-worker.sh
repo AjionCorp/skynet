@@ -141,7 +141,7 @@ cleanup_on_exit() {
   rm -rf "$LOCKFILE"
 }
 trap cleanup_on_exit EXIT
-trap 'log "ERR on line $LINENO"; exit 1' ERR
+trap 'log "ERR on line $LINENO: $BASH_COMMAND"; exit 1' ERR
 
 # --- Graceful shutdown handling ---
 # When SIGTERM/SIGINT is received (e.g. from `skynet stop`), set a flag so we
@@ -505,7 +505,7 @@ EOF
   _gate_idx=1
   while true; do
     _gate_var="SKYNET_GATE_${_gate_idx}"
-    _gate_cmd="${!_gate_var:-}"
+    eval "_gate_cmd=\${${_gate_var}:-}"
     if [ -z "$_gate_cmd" ]; then break; fi
     log "Running gate $_gate_idx: $_gate_cmd"
     if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then

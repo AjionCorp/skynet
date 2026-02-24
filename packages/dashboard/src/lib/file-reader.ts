@@ -1,6 +1,5 @@
-import { readFileSync, realpathSync } from "fs";
+import { readFileSync, realpathSync, statSync, openSync, readSync, closeSync } from "fs";
 import { resolve } from "path";
-import { spawnSync } from "child_process";
 
 /**
  * Read a file from the .dev/ directory. Returns empty string if file does not exist.
@@ -30,19 +29,28 @@ export function readDevFile(devDir: string, filename: string): string {
 
 /**
  * Read the last line of a script log file. Returns null if the log does not exist.
+ * Uses a pure Node.js implementation that reads the last ~4KB of the file
+ * instead of spawning a `tail` subprocess.
  */
 export function getLastLogLine(
   devDir: string,
   script: string
 ): string | null {
   if (!/^[a-z0-9-]+$/i.test(script)) return null;
+  const logPath = resolve(devDir, "scripts", `${script}.log`);
   try {
-    const result = spawnSync("tail", ["-1", `${devDir}/scripts/${script}.log`], {
-      encoding: "utf-8",
-      timeout: 2000,
-    });
-    const line = (result.stdout || "").trim();
-    return line || null;
+    const stat = statSync(logPath);
+    const fd = openSync(logPath, "r");
+    try {
+      const readSize = Math.min(stat.size, 4096);
+      const buf = Buffer.alloc(readSize);
+      readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+      const text = buf.toString("utf-8");
+      const lines = text.split("\n").filter(Boolean);
+      return lines.length > 0 ? lines[lines.length - 1] : null;
+    } finally {
+      closeSync(fd);
+    }
   } catch {
     return null;
   }
