@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add pipeline health trend sparkline to Pipeline dashboard
+## [DATA] [DATA] Refresh blockers.md Active section to match current resolved state
 **Status:** completed
-**Started:** 2026-02-24 16:43
+**Started:** 2026-02-24 16:54
 **Completed:** 2026-02-24
-**Branch:** dev/add-pipeline-health-trend-sparkline-to-p
+**Branch:** dev/refresh-blockersmd-active-section-to-mat
 **Worker:** 1
 
 ### Changes
