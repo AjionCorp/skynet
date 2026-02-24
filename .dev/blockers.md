@@ -90,6 +90,7 @@ _No active blockers._
 
 ## Mission Status
 
-All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 530+ tasks completed, 97% self-correction rate, 0 active retries. Pipeline is in polish/portability phase.
+All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 440+ tasks completed (442 pipeline commits on main), 99% self-correction rate (263 of 266 failures resolved), 3 active retries (recent 2026-02-24 task failures pending task-fixer). Pipeline is in polish/portability phase.
 
-**Current focus**: (1) Shell test coverage — `scripts/tests/` directory does not exist on main; dev-worker.sh, task-fixer.sh, and watchdog.sh have zero regression tests despite being the core pipeline engine. 8 new tasks generated to close this gap. (2) Robustness — prompt-size guardrail for worker dispatch and extended doctor --fix auto-repair. (3) Velocity chart merge failure triage. (4) E2E verification of `skynet init` onboarding flow. Note: quality gate configurability via `SKYNET_TYPECHECK_CMD` is already implemented in `_config.sh` and `_merge.sh`.
+**Current focus**: (1) State file hygiene — archive 267 resolved failed-task rows to bound file size, deduplicate completed.md entries. (2) Code quality — extract duplicated mission evaluation logic to shared module, separate rate-limit write path from read-only DB. (3) Test coverage — handler unit tests for mission-raw and pipeline-stream (last 2 untested handlers), watchdog crash recovery integration test, Linux cron setup-agents regression. (4) Extensibility — complete echo agent dry-run lifecycle, add pipeline idle detection and completion signaling.
+- **2026-02-24 16:49**: Claude Code authentication expired. Run `claude` and `/login` to restore. All pipeline jobs are paused.

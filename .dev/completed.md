@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
 | 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
 | 2026-02-24 | [FEAT] Add dark/light theme toggle to AdminLayout | merged to main | 6m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity | merged to main | 3m | success |
 | 2026-02-20 | [INFRA] Canonicalize active failed-task roots and collapse duplicate variants | fixing-* | 0m | blocked`), supersede redundant variants, and emit before/after root counts to logs/events. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state. |
 | 2026-02-20 | [FIX] Unblock dashboard backlog-parser DRY extraction root | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Unblock CLI shared helper DRY root for `readFile`/`isProcessRunning` | merged to main | 1m | success |
