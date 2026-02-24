@@ -33,6 +33,7 @@ unset _notify_plugin
 # Each channel's notify_<name>() is called; failures are silenced.
 _notify_all() {
   local msg="$1"
+  # IFS is saved/restored rather than using `local IFS` for bash 3.2 compat
   local _old_ifs="$IFS"
   IFS=','
   for _channel in $SKYNET_NOTIFY_CHANNELS; do

@@ -76,7 +76,11 @@ acquire_worker_lock() {
   local label="$3"
 
   if mkdir "$lockfile" 2>/dev/null; then
-    echo $$ > "$lockfile/pid"
+    if ! echo $$ > "$lockfile/pid" 2>/dev/null; then
+      rmdir "$lockfile" 2>/dev/null || true
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] PID write failed (disk full?). Exiting." >> "${logfile:-/dev/stderr}"
+      return 1
+    fi
     return 0
   fi
 
@@ -92,7 +96,11 @@ acquire_worker_lock() {
     mv "$lockfile" "$lockfile.stale.$$" 2>/dev/null || true
     rm -rf "$lockfile.stale.$$" 2>/dev/null || true
     if mkdir "$lockfile" 2>/dev/null; then
-      echo $$ > "$lockfile/pid"
+      if ! echo $$ > "$lockfile/pid" 2>/dev/null; then
+        rmdir "$lockfile" 2>/dev/null || true
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] PID write failed (disk full?). Exiting." >> "${logfile:-/dev/stderr}"
+        return 1
+      fi
       return 0
     else
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Lock contention. Exiting." >> "$logfile"

@@ -22,6 +22,8 @@ for logfile in "$SCRIPTS_DIR"/*.log; do
   while IFS= read -r match; do
     line_no="${match%%:*}"
     ts=$(echo "$match" | sed -n 's/.*\[\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\} [0-9]\{2\}:[0-9]\{2\}:[0-9]\{2\}\)\].*/\1/p')
+    # NOTE: String comparison of ISO timestamps works correctly in all locales
+    # because YYYY-MM-DD HH:MM:SS is lexicographically sortable.
     if [ -n "$ts" ] && { [ "$ts" \> "$CUTOFF" ] || [ "$ts" = "$CUTOFF" ]; }; then
       first_line="$line_no"
       break

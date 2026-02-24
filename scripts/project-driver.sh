@@ -11,6 +11,7 @@ BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 cd "$PROJECT_DIR"
 
+# Per-script log — writes to project-driver.log (not shared _log)
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 # --- Task normalization for deduplication ---
@@ -137,8 +138,8 @@ case "$failed_count" in ''|*[!0-9]*) failed_count=0 ;; esac
 
 # Get codebase structure summary (guard directories that may not exist yet)
 if [ -d "$PROJECT_DIR" ]; then
-  api_routes=$(find "$PROJECT_DIR" -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
-  pages=$(find "$PROJECT_DIR" -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+  api_routes=$(find "$PROJECT_DIR" -maxdepth 8 -path "*/app/api/*/route.ts" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
+  pages=$(find "$PROJECT_DIR" -maxdepth 8 -path "*/app/*/page.tsx" -not -path "*/node_modules/*" 2>/dev/null | sort || true)
 else
   api_routes="(project directory not found)"
   pages="(project directory not found)"
@@ -293,8 +294,9 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 - If the mission is achieved (all success criteria met), write that to $BLOCKERS as a celebration, not a blocker"
 
 # --- Snapshot existing backlog for post-agent deduplication ---
-_dedup_snapshot=$(mktemp)
-_dedup_normalized=$(mktemp)
+_dedup_snapshot=$(mktemp /tmp/skynet-dedup-snapshot-XXXXXX)
+_dedup_normalized=$(mktemp /tmp/skynet-dedup-normalized-XXXXXX)
+chmod 600 "$_dedup_snapshot" "$_dedup_normalized"
 trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized"' EXIT
 
 # SQLite-based dedup snapshot (primary — covers all task states)
@@ -347,7 +349,8 @@ if run_agent "$PROMPT" "$LOG"; then
   # Acquire backlog lock to prevent races with dev-worker claiming tasks
   if [ -f "$BACKLOG" ] && [ -s "$_dedup_normalized" ] && mkdir "$BACKLOG_LOCK" 2>/dev/null; then
     echo $$ > "$BACKLOG_LOCK/pid" 2>/dev/null || true
-    _dedup_cleaned=$(mktemp)
+    _dedup_cleaned=$(mktemp /tmp/skynet-dedup-cleaned-XXXXXX)
+    chmod 600 "$_dedup_cleaned"
     _dedup_count=0
     while IFS= read -r _line; do
       if echo "$_line" | grep -q '^\- \[ \]'; then

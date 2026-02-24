@@ -1,13 +1,13 @@
 const MAX_BODY_SIZE = 1_000_000; // 1 MB
 
 /**
- * Parse JSON request body with size validation.
+ * Parse request body as JSON with size limit and error handling.
+ * NOTE: The generic T is a TypeScript-only hint — no runtime validation is performed.
+ * Callers MUST validate required fields after parsing. The T parameter exists
+ * for IDE autocompletion, not runtime safety.
  *
- * NOTE: The generic type T is a compile-time assertion only — no runtime validation
- * is performed on the parsed JSON shape. Callers must validate fields they depend on
- * (e.g., checking `typeof body.workerType === "string"`). This is intentional: adding
- * a schema validator (Zod, etc.) would increase bundle size for minimal benefit since
- * all callers already validate their specific required fields.
+ * This is intentional: adding a schema validator (Zod, etc.) would increase bundle
+ * size for minimal benefit since all callers already validate their specific fields.
  *
  * Example: Callers must validate required fields:
  *   const { data } = await parseBody<{ name: string }>(req);

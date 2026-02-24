@@ -98,7 +98,7 @@ describe("configSetCommand", () => {
       configSetCommand("SKYNET_MAX_WORKERS", "abc", { dir: "/tmp/test" }),
     ).rejects.toThrow("process.exit");
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("positive integer"),
+      expect.stringContaining("between 1 and 16"),
     );
   });
 
@@ -107,7 +107,7 @@ describe("configSetCommand", () => {
       configSetCommand("SKYNET_MAX_WORKERS", "0", { dir: "/tmp/test" }),
     ).rejects.toThrow("process.exit");
     expect(console.error).toHaveBeenCalledWith(
-      expect.stringContaining("positive integer"),
+      expect.stringContaining("between 1 and 16"),
     );
   });
 

@@ -79,6 +79,9 @@ realpath_portable() {
   if command -v realpath >/dev/null 2>&1; then
     realpath "$1"
   elif $SKYNET_IS_MACOS; then
+    # NOTE: python3 is pre-installed on macOS 12.3+ (Monterey) via Xcode CLT, but is NOT
+    # guaranteed on minimal/container macOS images. If python3 is absent, we fall back to
+    # returning the path as-is (echo "$1"), which may contain unresolved symlinks.
     python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "$1" 2>/dev/null || echo "$1"
   else
     readlink -f "$1" 2>/dev/null || echo "$1"
@@ -115,7 +118,12 @@ _acquire_file_lock() {
 
   if ! $SKYNET_IS_MACOS; then
     # Linux: use native flock
-    # Open file on FD 9 and use flock with timeout
+    # Open file on FD 9 and use flock with timeout.
+    # FD 9 is chosen as a high-numbered descriptor unlikely to conflict with
+    # application FDs (0-2 are stdin/stdout/stderr, 3-8 may be used by bash
+    # internals or subshells). Only one file lock is held per process, so a
+    # single hardcoded FD is sufficient. If a future change requires multiple
+    # concurrent locks, each will need its own FD.
     exec 9>"$lockfile"
     if flock -w "$timeout" 9 2>/dev/null; then
       _FLOCK_FD=9

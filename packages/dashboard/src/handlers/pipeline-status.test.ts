@@ -1,3 +1,6 @@
+// NOTE: These tests verify response data shape and status codes but do not assert
+// console output (e.g., console.warn for SQLite fallback). Console side effects are
+// considered logging concerns and are not part of the handler's contract.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createPipelineStatusHandler } from "./pipeline-status";
 import type { SkynetConfig } from "../types";

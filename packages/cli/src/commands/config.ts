@@ -109,16 +109,12 @@ const MUTABLE_KEYS = new Set([
   "SKYNET_BRANCH_PREFIX",
   "SKYNET_MAIN_BRANCH",
   "SKYNET_CLAUDE_BIN",
-  "SKYNET_CLAUDE_FLAGS",
   "SKYNET_CODEX_BIN",
   "SKYNET_CODEX_SUBCOMMAND",
-  "SKYNET_CODEX_FLAGS",
   "SKYNET_CODEX_MODEL",
   "SKYNET_GEMINI_BIN",
   "SKYNET_GEMINI_FLAGS",
   "SKYNET_GEMINI_MODEL",
-  "SKYNET_AGENT_PLUGIN",
-  "SKYNET_EXTRA_PATH",
   "SKYNET_WORKER_CONTEXT",
   "SKYNET_WORKER_CONVENTIONS",
 ]);
@@ -174,8 +170,8 @@ function validateValue(key: string, value: string, projectDir: string): string |
   switch (key) {
     case "SKYNET_MAX_WORKERS": {
       const n = Number(value);
-      if (!Number.isInteger(n) || n <= 0) {
-        return `SKYNET_MAX_WORKERS must be a positive integer (got "${value}").`;
+      if (!Number.isInteger(n) || n < 1 || n > 16) {
+        return `SKYNET_MAX_WORKERS must be an integer between 1 and 16 (got "${value}").`;
       }
       return null;
     }
@@ -322,6 +318,20 @@ export async function configSetCommand(key: string, value: string, options: Conf
   if (shellError) {
     console.error(`\n  Error: ${shellError}\n`);
     process.exit(1);
+  }
+
+  // Executable config keys — restrict to simple safe commands
+  const EXECUTABLE_KEYS = new Set([
+    "SKYNET_GATE_1", "SKYNET_GATE_2", "SKYNET_GATE_3",
+    "SKYNET_INSTALL_CMD", "SKYNET_TYPECHECK_CMD", "SKYNET_LINT_CMD",
+    "SKYNET_DEV_SERVER_CMD",
+    "SKYNET_CLAUDE_BIN", "SKYNET_CODEX_BIN", "SKYNET_GEMINI_BIN",
+  ]);
+  if (EXECUTABLE_KEYS.has(key)) {
+    if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
+      console.error(`\n  Error: Executable config "${key}" contains disallowed characters.\n`);
+      process.exit(1);
+    }
   }
 
   // Replace the value on the target line, preserving export prefix and comments

@@ -20,11 +20,19 @@ function isRateLimited(ip: string): boolean {
   }
   const entry = LOGIN_ATTEMPTS.get(ip);
   if (!entry || now >= entry.resetAt) {
-    LOGIN_ATTEMPTS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
     return false;
   }
-  entry.count++;
   return entry.count > MAX_ATTEMPTS;
+}
+
+function recordFailedAttempt(ip: string): void {
+  const now = Date.now();
+  const entry = LOGIN_ATTEMPTS.get(ip);
+  if (!entry || now >= entry.resetAt) {
+    LOGIN_ATTEMPTS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
+  } else {
+    entry.count++;
+  }
 }
 
 export async function POST(request: Request) {
@@ -37,7 +45,7 @@ export async function POST(request: Request) {
     const ip = realIp || forwardedIp || "unknown";
     if (isRateLimited(ip)) {
       return NextResponse.json(
-        { error: "Too many login attempts. Try again later." },
+        { data: null, error: "Too many login attempts. Try again later." },
         { status: 429 }
       );
     }
@@ -45,28 +53,29 @@ export async function POST(request: Request) {
     // Pre-check Content-Length header before reading body into memory
     const contentLength = parseInt(request.headers.get("content-length") || "0", 10);
     if (contentLength > 10_000) {
-      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      return NextResponse.json({ data: null, error: "Request body too large" }, { status: 413 });
     }
     const text = await request.text();
     if (text.length > 10_000) {
-      return NextResponse.json({ error: "Request body too large" }, { status: 413 });
+      return NextResponse.json({ data: null, error: "Request body too large" }, { status: 413 });
     }
     const body = JSON.parse(text);
     if (!body || typeof body !== "object" || typeof body.apiKey !== "string") {
-      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+      return NextResponse.json({ data: null, error: "Invalid request body" }, { status: 400 });
     }
     const { apiKey } = body as { apiKey: string };
     const expected = process.env.SKYNET_DASHBOARD_API_KEY;
 
     if (!expected) {
       return NextResponse.json(
-        { error: "Authentication error" },
+        { data: null, error: "Authentication error" },
         { status: 500 }
       );
     }
 
     if (!apiKey || !safeCompare(apiKey, expected)) {
-      return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
+      recordFailedAttempt(ip);
+      return NextResponse.json({ data: null, error: "Invalid API key" }, { status: 401 });
     }
 
     const sessionToken = deriveSessionToken(expected);
@@ -80,6 +89,6 @@ export async function POST(request: Request) {
     });
     return response;
   } catch {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+    return NextResponse.json({ data: null, error: "Invalid request" }, { status: 400 });
   }
 }

@@ -6,7 +6,7 @@
  * When SkynetConfig.staleMinutes is available (set from config), that value takes precedence.
  * This constant is only used as a fallback when the config value is not available.
  */
-export const STALE_THRESHOLD_SECONDS = 30 * 60;
+export const STALE_THRESHOLD_SECONDS = 30 * 60; // 1800 seconds = 30 minutes
 
 /**
  * Validates script names and worker types: lowercase alphanumeric and hyphens only.

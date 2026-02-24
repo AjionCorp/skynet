@@ -3,7 +3,7 @@ import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
-import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
+import { isSqliteReady, sqliteRows, sqlInt } from "../utils/sqliteQuery.js";
 import { decodeJwtExp, calculateHealthScore } from "@ajioncorp/skynet";
 
 interface StatusOptions {
@@ -29,6 +29,10 @@ function formatDuration(ms: number): string {
   return `${hours}h ${remainingMins}m`;
 }
 
+// NOTE: JWT exp is read for display purposes only (expiry estimation).
+// The actual token validation happens server-side when the token is used.
+// We do not verify the JWT signature here — that would require the issuer's
+// public key, which is not available to the CLI.
 function getCodexAuthStatus(vars: Record<string, string>): string {
   if (process.env.OPENAI_API_KEY) {
     return "Codex Auth: OK (API key env)";
@@ -228,7 +232,7 @@ export async function statusCommand(options: StatusOptions) {
   if (usingSqlite) {
     try {
       // staleSecs is computed from STALE_THRESHOLD_SECONDS — safe to interpolate
-      const staleSecs = Math.floor(staleThresholdMs / 1000);
+      const staleSecs = sqlInt(Math.floor(staleThresholdMs / 1000));
       const hbRow = sqliteRows(devDir,
         `SELECT
           (SELECT COUNT(*) FROM workers WHERE heartbeat_epoch > 0 AND (strftime('%s','now') - heartbeat_epoch) > ${staleSecs}) as c0,
@@ -385,14 +389,14 @@ export async function statusCommand(options: StatusOptions) {
   print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
-  // NOTE: Mission evaluation logic is duplicated from packages/dashboard/src/lib/mission.ts
-  // (parseMissionProgress / evaluateCriterion). The canonical implementation lives in
-  // @ajioncorp/skynet but is not currently exported for CLI use because:
-  //   1. The dashboard version expects MissionEvaluationContext (pre-computed counts).
-  //   2. The CLI version reads directly from the filesystem and computes its own inputs.
-  // Changes to criteria evaluation (IDs 1-6, thresholds) MUST be kept in sync manually.
-  // TODO: Consider exporting parseMissionProgress from @ajioncorp/skynet with a
-  //       filesystem-friendly adapter to eliminate this duplication.
+  // DUPLICATION: This mission evaluation logic is duplicated from
+  // packages/dashboard/src/lib/mission.ts. Changes to criteria IDs (1-6),
+  // thresholds, or status labels MUST be kept in sync manually.
+  // Tracked: consider exporting parseMissionProgress from @ajioncorp/skynet
+  // with a filesystem-friendly adapter to eliminate this duplication.
+  // The dashboard version expects MissionEvaluationContext (pre-computed counts),
+  // while the CLI version reads directly from the filesystem and computes its
+  // own inputs — hence the duplication.
   const missionRaw = readFile(join(devDir, "mission.md"));
   const missionProgress: { id: number; criterion: string; status: string; evidence: string }[] = [];
   if (missionRaw) {

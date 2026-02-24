@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parseMissionCriteria, evaluateCriterion } from "./mission";
+import { parseMissionCriteria, evaluateCriterion, parseMissionProgress } from "./mission";
 
 vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
@@ -252,3 +252,69 @@ describe("evaluateCriterion", () => {
     });
   });
 });
+
+describe("parseMissionProgress", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadDevFile.mockReturnValue("");
+    mockExistsSync.mockReturnValue(false);
+  });
+
+  it("returns empty array when mission.md is empty", () => {
+    mockReadDevFile.mockReturnValue("");
+    const result = parseMissionProgress({
+      devDir: "/tmp/test/.dev",
+      completedCount: 0,
+      failedLines: [],
+      handlerCount: 0,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("returns empty array when no Success Criteria section exists", () => {
+    mockReadDevFile.mockReturnValue("# Mission\nNo criteria here.");
+    const result = parseMissionProgress({
+      devDir: "/tmp/test/.dev",
+      completedCount: 10,
+      failedLines: [],
+      handlerCount: 5,
+    });
+    expect(result).toEqual([]);
+  });
+
+  it("evaluates all criteria and returns progress array", () => {
+    // First call returns mission.md content, subsequent calls return empty (watchdog log)
+    let callCount = 0;
+    mockReadDevFile.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return [
+          "# Mission",
+          "## Success Criteria",
+          "1. Setup criterion",
+          "2. Self-correction",
+        ].join("\n");
+      }
+      return "";
+    });
+
+    const result = parseMissionProgress({
+      devDir: "/tmp/test/.dev",
+      completedCount: 5,
+      failedLines: [{ status: "fixed" }],
+      handlerCount: 6,
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result[0].id).toBe(1);
+    expect(result[0].status).toBe("met");
+    expect(result[1].id).toBe(2);
+    // 1 fixed, 0 blocked = 100% self-correction
+    expect(result[1].status).toBe("met");
+  });
+
+  // NOTE: Console output from parseMissionProgress is not asserted in these tests.
+  // The function does not produce console output, but downstream consumers in
+  // pipeline-status.ts and status.ts do — those are covered by their respective tests.
+});
+

@@ -37,3 +37,7 @@ playwright-report/
 .dev/skynet.db-shm
 .dev/skynet.db-wal
 .dev/md-backup/
+
+# Skynet runtime data
+.dev/db-backups/
+.dev/skynet.project.sh

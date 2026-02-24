@@ -333,19 +333,23 @@ _cr_phase3_orphan_worktrees() {
     is_running "$wt_lock" && continue
 
     # Kill any orphan processes running inside the worktree (claude, node, etc.)
-    # NOTE: pgrep -f matches against the full command line. Using the resolved absolute
-    # path reduces (but doesn't eliminate) false positives from unrelated processes whose
-    # command lines happen to contain a similar substring.
+    # NOTE: pgrep -f matches against the full command line, which could match unrelated
+    # processes. Mitigations: (1) resolved absolute path via pwd -P narrows the pattern,
+    # (2) regex anchors "bash.*path([ /]|$)" require bash prefix and path boundary,
+    # (3) own PID and grep processes are explicitly excluded from the result.
     local resolved_wt_dir
     resolved_wt_dir=$(cd "$wt_dir" 2>/dev/null && pwd -P || echo "$wt_dir")
     local orphan_pids
+    # Escape regex metacharacters in path for safe pgrep -f matching
+    local escaped_wt_dir
+    escaped_wt_dir=$(printf '%s' "$resolved_wt_dir" | sed 's/[.[\*^$(){}|+?\\]/\\&/g')
     # Narrow match: only kill processes whose command line contains the exact worktree
     # path as a directory argument to bash (not as a substring of log messages or other
     # paths). Exclude our own PID and pgrep/grep processes.
     if command -v pgrep >/dev/null 2>&1; then
-      orphan_pids=$(pgrep -f "bash.*${resolved_wt_dir}([ /]|$)" 2>/dev/null | grep -v "^$$\$" || true)
+      orphan_pids=$(pgrep -f "bash.*${escaped_wt_dir}([ /]|$)" 2>/dev/null | grep -v "^$$\$" || true)
     else
-      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${resolved_wt_dir}([ /]|$)" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
+      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${escaped_wt_dir}([ /]|$)" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
@@ -402,6 +406,7 @@ crash_recovery
 # Time guard: only reconcile claims older than ORPHAN_CUTOFF to avoid racing with
 # the ~50-200ms gap between db_claim_next_task and db_set_worker_status in dev-worker.
 _ORPHAN_CUTOFF="${SKYNET_ORPHAN_CUTOFF_SECONDS:-120}"
+case "$_ORPHAN_CUTOFF" in ''|*[!0-9]*) _ORPHAN_CUTOFF=120 ;; esac
 _orphaned_claimed=$(_db_sep "
   SELECT t.id, t.title, t.worker_id
   FROM tasks t
@@ -512,6 +517,7 @@ if [ -f "$DB_PATH" ]; then
     tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: SQLite database corrupted — attempting automatic restore."
 
     # --- Automatic DB restore from most recent daily backup ---
+    # ls -1t sorts by mtime (not locale-dependent lexicographic order), so LC_ALL is not needed
     _restore_backup=$(ls -1t "$DEV_DIR/db-backups"/skynet.db.2* 2>/dev/null | head -1)
     if [ -n "$_restore_backup" ]; then
       log "Attempting automatic DB restore from $_restore_backup"
@@ -528,7 +534,7 @@ if [ -f "$DB_PATH" ]; then
           # Restore to a temp file first, verify integrity, then atomically rename into place
           # $_restore_tmp is built from DB_PATH + .restore-tmp.$$ — no special chars possible.
           _restore_tmp="$DB_PATH.restore-tmp.$$"
-          sqlite3 "$_restore_backup" ".backup $_restore_tmp" 2>/dev/null
+          sqlite3 "$_restore_backup" ".backup '${_restore_tmp}'" 2>/dev/null
           _restore_check=$(sqlite3 "$_restore_tmp" "PRAGMA quick_check;" 2>/dev/null | head -1)
           if [ "$_restore_check" = "ok" ]; then
             if [ -f "$DB_PATH" ]; then
@@ -565,16 +571,23 @@ _backup_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-db-backup-$(date +%Y%m%d)"
 if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
   mkdir -p "$DEV_DIR/db-backups"
   _backup_file="$DEV_DIR/db-backups/skynet.db.$(date +%Y%m%d)"
-  if sqlite3 "$DB_PATH" ".backup '$_backup_file'" 2>/dev/null; then
-    touch "$_backup_sentinel"
-    log "Daily DB backup created: $_backup_file"
-    # Rotate: keep 7 days
-    ls -1t "$DEV_DIR/db-backups"/skynet.db.* 2>/dev/null | tail -n +8 | while read -r _old; do
-      rm -f "$_old"
-    done
-  else
-    log "WARNING: Daily DB backup failed"
-  fi
+  # Validate backup path is safe for sqlite3 .backup command
+  case "$_backup_file" in
+    *"'"*|*'\\'*) log "WARNING: Unsafe characters in backup path, skipping backup" ;;
+    *)
+      if sqlite3 "$DB_PATH" ".backup '${_backup_file}'" 2>/dev/null; then
+        touch "$_backup_sentinel"
+        log "Daily DB backup created: $_backup_file"
+        # Rotate: keep 7 days
+        # ls -1t sorts by mtime — locale-independent; keeping 7 newest backups
+        ls -1t "$DEV_DIR/db-backups"/skynet.db.* 2>/dev/null | tail -n +8 | while read -r _old; do
+          rm -f "$_old"
+        done
+      else
+        log "WARNING: Daily DB backup failed"
+      fi
+    ;;
+  esac
 fi
 
 # Clean up old /tmp sentinel files (older than 7 days) to prevent accumulation

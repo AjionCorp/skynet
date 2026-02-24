@@ -151,6 +151,17 @@ const MUTABLE_KEYS = new Set([
 ]);
 
 /**
+ * Keys whose values are eval'd as shell commands by workers.
+ * Restricted to simple safe commands (alphanumeric, spaces, dots, slashes, hyphens, colons, equals).
+ */
+const EXECUTABLE_KEYS = new Set([
+  "SKYNET_GATE_1", "SKYNET_GATE_2", "SKYNET_GATE_3",
+  "SKYNET_INSTALL_CMD", "SKYNET_TYPECHECK_CMD", "SKYNET_LINT_CMD",
+  "SKYNET_DEV_SERVER_CMD",
+  "SKYNET_CLAUDE_BIN", "SKYNET_CODEX_BIN", "SKYNET_GEMINI_BIN",
+]);
+
+/**
  * Validate config updates — reject dangerous values.
  */
 function validateUpdates(updates: Record<string, string>): string | null {
@@ -173,14 +184,6 @@ function validateUpdates(updates: Record<string, string>): string | null {
       errors.push(`Non-printable characters in value for "${key}"`);
       continue;
     }
-    // Executable config keys are eval'd by workers — restrict to simple safe commands.
-    // Only allow: word chars, spaces, hyphens, forward slashes, dots, colons, equals.
-    // This blocks: &&, ||, ;, |, $(), backticks, redirects, etc.
-    const EXECUTABLE_KEYS = new Set([
-      "SKYNET_GATE_1", "SKYNET_GATE_2", "SKYNET_GATE_3",
-      "SKYNET_INSTALL_CMD", "SKYNET_TYPECHECK_CMD", "SKYNET_LINT_CMD",
-      "SKYNET_DEV_SERVER_CMD",
-    ]);
     if (EXECUTABLE_KEYS.has(key)) {
       if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
         errors.push(`Executable config "${key}" contains disallowed characters`);
@@ -226,6 +229,17 @@ function validateUpdates(updates: Record<string, string>): string | null {
  * (e.g., "Config file not found", not "Config File Not Found"). This matches
  * the convention used across all handlers.
  */
+/**
+ * Keys containing secrets that should be masked in GET responses.
+ * These values are write-only from the dashboard's perspective.
+ */
+const SENSITIVE_KEYS = new Set([
+  "SKYNET_TG_BOT_TOKEN",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+  "SKYNET_DASHBOARD_API_KEY",
+]);
+
 export function createConfigHandler(config: SkynetConfig) {
   const configPath = `${config.devDir}/skynet.config.sh`;
 
@@ -239,7 +253,10 @@ export function createConfigHandler(config: SkynetConfig) {
       }
 
       const raw = readFileSync(configPath, "utf-8");
-      const entries = parseConfigFile(raw);
+      const entries = parseConfigFile(raw).map(e => ({
+        ...e,
+        value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
+      }));
 
       return Response.json({
         data: { entries, configPath },

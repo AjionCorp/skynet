@@ -17,6 +17,8 @@ _DB_TMPFILES=""
 _db_register_tmp() { _DB_TMPFILES="$_DB_TMPFILES $1"; }
 _db_cleanup_tmpfiles() {
   local _f
+  # Intentional word splitting: _DB_TMPFILES is a space-delimited string of paths.
+  # We don't quote it because we need the shell to split on spaces.
   for _f in $_DB_TMPFILES; do
     rm -f "$_f" 2>/dev/null || true
   done
@@ -33,6 +35,9 @@ _DB_SEP=$'\x1f'
 
 # --- SQL injection prevention ---
 _sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
+# NOTE: _sql_int intentionally coerces non-numeric input to 0 rather than
+# failing. This is defense-in-depth — callers should validate inputs, but
+# if invalid data reaches SQL, 0 is safer than an injection vector.
 # Strip non-digits and leading zeros — defense-in-depth for integer params.
 # Intentionally rejects negative values — all DB integer fields in skynet
 # (worker IDs, counts, epochs) are non-negative.

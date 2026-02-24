@@ -11,7 +11,10 @@ interface DoctorOptions {
   fix?: boolean;
 }
 
-// cmd values are hardcoded constants (not user input), so execSync string form is safe here.
+// Trust boundary: most callers pass hardcoded constants. The config-validation
+// section (SKYNET_GATE_* checks) passes `command -v <cmdName>` where cmdName is
+// the first word of a config value. This is acceptable because skynet.config.sh
+// is a trusted operator-controlled file, not user input.
 function getToolVersion(cmd: string): string | null {
   try {
     return execSync(cmd, { stdio: ["ignore", "pipe", "ignore"], timeout: 10000 })
@@ -553,6 +556,8 @@ export async function doctorCommand(options: DoctorOptions) {
           updatedBacklog = updatedBacklog.replace(re, "$1[ ]$2");
         }
         try {
+          // NOTE: Direct write (not atomic tmp+rename) is acceptable here because
+          // backlog repair is idempotent — re-running --fix produces the same result.
           writeFileSync(backlogPath, updatedBacklog, "utf-8");
           console.log(`    Fixed: reset ${orphanedClaimed.length} orphaned claimed task(s) to pending`);
           fixCount += orphanedClaimed.length;
@@ -695,6 +700,8 @@ export async function doctorCommand(options: DoctorOptions) {
         }
         try {
           const existing = readFile(configPath);
+          // NOTE: Direct write (not atomic tmp+rename) is acceptable here because
+          // config repair is idempotent and only appends missing defaults.
           writeFileSync(configPath, existing.trimEnd() + "\n" + lines.join("\n") + "\n", "utf-8");
           console.log(`    Fixed: appended ${missingKeys.length} default config var(s)`);
           fixCount += missingKeys.length;

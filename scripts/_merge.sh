@@ -137,6 +137,7 @@ do_merge_to_main() {
     log "Merge conflict — attempting rebase recovery..."
     git merge --abort 2>/dev/null || true
     git_pull_with_retry 2 || true
+    # branch_name is sanitized by the caller (dev-worker.sh) to prevent leading hyphens
     if git checkout "$branch_name" 2>>"$log_file"; then
       if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
         log "Rebase succeeded — retrying merge."

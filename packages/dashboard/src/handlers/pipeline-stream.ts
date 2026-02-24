@@ -91,7 +91,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           watcher = watch(devDir, (_event, filename) => {
             if (!filename?.endsWith(".md")) return;
             if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => pushStatus(), 500);
+            debounceTimer = setTimeout(() => { pushStatus().catch(() => cleanup()); }, 500);
           });
 
           watcher.on("error", () => {

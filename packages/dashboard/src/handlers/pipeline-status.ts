@@ -68,7 +68,8 @@ function readCodexAuthStatus(
   authFile: string
 ): CodexAuthStatus {
   try {
-    const raw = JSON.parse(readFile(authFile, "utf-8"));
+    // Type assertion: codex auth.json is an external file with no schema guarantee
+    const raw = JSON.parse(readFile(authFile, "utf-8")) as { tokens?: { id_token?: string; access_token?: string; refresh_token?: string } };
     const tokens = raw?.tokens || {};
     const token = tokens.id_token || tokens.access_token || "";
     const refresh = tokens.refresh_token || "";
@@ -366,9 +367,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const backlogLocked = existsSync(backlogLockPath);
 
       // Git status — run in project root (parent of devDir)
-      // NOTE: Four separate spawnSync git calls (~20ms total) run per status request.
-      // Combining them into fewer calls is possible but trades readability for ~15ms savings.
-      // At the current request rate (human-driven, not automated polling), this is acceptable.
+      // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.
+      // The total cost (~40ms for 4 calls) is acceptable for the status endpoint's ~1s polling
+      // interval. Combining them into fewer calls trades readability for ~15ms savings.
       const projectRoot = devDir.replace(/\/?\.dev\/?$/, "");
       let gitBranch = "unknown";
       let commitsAhead = 0;

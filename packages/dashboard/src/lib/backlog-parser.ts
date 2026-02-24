@@ -96,6 +96,8 @@ export function parseBacklog(content: string): ParsedBacklogItem[] {
 
 /**
  * Summarize backlog counts from parsed items.
+ * NOTE: This is a second pass over already-parsed items (O(n) on the item count,
+ * not on the raw file). Acceptable at expected backlog scale (<100 items).
  */
 export function backlogCounts(items: ParsedBacklogItem[]): {
   pendingCount: number;

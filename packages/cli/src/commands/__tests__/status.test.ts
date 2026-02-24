@@ -14,6 +14,11 @@ vi.mock("child_process", () => ({
 vi.mock("../../utils/sqliteQuery", () => ({
   isSqliteReady: vi.fn(() => false),
   sqliteRows: vi.fn(() => []),
+  sqlInt: vi.fn((v: string | number) => {
+    const n = Number(v);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) return 0;
+    return n;
+  }),
 }));
 
 vi.mock("../../utils/isProcessRunning", () => ({

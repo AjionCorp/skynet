@@ -73,3 +73,13 @@ export function sqlEscape(value: string): string {
     .replace(/\r/g, "")
     .replace(/'/g, "''");
 }
+
+/**
+ * Sanitize a value for use as a SQL integer. Returns 0 for non-numeric values.
+ * Prevents NaN injection into SQL queries when numeric values come from config.
+ */
+export function sqlInt(value: string | number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return 0;
+  return n;
+}

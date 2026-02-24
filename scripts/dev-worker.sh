@@ -302,7 +302,7 @@ EOF
   _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
   # shellcheck disable=SC2034
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
-  branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
+  branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 40)"
 
   # Load skills matching this task's tag
   SKILL_CONTENT="$(get_skills_for_tag "${task_type:-}")"
@@ -509,6 +509,8 @@ EOF
     eval "_gate_cmd=\${${_gate_var}:-}"
     if [ -z "$_gate_cmd" ]; then break; fi
     log "Running gate $_gate_idx: $_gate_cmd"
+    # Safety: gate commands are validated at config time (EXECUTABLE_KEYS regex: ^[a-zA-Z0-9 .\/_:=-]+$)
+    # which blocks shell metacharacters (;, &&, ||, |, $, backticks, redirects).
     if ! (cd "$WORKTREE_DIR" && eval "$_gate_cmd") >> "$LOG" 2>&1; then
       _gate_failed="$_gate_cmd"
       break
