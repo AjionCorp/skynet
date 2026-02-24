@@ -6,7 +6,7 @@ import { safeCompare, deriveSessionToken } from "./lib/auth";
 // reverse proxy level (e.g. nginx, Caddy, Cloudflare). The Next.js middleware
 // handles only authentication. See next.config.ts for allowed origins if needed.
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const apiKey = process.env.SKYNET_DASHBOARD_API_KEY;
 
   // No key configured: allow only in explicit dev mode, fail closed otherwise
@@ -16,10 +16,12 @@ export function middleware(request: NextRequest) {
       if (pathname.startsWith("/api/")) {
         return NextResponse.json(
           { data: null, error: "Auth not configured" },
-          { status: 500 }
+          { status: 500 },
         );
       }
-      return new NextResponse("SKYNET_DASHBOARD_API_KEY not set", { status: 500 });
+      return new NextResponse("SKYNET_DASHBOARD_API_KEY not set", {
+        status: 500,
+      });
     }
     return NextResponse.next();
   }
@@ -47,8 +49,12 @@ export function middleware(request: NextRequest) {
   // This is acceptable for a single-operator pipeline dashboard.
   // Accepts both raw API key (for backward compatibility / CLI usage) and HMAC session token.
   // Prefer session token for browser-based access to avoid key exposure in logs.
-  const expectedSessionToken = deriveSessionToken(apiKey);
-  if (token && (safeCompare(token, apiKey) || safeCompare(token, expectedSessionToken))) {
+  const expectedSessionToken = await deriveSessionToken(apiKey);
+  if (
+    token &&
+    ((await safeCompare(token, apiKey)) ||
+      (await safeCompare(token, expectedSessionToken)))
+  ) {
     return NextResponse.next();
   }
 
@@ -56,7 +62,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/api/")) {
     return NextResponse.json(
       { data: null, error: "Unauthorized" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 

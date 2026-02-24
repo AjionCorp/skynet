@@ -107,7 +107,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!apiKey || !safeCompare(apiKey, expected)) {
+    if (!apiKey || !(await safeCompare(apiKey, expected))) {
       recordFailedAttempt(ip);
       return NextResponse.json({ data: null, error: "Invalid API key" }, { status: 401 });
     }
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     // Successful login — clear any accumulated failed attempts for this IP
     LOGIN_ATTEMPTS.delete(ip);
 
-    const sessionToken = deriveSessionToken(expected);
+    const sessionToken = await deriveSessionToken(expected);
     const response = NextResponse.json({ data: { ok: true }, error: null });
     response.cookies.set("skynet-api-key", sessionToken, {
       httpOnly: true,

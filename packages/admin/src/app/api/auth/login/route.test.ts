@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from "vites
 
 // Mock auth module before importing route
 vi.mock("../../../../lib/auth", () => ({
-  safeCompare: vi.fn((a: string, b: string) => a === b),
-  deriveSessionToken: vi.fn(() => "mock-session-token"),
+  safeCompare: vi.fn(async (a: string, b: string) => a === b),
+  deriveSessionToken: vi.fn(async () => "mock-session-token"),
 }));
 
 import { POST, _LOGIN_ATTEMPTS_FOR_TESTING } from "./route";
