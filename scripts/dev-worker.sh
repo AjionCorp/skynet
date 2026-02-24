@@ -16,6 +16,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 # SQLite is the sole source of truth — fail fast if missing
 _require_db
 
+# Resource guard: prevent runaway memory usage (default 4GB per worker).
+# Uses virtual memory limit as a safety net — the OS kills the process on exceed.
+_SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"  # 4 GB
+ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || true
+
 # Per-worker port offset to prevent dev-server collisions in multi-worker mode
 WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
 export PORT="$WORKER_PORT"
@@ -72,10 +77,12 @@ HEARTBEAT_FILE="$DEV_DIR/worker-${WORKER_ID}.heartbeat"
 _heartbeat_pid=""
 
 _start_heartbeat() {
+  local _parent_pid=$$
   (
     while true; do
-      # Exit if parent worker process is no longer alive
-      kill -0 $$ 2>/dev/null || exit 0
+      # $$ in a subshell still refers to the parent PID in bash — this is correct:
+      # we exit the heartbeat loop when the parent worker dies.
+      kill -0 "$_parent_pid" 2>/dev/null || exit 0
       date +%s > "$HEARTBEAT_FILE"
       db_update_heartbeat_and_progress "$WORKER_ID" 2>/dev/null || true
       sleep 60
@@ -213,7 +220,7 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
       _stale_status=$(_db "SELECT status FROM tasks WHERE id=$(_sql_int "$_stale_id");" 2>/dev/null || true)
       if [ "$_stale_status" = "claimed" ]; then
         db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
-      elif [[ "$_stale_status" =~ ^fixing- ]]; then
+      elif case "$_stale_status" in fixing-*) true ;; *) false ;; esac; then
         log "Stale lock on $task_title but task is $_stale_status (fixer handling) — skipping"
       fi
     fi

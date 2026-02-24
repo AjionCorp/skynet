@@ -7,7 +7,11 @@ export async function POST(request: Request) {
     if (text.length > 10_000) {
       return NextResponse.json({ error: "Request body too large" }, { status: 413 });
     }
-    const { apiKey } = JSON.parse(text) as { apiKey: string };
+    const body = JSON.parse(text);
+    if (!body || typeof body !== "object" || typeof body.apiKey !== "string") {
+      return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    }
+    const { apiKey } = body as { apiKey: string };
     const expected = process.env.SKYNET_DASHBOARD_API_KEY;
 
     if (!expected) {

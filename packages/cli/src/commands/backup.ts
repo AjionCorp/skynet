@@ -30,6 +30,8 @@ export async function backupCommand(options: BackupOptions) {
   const backupFile = join(backupDir, `skynet.db.${timestamp}`);
 
   try {
+    // backupFile is generated from ISO timestamp + devDir — no user input.
+    // The single-quote escaping is defense-in-depth for the .backup command.
     const result = spawnSync("sqlite3", [dbPath], {
       input: `.backup '${backupFile.replace(/'/g, "''")}'`,
       encoding: "utf-8",

@@ -356,7 +356,10 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         const aheadResult = spawnSync("git", ["rev-list", "--count", "origin/main..HEAD"], {
           cwd: projectRoot, encoding: "utf-8", timeout: 5000,
         });
-        commitsAhead = aheadResult.status === 0 ? (Number(aheadResult.stdout?.trim()) || 0) : 0;
+        if (aheadResult.status === 0) {
+          const parsed = Number(aheadResult.stdout?.trim());
+          commitsAhead = Number.isFinite(parsed) ? parsed : 0;
+        }
 
         const dirtyResult = spawnSync("git", ["status", "--porcelain"], {
           cwd: projectRoot, encoding: "utf-8", timeout: 5000,

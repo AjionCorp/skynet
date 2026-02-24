@@ -14,7 +14,7 @@ SKYNET_USE_FLOCK="${SKYNET_USE_FLOCK:-true}"
 
 # Auto-TTL: maximum age (seconds) for a merge lock before force-release.
 # Prevents pipeline deadlock when a worker dies while holding the merge lock.
-SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-600}"  # 10 minutes
+SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-180}"  # 3 minutes
 
 # Acquire merge lock.
 # Delegates to the pluggable lock backend (file/redis).

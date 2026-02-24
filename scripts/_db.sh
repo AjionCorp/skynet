@@ -4,6 +4,8 @@
 # WAL mode handles concurrent reads + single writer — no more mkdir locks.
 
 DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
+# Security: skynet.db is not encrypted. Ensure .dev/ directory is on an
+# encrypted volume and has restrictive permissions (chmod 700).
 
 # --- Temp file tracking for leak prevention ---
 # mktemp files created by _sql_exec/_sql_query are normally cleaned inline,
@@ -50,7 +52,7 @@ _db() {
     local _start _end _elapsed _preview
     _start=$(_db_now_ms)
     local _out
-    _out=$(printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH")
+    _out=$(printf '.timeout 15000\n%s\n' "$1" | sqlite3 "$DB_PATH")
     local _rc=$?
     _end=$(_db_now_ms)
     if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
@@ -66,14 +68,14 @@ _db() {
     [ -n "$_out" ] && printf '%s\n' "$_out"
     return $_rc
   fi
-  printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH"
+  printf '.timeout 15000\n%s\n' "$1" | sqlite3 "$DB_PATH"
 }
 _db_sep() {
   if [ "${SKYNET_DB_DEBUG:-false}" = "true" ]; then
     local _start _end _elapsed _preview
     _start=$(_db_now_ms)
     local _out
-    _out=$(printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH")
+    _out=$(printf '.timeout 15000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH")
     local _rc=$?
     _end=$(_db_now_ms)
     if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
@@ -89,7 +91,7 @@ _db_sep() {
     [ -n "$_out" ] && printf '%s\n' "$_out"
     return $_rc
   fi
-  printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"
+  printf '.timeout 15000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"
 }
 
 # --- Error-checked sqlite3 wrapper for mutations ---
@@ -208,10 +210,17 @@ _validate_status_transition() {
 }
 
 # Helper: look up current status of a task by ID for transition validation.
-# Returns the status string or empty if not found.
+# Returns the status string, empty if not found, or "ERROR" (with rc=1) on SQL failure.
 _get_task_status() {
   local task_id; task_id=$(_sql_int "$1")
-  _db "SELECT status FROM tasks WHERE id=$task_id;" 2>/dev/null || true
+  local result
+  result=$(_db "SELECT status FROM tasks WHERE id=$task_id;" 2>/dev/null)
+  local rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "ERROR"
+    return 1
+  fi
+  echo "$result"
 }
 
 # ============================================================
@@ -224,7 +233,7 @@ db_init() {
   _init_err=$(sqlite3 "$DB_PATH" <<'SCHEMA' 2>&1
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
-PRAGMA busy_timeout = 5000;
+PRAGMA busy_timeout = 15000;
 
 CREATE TABLE IF NOT EXISTS tasks (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -494,8 +503,8 @@ db_explain_claim() {
 
 db_unclaim_task() {
   local task_id; task_id=$(_sql_int "$1")
-  local _cur_status; _cur_status=$(_get_task_status "$task_id")
-  _validate_status_transition "$task_id" "$_cur_status" "pending" "db_unclaim_task"
+  local _cur_status; _cur_status=$(_get_task_status "$task_id" 2>/dev/null || true)
+  [ "$_cur_status" != "ERROR" ] && _validate_status_transition "$task_id" "$_cur_status" "pending" "db_unclaim_task"
   _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
     WHERE id=$task_id AND status='claimed';
@@ -515,8 +524,8 @@ _db_complete_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" duration="$3" duration_secs; duration_secs=$(_sql_int "${4:-0}")
   local notes="${5:-success}"
-  local _cur_status; _cur_status=$(_get_task_status "$task_id")
-  _validate_status_transition "$task_id" "$_cur_status" "completed" "db_complete_task"
+  local _cur_status; _cur_status=$(_get_task_status "$task_id" 2>/dev/null || true)
+  [ "$_cur_status" != "ERROR" ] && _validate_status_transition "$task_id" "$_cur_status" "completed" "db_complete_task"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local duration_esc; duration_esc=$(_sql_escape "$duration")
   local notes_esc; notes_esc=$(_sql_escape "$notes")
@@ -533,8 +542,8 @@ db_complete_task() { _db_retry _db_complete_task_inner "$@"; }
 _db_fail_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
   local branch="$2" error="$3"
-  local _cur_status; _cur_status=$(_get_task_status "$task_id")
-  _validate_status_transition "$task_id" "$_cur_status" "failed" "db_fail_task"
+  local _cur_status; _cur_status=$(_get_task_status "$task_id" 2>/dev/null || true)
+  [ "$_cur_status" != "ERROR" ] && _validate_status_transition "$task_id" "$_cur_status" "failed" "db_fail_task"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
   _sql_exec "
@@ -909,7 +918,7 @@ db_get_health_score() {
 
 db_export_context() {
   # Single sqlite3 call with section headers embedded as literal SELECT values
-  printf '.timeout 5000\n%s\n' "
+  printf '.timeout 15000\n%s\n' "
     SELECT '## Backlog (pending tasks)';
     SELECT '- [ ] [' || tag || '] ' || title FROM tasks WHERE status='pending' ORDER BY priority ASC;
     SELECT '';
@@ -1055,6 +1064,11 @@ db_export_failed() {
 
 # Regenerate all state markdown files from SQLite.
 # Call inside merge lock before git commit of state files.
+#
+# NOTE: State file export is sequential (backlog.md, completed.md, etc.).
+# Between exports, a concurrent git pull could read a mix of old and new files.
+# This is acceptable because SQLite is the authoritative source of truth —
+# state files are human-readable views only.
 db_export_state_files() {
   [ ! -f "$DB_PATH" ] && return 0
   local _errs=0
@@ -1105,6 +1119,12 @@ db_prune_old_events() {
   local deleted
   deleted=$(_db "DELETE FROM events WHERE epoch < $cutoff_epoch; SELECT changes();")
   [ "${deleted:-0}" -gt 0 ] && log "Pruned $deleted events older than ${days} days" 2>/dev/null || true
+}
+
+# Lightweight WAL checkpoint — call every watchdog cycle to prevent WAL growth.
+# Uses PASSIVE mode (non-blocking) unlike the TRUNCATE in db_maintenance().
+db_wal_checkpoint() {
+  _db "PRAGMA wal_checkpoint(PASSIVE);" 2>/dev/null || true
 }
 
 # Run integrity check, optimize, optional VACUUM, WAL checkpoint, and event pruning.

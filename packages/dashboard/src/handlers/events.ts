@@ -38,7 +38,7 @@ export function createEventsHandler(config: SkynetConfig) {
 
         const epoch = Number(parts[0]);
         if (!Number.isFinite(epoch)) continue;
-        if (epoch < 0 || epoch > 8.64e12) continue;
+        if (epoch < 0 || epoch > 4.1e9) continue;  // reject epochs beyond ~year 2100
 
         const detail = parts.slice(2).join("|");
         const workerMatch = detail.match(/^(?:Worker|Fixer)\s+(\d+):/);

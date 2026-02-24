@@ -73,6 +73,8 @@ export async function restoreDbCommand(file: string, options: RestoreOptions) {
     const timestamp = new Date().toISOString().replace(/[T:]/g, "-").slice(0, 19);
     const preRestoreBackup = join(backupDir, `skynet.db.pre-restore-${timestamp}`);
     try {
+      // preRestoreBackup is generated from ISO timestamp + devDir — no user input.
+      // The single-quote escaping is defense-in-depth for the .backup command.
       const backupResult = spawnSync("sqlite3", [dbPath, `.backup '${preRestoreBackup.replace(/'/g, "''")}'`], {
         stdio: ["ignore", "pipe", "pipe"],
         timeout: 30000,

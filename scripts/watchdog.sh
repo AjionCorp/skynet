@@ -99,6 +99,10 @@ rotate_log_if_needed "$LOG"
 # Trim logs to last 24h on each watchdog run
 bash "$SCRIPTS_DIR/clean-logs.sh" 2>/dev/null || true
 
+# Lightweight WAL checkpoint every cycle to prevent unbounded WAL growth.
+# The full TRUNCATE checkpoint runs in db_maintenance() every 10 cycles.
+db_wal_checkpoint
+
 is_running() {
   local lockfile="$1"
   local pid=""
@@ -327,12 +331,13 @@ _cr_phase3_orphan_worktrees() {
     local resolved_wt_dir
     resolved_wt_dir=$(cd "$wt_dir" 2>/dev/null && pwd -P || echo "$wt_dir")
     local orphan_pids
-    # Prefer pgrep -f for clean PID output; fall back to ps with explicit
-    # column format (-o pid= -o command=) to avoid column misalignment.
+    # Narrow match: only kill processes whose command line contains the exact worktree
+    # path as a directory argument to bash (not as a substring of log messages or other
+    # paths). Exclude our own PID and pgrep/grep processes.
     if command -v pgrep >/dev/null 2>&1; then
-      orphan_pids=$(pgrep -f "$resolved_wt_dir" 2>/dev/null | grep -v "^$$\$" || true)
+      orphan_pids=$(pgrep -f "bash.*${resolved_wt_dir}" 2>/dev/null | grep -v "^$$\$" || true)
     else
-      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -F "$resolved_wt_dir" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
+      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${resolved_wt_dir}" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
@@ -449,27 +454,27 @@ fi
 # TOCTOU guard: re-read the PID right before removal. If it changed between the
 # first and second read, a new worker legitimately acquired the lock — skip.
 if [ -d "$MERGE_LOCK" ]; then
-  _ml_pid=""
-  [ -f "$MERGE_LOCK/pid" ] && _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
-  if [ -z "$_ml_pid" ]; then
+  _ml_pid_first=""
+  [ -f "$MERGE_LOCK/pid" ] && _ml_pid_first=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+  if [ -z "$_ml_pid_first" ]; then
     # No PID file — process crashed between mkdir and PID write; reclaim.
     # Re-check: if a PID file appeared in the meantime, another worker took over.
-    _ml_pid_recheck=""
-    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_recheck=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
-    if [ -z "$_ml_pid_recheck" ]; then
+    _ml_pid_second=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_second=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+    if [ -z "$_ml_pid_second" ]; then
       log "Merge lock has no PID file — removing stale lock proactively"
       rm -rf "$MERGE_LOCK" 2>/dev/null || true
     fi
-  elif ! kill -0 "$_ml_pid" 2>/dev/null; then
+  elif ! kill -0 "$_ml_pid_first" 2>/dev/null; then
     # PID appears dead — re-read to guard against TOCTOU race where a new
     # worker acquired the lock between our first read and this removal.
-    _ml_pid_recheck=""
-    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_recheck=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
-    if [ "$_ml_pid_recheck" = "$_ml_pid" ] && ! kill -0 "$_ml_pid" 2>/dev/null; then
-      log "Merge lock held by dead PID $_ml_pid — removing proactively"
+    _ml_pid_second=""
+    [ -f "$MERGE_LOCK/pid" ] && _ml_pid_second=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+    if [ "$_ml_pid_second" = "$_ml_pid_first" ] && ! kill -0 "$_ml_pid_first" 2>/dev/null; then
+      log "Merge lock held by dead PID $_ml_pid_first — removing proactively"
       rm -rf "$MERGE_LOCK" 2>/dev/null || true
     else
-      log "Merge lock PID changed ($_ml_pid -> $_ml_pid_recheck) — skipping removal"
+      log "Merge lock PID changed ($_ml_pid_first -> $_ml_pid_second) — skipping removal"
     fi
   fi
 fi
@@ -997,7 +1002,10 @@ _check_disk_space() {
   fi
   return 0
 }
-_check_disk_space "$DEV_DIR"
+_disk_ok=true
+if ! _check_disk_space "$DEV_DIR"; then
+  _disk_ok=false
+fi
 
 # --- Health score alert ---
 # Mirrors the pipeline-status handler logic:
@@ -1103,6 +1111,10 @@ if [ "${SKYNET_POST_MERGE_SMOKE:-false}" = "true" ]; then
 fi
 
 # ── Canary deployment gating ───────────────────────────────────────
+# NOTE: Entering canary mode does NOT kill already-running workers.
+# They continue with the previous code until they complete or are detected
+# as stale by the heartbeat monitor. This is intentional — killing a
+# mid-merge worker could leave main in an inconsistent state.
 _canary_active=false
 _canary_file="${DEV_DIR}/canary-pending"
 _canary_commit=""
@@ -1180,7 +1192,35 @@ if $_canary_active && [ "$dev_workers_running" -gt 1 ]; then
   tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: $dev_workers_running workers active during canary — excess workers may interfere with validation"
 fi
 
+# --- Circuit breaker: auto-pause after 3 consecutive merge failures ---
+_check_circuit_breaker() {
+  local recent_merges
+  recent_merges=$(_db "SELECT event FROM events WHERE event IN ('task_completed','merge_conflict','task_reverted','revert_failed') ORDER BY epoch DESC LIMIT 3;" 2>/dev/null || echo "")
+  if [ -z "$recent_merges" ]; then return 0; fi
+
+  # Check if all recent merge-related events are failures
+  local fail_count=0
+  local total=0
+  while IFS= read -r evt; do
+    [ -z "$evt" ] && continue
+    total=$((total + 1))
+    case "$evt" in
+      merge_conflict|task_reverted|revert_failed) fail_count=$((fail_count + 1)) ;;
+    esac
+  done <<< "$recent_merges"
+
+  if [ "$total" -ge 3 ] && [ "$fail_count" -eq "$total" ]; then
+    log "CIRCUIT BREAKER: $fail_count consecutive merge failures — auto-pausing pipeline"
+    touch "$DEV_DIR/pipeline-paused"
+    db_add_event "circuit_breaker" "Auto-paused after $fail_count consecutive merge failures"
+    return 1
+  fi
+  return 0
+}
+
 # --- Pipeline pause check (skip dispatch but still run health checks above) ---
+# Check circuit breaker first — it may create the pipeline-paused file
+$_db_healthy && _check_circuit_breaker || true
 pipeline_paused=false
 if [ -f "$DEV_DIR/pipeline-paused" ]; then
   pipeline_paused=true
@@ -1188,7 +1228,9 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
 fi
 
 # --- Only kick Claude-dependent workers if auth is OK and DB is healthy ---
-if ! $_db_healthy; then
+if ! $_disk_ok; then
+  log "Skipping dispatch — disk space critical (>90%)"
+elif ! $_db_healthy; then
   log "Skipping dispatch — DB unhealthy"
 elif $agent_auth_ok && ! $pipeline_paused; then
   # Rule 1: Kick dev-workers proportional to backlog size
@@ -1208,6 +1250,9 @@ elif $agent_auth_ok && ! $pipeline_paused; then
 
   # Rule 2: Kick task-fixers proportional to failed task count
   # Check fixer cooldown first — skip all fixers if cooling down
+  # NOTE: Cooldown is global (all fixers), not per-fixer or per-task.
+  # This prevents rapid retry storms but may delay fixes for unrelated tasks.
+  # Future improvement: per-task or per-error-type cooldown.
   _fixer_cooldown_active=false
   if [ -f "$DEV_DIR/fixer-cooldown" ]; then
     _cooldown_ts=$(cat "$DEV_DIR/fixer-cooldown" 2>/dev/null || echo 0)
@@ -1286,7 +1331,7 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   _success_24h=0
   while IFS='|' read -r _epoch _result _title; do
     [ -z "$_epoch" ] && continue
-    [[ "$_epoch" =~ ^[0-9]+$ ]] || continue
+    case "$_epoch" in *[!0-9]*|"") continue ;; esac
     if [ "$_epoch" -ge "$_24h_ago" ] 2>/dev/null; then
       _total_24h=$((_total_24h + 1))
       [ "$_result" = "success" ] && _success_24h=$((_success_24h + 1))

@@ -17,6 +17,8 @@ export function createMissionRawHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      // readDevFile() returns "" on missing files — this catch handles
+      // unexpected errors (permission denied, encoding issues, etc.)
       return Response.json(
         {
           data: null,

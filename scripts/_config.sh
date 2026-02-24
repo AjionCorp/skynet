@@ -31,7 +31,8 @@ source "$SKYNET_CONFIG_FILE"
 
 # Validate required variables
 for _var in SKYNET_PROJECT_NAME SKYNET_PROJECT_DIR SKYNET_DEV_DIR; do
-  if [ -z "${!_var:-}" ]; then
+  eval "_val=\${${_var}:-}"
+  if [ -z "$_val" ]; then
     echo "FATAL: $_var is not set in skynet.config.sh" >&2
     exit 1
   fi
@@ -67,6 +68,8 @@ export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 # --dangerously-skip-permissions is required for autonomous workers to modify files
 # without interactive approval prompts. Only safe in isolated worktrees where no
 # user-owned files outside the project are at risk.
+# NOTE: Claude Code reads auth tokens from its own config (~/.claude/),
+# not from command-line arguments. Tokens are NOT visible in /proc/PID/cmdline.
 export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-permissions}"
 export SKYNET_CODEX_MODEL="${SKYNET_CODEX_MODEL:-}"
 export SKYNET_CODEX_SUBCOMMAND="${SKYNET_CODEX_SUBCOMMAND:-exec}"
@@ -84,6 +87,9 @@ export SKYNET_DEV_PORT="${SKYNET_DEV_PORT:-${SKYNET_DEV_SERVER_PORT:-3000}}"
 export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
 export SKYNET_LINT_CMD="${SKYNET_LINT_CMD:-}"  # empty string means "skip lint gate"
 export SKYNET_WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${SKYNET_DEV_DIR}/worktrees}"
+
+# Memory limit per worker process in KB (default 4GB). Applied via ulimit -v.
+export SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"
 
 # Log format: "text" (default, human-readable) or "json" (machine-parseable JSON lines)
 export SKYNET_LOG_FORMAT="${SKYNET_LOG_FORMAT:-text}"
@@ -113,8 +119,8 @@ export SKYNET_SMOKE_TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
 export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 
 # Timeout (seconds) for each git push attempt (prevents indefinite hang on network stalls).
-# Increase if you see "git push failed after 3 attempts" on slow networks.
-export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-60}"
+# 120s accommodates large diffs and slow networks; override via env var if needed.
+export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-120}"
 
 # Canary deployment: when enabled, script changes (scripts/*.sh) trigger single-worker
 # validation before full dispatch. Prevents self-modifying bugs from crashing all workers.
@@ -148,7 +154,7 @@ _validate_config() {
   local errors=0
   # Validate gate commands exist
   for _gate_var in SKYNET_GATE_1 SKYNET_GATE_2 SKYNET_GATE_3; do
-    local _gate_val="${!_gate_var:-}"
+    eval "local _gate_val=\${${_gate_var}:-}"
     [ -z "$_gate_val" ] && continue
     local _gate_cmd="${_gate_val%% *}"  # first word
     if ! command -v "$_gate_cmd" >/dev/null 2>&1; then
@@ -157,7 +163,7 @@ _validate_config() {
   done
   # Validate numeric configs
   for _num_var in SKYNET_MAX_WORKERS SKYNET_MAX_FIXERS SKYNET_STALE_MINUTES SKYNET_AGENT_TIMEOUT_MINUTES; do
-    local _num_val="${!_num_var:-}"
+    eval "local _num_val=\${${_num_var}:-}"
     case "$_num_val" in
       ''|*[!0-9]*) echo "WARNING: $_num_var='$_num_val' is not a positive integer" >&2; errors=$((errors + 1)) ;;
     esac
@@ -268,9 +274,11 @@ rotate_log_if_needed() {
       # Re-check size after acquiring lock (another process may have rotated)
       current_size=$(file_size "$logfile")
       if [ "$current_size" -gt "$max_bytes" ]; then
-        rm -f "${logfile}.2"
+        rm -f "${logfile}.2" "${logfile}.2.gz"
         [ -f "${logfile}.1" ] && mv "${logfile}.1" "${logfile}.2"
         mv "$logfile" "${logfile}.1"
+        # Compress the older backup to save disk space
+        [ -f "${logfile}.2" ] && gzip -f "${logfile}.2" 2>/dev/null &
       fi
       rmdir "$_rotate_lock" 2>/dev/null || true
     fi

@@ -56,6 +56,31 @@
 # Internal state shared with caller after return
 _MERGE_STATE_COMMITTED=false
 
+# _do_revert — Revert HEAD commit(s), optionally commit and push.
+# Args: $1 = state_committed ("true" if state commit exists), $2 = reason, $3 = log_file
+# When state_committed is "true", reverts HEAD (state) and HEAD~1 (merge).
+# When "false", reverts only HEAD (the merge commit).
+# Uses --no-commit so we can combine multiple reverts into one commit.
+# Returns 0 on success, 1 on git revert failure.
+_do_revert() {
+  local state_committed="$1" reason="$2" log_file="$3"
+  log "Reverting: $reason"
+  if [ "$state_committed" = "true" ]; then
+    # HEAD is state commit, HEAD~1 is merge — revert both
+    if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
+      log "CRITICAL: git revert failed — main may be broken."
+      return 1
+    fi
+  else
+    if ! git revert --no-commit HEAD 2>>"$log_file"; then
+      log "CRITICAL: git revert failed — main may be broken."
+      return 1
+    fi
+  fi
+  git commit -m "revert: auto-revert ($reason)" --no-verify 2>/dev/null || true
+  return 0
+}
+
 do_merge_to_main() {
   local branch_name="$1"
   local worktree_dir="$2"
@@ -158,8 +183,7 @@ do_merge_to_main() {
     fi
     if ! eval "$SKYNET_TYPECHECK_CMD" >> "$log_file" 2>&1; then
       log "POST-MERGE TYPECHECK FAILED — reverting merge (holding merge lock)"
-      if ! git revert HEAD --no-edit 2>>"$log_file"; then
-        log "CRITICAL: git revert failed — main may be broken."
+      if ! _do_revert "false" "typecheck failed" "$log_file"; then
         release_merge_lock
         return 3
       fi
@@ -187,21 +211,10 @@ do_merge_to_main() {
     log "Running post-merge smoke test..."
     if ! bash "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" >> "$log_file" 2>&1; then
       log "SMOKE TEST FAILED — reverting merge"
-      if $_MERGE_STATE_COMMITTED; then
-        # HEAD is state commit, HEAD~1 is merge — revert both
-        if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
-          log "CRITICAL: git revert failed — main may be broken."
-          release_merge_lock
-          return 3
-        fi
-      else
-        if ! git revert --no-commit HEAD 2>>"$log_file"; then
-          log "CRITICAL: git revert failed — main may be broken."
-          release_merge_lock
-          return 3
-        fi
+      if ! _do_revert "$_MERGE_STATE_COMMITTED" "smoke test failed" "$log_file"; then
+        release_merge_lock
+        return 3
       fi
-      git commit -m "revert: auto-revert (smoke test failed)" --no-verify 2>/dev/null || true
       git_push_with_retry || log "WARNING: push of smoke test revert failed"
       release_merge_lock
       return 7
@@ -213,25 +226,19 @@ do_merge_to_main() {
   extend_merge_lock 2>/dev/null || true
   if ! git_push_with_retry; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"
-    if $_MERGE_STATE_COMMITTED; then
-      if ! git revert --no-commit HEAD HEAD~1 2>>"$log_file"; then
-        log "CRITICAL: git revert failed — main may be broken."
-        release_merge_lock
-        return 3
-      fi
-    else
-      if ! git revert --no-commit HEAD 2>>"$log_file"; then
-        log "CRITICAL: git revert failed — main may be broken."
-        release_merge_lock
-        return 3
-      fi
+    if ! _do_revert "$_MERGE_STATE_COMMITTED" "push failed" "$log_file"; then
+      release_merge_lock
+      return 3
     fi
-    git commit -m "revert: auto-revert (push failed)" --no-verify 2>/dev/null || true
     # Try to push the revert
     if ! git_push_with_retry; then
       log "CRITICAL: revert push also failed — local main diverged from remote."
       emit_event "push_diverged" "Force-syncing to origin/main after push failure" || true
       log "CRITICAL: Push failed after revert — force-syncing local main to origin"
+      # RECOVERY: Hard reset to remote state after push failure.
+      # This discards the local revert commit. The original (possibly broken)
+      # merge is already on remote, so we sync to that state. The watchdog's
+      # next cycle will detect and handle any main-branch issues.
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
       release_merge_lock
       return 3

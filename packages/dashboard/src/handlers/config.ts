@@ -159,7 +159,7 @@ function validateUpdates(updates: Record<string, string>): string | null {
     // Bare $VAR references are also blocked — they would be expanded by bash when
     // sourcing the config, allowing exfiltration of environment variables or
     // unintended value injection.
-    if (/[`"'|&><()]|\$[({a-zA-Z_]|;|\n|\r/.test(value)) {
+    if (/[`"'|&><()]|\$[({a-zA-Z_]|;|\n|\r|\t/.test(value)) {
       return `Unsafe characters in value for "${key}"`;
     }
     // Key must be a valid bash variable name

@@ -80,7 +80,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
             sendEvent({
               data: null,
               error:
-                err instanceof Error
+                process.env.NODE_ENV === "development" && err instanceof Error
                   ? err.message
                   : "Failed to read status",
             });

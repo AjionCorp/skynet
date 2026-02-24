@@ -337,7 +337,7 @@ assert_eq "$_merge_rc" "2" "rc2: merge returned 2 (typecheck failed)"
 # Verify auto-revert happened: the revert commit should be on main
 cd "$PROJECT_DIR"
 LAST_COMMIT_MSG=$(git log -1 --format=%s 2>/dev/null)
-assert_contains "$LAST_COMMIT_MSG" "Revert" "rc2: revert commit exists on main"
+assert_contains "$LAST_COMMIT_MSG" "revert" "rc2: revert commit exists on main"
 
 # Verify the file is NOT on main (reverted)
 if [ -f "$PROJECT_DIR/typecheck-fail-file.txt" ]; then

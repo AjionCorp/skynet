@@ -218,7 +218,8 @@ describe("createPipelineStreamHandler", () => {
     const text = new TextDecoder().decode(value);
     const parsed = JSON.parse(text.replace("data: ", "").trim());
     expect(parsed.data).toBeNull();
-    expect(parsed.error).toBe("Status read failed");
+    // Error message is sanitized in non-development mode
+    expect(parsed.error).toBe("Failed to read status");
     reader.cancel();
   });
 

@@ -14,6 +14,11 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 # SQLite is the sole source of truth — fail fast if missing
 _require_db
 
+# Resource guard: prevent runaway memory usage (default 4GB per worker).
+# Uses virtual memory limit as a safety net — the OS kills the process on exceed.
+_SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"  # 4 GB
+ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || true
+
 # Instance-specific log: fixer 1 → task-fixer.log, fixer 2+ → task-fixer-N.log
 if [ "$FIXER_ID" = "1" ]; then
   LOG="$SCRIPTS_DIR/task-fixer.log"
@@ -256,7 +261,7 @@ _make_fix_branch() {
   local _branch_base
   _branch_base="$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
   if [ -z "$_branch_base" ] || ! echo "$_branch_base" | grep -qE '^[a-z0-9]'; then
-    log "ERROR: Could not sanitize task title into valid branch name"
+    log "WARNING: Could not sanitize task title into valid branch name, using fallback: task-$_db_task_id"
     # use a fallback based on task ID
     _branch_base="task-$_db_task_id"
   fi
