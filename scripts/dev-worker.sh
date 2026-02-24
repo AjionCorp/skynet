@@ -46,7 +46,7 @@ WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/w${WORKER_ID}"
 
 cd "$PROJECT_DIR"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [W${WORKER_ID}] $*" >> "$LOG"; }
+log() { _log "info" "W${WORKER_ID}" "$*" "$LOG"; }
 
 # Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
 format_duration() {
@@ -77,7 +77,7 @@ _start_heartbeat() {
       # Exit if parent worker process is no longer alive
       kill -0 $$ 2>/dev/null || exit 0
       date +%s > "$HEARTBEAT_FILE"
-      db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
+      db_update_heartbeat_and_progress "$WORKER_ID" 2>/dev/null || true
       sleep 60
     done
   ) &

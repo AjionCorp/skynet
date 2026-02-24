@@ -81,6 +81,19 @@ export SKYNET_TYPECHECK_CMD="${SKYNET_TYPECHECK_CMD:-pnpm typecheck}"
 export SKYNET_LINT_CMD="${SKYNET_LINT_CMD:-}"  # empty string means "skip lint gate"
 export SKYNET_WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${SKYNET_DEV_DIR}/worktrees}"
 
+# Log format: "text" (default, human-readable) or "json" (machine-parseable JSON lines)
+export SKYNET_LOG_FORMAT="${SKYNET_LOG_FORMAT:-text}"
+
+# SQL debug mode: log every query with timing. Default off for zero overhead.
+export SKYNET_DB_DEBUG="${SKYNET_DB_DEBUG:-false}"
+# Slow query warning threshold in milliseconds
+export SKYNET_DB_SLOW_QUERY_MS="${SKYNET_DB_SLOW_QUERY_MS:-100}"
+
+# Lock backend: "file" (default flock/mkdir) or "redis" (distributed, requires redis-cli)
+export SKYNET_LOCK_BACKEND="${SKYNET_LOCK_BACKEND:-file}"
+# Redis URL for distributed locking (only used when SKYNET_LOCK_BACKEND=redis)
+export SKYNET_REDIS_URL="${SKYNET_REDIS_URL:-}"
+
 # Quality gates defaults (just typecheck by default)
 export SKYNET_GATE_1="${SKYNET_GATE_1:-$SKYNET_TYPECHECK_CMD}"
 
@@ -141,6 +154,9 @@ source "$SKYNET_SCRIPTS_DIR/_agent.sh"
 # Source skill discovery and tag-filtered injection (see .dev/skills/)
 source "$SKYNET_SCRIPTS_DIR/_skills.sh"
 
+# Source pluggable lock backend (needed by _locks.sh)
+source "$SKYNET_SCRIPTS_DIR/_lock_backend.sh"
+
 # Source shared lock helpers (merge mutex, etc.)
 source "$SKYNET_SCRIPTS_DIR/_locks.sh"
 
@@ -154,10 +170,42 @@ if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
   _SKYNET_DB_INITIALIZED=1
 fi
 
-# TODO: Add SKYNET_LOG_FORMAT=json option for structured logging (machine-parseable output)
+# --- Structured logging ---
+# Shared log formatter. When SKYNET_LOG_FORMAT=json, outputs JSON lines.
+# Each script's log() delegates to _log() with its worker label and log file.
+_json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+_log() {
+  local level="${1:-info}" label="$2" msg="$3" logfile="${4:-}"
+  local line
+  if [ "${SKYNET_LOG_FORMAT:-text}" = "json" ]; then
+    local ts
+    ts=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+    line=$(printf '{"ts":"%s","level":"%s","worker":"%s","msg":"%s"}' \
+      "$ts" "$level" "$(_json_escape "$label")" "$(_json_escape "$msg")")
+  else
+    line="[$(date '+%Y-%m-%d %H:%M:%S')]"
+    [ -n "$label" ] && line="$line [$label]"
+    line="$line $msg"
+  fi
+  if [ -n "$logfile" ]; then
+    printf '%s\n' "$line" >> "$logfile"
+  else
+    printf '%s\n' "$line"
+  fi
+}
 
 # NOTE: Individual scripts define their own log() to append to their specific LOG file.
 # This is intentional — each worker needs its own log destination.
+# Each log() calls _log() with the script's label and destination.
 
 # --- Log rotation ---
 # Rotates a log file if it exceeds SKYNET_MAX_LOG_SIZE_KB.

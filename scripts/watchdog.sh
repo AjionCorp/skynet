@@ -18,7 +18,7 @@ WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
 
 cd "$PROJECT_DIR"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG"; }
+log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
 
 # --- Singleton enforcement via mkdir-based atomic lock ---
 if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then

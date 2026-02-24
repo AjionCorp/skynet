@@ -576,6 +576,33 @@ else
   fail "flock: contention — second process should have acquired lock"
 fi
 
+# ============================================================
+# TEST: Lock backend interface (file backend)
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== lock backend interface ==="
+
+# Source lock backend (needed for standalone test — _config.sh sources it in production)
+export SKYNET_SCRIPTS_DIR="$REPO_ROOT/scripts"
+source "$REPO_ROOT/scripts/_lock_backend.sh"
+
+lock_backend_acquire "test-backend" 5
+_lb_rc=$?
+assert_eq "$_lb_rc" "0" "lock_backend: acquire succeeds"
+
+lock_backend_check "test-backend"
+_lc_rc=$?
+assert_eq "$_lc_rc" "0" "lock_backend: check confirms lock held"
+
+lock_backend_release "test-backend"
+pass "lock_backend: release succeeds"
+
+# Verify lock released (check should fail now)
+lock_backend_check "test-backend"
+_lr_rc=$?
+[ "$_lr_rc" -ne 0 ] && pass "lock_backend: check fails after release" || fail "lock_backend: should not be held after release"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

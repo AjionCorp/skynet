@@ -723,6 +723,52 @@ assert_not_empty "$EMPTY_R2_TITLE" "empty_blocked_by: second task claimable"
 EMPTY_CLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='claimed';")
 assert_eq "$EMPTY_CLAIMED" "2" "empty_blocked_by: both tasks (empty string and NULL) claimed"
 
+# ============================================================
+# TEST: Compound indexes exist
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== compound indexes ==="
+
+IDX_SW=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_tasks_status_worker';")
+assert_eq "$IDX_SW" "1" "db_init: compound index status_worker exists"
+
+IDX_NR=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_tasks_nroot_status';")
+assert_eq "$IDX_NR" "1" "db_init: compound index nroot_status exists"
+
+IDX_WS=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='idx_workers_status';")
+assert_eq "$IDX_WS" "1" "db_init: workers status index exists"
+
+# ============================================================
+# TEST: Combined heartbeat + progress update
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== combined heartbeat+progress ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM workers;"
+db_set_worker_status 1 "dev" "idle" "" "" "" 2>/dev/null || true
+
+db_update_heartbeat_and_progress 1
+HB=$(sqlite3 "$DB_PATH" "SELECT heartbeat_epoch FROM workers WHERE id=1;")
+PR=$(sqlite3 "$DB_PATH" "SELECT progress_epoch FROM workers WHERE id=1;")
+
+[ -n "$HB" ] && [ "$HB" -gt 0 ] 2>/dev/null && pass "combined update: heartbeat_epoch set" || fail "combined update: heartbeat_epoch not set"
+[ -n "$PR" ] && [ "$PR" -gt 0 ] 2>/dev/null && pass "combined update: progress_epoch set" || fail "combined update: progress_epoch not set"
+assert_eq "$HB" "$PR" "combined update: heartbeat and progress epochs match"
+
+# ============================================================
+# TEST: db_explain_claim returns query plan
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== db_explain_claim ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+db_add_task "Explain test" "FEAT" "" "top" >/dev/null
+PLAN=$(db_explain_claim 1)
+[ -n "$PLAN" ] && pass "db_explain_claim: returns query plan" || fail "db_explain_claim: empty plan"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

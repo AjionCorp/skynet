@@ -164,6 +164,9 @@ source "$REPO_ROOT/scripts/_notify.sh"
 db_add_event() { :; }
 source "$REPO_ROOT/scripts/_events.sh"
 
+# Source pluggable lock backend (needed by _locks.sh)
+source "$REPO_ROOT/scripts/_lock_backend.sh"
+
 # Source lock helpers (needs SKYNET_LOCK_PREFIX)
 source "$REPO_ROOT/scripts/_locks.sh"
 

@@ -356,6 +356,50 @@ _post_canary=$(_db "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','fix
 
 rm -f "$DEV_DIR/canary-pending"
 
+# ============================================================
+# TEST: Structured logging (_json_escape + _log)
+# ============================================================
+
+echo ""
+log "=== structured logging ==="
+
+# Source _config.sh functions for _json_escape and _log
+eval "$(sed -n '/^_json_escape()/,/^}$/p' "$REPO_ROOT/scripts/_config.sh")"
+eval "$(sed -n '/^_log()/,/^}$/p' "$REPO_ROOT/scripts/_config.sh")"
+
+# Test _json_escape
+assert_eq "$(_json_escape 'hello world')" "hello world" "_json_escape: clean string unchanged"
+assert_eq "$(_json_escape 'he said "hi"')" 'he said \"hi\"' "_json_escape: escapes double quotes"
+assert_eq "$(_json_escape 'back\\slash')" 'back\\\\slash' "_json_escape: escapes backslashes"
+
+# Test _log in text mode
+SKYNET_LOG_FORMAT=text
+_TEXT_OUT=$(_log "info" "W1" "test message" "")
+assert_contains "$_TEXT_OUT" "[W1]" "_log text: includes worker label"
+assert_contains "$_TEXT_OUT" "test message" "_log text: includes message"
+
+# Test _log in JSON mode
+SKYNET_LOG_FORMAT=json
+_JSON_OUT=$(_log "info" "W1" "test message" "")
+assert_contains "$_JSON_OUT" '"level":"info"' "_log json: includes level"
+assert_contains "$_JSON_OUT" '"worker":"W1"' "_log json: includes worker"
+assert_contains "$_JSON_OUT" '"msg":"test message"' "_log json: includes message"
+assert_contains "$_JSON_OUT" '"ts":' "_log json: includes timestamp"
+
+# Test JSON mode with special characters
+_JSON_SPECIAL=$(_log "info" "W1" 'msg with "quotes" and back\slash' "")
+assert_contains "$_JSON_SPECIAL" '\"quotes\"' "_log json: escapes quotes in message"
+
+# Test _log writes to file
+_LOG_TMPFILE="$TMPDIR_ROOT/log-test.txt"
+SKYNET_LOG_FORMAT=json
+_log "warn" "TEST" "file write test" "$_LOG_TMPFILE"
+assert_grep_file '"level":"warn"' "$_LOG_TMPFILE" "_log json: writes to file"
+assert_grep_file '"worker":"TEST"' "$_LOG_TMPFILE" "_log json: file has worker label"
+
+# Restore default
+SKYNET_LOG_FORMAT=text
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

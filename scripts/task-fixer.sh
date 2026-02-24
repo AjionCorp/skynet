@@ -28,7 +28,8 @@ WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/fixer-${FIXER_ID}"
 
 cd "$PROJECT_DIR"
 
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [F${FIXER_ID}] $*" | tee -a "$LOG"; }
+# task-fixer logs to file AND stdout (tee behavior)
+log() { _log "info" "F${FIXER_ID}" "$*" "$LOG"; _log "info" "F${FIXER_ID}" "$*"; }
 
 # Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
 format_duration() {

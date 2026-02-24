@@ -34,10 +34,63 @@ _sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
 # Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
 _sql_int() { local v="${1%%[^0-9]*}"; echo "${v:-0}"; }
 
+# Portable millisecond timer (macOS date lacks %N, use perl Time::HiRes)
+_db_now_ms() {
+  if command -v perl >/dev/null 2>&1; then
+    perl -MTime::HiRes=time -e 'printf "%d\n", time()*1000' 2>/dev/null
+  else
+    echo 0
+  fi
+}
+
 # --- sqlite3 with automatic busy_timeout (no output pollution) ---
 # .timeout is a dot-command that sets busy_timeout without producing output.
-_db() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH"; }
-_db_sep() { printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"; }
+_db() {
+  if [ "${SKYNET_DB_DEBUG:-false}" = "true" ]; then
+    local _start _end _elapsed _preview
+    _start=$(_db_now_ms)
+    local _out
+    _out=$(printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH")
+    local _rc=$?
+    _end=$(_db_now_ms)
+    if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
+      _elapsed=$(( _end - _start ))
+    else
+      _elapsed="?"
+    fi
+    _preview=$(printf '%s' "$1" | head -3 | tr '\n' ' ' | cut -c1-200)
+    log "SQL DEBUG (${_elapsed}ms rc=$_rc): $_preview" 2>/dev/null || true
+    if [ "$_elapsed" != "?" ] && [ "$_elapsed" -gt "${SKYNET_DB_SLOW_QUERY_MS:-100}" ] 2>/dev/null; then
+      log "SQL SLOW (${_elapsed}ms > ${SKYNET_DB_SLOW_QUERY_MS}ms): $_preview" 2>/dev/null || true
+    fi
+    [ -n "$_out" ] && printf '%s\n' "$_out"
+    return $_rc
+  fi
+  printf '.timeout 5000\n%s\n' "$1" | sqlite3 "$DB_PATH"
+}
+_db_sep() {
+  if [ "${SKYNET_DB_DEBUG:-false}" = "true" ]; then
+    local _start _end _elapsed _preview
+    _start=$(_db_now_ms)
+    local _out
+    _out=$(printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH")
+    local _rc=$?
+    _end=$(_db_now_ms)
+    if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
+      _elapsed=$(( _end - _start ))
+    else
+      _elapsed="?"
+    fi
+    _preview=$(printf '%s' "$1" | head -3 | tr '\n' ' ' | cut -c1-200)
+    log "SQL DEBUG (${_elapsed}ms rc=$_rc): $_preview" 2>/dev/null || true
+    if [ "$_elapsed" != "?" ] && [ "$_elapsed" -gt "${SKYNET_DB_SLOW_QUERY_MS:-100}" ] 2>/dev/null; then
+      log "SQL SLOW (${_elapsed}ms > ${SKYNET_DB_SLOW_QUERY_MS}ms): $_preview" 2>/dev/null || true
+    fi
+    [ -n "$_out" ] && printf '%s\n' "$_out"
+    return $_rc
+  fi
+  printf '.timeout 5000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"
+}
 
 # --- Error-checked sqlite3 wrapper for mutations ---
 # Usage: _sql_exec "SQL statement"
@@ -202,6 +255,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_status_priority ON tasks(status, priority);
 CREATE INDEX IF NOT EXISTS idx_tasks_normalized_root ON tasks(normalized_root);
 CREATE INDEX IF NOT EXISTS idx_tasks_branch ON tasks(branch);
+CREATE INDEX IF NOT EXISTS idx_tasks_status_worker ON tasks(status, worker_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_nroot_status ON tasks(normalized_root, status) WHERE normalized_root != '';
 
 CREATE TABLE IF NOT EXISTS blockers (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -227,6 +282,8 @@ CREATE TABLE IF NOT EXISTS workers (
   last_info       TEXT DEFAULT '',
   updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
 
 CREATE TABLE IF NOT EXISTS events (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,10 +372,17 @@ db_count_by_status() {
 db_claim_next_task() {
   local worker_id; worker_id=$(_sql_int "$1")
 
-  # Single atomic SQL: resolve blockers via recursive CTE, claim first unblocked pending task.
-  # BEGIN IMMEDIATE acquires RESERVED lock at start — serializes concurrent writers.
-  # The recursive CTE splits comma-separated blocked_by into individual dependencies
-  # and checks each against completed/done/fixed/superseded tasks.
+  # ── Claim Algorithm ──────────────────────────────────────────────
+  # Single atomic SQL that finds and claims the next eligible task:
+  #   1. BEGIN IMMEDIATE — acquires RESERVED lock (serializes writers)
+  #   2. dep_split CTE — recursively splits comma-separated blocked_by
+  #      into individual dependency titles ("A, B" → ["A", "B"])
+  #   3. unresolved CTE — finds tasks with dependencies NOT yet in
+  #      terminal state (completed/done/fixed/superseded)
+  #   4. target CTE — selects highest-priority pending task that is
+  #      either unblocked or has all dependencies resolved
+  #   5. UPDATE + SELECT changes() — atomically claims the target
+  # ─────────────────────────────────────────────────────────────────
   local changed
   changed=$(_db "
     BEGIN IMMEDIATE;
@@ -360,6 +424,43 @@ db_claim_next_task() {
     # Fetch the claimed task details
     _db_sep "SELECT id, title, tag, description, branch FROM tasks WHERE worker_id = $worker_id AND status = 'claimed' ORDER BY claimed_at DESC LIMIT 1;"
   fi
+}
+
+# Diagnostic: show query plan for the claim CTE.
+# Usage: db_explain_claim 1
+db_explain_claim() {
+  local worker_id; worker_id=$(_sql_int "$1")
+  _db "
+    EXPLAIN QUERY PLAN
+    WITH RECURSIVE dep_split(task_id, dep, rest) AS (
+      SELECT id,
+        TRIM(SUBSTR(blocked_by, 1, INSTR(blocked_by || ',', ',') - 1)),
+        SUBSTR(blocked_by, INSTR(blocked_by || ',', ',') + 1)
+      FROM tasks WHERE status = 'pending' AND blocked_by != ''
+      UNION ALL
+      SELECT task_id,
+        TRIM(SUBSTR(rest, 1, INSTR(rest || ',', ',') - 1)),
+        SUBSTR(rest, INSTR(rest || ',', ',') + 1)
+      FROM dep_split WHERE rest != ''
+    ),
+    unresolved AS (
+      SELECT DISTINCT task_id FROM dep_split
+      WHERE dep IS NOT NULL AND dep != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.title = dep_split.dep
+            AND t.status IN ('completed', 'done', 'fixed', 'superseded')
+        )
+    ),
+    target AS (
+      SELECT id FROM tasks
+      WHERE status = 'pending'
+        AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
+      ORDER BY priority ASC
+      LIMIT 1
+    )
+    SELECT * FROM target;
+  "
 }
 
 db_unclaim_task() {
@@ -614,6 +715,20 @@ db_update_progress() {
     INSERT INTO workers (id, progress_epoch, updated_at)
     VALUES ($wid, $epoch, datetime('now'))
     ON CONFLICT(id) DO UPDATE SET progress_epoch=$epoch, updated_at=datetime('now');
+  "
+}
+
+# Combined heartbeat + progress update in single write transaction.
+# Reduces write contention by coalescing two separate writes into one.
+# Called by heartbeat subshell to halve the DB write frequency.
+db_update_heartbeat_and_progress() {
+  local wid; wid=$(_sql_int "$1")
+  local epoch; epoch=$(date +%s)
+  _sql_exec "
+    INSERT INTO workers (id, heartbeat_epoch, progress_epoch, updated_at)
+    VALUES ($wid, $epoch, $epoch, datetime('now'))
+    ON CONFLICT(id) DO UPDATE SET
+      heartbeat_epoch=$epoch, progress_epoch=$epoch, updated_at=datetime('now');
   "
 }
 
