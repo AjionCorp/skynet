@@ -136,10 +136,19 @@ export class SkynetDB {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     // OPS-P2-8: Verify SQLite version supports CTEs (requires >= 3.8.3)
-    const version = this.db.pragma("sqlite_version", { simple: true }) as string;
-    if (version < "3.8.3") {
-      this.db.close();
-      throw new Error(`SQLite ${version} is too old — requires >= 3.8.3 for CTE support`);
+    // Parse into numeric components — string comparison is lexicographic and
+    // would incorrectly rank "3.10.0" < "3.8.3".
+    const version = this.db.pragma("sqlite_version", { simple: true }) as string | undefined;
+    if (version) {
+      const [major, minor, patch] = version.split(".").map(Number);
+      if (
+        major < 3 ||
+        (major === 3 && minor < 8) ||
+        (major === 3 && minor === 8 && patch < 3)
+      ) {
+        this.db.close();
+        throw new Error(`SQLite ${version} is too old — requires >= 3.8.3 for CTE support`);
+      }
     }
     // Lightweight call that only runs ANALYZE when statistics are stale.
     // Safe to call on every connection — no-op when stats are fresh.

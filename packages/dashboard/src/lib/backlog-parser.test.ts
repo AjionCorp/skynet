@@ -75,6 +75,13 @@ describe("parseBlockedBy", () => {
   it("filters empty entries from trailing comma", () => {
     expect(parseBlockedBy("Task | blockedBy: dep1,")).toEqual(["dep1"]);
   });
+
+  // TEST-P3-7: Duplicate blockedBy entries should be preserved (no dedup)
+  it("preserves duplicate blockedBy entries", () => {
+    const result = parseBlockedBy("Task | blockedBy: dep1, dep1, dep2");
+    // parseBlockedBy does simple split/trim/filter — no deduplication
+    expect(result).toEqual(["dep1", "dep1", "dep2"]);
+  });
 });
 
 describe("parseBacklog", () => {

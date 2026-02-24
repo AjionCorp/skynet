@@ -60,15 +60,22 @@ export PATH="${SKYNET_EXTRA_PATH:-/opt/homebrew/bin:/usr/local/bin}:$PATH"
 export SKYNET_LOCK_PREFIX="${SKYNET_LOCK_PREFIX:-/tmp/skynet-${SKYNET_PROJECT_NAME}}"
 
 # OPS-P2-10: Warn if lock prefix directory is owned by a different user
+# Collect all mismatches and log once at the end (don't break after the first).
 _lock_dir_parent="$(dirname "$SKYNET_LOCK_PREFIX" 2>/dev/null || echo "/tmp")"
+_lock_mismatches=""
+_lock_mismatch_count=0
 for _lock_check in "$_lock_dir_parent"/skynet-*; do
   [ -e "$_lock_check" ] || continue
   _lock_owner="$(stat -f%u "$_lock_check" 2>/dev/null || stat -c%u "$_lock_check" 2>/dev/null || echo "")"
   if [ -n "$_lock_owner" ] && [ "$_lock_owner" != "$(id -u)" ]; then
-    echo "WARNING: Lock path '$_lock_check' is owned by UID $_lock_owner (current user: $(id -u)). Risk of lock contention on shared hosts." >&2
-    break  # One warning is enough
+    _lock_mismatches="${_lock_mismatches}  - ${_lock_check} (UID ${_lock_owner})"$'\n'
+    _lock_mismatch_count=$((_lock_mismatch_count + 1))
   fi
 done
+if [ "$_lock_mismatch_count" -gt 0 ]; then
+  echo "WARNING: ${_lock_mismatch_count} lock path(s) owned by different UID (current user: $(id -u)). Risk of lock contention on shared hosts:" >&2
+  printf '%s' "$_lock_mismatches" >&2
+fi
 
 # Auth token cache — stored in user-private directory, NOT world-readable /tmp
 _skynet_token_dir="${HOME}/.cache/skynet"
@@ -237,10 +244,10 @@ _validate_config_numerics() {
     eval "local val=\${${var_name}:-}"
     case "$val" in ''|*[!0-9]*) return ;; esac  # skip non-numeric
     if [ "$val" -lt "$min" ]; then
-      echo "WARNING: ${var_name}=${val} below minimum ${min} — clamping to ${min}" >&2
+      echo "ERROR: ${var_name}=${val} below minimum ${min} — clamping to ${min}. Update your config to silence this." >&2
       eval "export ${var_name}=${min}"
     elif [ "$val" -gt "$max" ]; then
-      echo "WARNING: ${var_name}=${val} above maximum ${max} — clamping to ${max}" >&2
+      echo "ERROR: ${var_name}=${val} above maximum ${max} — clamping to ${max}. Update your config to silence this." >&2
       eval "export ${var_name}=${max}"
     fi
   }
@@ -398,6 +405,7 @@ git_pull_with_retry() {
   local attempt=1
   local backoff=1
   while [ "$attempt" -le "$max_attempts" ]; do
+    [ "$attempt" -gt 1 ] && log "git pull attempt $attempt/$max_attempts..."
     if run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git pull origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi
@@ -418,6 +426,7 @@ git_push_with_retry() {
   local attempt=1
   local backoff=1
   while [ "$attempt" -le "$max_attempts" ]; do
+    [ "$attempt" -gt 1 ] && log "git push attempt $attempt/$max_attempts..."
     if run_with_timeout "$SKYNET_GIT_PUSH_TIMEOUT" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
       return 0
     fi

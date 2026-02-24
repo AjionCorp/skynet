@@ -257,6 +257,23 @@ describe("SkynetDB", () => {
       // Should not throw even with 0 maxWorkers
       expect(db.calculateHealthScore(0)).toBe(100);
     });
+
+    // TEST-P2-3: Extreme maxWorkers values — ensure no crash or NaN
+    it("handles extreme maxWorkers value without crash", () => {
+      const score = db.calculateHealthScore(Number.MAX_SAFE_INTEGER);
+      expect(typeof score).toBe("number");
+      expect(Number.isFinite(score)).toBe(true);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    });
+
+    it("handles negative maxWorkers by clamping to 1", () => {
+      const score = db.calculateHealthScore(-5);
+      expect(typeof score).toBe("number");
+      expect(Number.isFinite(score)).toBe(true);
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    });
   });
 
   describe("getCompletedCount", () => {

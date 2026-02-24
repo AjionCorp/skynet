@@ -168,23 +168,23 @@ do_merge_to_main() {
   else
     # Merge failed — attempt rebase recovery (max 1 attempt)
     log "Merge conflict — attempting rebase recovery..."
-    git merge --abort 2>/dev/null || true
+    run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git merge --abort 2>/dev/null || true
     git_pull_with_retry 2 || true
     # branch_name is sanitized by the caller (dev-worker.sh) to prevent leading hyphens
-    if git checkout "$branch_name" 2>>"$log_file"; then
-      if git rebase "$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
+    if run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git checkout "$branch_name" 2>>"$log_file"; then
+      if run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git rebase "$SKYNET_MAIN_BRANCH" 2>>"$log_file"; then
         log "Rebase succeeded — retrying merge."
-        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
+        run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
         if git merge "$branch_name" --no-edit 2>>"$log_file"; then
           _merge_succeeded=true
         else
           log "Merge still fails after successful rebase — conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-          git merge --abort 2>/dev/null || true
+          run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git merge --abort 2>/dev/null || true
         fi
       else
         log "Rebase has conflicts — aborting. Conflict files: $(git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
-        git rebase --abort 2>/dev/null || true
-        git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
+        run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git rebase --abort 2>/dev/null || true
+        run_with_timeout "${SKYNET_GIT_TIMEOUT:-120}" git checkout "$SKYNET_MAIN_BRANCH" 2>>"$log_file"
       fi
     else
       log "ERROR: Failed to checkout $branch_name for rebase recovery"
@@ -303,6 +303,14 @@ do_merge_to_main() {
     if [ "$_lock_elapsed" -gt 500 ]; then
       log "WARNING: Merge lock held for ${_lock_elapsed}s (TTL=${SKYNET_MERGE_LOCK_TTL}s) — push may race against TTL expiry"
     fi
+  fi
+
+  # OPS-P1-4: Abort if insufficient TTL remaining for a safe push (need 180s margin)
+  local _lock_age=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
+  if [ "$_lock_age" -gt $(( SKYNET_MERGE_LOCK_TTL - 180 )) ]; then
+    log "ERROR: Merge lock held for ${_lock_age}s — insufficient TTL remaining for push (need 180s). Aborting."
+    _release_merge_lock_with_duration
+    return 3
   fi
 
   if ! git_push_with_retry; then

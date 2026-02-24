@@ -224,6 +224,24 @@ describe("createPromptsHandler", () => {
     expect(typeof prompt.prompt).toBe("string");
   });
 
+  // TEST-P2-2: Odd-backslash edge case — backslash right before closing quote
+  it("handles odd backslash before closing quote (escaped closing quote)", async () => {
+    mockReadFileSync.mockImplementation((path) => {
+      if (String(path).includes("dev-worker.sh"))
+        // The backslash before the closing quote means the quote is escaped,
+        // so extractPrompt should NOT find a closing quote and should return null
+        return 'PROMPT="trailing backslash\\"' as never;
+      throw new Error("ENOENT");
+    });
+
+    const handler = createPromptsHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    // The \" at the end is an escaped quote, so the PROMPT block is unclosed
+    expect(data).toHaveLength(0);
+  });
+
   it("skips scripts with unclosed PROMPT quote", async () => {
     mockReadFileSync.mockImplementation((path) => {
       if (String(path).includes("dev-worker.sh"))

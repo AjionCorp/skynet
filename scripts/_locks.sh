@@ -77,7 +77,11 @@ acquire_worker_lock() {
   local label="$3"
 
   if mkdir "$lockfile" 2>/dev/null; then
-    if ! echo $$ > "$lockfile/pid" 2>/dev/null; then
+    # OPS-P0-3: Atomic PID write — write to temp file then rename so readers
+    # never see a partially-written or empty PID file.
+    local _tmp_pid="${lockfile}/pid.$$"
+    if ! echo "$$" > "$_tmp_pid" 2>/dev/null || ! mv "$_tmp_pid" "$lockfile/pid" 2>/dev/null; then
+      rm -f "$_tmp_pid" 2>/dev/null || true
       rmdir "$lockfile" 2>/dev/null || true
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] PID write failed (disk full?). Exiting." >> "${logfile:-/dev/stderr}"
       return 1
@@ -97,7 +101,10 @@ acquire_worker_lock() {
     mv "$lockfile" "$lockfile.stale.$$" 2>/dev/null || true
     rm -rf "$lockfile.stale.$$" 2>/dev/null || true
     if mkdir "$lockfile" 2>/dev/null; then
-      if ! echo $$ > "$lockfile/pid" 2>/dev/null; then
+      # OPS-P0-3: Atomic PID write on stale-lock reclaim path
+      local _tmp_pid="${lockfile}/pid.$$"
+      if ! echo "$$" > "$_tmp_pid" 2>/dev/null || ! mv "$_tmp_pid" "$lockfile/pid" 2>/dev/null; then
+        rm -f "$_tmp_pid" 2>/dev/null || true
         rmdir "$lockfile" 2>/dev/null || true
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label:-}] PID write failed (disk full?). Exiting." >> "${logfile:-/dev/stderr}"
         return 1

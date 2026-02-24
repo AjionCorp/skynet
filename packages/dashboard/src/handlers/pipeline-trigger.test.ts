@@ -151,6 +151,15 @@ describe("createPipelineTriggerHandler", () => {
     expect(body.error).toBe("spawn failed");
   });
 
+  // TEST-P2-1: args array with null/undefined items returns 400
+  it("returns 400 when args array contains null or non-string items", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const res = await handler(makePostRequest({ script: "watchdog", args: [null, undefined, 42] }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("Invalid argument");
+  });
+
   it("returns 400 when request body is not valid JSON", async () => {
     const handler = createPipelineTriggerHandler(makeConfig());
     const req = new Request("http://localhost/api/pipeline/trigger", {

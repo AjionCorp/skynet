@@ -55,6 +55,8 @@ _agent_exec() {
   # macOS: perl-based timeout with SIGKILL escalation (bash 3.2 compatible).
   # OPS-P1-6: After SIGTERM timeout, waits 30s then sends SIGKILL to ensure
   # child git/node processes are forcefully terminated.
+  # OPS-P3-4: Exit with 142 (SIGALRM=14 + 128) to avoid collision with natural
+  # exit code 124. Callers check both 124 (GNU timeout) and 142 (perl fallback).
   perl -e '
     use POSIX ":sys_wait_h";
     my $timeout = shift;
@@ -71,10 +73,14 @@ _agent_exec() {
       # Wait up to 30s for graceful shutdown, then SIGKILL
       for (1..30) { last if waitpid($pid, WNOHANG) > 0; sleep 1; }
       if (waitpid($pid, WNOHANG) == 0) { kill "KILL", $pid; waitpid($pid, 0); }
-      exit 124;
+      exit 142;
     }
     exit ($? >> 8);
   ' "$timeout_secs" "$@" 2>/dev/null
+  local _perl_rc=$?
+  # Normalize exit code 142 to 124 for consistent timeout detection across platforms
+  [ "$_perl_rc" -eq 142 ] && return 124
+  return $_perl_rc
   return $?
 }
 

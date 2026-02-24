@@ -16,8 +16,12 @@ _require_db
 
 # Resource guard: prevent runaway memory usage (default 4GB per worker).
 # Uses virtual memory limit as a safety net — the OS kills the process on exceed.
+# OPS-P2-7: Validate numeric and minimum threshold before applying ulimit.
 _SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"  # 4 GB
-ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || true
+case "${_SKYNET_WORKER_MEM_LIMIT_KB:-}" in
+  ''|*[!0-9]*) echo "[F${FIXER_ID}] WARNING: SKYNET_WORKER_MEM_LIMIT_KB not numeric, skipping ulimit" >&2 ;;
+  *) [ "$_SKYNET_WORKER_MEM_LIMIT_KB" -ge 524288 ] && ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || echo "[F${FIXER_ID}] WARNING: Memory limit ${_SKYNET_WORKER_MEM_LIMIT_KB}KB too low (<512MB) or ulimit failed" >&2 ;;
+esac
 
 # Instance-specific log: fixer 1 → task-fixer.log, fixer 2+ → task-fixer-N.log
 if [ "$FIXER_ID" = "1" ]; then

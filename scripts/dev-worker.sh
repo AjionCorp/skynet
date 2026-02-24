@@ -18,8 +18,12 @@ _require_db
 
 # Resource guard: prevent runaway memory usage (default 4GB per worker).
 # Uses virtual memory limit as a safety net — the OS kills the process on exceed.
+# OPS-P2-7: Validate numeric and minimum threshold before applying ulimit.
 _SKYNET_WORKER_MEM_LIMIT_KB="${SKYNET_WORKER_MEM_LIMIT_KB:-4194304}"  # 4 GB
-ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || true
+case "${_SKYNET_WORKER_MEM_LIMIT_KB:-}" in
+  ''|*[!0-9]*) echo "[W${WORKER_ID}] WARNING: SKYNET_WORKER_MEM_LIMIT_KB not numeric, skipping ulimit" >&2 ;;
+  *) [ "$_SKYNET_WORKER_MEM_LIMIT_KB" -ge 524288 ] && ulimit -v "$_SKYNET_WORKER_MEM_LIMIT_KB" 2>/dev/null || echo "[W${WORKER_ID}] WARNING: Memory limit ${_SKYNET_WORKER_MEM_LIMIT_KB}KB too low (<512MB) or ulimit failed" >&2 ;;
+esac
 
 # Per-worker port offset to prevent dev-server collisions in multi-worker mode
 WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
@@ -81,13 +85,17 @@ _heartbeat_pid=""
 _start_heartbeat() {
   local _parent_pid=$$
   (
-    while true; do
-      # $$ in a subshell still refers to the parent PID in bash — this is correct:
-      # we exit the heartbeat loop when the parent worker dies.
-      kill -0 "$_parent_pid" 2>/dev/null || exit 0
-      date +%s > "$HEARTBEAT_FILE"
-      db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
-      sleep 60
+    # OPS-P0-1: Poll parent liveness every 5s so the subshell exits quickly
+    # after SIGKILL, but only write heartbeat every 60s to avoid DB churn.
+    local _hb_counter=0
+    while kill -0 "$_parent_pid" 2>/dev/null; do
+      sleep 5
+      _hb_counter=$((_hb_counter + 5))
+      if [ "$_hb_counter" -ge 60 ]; then
+        _hb_counter=0
+        date +%s > "$HEARTBEAT_FILE"
+        db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
+      fi
     done
   ) &
   _heartbeat_pid=$!
@@ -299,9 +307,18 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
           fi
         done < "$_claim_tracker"
         printf '%s' "$_kept_lines" > "$_claim_tracker"
+        # OPS-P1-1: Prevent claim tracker from growing unbounded
+        if [ -f "$_claim_tracker" ]; then
+          local _tracker_size
+          _tracker_size=$(wc -c < "$_claim_tracker" 2>/dev/null || echo 0)
+          if [ "$_tracker_size" -gt 10240 ]; then
+            : > "$_claim_tracker"
+            log "WARNING: Claim tracker exceeded 10KB — truncated"
+          fi
+        fi
         if [ "$_recent_claims" -ge 3 ]; then
           log "WARNING: Task $_db_task_id ('$_db_title') claimed $_recent_claims times in 5 min — skipping to prevent rapid retry"
-          db_unclaim_task "$_db_task_id" 2>/dev/null || true
+          db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }
           continue
         fi
       fi
@@ -383,7 +400,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
-        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
@@ -393,7 +410,7 @@ EOF
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
@@ -407,7 +424,7 @@ EOF
       if [ "${WORKTREE_LAST_ERROR:-}" = "branch_in_use" ]; then
         log "Branch $branch_name is already checked out in another worktree — skipping for now."
         _stop_heartbeat
-        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+        [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
@@ -417,7 +434,7 @@ EOF
       log "Failed to create worktree for $branch_name — unclaiming."
       _stop_heartbeat
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
@@ -463,7 +480,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
   if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
     log "DRY-RUN: Would execute agent for task: $task_title"
     log "DRY-RUN: Skipping agent execution, unclaiming task"
-    [ -n "${_db_task_id:-}" ] && db_unclaim_task "$_db_task_id" 2>/dev/null || true
+    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
     _stop_heartbeat
@@ -635,7 +652,7 @@ EOF
   # --- Graceful shutdown checkpoint (before merge) ---
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested before merge — unclaiming task and exiting cleanly"
-    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
 
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
@@ -763,7 +780,7 @@ WEOF
     4)
       # Merge lock contention
       emit_event "merge_lock_contention" "Worker $WORKER_ID: $task_title"
-      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       db_export_state_files 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -772,7 +789,7 @@ WEOF
       ;;
     5)
       # Pull failed
-      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed — task may remain stuck as claimed"; }
+      [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       continue

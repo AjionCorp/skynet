@@ -141,7 +141,8 @@ render() {
   local labels=("dev-worker" "task-fixer" "project-driver" "sync-runner" "ui-tester" "feature-valid." "health-check")
   local scheds=("every 15m" "every 30m" "8am + 8pm" "every 6h" "every 1h" "every 2h" "daily 8am")
 
-  for i in "${!workers[@]}"; do
+  # SH-P2-1: Use seq instead of ${!array[@]} for bash 3.2 compatibility
+  for i in $(seq 0 $((${#workers[@]} - 1))); do
     local w="${workers[$i]}" lbl="${labels[$i]}" sch="${scheds[$i]}"
     local lock="${SKYNET_LOCK_PREFIX}-${w}.lock"
     if is_running "$lock"; then

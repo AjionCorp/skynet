@@ -368,23 +368,39 @@ _cr_phase3_orphan_worktrees() {
     # Narrow match: only kill processes whose command line contains the exact worktree
     # path as a directory argument to bash (not as a substring of log messages or other
     # paths). Exclude our own PID and pgrep/grep processes.
+    local _my_pid=$$
     if command -v pgrep >/dev/null 2>&1; then
-      orphan_pids=$(pgrep -f "bash.*${escaped_wt_dir}([ /]|$)" 2>/dev/null | grep -v "^$$\$" || true)
+      orphan_pids=$(pgrep -f "bash.*${escaped_wt_dir}([ /]|$)" 2>/dev/null | grep -v "^${_my_pid}$" || true)
     else
-      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${escaped_wt_dir}([ /]|$)" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
+      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${escaped_wt_dir}([ /]|$)" | grep -v grep | grep -v "^ *${_my_pid} " | awk '{print $1}' || true)
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
-      # OPS-P1-4: Re-validate each PID before killing to guard against PID
+      # OPS-P1-3/P1-4: Re-validate each PID before killing to guard against PID
       # wraparound race — PIDs from pgrep may be reused between pgrep and kill.
+      # Verify the process command still references the expected worktree path.
       while read -r _opid; do
         [ -z "$_opid" ] && continue
-        kill -0 "$_opid" 2>/dev/null && kill -TERM "$_opid" 2>/dev/null
+        kill -0 "$_opid" 2>/dev/null || continue
+        # Verify process is still the expected bash process (not a recycled PID)
+        local _cmd
+        _cmd=$(ps -p "$_opid" -o args= 2>/dev/null || echo "")
+        case "$_cmd" in
+          *"$wt_dir"*) kill -TERM "$_opid" 2>/dev/null; log "Killed orphan process $_opid" ;;
+          *) log "PID $_opid recycled (now: ${_cmd:0:60}), skipping" ;;
+        esac
       done <<< "$orphan_pids"
       sleep 1
       while read -r _opid; do
         [ -z "$_opid" ] && continue
-        kill -0 "$_opid" 2>/dev/null && kill -9 "$_opid" 2>/dev/null
+        kill -0 "$_opid" 2>/dev/null || continue
+        # Re-verify before SIGKILL escalation
+        local _cmd
+        _cmd=$(ps -p "$_opid" -o args= 2>/dev/null || echo "")
+        case "$_cmd" in
+          *"$wt_dir"*) kill -9 "$_opid" 2>/dev/null; log "Force-killed orphan process $_opid" ;;
+          *) ;; # Already logged in SIGTERM pass or recycled since
+        esac
       done <<< "$orphan_pids"
     fi
 
@@ -409,17 +425,19 @@ _cr_phase3_orphan_worktrees() {
 crash_recovery() {
   local recovered=0
   local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
+  # OPS-P2-2: Track phase errors for cascading failure detection
+  local _cr_phase_errors=0
 
-  _cr_phase1_stale_locks
+  _cr_phase1_stale_locks || _cr_phase_errors=$((_cr_phase_errors + 1))
   if [ "$recovered" -gt 500 ]; then
     log "WARNING: Crash recovery exceeded 500 items after phase 1 — skipping remaining phases"
   else
-    _cr_phase2_orphaned_tasks
+    _cr_phase2_orphaned_tasks || _cr_phase_errors=$((_cr_phase_errors + 1))
   fi
   if [ "$recovered" -gt 500 ]; then
     [ "$_cr_stale_pids" -gt 0 ] || log "WARNING: Crash recovery exceeded 500 items after phase 2 — skipping phase 3"
   else
-    _cr_phase3_orphan_worktrees
+    _cr_phase3_orphan_worktrees || _cr_phase_errors=$((_cr_phase_errors + 1))
   fi
 
   if [ "$recovered" -gt 0 ]; then
@@ -431,6 +449,13 @@ crash_recovery() {
   if [ "$recovered" -gt 500 ]; then
     emit_event "crash_recovery_limit" "Crash recovery hit 500-item limit — some items may not have been recovered"
     tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Crash recovery hit 500-item limit — recovery may be incomplete. Investigate immediately."
+  fi
+
+  # OPS-P2-2: Escalate when multiple phases fail — indicates systemic issue
+  if [ "$_cr_phase_errors" -gt 1 ]; then
+    log "CRITICAL: ${_cr_phase_errors} crash recovery phases failed — possible cascading failure"
+    emit_event "crash_recovery_cascade" "${_cr_phase_errors} phases failed in crash recovery" 2>/dev/null || true
+    tg "🚨 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: CRITICAL — ${_cr_phase_errors} crash recovery phases failed. Investigate immediately."
   fi
 }
 
@@ -1598,15 +1623,25 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
       _wal_limit=$((100 * 1024 * 1024))  # 100MB
       if [ "${_wal_size:-0}" -gt "$_wal_limit" ] 2>/dev/null; then
         log "WARNING: WAL file is ${_wal_size} bytes (>100MB) — forcing TRUNCATE checkpoint"
-        _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || log "WARNING: TRUNCATE checkpoint failed"
+        if ! _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null; then
+          log "CRITICAL: TRUNCATE checkpoint failed on oversized WAL"
+          emit_event "db_wal_checkpoint_failed" "TRUNCATE checkpoint failed — WAL is ${_wal_size} bytes"
+          _db_wal_healthy=false
+        fi
       fi
     fi
 
+    # OPS-P0-2: Capture checkpoint result with circuit-breaker observability.
+    # On failure, log CRITICAL and emit event so operators are alerted.
+    # On success, reset the WAL health flag.
     _wal_result=$(_db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || echo "")
     if [ -n "$_wal_result" ]; then
       log "WAL checkpoint: $_wal_result"
+      _db_wal_healthy=true
     else
-      log "WARNING: WAL checkpoint failed"
+      log "CRITICAL: WAL checkpoint(RESTART) failed — database may be degraded"
+      emit_event "db_wal_checkpoint_failed" "WAL checkpoint failed — database may be degraded"
+      _db_wal_healthy=false
     fi
     # Run PRAGMA optimize to keep query planner statistics up-to-date
     _db "PRAGMA optimize;" 2>/dev/null || true

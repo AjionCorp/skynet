@@ -7,6 +7,11 @@ DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 # Security: skynet.db is not encrypted. Ensure .dev/ directory is on an
 # encrypted volume and has restrictive permissions (chmod 700).
 
+# OPS-P0-2: WAL health flag — set to false after checkpoint failure so operators
+# can observe degraded state. Does NOT block writes (too aggressive); purely
+# for observability via watchdog logs and status surfaces.
+_db_wal_healthy=true
+
 # --- Temp file tracking for leak prevention ---
 # mktemp files created by _sql_exec/_sql_query are normally cleaned inline,
 # but a SIGTERM between mktemp and rm would leak them. _db_cleanup_tmpfiles()
