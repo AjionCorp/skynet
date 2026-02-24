@@ -69,6 +69,7 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
 fi
 
 # --- Claude Code auth pre-check (with alerting) ---
+# Idempotent source — auth-check.sh has re-source guard
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_any_auth; then
   log "No agent auth available (Claude/Codex). Skipping project-driver."
@@ -155,7 +156,7 @@ log "State: $remaining pending, $claimed claimed, $completed_count completed, $f
 
 # --- Pipeline velocity metrics (prefer SQLite, fallback to file) ---
 _today=$(date '+%Y-%m-%d')
-today_completed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed' AND completed_at LIKE '${_today}%';" 2>/dev/null \
+today_completed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='completed' AND completed_at LIKE '${_today}%';" 2>/dev/null \
   || grep -c "$_today" "$COMPLETED" 2>/dev/null || echo 0)
 today_completed=${today_completed:-0}
 case "$today_completed" in ''|*[!0-9]*) today_completed=0 ;; esac
@@ -167,7 +168,7 @@ case "$total_completed" in ''|*[!0-9]*)
   total_completed=$((total_completed > 1 ? total_completed - 1 : 0))
   ;;
 esac
-total_failed=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','fixed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo "")
+total_failed=$(_db "SELECT COUNT(*) FROM tasks WHERE status IN ('failed','fixed','blocked','superseded') OR status LIKE 'fixing-%';" 2>/dev/null || echo "")
 case "$total_failed" in ''|*[!0-9]*)
   total_failed=$(grep -c '^|' "$FAILED" 2>/dev/null || true)
   total_failed=${total_failed:-0}
@@ -300,7 +301,7 @@ chmod 600 "$_dedup_snapshot" "$_dedup_normalized"
 trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized"' EXIT
 
 # SQLite-based dedup snapshot (primary — covers all task states)
-_db_all_titles=$(sqlite3 "$DB_PATH" "SELECT title FROM tasks WHERE status NOT IN ('superseded');" 2>/dev/null || true)
+_db_all_titles=$(_db "SELECT title FROM tasks WHERE status NOT IN ('superseded');" 2>/dev/null || true)
 if [ -n "$_db_all_titles" ]; then
   while IFS= read -r _t; do
     echo "- [ ] $_t" >> "$_dedup_snapshot"

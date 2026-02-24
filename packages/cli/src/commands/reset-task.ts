@@ -2,7 +2,7 @@ import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { createInterface } from "readline";
 import { loadConfig } from "../utils/loadConfig.js";
-import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape } from "../utils/sqliteQuery.js";
+import { isSqliteReady, sqliteQuery, sqliteRows, sqlEscape, sqlLikeEscape } from "../utils/sqliteQuery.js";
 
 interface ResetTaskOptions {
   dir?: string;
@@ -60,12 +60,12 @@ export async function resetTaskCommand(titleSubstring: string, options: ResetTas
   }
 
   const searchTerm = titleSubstring.trim();
-  const safeTerm = sqlEscape(searchTerm);
+  const safeTerm = sqlLikeEscape(searchTerm);
 
   // Find matching tasks in SQLite
   const rows = sqliteRows(devDir,
     `SELECT id, title, branch, error, attempts, status FROM tasks ` +
-    `WHERE title LIKE '%${safeTerm}%' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
+    `WHERE title LIKE '%${safeTerm}%' ESCAPE '\\' AND status IN ('failed','fixing-1','fixing-2','fixing-3','blocked');`
   );
 
   if (rows.length === 0) {

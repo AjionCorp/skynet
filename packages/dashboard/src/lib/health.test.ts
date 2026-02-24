@@ -23,4 +23,23 @@ describe("calculateHealthScore", () => {
   it("combines all penalty types", () => {
     expect(calculateHealthScore({ failedPendingCount: 2, blockerCount: 1, staleHeartbeatCount: 3, staleTasks24hCount: 2 })).toBe(72);
   });
+  it("returns exactly 100 when all counts are zero", () => {
+    expect(calculateHealthScore({ failedPendingCount: 0, blockerCount: 0, staleHeartbeatCount: 0, staleTasks24hCount: 0 })).toBe(100);
+  });
+  it("never returns a negative score (clamps to 0)", () => {
+    // Extreme penalties: 50*5 + 50*10 + 50*2 + 50*1 = 250 + 500 + 100 + 50 = 900
+    expect(calculateHealthScore({ failedPendingCount: 50, blockerCount: 50, staleHeartbeatCount: 50, staleTasks24hCount: 50 })).toBe(0);
+  });
+  it("deducts exactly 5 for a single failed task (boundary)", () => {
+    expect(calculateHealthScore({ failedPendingCount: 1, blockerCount: 0, staleHeartbeatCount: 0, staleTasks24hCount: 0 })).toBe(95);
+  });
+  it("deducts exactly 10 for a single blocker (boundary)", () => {
+    expect(calculateHealthScore({ failedPendingCount: 0, blockerCount: 1, staleHeartbeatCount: 0, staleTasks24hCount: 0 })).toBe(90);
+  });
+  it("deducts exactly 2 for a single stale heartbeat (boundary)", () => {
+    expect(calculateHealthScore({ failedPendingCount: 0, blockerCount: 0, staleHeartbeatCount: 1, staleTasks24hCount: 0 })).toBe(98);
+  });
+  it("deducts exactly 1 for a single stale task (boundary)", () => {
+    expect(calculateHealthScore({ failedPendingCount: 0, blockerCount: 0, staleHeartbeatCount: 0, staleTasks24hCount: 1 })).toBe(99);
+  });
 });

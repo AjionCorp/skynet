@@ -2,6 +2,9 @@ import type { SkynetConfig } from "../types";
 import type { FSWatcher } from "fs";
 import { createPipelineStatusHandler } from "./pipeline-status";
 
+let activeConnections = 0;
+const MAX_SSE_CONNECTIONS = 20;
+
 /**
  * Create a GET handler for the pipeline/stream SSE endpoint.
  * Watches .dev/ files for changes using fs.watch and streams status updates.
@@ -10,6 +13,10 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
   const getStatus = createPipelineStatusHandler(config);
 
   return async function GET(): Promise<Response> {
+    if (activeConnections >= MAX_SSE_CONNECTIONS) {
+      return new Response("Too many SSE connections", { status: 503 });
+    }
+    activeConnections++;
     const { devDir } = config;
     const { watch } = await import("fs");
 
@@ -20,6 +27,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
     let closed = false;
 
     function cleanup() {
+      if (!closed) activeConnections--;
       closed = true;
       if (watcher) {
         watcher.close();

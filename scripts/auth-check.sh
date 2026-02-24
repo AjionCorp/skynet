@@ -16,6 +16,10 @@
 #   - "authentication missing" (Codex/Gemini) = credentials were never configured
 #   These convey different failure modes and are intentionally distinct.
 
+# Source guard — prevent redundant re-sourcing when multiple scripts source this
+[ "${_AUTH_CHECK_SOURCED:-}" = "1" ] && return 0 2>/dev/null || true
+_AUTH_CHECK_SOURCED=1
+
 if ! declare -f log >/dev/null 2>&1; then
   log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >&2; }
 fi

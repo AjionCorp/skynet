@@ -322,5 +322,89 @@ describe("createConfigHandler", () => {
       expect(res.status).toBe(400);
       expect(body.error).toContain("Unsafe characters");
     });
+
+    it("rejects shell positional and special parameters in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { POST } = createConfigHandler(makeConfig());
+
+      for (const val of ["value$1", "val$?", "val$!", "val$@"]) {
+        const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: val } }));
+        const body = await res.json();
+        expect(res.status).toBe(400);
+        expect(body.error).toContain("Unsafe characters");
+      }
+    });
+
+    it("rejects path traversal in EXECUTABLE_KEYS values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_GATE_1: "../../usr/bin/evil" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("path traversal (../)");
+    });
+
+    it("masks SENSITIVE_KEYS in POST response", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockWriteFileSync.mockImplementation(() => {});
+      mockRenameSync.mockImplementation(() => {});
+      mockReadFileSync.mockReturnValue(
+        [
+          'export SKYNET_TG_BOT_TOKEN="secret-token-123"',
+          'export SKYNET_SLACK_WEBHOOK_URL="https://hooks.slack.com/secret"',
+          'export SKYNET_MAX_WORKERS="4"',
+        ].join("\n") as never
+      );
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "4" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
+      const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
+      const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
+      expect(tokenEntry.value).toBe("••••••••");
+      expect(slackEntry.value).toBe("••••••••");
+      expect(workersEntry.value).toBe("4");
+    });
+
+    it("masks SENSITIVE_KEYS values in GET response", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        [
+          'export SKYNET_TG_BOT_TOKEN="secret-token-123"',
+          'export SKYNET_SLACK_WEBHOOK_URL="https://hooks.slack.com/secret"',
+          'export SKYNET_MAX_WORKERS="4"',
+        ].join("\n") as never
+      );
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
+      const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
+      const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
+      expect(tokenEntry.value).toBe("••••••••");
+      expect(slackEntry.value).toBe("••••••••");
+      expect(workersEntry.value).toBe("4");
+    });
+
+    it("returns generic error in production mode", async () => {
+      process.env.NODE_ENV = "production";
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockImplementation(() => { throw new Error("Secret details"); });
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(body.error).toBe("Internal server error");
+      expect(body.error).not.toContain("Secret");
+    });
   });
 });

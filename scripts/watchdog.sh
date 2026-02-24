@@ -333,8 +333,10 @@ _cr_phase3_orphan_worktrees() {
     is_running "$wt_lock" && continue
 
     # Kill any orphan processes running inside the worktree (claude, node, etc.)
-    # NOTE: pgrep -f matches against the full command line, which could match unrelated
-    # processes. Mitigations: (1) resolved absolute path via pwd -P narrows the pattern,
+    # NOTE: pgrep -f is inherently fuzzy — it could match unrelated processes whose
+    # command line contains the worktree path as a substring. The regex escaping
+    # and worktree-specific path pattern mitigate this. False positive risk is low.
+    # Mitigations: (1) resolved absolute path via pwd -P narrows the pattern,
     # (2) regex anchors "bash.*path([ /]|$)" require bash prefix and path boundary,
     # (3) own PID and grep processes are explicitly excluded from the result.
     local resolved_wt_dir
@@ -567,7 +569,7 @@ fi
 
 # --- Daily SQLite backup ---
 # Uses sqlite3 .backup (safe during WAL writes). Keeps 7 days, rotates daily.
-_backup_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-db-backup-$(date +%Y%m%d)"
+_backup_sentinel="$DEV_DIR/.db-backup-sentinel-$(date +%Y%m%d)"
 if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
   mkdir -p "$DEV_DIR/db-backups"
   _backup_file="$DEV_DIR/db-backups/skynet.db.$(date +%Y%m%d)"
@@ -598,6 +600,7 @@ validate_backlog
 
 # --- Auth pre-check: don't kick off Claude workers if auth is down ---
 # Uses shared check_claude_auth which auto-triggers auth-refresh on failure
+# Idempotent source — auth-check.sh has re-source guard
 source "$SCRIPTS_DIR/auth-check.sh"
 agent_auth_ok=false
 claude_auth_ok=false
@@ -1191,7 +1194,7 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
       # Attempt to revert the canary commit — hold merge lock to avoid conflicts
       if acquire_merge_lock; then
         if git revert --no-edit --no-verify "$_canary_commit" 2>/dev/null; then
-          git push origin "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+          git_push_with_retry || log "WARNING: push of canary revert failed"
           log "CANARY: Reverted commit $_canary_commit"
           emit_event "canary_failed" "commit=$_canary_commit action=reverted"
         else

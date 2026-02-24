@@ -4,7 +4,7 @@ import type { SpawnSyncReturns } from "child_process";
 // ── Pure function tests (no mocking needed) ────────────────────────────
 
 // Import sqlEscape and sqlInt directly — they are pure functions
-import { sqlEscape, sqlInt } from "./sqliteQuery.js";
+import { sqlEscape, sqlInt, sqlLikeEscape } from "./sqliteQuery.js";
 
 describe("sqlEscape", () => {
   it("doubles single quotes", () => {
@@ -51,6 +51,29 @@ describe("sqlEscape", () => {
     const escaped = sqlEscape(input);
     expect(escaped).not.toContain("\n");
     expect(escaped).toBe("value .shell rm -rf /");
+  });
+});
+
+describe("sqlLikeEscape", () => {
+  it("escapes % to \\%", () => {
+    expect(sqlLikeEscape("100%")).toBe("100\\%");
+  });
+
+  it("escapes _ to \\_", () => {
+    expect(sqlLikeEscape("some_value")).toBe("some\\_value");
+  });
+
+  it("also applies base sqlEscape (single quotes, NUL, etc)", () => {
+    expect(sqlLikeEscape("it's 100%")).toBe("it''s 100\\%");
+    expect(sqlLikeEscape("val\0ue%")).toBe("value\\%");
+  });
+
+  it("handles combined wildcards", () => {
+    expect(sqlLikeEscape("%_test_%")).toBe("\\%\\_test\\_\\%");
+  });
+
+  it("passes through safe strings unchanged", () => {
+    expect(sqlLikeEscape("hello world")).toBe("hello world");
   });
 });
 

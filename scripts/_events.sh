@@ -53,5 +53,12 @@ emit_event() {
   local _safe_desc="${description:0:3000}"
   # Strip trailing backslash to avoid corrupted escape sequences after truncation
   case "$_safe_desc" in *'\\') _safe_desc="${_safe_desc%?}" ;; esac
+  # Sanitize pipes in description to prevent column corruption in pipe-delimited format.
+  # Uses tr instead of ${var//|/-} for bash 3.2 compatibility (pattern replacement with
+  # literal pipe is unreliable in older bash versions).
+  _safe_desc="$(printf '%s' "$_safe_desc" | tr '|' '-')"
+  # Flat-file format: timestamp|event|description (pipe-delimited).
+  # Description field has pipes sanitized to prevent column corruption.
+  # The SQLite path (primary) does not have this limitation.
   printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc" >> "$events_log"
 }

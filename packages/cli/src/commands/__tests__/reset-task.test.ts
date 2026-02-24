@@ -24,6 +24,7 @@ vi.mock("../../utils/sqliteQuery", () => ({
   sqliteQuery: vi.fn(() => ""),
   sqliteRows: vi.fn(() => []),
   sqlEscape: vi.fn((s: string) => s.replace(/'/g, "''")),
+  sqlLikeEscape: vi.fn((s: string) => s.replace(/'/g, "''").replace(/%/g, "\\%").replace(/_/g, "\\_")),
 }));
 
 import { existsSync } from "fs";

@@ -146,6 +146,7 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
 fi
 
 # --- Claude Code auth pre-check (with alerting) ---
+# Idempotent source — auth-check.sh has re-source guard
 source "$SCRIPTS_DIR/auth-check.sh"
 if ! check_any_auth; then
   log "No agent auth available (Claude/Codex). Skipping task-fixer."

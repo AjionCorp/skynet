@@ -75,6 +75,15 @@ export function sqlEscape(value: string): string {
 }
 
 /**
+ * Escape a string for safe use in SQL LIKE patterns.
+ * Escapes LIKE wildcards (% and _) in addition to base sqlEscape sanitization.
+ * Use with ESCAPE '\\' clause in the LIKE expression.
+ */
+export function sqlLikeEscape(value: string): string {
+  return sqlEscape(value).replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+/**
  * Sanitize a value for use as a SQL integer. Returns 0 for non-numeric values.
  * Prevents NaN injection into SQL queries when numeric values come from config.
  */

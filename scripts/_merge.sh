@@ -162,6 +162,9 @@ do_merge_to_main() {
   # Restore the caller's ERR trap. trap -p ERR returns a shell-escaped string
   # like `trap -- 'handler' ERR` which is safe to eval. We validate the prefix
   # to ensure no injection from corrupted trap output.
+  # Safety: trap -p output is trusted (set by our own scripts), and the case
+  # statement validates the prefix format before eval. This is safe within
+  # the controlled execution environment of the pipeline.
   if [ -n "$_saved_err_trap" ]; then
     case "$_saved_err_trap" in
       "trap -- "*)  eval "$_saved_err_trap" ;;

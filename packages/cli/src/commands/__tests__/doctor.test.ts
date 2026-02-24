@@ -130,6 +130,183 @@ describe("doctorCommand", () => {
     expect(logCalls).toContain("NOT FOUND");
   });
 
+  it("outputs FAIL when .dev/ directory is missing", async () => {
+    // existsSync returns false for everything — no .dev/ dir, no config
+    mockExistsSync.mockReturnValue(false);
+
+    mockExecSync.mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
+      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
+      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
+      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
+      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
+      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
+      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
+      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
+      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
+      return Buffer.from("") as never;
+    });
+
+    await expect(doctorCommand({ dir: "/tmp/test-project" })).rejects.toThrow("process.exit");
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    expect(logCalls).toContain("[FAIL]");
+    // Should mention config not found
+    expect(logCalls).toContain("NOT FOUND");
+  });
+
+  it("detects stale lock files and reports WARN for workers", async () => {
+    const configContent = makeConfigContent();
+
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      if (path.endsWith(".dev/scripts")) return true;
+      if (path.match(/\.(sh)$/)) return true;
+      if (path.endsWith("backlog.md")) return true;
+      if (path.endsWith("completed.md")) return true;
+      if (path.endsWith("failed-tasks.md")) return true;
+      if (path.endsWith("mission.md")) return true;
+      // Stale lock file exists for dev-worker-1
+      if (path.endsWith("dev-worker-1.lock")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return configContent as never;
+      // Lock file with a dead PID
+      if (path.endsWith("dev-worker-1.lock")) return "999999" as never;
+      return "" as never;
+    });
+
+    mockExecSync.mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
+      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
+      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
+      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
+      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
+      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
+      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
+      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
+      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
+      return Buffer.from("") as never;
+    });
+
+    mockReaddirSync.mockReturnValue([] as never);
+
+    await doctorCommand({ dir: "/tmp/test-project" });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    // Worker section should show STALE lock
+    expect(logCalls).toContain("STALE");
+    expect(logCalls).toContain("[WARN]");
+  });
+
+  it("reports SQLite integrity check results", async () => {
+    const configContent = makeConfigContent();
+
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      if (path.endsWith(".dev/scripts")) return true;
+      if (path.match(/\.(sh)$/)) return true;
+      if (path.endsWith("backlog.md")) return true;
+      if (path.endsWith("completed.md")) return true;
+      if (path.endsWith("failed-tasks.md")) return true;
+      if (path.endsWith("mission.md")) return true;
+      if (path.endsWith("skynet.db")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return configContent as never;
+      return "" as never;
+    });
+
+    mockExecSync.mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
+      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
+      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
+      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
+      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
+      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
+      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
+      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
+      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
+      return Buffer.from("") as never;
+    });
+
+    mockReaddirSync.mockReturnValue([] as never);
+
+    await doctorCommand({ dir: "/tmp/test-project" });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    // Should show SQLite Database section
+    expect(logCalls).toContain("SQLite Database");
+  });
+
+  it("validates gate commands and warns when not found", async () => {
+    const configContent = makeConfigContent({
+      SKYNET_GATE_1: "nonexistent-tool --check",
+    });
+
+    mockExistsSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return true;
+      if (path.endsWith(".dev/scripts")) return true;
+      if (path.match(/\.(sh)$/)) return true;
+      if (path.endsWith("backlog.md")) return true;
+      if (path.endsWith("completed.md")) return true;
+      if (path.endsWith("failed-tasks.md")) return true;
+      if (path.endsWith("mission.md")) return true;
+      return false;
+    });
+
+    mockReadFileSync.mockImplementation((p) => {
+      const path = String(p);
+      if (path.endsWith("skynet.config.sh")) return configContent as never;
+      return "" as never;
+    });
+
+    mockExecSync.mockImplementation((cmd) => {
+      const cmdStr = String(cmd);
+      if (cmdStr.includes("git --version")) return Buffer.from("git version 2.39.0") as never;
+      if (cmdStr.includes("node --version")) return Buffer.from("v20.0.0") as never;
+      if (cmdStr.includes("pnpm --version")) return Buffer.from("8.0.0") as never;
+      if (cmdStr.includes("shellcheck --version")) return Buffer.from("0.9.0") as never;
+      if (cmdStr.includes("claude --version")) return Buffer.from("1.0.0") as never;
+      if (cmdStr.includes("codex --version")) return Buffer.from("0.5.0") as never;
+      if (cmdStr.includes("rev-parse --abbrev-ref")) return Buffer.from("main") as never;
+      if (cmdStr.includes("git status --porcelain")) return Buffer.from("") as never;
+      if (cmdStr.includes("git worktree list")) return Buffer.from("") as never;
+      // command -v nonexistent-tool fails
+      if (cmdStr.includes("command -v nonexistent-tool")) throw new Error("not found");
+      return Buffer.from("") as never;
+    });
+
+    mockReaddirSync.mockReturnValue([] as never);
+
+    await doctorCommand({ dir: "/tmp/test-project" });
+
+    const logCalls = (console.log as ReturnType<typeof vi.fn>).mock.calls
+      .flat()
+      .join("\n");
+    // Config Validation section should warn about the missing gate command
+    expect(logCalls).toContain("NOT FOUND");
+    expect(logCalls).toContain("SKYNET_GATE_1");
+  });
+
   it("outputs WARN for stale heartbeat", async () => {
     const configContent = makeConfigContent({ SKYNET_STALE_MINUTES: "45" });
 

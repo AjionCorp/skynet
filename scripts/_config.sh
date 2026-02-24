@@ -34,6 +34,9 @@ SKYNET_CONFIG_FILE="$(_find_config)" || {
 source "$SKYNET_CONFIG_FILE"
 
 # Validate required variables
+# bash 3.2 compat: Cannot use ${!_var} with default values or nameref (declare -n
+# requires bash 4.3+). The eval pattern is safe here because _var values come from
+# a hardcoded list of SKYNET_* variable names, not user input.
 for _var in SKYNET_PROJECT_NAME SKYNET_PROJECT_DIR SKYNET_DEV_DIR; do
   eval "_val=\${${_var}:-}"
   if [ -z "$_val" ]; then
@@ -49,8 +52,9 @@ done
 export PATH="${SKYNET_EXTRA_PATH:-/opt/homebrew/bin:/usr/local/bin}:$PATH"
 
 # Derived defaults
-# NOTE: Lock paths in /tmp are predictable. On shared hosts, consider using
-# mktemp for unique prefixes or setting SKYNET_LOCK_PREFIX to a private directory.
+# SECURITY: Lock paths in /tmp/ are predictable and world-accessible on shared hosts.
+# On multi-user systems, set SKYNET_LOCK_PREFIX to a user-private directory
+# (e.g., $HOME/.cache/skynet/locks) to prevent local DoS via pre-created locks.
 export SKYNET_LOCK_PREFIX="${SKYNET_LOCK_PREFIX:-/tmp/skynet-${SKYNET_PROJECT_NAME}}"
 
 # Auth token cache — stored in user-private directory, NOT world-readable /tmp
@@ -180,18 +184,30 @@ _validate_config() {
       ''|*[!0-9]*) echo "WARNING: $_num_var='$_num_val' is not a positive integer" >&2; errors=$((errors + 1)) ;;
     esac
   done
+  # Validate executable config values against allowed character set
+  for _exec_var in SKYNET_GATE_1 SKYNET_GATE_2 SKYNET_GATE_3 SKYNET_INSTALL_CMD SKYNET_TYPECHECK_CMD SKYNET_LINT_CMD SKYNET_DEV_SERVER_CMD SKYNET_CLAUDE_BIN SKYNET_CODEX_BIN SKYNET_GEMINI_BIN; do
+    eval "local _exec_val=\${${_exec_var}:-}"
+    [ -z "$_exec_val" ] && continue
+    case "$_exec_val" in
+      *".."*) echo "WARNING: $_exec_var contains path traversal" >&2; errors=$((errors + 1)) ;;
+      *[^a-zA-Z0-9\ ./_:=-]*) echo "WARNING: $_exec_var='$_exec_val' contains disallowed characters" >&2; errors=$((errors + 1)) ;;
+    esac
+  done
   # Validate lock backend
+  local critical=0
   if [ "${SKYNET_LOCK_BACKEND:-file}" = "redis" ]; then
     if [ -z "${SKYNET_REDIS_URL:-}" ]; then
       echo "ERROR: SKYNET_LOCK_BACKEND=redis requires SKYNET_REDIS_URL to be set" >&2
       errors=$((errors + 1))
+      critical=$((critical + 1))
     fi
     if ! command -v "${SKYNET_REDIS_CLI:-redis-cli}" >/dev/null 2>&1; then
       echo "ERROR: SKYNET_LOCK_BACKEND=redis requires redis-cli in PATH" >&2
       errors=$((errors + 1))
+      critical=$((critical + 1))
     fi
   fi
-  return 0  # warnings only, don't block startup
+  [ "$critical" -eq 0 ]
 }
 _validate_config
 

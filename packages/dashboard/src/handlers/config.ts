@@ -171,11 +171,12 @@ function validateUpdates(updates: Record<string, string>): string | null {
       errors.push(`Invalid type for key "${key}"`);
       continue;
     }
-    // Block shell injection: no backticks, $(), ${}, $VAR, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
+    // Block shell injection: no backticks, $(), ${}, $VAR, $1, $?, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
     // Bare $VAR references are also blocked — they would be expanded by bash when
     // sourcing the config, allowing exfiltration of environment variables or
-    // unintended value injection.
-    if (/[`"'|&><()#]|\$[({a-zA-Z_]|;|\n|\r|\t/.test(value)) {
+    // unintended value injection. Positional ($1..$9) and special ($?, $!, $@, $$)
+    // params are also blocked as they expand to process state in bash.
+    if (/[`"'|&><()#]|\$[({a-zA-Z_0-9?!@*#$-]|;|\n|\r|\t/.test(value)) {
       errors.push(`Unsafe characters in value for "${key}"`);
       continue;
     }
@@ -187,6 +188,11 @@ function validateUpdates(updates: Record<string, string>): string | null {
     if (EXECUTABLE_KEYS.has(key)) {
       if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
         errors.push(`Executable config "${key}" contains disallowed characters`);
+        continue;
+      }
+      // Block path traversal attempts in executable values
+      if (/\.\.\//.test(value)) {
+        errors.push(`Executable config "${key}" must not contain path traversal (../)`);
         continue;
       }
     }
@@ -309,7 +315,10 @@ export function createConfigHandler(config: SkynetConfig) {
 
       // Re-read to return updated state
       const raw = readFileSync(configPath, "utf-8");
-      const entries = parseConfigFile(raw);
+      const entries = parseConfigFile(raw).map(e => ({
+        ...e,
+        value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
+      }));
 
       return Response.json({
         data: { entries, configPath, updatedKeys: Object.keys(updates) },

@@ -229,4 +229,16 @@ describe("parseBacklogWithBlocked", () => {
     const result = parseBacklogWithBlocked(content);
     expect(result.items[0].blocked).toBe(false);
   });
+
+  it("detects transitive 3-node circular dependencies (A->B->C->A)", () => {
+    const content =
+      "- [ ] TaskA | blockedBy: TaskC\n- [ ] TaskB | blockedBy: TaskA\n- [ ] TaskC | blockedBy: TaskB";
+    const result = parseBacklogWithBlocked(content);
+    const taskA = result.items.find((i) => i.text.includes("TaskA"));
+    const taskB = result.items.find((i) => i.text.includes("TaskB"));
+    const taskC = result.items.find((i) => i.text.includes("TaskC"));
+    expect(taskA?.blocked).toBe(true);
+    expect(taskB?.blocked).toBe(true);
+    expect(taskC?.blocked).toBe(true);
+  });
 });

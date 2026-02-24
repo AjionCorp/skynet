@@ -335,4 +335,30 @@ describe("createPipelineStatusHandler", () => {
     expect(data.syncHealth.lastRun).toBeNull();
     expect(data.syncHealth.endpoints).toEqual([]);
   });
+
+  it("includes missionProgress field as an array in response", async () => {
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data).toHaveProperty("missionProgress");
+    expect(Array.isArray(data.missionProgress)).toBe(true);
+  });
+
+  it("returns structured mission items when mission.md has criteria", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "mission.md") return "# Mission\n\n## Success Criteria\n1. Zero-to-autonomous setup\n2. Self-correction rate >95%";
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.missionProgress.length).toBeGreaterThanOrEqual(1);
+    for (const item of data.missionProgress) {
+      expect(item).toHaveProperty("id");
+      expect(item).toHaveProperty("criterion");
+      expect(item).toHaveProperty("status");
+      expect(item).toHaveProperty("evidence");
+      expect(["met", "partial", "not-met"]).toContain(item.status);
+    }
+  });
 });

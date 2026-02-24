@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 
 // --- In-memory rate limiter for login attempts ---
-// NOTE: Resets on process restart. This is acceptable for a single-operator dashboard
-// where persistent rate limiting would require external storage (Redis/DB).
+// NOTE: Resets on process restart (Next.js dev mode, deployments, crashes).
+// Acceptable for a single-operator dashboard. Persistent rate limiting would
+// require external storage (Redis/DB) which is out of scope for this use case.
 // The 5-attempt / 15-minute window provides sufficient protection against online brute-force.
 const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
@@ -22,7 +23,7 @@ function isRateLimited(ip: string): boolean {
   if (!entry || now >= entry.resetAt) {
     return false;
   }
-  return entry.count > MAX_ATTEMPTS;
+  return entry.count >= MAX_ATTEMPTS;
 }
 
 function recordFailedAttempt(ip: string): void {

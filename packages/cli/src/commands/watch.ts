@@ -308,13 +308,8 @@ function renderDashboard(projectDir: string, vars: Record<string, string>) {
     // Current task — prefer DB data, fall back to lock/file
     const dbWorker = data.workers.find((w) => w.id === wid);
     let taskLabel = `${DIM}\u2014${RESET}`;
-    if (dbWorker && dbWorker.taskTitle) {
+    if (dbWorker?.taskTitle) {
       taskLabel = truncate(dbWorker.taskTitle, 60);
-    } else if (data.source === "files") {
-      // Already populated from files via workers array
-      if (dbWorker?.taskTitle) {
-        taskLabel = truncate(dbWorker.taskTitle, 60);
-      }
     }
 
     // Heartbeat age

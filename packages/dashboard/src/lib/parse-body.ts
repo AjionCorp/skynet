@@ -21,6 +21,12 @@ export async function parseBody<T>(
   request: Request
 ): Promise<{ data: T | null; error: string | null; status?: number }> {
   try {
+    // Reject non-JSON content types early (before reading body)
+    const contentType = request.headers.get("content-type") || "";
+    if (contentType && !contentType.includes("application/json")) {
+      return { data: null, error: "Content-Type must be application/json", status: 415 };
+    }
+
     // Early reject if Content-Length header exceeds limit (not a security check,
     // just an optimization — actual body size is enforced below)
     const cl = request.headers.get("content-length");
