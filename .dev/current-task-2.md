@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add keyboard shortcuts to dashboard
+## [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard
 **Status:** completed
-**Started:** 2026-02-24 16:36
+**Started:** 2026-02-24 16:48
 **Completed:** 2026-02-24
-**Branch:** dev/add-keyboard-shortcuts-to-dashboard
+**Branch:** dev/add-worker-efficiency-cards-to-pipeline-
 **Worker:** 2
 
 ### Changes

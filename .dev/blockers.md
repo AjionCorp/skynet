@@ -92,4 +92,4 @@ _No active blockers._
 
 All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 530+ tasks completed, 97% self-correction rate, 0 active retries. Pipeline is in polish/portability phase.
 
-**Current focus**: (1) Test coverage for core scripts — dev-worker.sh and task-fixer.sh have zero shell tests. (2) Configurability — quality gates are hardcoded to `pnpm typecheck`, blocking non-TypeScript adoption. (3) Robustness — worker context size guardrail, doctor auto-repair. (4) Quality gates — remaining telemetry parity tests.
+**Current focus**: (1) Shell test coverage — `scripts/tests/` directory does not exist on main; dev-worker.sh, task-fixer.sh, and watchdog.sh have zero regression tests despite being the core pipeline engine. 8 new tasks generated to close this gap. (2) Robustness — prompt-size guardrail for worker dispatch and extended doctor --fix auto-repair. (3) Velocity chart merge failure triage. (4) E2E verification of `skynet init` onboarding flow. Note: quality gate configurability via `SKYNET_TYPECHECK_CMD` is already implemented in `_config.sh` and `_merge.sh`.

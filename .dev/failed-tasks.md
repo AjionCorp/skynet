@@ -4,6 +4,7 @@
 |------|------|--------|-------|----------|--------|
 | 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | dev/add-keyboard-shortcuts-to-dashboard | worktree missing before gates | 0 | failed |
 | 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | failed |
+| 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | dev/add-worker-efficiency-cards-to-pipeline- | typecheck failed after fix attempt 1 | 1 | fixing-1 |
 | 2026-02-20 | [TEST] Add EventsDashboard component tests | merged to main | merge conflict | 1 | fixed |
 | 2026-02-20 | [FIX] Fix codex.sh to pipe prompt via stdin instead of CLI argument | fix/fix-codexsh-to-pipe-prompt-via-stdin-ins | typecheck failed after fix attempt 3 | 3 | fixed |
 | 2026-02-20 | [FIX] Add missing `SKYNET_WATCHDOG_INTERVAL` and `SKYNET_ONE_SHOT` to config template | dev/add-missing-skynetwatchdoginterval-and-s | typecheck failed (fix attempt 1 failed) (fix attempt 2 failed) (fix attempt 3 failed) | 3 | fixed |
