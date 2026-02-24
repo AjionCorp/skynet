@@ -207,3 +207,155 @@ describe("createPipelineTriggerHandler", () => {
     expect(body.error).toBe("Invalid script name");
   });
 });
+
+
+// ── Test-1: Shell metacharacter and injection tests ─────────────────
+
+describe("pipeline-trigger argument injection tests", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(async () => {
+    process.env.NODE_ENV = "development";
+    vi.clearAllMocks();
+    mockUnref.mockReset();
+    // Re-establish mock implementations after clearAllMocks wipes them
+    const fs = await import("fs");
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    vi.mocked(fs.openSync).mockReturnValue(3 as never);
+    mockSpawn.mockReturnValue({ unref: mockUnref } as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  describe("rejects shell metacharacters in args", () => {
+    const dangerousArgs = [
+      { char: ";", arg: "foo;rm -rf /" },
+      { char: "|", arg: "foo|cat /etc/passwd" },
+      { char: "&&", arg: "foo&&whoami" },
+      { char: "`", arg: "`whoami`" },
+      { char: "$()", arg: "$(id)" },
+      { char: "$(...)", arg: "a$(cat /etc/shadow)" },
+      { char: ">", arg: "foo>out" },
+      { char: "<", arg: "foo<in" },
+      { char: "newline", arg: "foo\nbar" },
+      { char: "space", arg: "foo bar" },
+      { char: "tab", arg: "foo\tbar" },
+      { char: "single-quote", arg: "foo'bar" },
+      { char: "double-quote", arg: 'foo"bar' },
+      { char: "backslash", arg: "foo\\bar" },
+      { char: "curly-brace", arg: "${PATH}" },
+      { char: "exclamation", arg: "!important" },
+      { char: "hash", arg: "#comment" },
+      { char: "tilde", arg: "~root" },
+      { char: "asterisk", arg: "*.sh" },
+      { char: "question-mark", arg: "file?.txt" },
+    ];
+
+    for (const { char, arg } of dangerousArgs) {
+      it(`rejects "${char}" — arg: ${JSON.stringify(arg)}`, async () => {
+        const handler = createPipelineTriggerHandler(makeConfig());
+        const res = await handler(makePostRequest({ script: "watchdog", args: [arg] }));
+        const body = await res.json();
+        expect(res.status).toBe(400);
+        expect(body.error).toBe("Invalid argument");
+      });
+    }
+  });
+
+  describe("rejects path traversal in args", () => {
+    const traversalArgs = [
+      "../../../etc/passwd",
+      "../../secret",
+      "../config",
+      "foo/../bar",
+      "..",
+      "...",
+    ];
+
+    for (const arg of traversalArgs) {
+      it(`rejects path traversal: ${JSON.stringify(arg)}`, async () => {
+        const handler = createPipelineTriggerHandler(makeConfig());
+        const res = await handler(makePostRequest({ script: "watchdog", args: [arg] }));
+        const body = await res.json();
+        expect(res.status).toBe(400);
+        expect(body.error).toBe("Invalid argument");
+      });
+    }
+  });
+
+  it("rejects args count exceeding max (10)", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const tooManyArgs = Array.from({ length: 11 }, (_, i) => String(i));
+    const res = await handler(makePostRequest({ script: "watchdog", args: tooManyArgs }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toContain("Too many arguments");
+  });
+
+  it("accepts exactly 10 args (boundary)", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const maxArgs = Array.from({ length: 10 }, (_, i) => String(i));
+    const res = await handler(makePostRequest({ script: "watchdog", args: maxArgs }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.triggered).toBe(true);
+  });
+
+  it("rejects arg length exceeding max (64 chars)", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const longArg = "a".repeat(65);
+    const res = await handler(makePostRequest({ script: "watchdog", args: [longArg] }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("Invalid argument");
+  });
+
+  it("accepts arg at exactly 64 chars (boundary)", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const exactArg = "a".repeat(64);
+    const res = await handler(makePostRequest({ script: "watchdog", args: [exactArg] }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.triggered).toBe(true);
+  });
+
+  describe("valid args pass through correctly", () => {
+    const validArgs = [
+      { desc: "single digit", args: ["1"] },
+      { desc: "alphanumeric", args: ["abc123"] },
+      { desc: "hyphenated", args: ["dev-worker"] },
+      { desc: "multiple valid args", args: ["1", "foo", "bar-baz"] },
+      { desc: "numeric worker IDs", args: ["1", "2", "3"] },
+    ];
+
+    for (const { desc, args } of validArgs) {
+      it(`accepts valid args: ${desc}`, async () => {
+        const handler = createPipelineTriggerHandler(makeConfig());
+        const res = await handler(makePostRequest({ script: "watchdog", args }));
+        const body = await res.json();
+        expect(res.status).toBe(200);
+        expect(body.data.triggered).toBe(true);
+        expect(body.error).toBeNull();
+      });
+    }
+  });
+
+  it("accepts empty args array", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const res = await handler(makePostRequest({ script: "watchdog", args: [] }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.triggered).toBe(true);
+    expect(body.error).toBeNull();
+  });
+
+  it("passes validated args through to spawn", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    await handler(makePostRequest({ script: "dev-worker", args: ["3", "extra"] }));
+    const spawnArgs = mockSpawn.mock.calls[0][1] as string[];
+    expect(spawnArgs).toContain("3");
+    expect(spawnArgs).toContain("extra");
+  });
+});

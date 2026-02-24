@@ -521,3 +521,211 @@ describe("createConfigHandler", () => {
     });
   });
 });
+
+// ── Test-3: Config handler — additional coverage ────────────────────
+
+describe("createConfigHandler — edge cases", () => {
+  const originalNodeEnv = process.env.NODE_ENV;
+
+  beforeEach(() => {
+    process.env.NODE_ENV = "development";
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(false);
+    mockReadFileSync.mockReturnValue("" as never);
+  });
+
+  afterEach(() => {
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  describe("GET edge cases", () => {
+    it("returns { data, error } shape consistently on success", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body).toHaveProperty("data");
+      expect(body).toHaveProperty("error");
+      expect(body.data).toHaveProperty("entries");
+      expect(body.data).toHaveProperty("configPath");
+    });
+
+    it("handles config with only comments (no exports)", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        [
+          "#!/usr/bin/env bash",
+          "# This is a comment-only config",
+          "# ---- Section Header ----",
+          "# More comments",
+        ].join("\n") as never
+      );
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.entries).toEqual([]);
+    });
+
+    it("handles config with escaped double quotes in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        'export SKYNET_WORKER_CONTEXT="say \\"hello\\""\n' as never
+      );
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.data.entries).toHaveLength(1);
+      expect(body.data.entries[0].value).toBe('say "hello"');
+    });
+
+    it("parses section header comments as context", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        [
+          "# ---- Worker Configuration ----",
+          'export SKYNET_MAX_WORKERS="4"',
+        ].join("\n") as never
+      );
+
+      const { GET } = createConfigHandler(makeConfig());
+      const res = await GET();
+      const body = await res.json();
+
+      expect(body.data.entries[0].comment).toBe("Worker Configuration");
+    });
+  });
+
+  describe("POST edge cases", () => {
+    it("rejects non-mutable key even with valid format", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_UNKNOWN_KEY: "value" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("not in the list of updatable");
+    });
+
+    it("rejects invalid JSON body gracefully", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const req = new Request("http://localhost/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "not-valid-json",
+      });
+      const res = await POST(req);
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.data).toBeNull();
+      expect(body.error).toBeTruthy();
+    });
+
+    it("rejects pipe characters in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "4|rm -rf /" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Unsafe characters");
+    });
+
+    it("rejects ampersand in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "4&rm" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("Unsafe characters");
+    });
+
+    it("rejects redirect characters in values", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res1 = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "4>file" } }));
+      expect((await res1.json()).error).toContain("Unsafe characters");
+
+      const res2 = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "4<file" } }));
+      expect((await res2.json()).error).toContain("Unsafe characters");
+    });
+
+    it("handles multiple updates in a single POST", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue(
+        [
+          'export SKYNET_MAX_WORKERS="4"',
+          'export SKYNET_STALE_MINUTES="30"',
+        ].join("\n") as never
+      );
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({
+        updates: {
+          SKYNET_MAX_WORKERS: "8",
+          SKYNET_STALE_MINUTES: "15",
+        },
+      }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.updatedKeys).toContain("SKYNET_MAX_WORKERS");
+      expect(body.data.updatedKeys).toContain("SKYNET_STALE_MINUTES");
+    });
+
+    it("rejects SKYNET_MAX_WORKERS > 16", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "17" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("between 1 and 16");
+    });
+
+    it("accepts SKYNET_MAX_WORKERS boundary values 1 and 16", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_MAX_WORKERS="4"\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res1 = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "1" } }));
+      expect((await res1.json()).error).toBeNull();
+
+      const res2 = await POST(makeRequest({ updates: { SKYNET_MAX_WORKERS: "16" } }));
+      expect((await res2.json()).error).toBeNull();
+    });
+
+    it("rejects disallowed characters in executable key SKYNET_GATE_1", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      // Executable keys only allow [a-zA-Z0-9 ./_:=-]+
+      const res = await POST(makeRequest({ updates: { SKYNET_GATE_1: "cmd; evil" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      // Semicolons hit the general "Unsafe characters" check first
+      expect(body.error).toContain("Unsafe characters");
+    });
+  });
+});

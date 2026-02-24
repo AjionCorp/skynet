@@ -227,3 +227,113 @@ describe("createEventsHandler", () => {
     expect(body.data[0].event).toBe("task_claimed");
   });
 });
+
+// ── Test-3: Events handler — SQLite happy path and error handling ────
+
+describe("createEventsHandler — SQLite path", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it("returns events from SQLite when DB is available", async () => {
+    // Override the mock to return a functioning DB stub
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
+    const fakeDb = {
+      countPending: vi.fn(() => 0),
+      getRecentEvents: vi.fn(() => [
+        { ts: "2024-01-01T00:00:00.000Z", event: "task_completed", worker: 1, detail: "Worker 1 finished" },
+        { ts: "2024-01-01T00:01:00.000Z", event: "task_claimed", worker: 2, detail: "Worker 2 claimed task" },
+      ]),
+    };
+    mockGetSkynetDB.mockReturnValue(fakeDb as never);
+
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.error).toBeNull();
+    expect(body.data).toHaveLength(2);
+    expect(body.data[0].event).toBe("task_completed");
+    expect(body.data[1].event).toBe("task_claimed");
+    expect(fakeDb.getRecentEvents).toHaveBeenCalledWith(100);
+  });
+
+  it("falls back to tail when SQLite countPending throws", async () => {
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
+    mockGetSkynetDB.mockReturnValue({
+      countPending: () => { throw new Error("DB not initialized"); },
+    } as never);
+
+    mockTailOutput(`${EPOCH_1}|task_completed|Fallback works`);
+
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].detail).toBe("Fallback works");
+  });
+
+  it("falls back to tail when getSkynetDB itself throws", async () => {
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
+    mockGetSkynetDB.mockImplementation(() => { throw new Error("better-sqlite3 not installed"); });
+
+    mockTailOutput(`${EPOCH_1}|task_claimed|Tail fallback`);
+
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].event).toBe("task_claimed");
+  });
+
+  it("returns 500 when both SQLite and tail fail", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
+    mockGetSkynetDB.mockImplementation(() => { throw new Error("DB unavailable"); });
+
+    // Make tail fail by having spawnSync throw
+    mockSpawnSync.mockImplementation(() => { throw new Error("tail binary missing"); });
+
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.data).toBeNull();
+    expect(body.error).toBe("tail binary missing");
+
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+
+  it("returns generic error in production when handler crashes", async () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "production";
+
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
+    mockGetSkynetDB.mockImplementation(() => { throw new Error("secret DB error"); });
+    mockSpawnSync.mockImplementation(() => { throw new Error("internal details"); });
+
+    const GET = createEventsHandler(makeConfig());
+    const res = await GET();
+    const body = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(body.error).toBe("Internal server error");
+    expect(body.error).not.toContain("secret");
+    expect(body.error).not.toContain("internal details");
+
+    process.env.NODE_ENV = originalNodeEnv;
+  });
+});

@@ -332,40 +332,70 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
       _now_epoch=$(date +%s)
       _cutoff_epoch=$((_now_epoch - 300))
       # Prune old entries and count recent claims for this task ID
+      # P0-1: Wrap claim tracker read-prune-write in mkdir lock to prevent
+      # concurrent workers from corrupting the file.
+      _claim_lock="${_claim_tracker}.lock"
+      _claim_locked=false
+      _claim_skip=false
       if [ -f "$_claim_tracker" ]; then
-        _recent_claims=0
-        _kept_lines=""
-        while IFS='|' read -r _ct_epoch _ct_id; do
-          [ -z "$_ct_epoch" ] && continue
-          case "$_ct_epoch" in ''|*[!0-9]*) continue ;; esac
-          if [ "$_ct_epoch" -ge "$_cutoff_epoch" ]; then
-            _kept_lines="${_kept_lines}${_ct_epoch}|${_ct_id}
+        _claim_lock_i=0
+        while [ "$_claim_lock_i" -lt 5 ]; do
+          if mkdir "$_claim_lock" 2>/dev/null; then
+            _claim_locked=true
+            break
+          fi
+          _claim_lock_i=$((_claim_lock_i + 1))
+          perl -e 'select(undef,undef,undef,0.1)' 2>/dev/null || sleep 1
+        done
+        if $_claim_locked; then
+          _recent_claims=0
+          _kept_lines=""
+          while IFS='|' read -r _ct_epoch _ct_id; do
+            [ -z "$_ct_epoch" ] && continue
+            case "$_ct_epoch" in ''|*[!0-9]*) continue ;; esac
+            if [ "$_ct_epoch" -ge "$_cutoff_epoch" ]; then
+              _kept_lines="${_kept_lines}${_ct_epoch}|${_ct_id}
 "
-            if [ "$_ct_id" = "$_db_task_id" ]; then
-              _recent_claims=$((_recent_claims + 1))
+              if [ "$_ct_id" = "$_db_task_id" ]; then
+                _recent_claims=$((_recent_claims + 1))
+              fi
+            fi
+          done < "$_claim_tracker"
+          printf '%s' "$_kept_lines" > "$_claim_tracker"
+          # OPS-P1-1: Prevent claim tracker from growing unbounded.
+          # Rotate to .1 backup instead of truncating to preserve data for debugging.
+          if [ -f "$_claim_tracker" ]; then
+            local _tracker_size
+            _tracker_size=$(wc -c < "$_claim_tracker" 2>/dev/null || echo 0)
+            if [ "$_tracker_size" -gt 10240 ]; then
+              mv "$_claim_tracker" "${_claim_tracker}.1" 2>/dev/null || true
+              : > "$_claim_tracker"
+              log "WARNING: Claim tracker exceeded 10KB — rotated to .1 backup"
             fi
           fi
-        done < "$_claim_tracker"
-        printf '%s' "$_kept_lines" > "$_claim_tracker"
-        # OPS-P1-1: Prevent claim tracker from growing unbounded.
-        # Rotate to .1 backup instead of truncating to preserve data for debugging.
-        if [ -f "$_claim_tracker" ]; then
-          local _tracker_size
-          _tracker_size=$(wc -c < "$_claim_tracker" 2>/dev/null || echo 0)
-          if [ "$_tracker_size" -gt 10240 ]; then
-            mv "$_claim_tracker" "${_claim_tracker}.1" 2>/dev/null || true
-            : > "$_claim_tracker"
-            log "WARNING: Claim tracker exceeded 10KB — rotated to .1 backup"
+          if [ "$_recent_claims" -ge 3 ]; then
+            log "WARNING: Task $_db_task_id ('$_db_title') claimed $_recent_claims times in 5 min — skipping to prevent rapid retry"
+            _claim_skip=true
           fi
+          # Record this claim attempt (inside lock to prevent lost writes)
+          if ! $_claim_skip; then
+            echo "${_now_epoch}|${_db_task_id}" >> "$_claim_tracker"
+          fi
+          rmdir "$_claim_lock" 2>/dev/null || rm -rf "$_claim_lock" 2>/dev/null || true
+        else
+          # Lock contention after 5 retries — skip pruning (stale data is
+          # better than corruption). Append is safe for single-line writes.
+          log "WARNING: Claim tracker lock contention — skipping prune, appending only"
+          echo "${_now_epoch}|${_db_task_id}" >> "$_claim_tracker"
         fi
-        if [ "$_recent_claims" -ge 3 ]; then
-          log "WARNING: Task $_db_task_id ('$_db_title') claimed $_recent_claims times in 5 min — skipping to prevent rapid retry"
-          db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }
-          continue
-        fi
+      else
+        # No tracker file yet — record this first claim attempt
+        echo "${_now_epoch}|${_db_task_id}" >> "$_claim_tracker"
       fi
-      # Record this claim attempt
-      echo "${_now_epoch}|${_db_task_id}" >> "$_claim_tracker"
+      if $_claim_skip; then
+        db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }
+        continue
+      fi
 
       next_task="- [ ] [${_db_tag}] ${_db_title}"
     else

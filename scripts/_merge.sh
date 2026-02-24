@@ -108,6 +108,62 @@ _check_merge_lock_ttl() {
   fi
   return 0
 }
+# P1-1: Merge-aware push with TTL guard before each attempt.
+# Wraps git_push_with_retry logic but checks merge lock TTL (120s minimum)
+# immediately before each push attempt to prevent split-brain when TTL expires
+# during a network stall. 120s is enough for one push attempt under normal
+# conditions (push timeout defaults to 120s).
+_merge_push_with_ttl_guard() {
+  local max_attempts="${1:-3}"
+  local attempt=1
+  local backoff=1
+
+  # Reuse adaptive push timeout logic from git_push_with_retry
+  local _push_timeout="$SKYNET_GIT_PUSH_TIMEOUT"
+  local _diff_lines=0
+  local _diff_stat
+  _diff_stat=$(git diff --stat --cached 2>/dev/null | tail -1)
+  if [ -n "$_diff_stat" ]; then
+    local _insertions _deletions
+    _insertions=$(printf '%s' "$_diff_stat" | sed -n 's/.*[[:space:]]\([0-9][0-9]*\) insertion.*/\1/p')
+    _deletions=$(printf '%s' "$_diff_stat" | sed -n 's/.*[[:space:]]\([0-9][0-9]*\) deletion.*/\1/p')
+    _diff_lines=$(( ${_insertions:-0} + ${_deletions:-0} ))
+  fi
+  if [ "$_diff_lines" -gt 5000 ]; then
+    _push_timeout=$(( SKYNET_GIT_PUSH_TIMEOUT * 2 ))
+    if [ "$_push_timeout" -gt 300 ]; then
+      _push_timeout=300
+    fi
+    log "Large diff detected (${_diff_lines} lines), using extended push timeout (${_push_timeout}s)"
+  fi
+
+  local _gps_start
+  _gps_start=$(date +%s)
+  while [ "$attempt" -le "$max_attempts" ]; do
+    # SH-P2-2: Cap total elapsed time across all retries to 180s
+    local _gps_elapsed=$(( $(date +%s) - _gps_start ))
+    if [ "$_gps_elapsed" -gt 180 ]; then
+      log "ERROR: git push total time exceeded 180s (${_gps_elapsed}s) — aborting"
+      return 1
+    fi
+    # P1-1: TTL check before every push attempt (including the first).
+    # Require 120s remaining — enough for one push attempt to complete.
+    if ! _check_merge_lock_ttl 120; then
+      log "ERROR: Merge lock TTL exhausted before push attempt $attempt — aborting to prevent split-brain"
+      return 1
+    fi
+    [ "$attempt" -gt 1 ] && log "git push attempt $attempt/$max_attempts (TTL-guarded)..."
+    if run_with_timeout "$_push_timeout" git push origin "$SKYNET_MAIN_BRANCH" 2>>"${LOG:-/dev/null}"; then
+      return 0
+    fi
+    log "git push failed (attempt $attempt/$max_attempts)"
+    attempt=$((attempt + 1))
+    [ "$attempt" -le "$max_attempts" ] && sleep "$backoff"
+    backoff=$((backoff * 2))
+  done
+  log "ERROR: git push failed after $max_attempts attempts"
+  return 1
+}
 
 # OPS-P1-2: Release merge lock with duration logging
 _release_merge_lock_with_duration() {
@@ -402,7 +458,16 @@ do_merge_to_main() {
     return 3
   fi
 
-  if ! git_push_with_retry; then
+  # P1-1: Final TTL re-check immediately before push — require 120s remaining.
+  # This closes the window between OPS-P1-4 check above and the actual push,
+  # preventing split-brain if intervening operations consumed remaining TTL.
+  if ! _check_merge_lock_ttl 120; then
+    log "ERROR: Merge lock TTL insufficient immediately before push — aborting to prevent split-brain"
+    _release_merge_lock_with_duration
+    return 3
+  fi
+
+  if ! _merge_push_with_ttl_guard; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"
     if ! _do_revert "$_MERGE_STATE_COMMITTED" "push failed" "$log_file"; then
       _release_merge_lock_with_duration

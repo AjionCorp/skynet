@@ -343,7 +343,7 @@ IDLE_EOF
 
 # Minimum expected command length for a skynet worker process. If ps output is
 # shorter, it may be truncated and we cannot safely verify the PID identity.
-_SKYNET_PS_MIN_CMD_LEN=40
+_SKYNET_PS_MIN_CMD_LEN=100
 
 # _validate_skynet_orphan_pid PID WORKTREE_PATH
 # Returns 0 if the PID is a genuine skynet worker process in the given worktree.
@@ -1735,7 +1735,16 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
       _wal_limit=$((100 * 1024 * 1024))  # 100MB
       if [ "${_wal_size:-0}" -gt "$_wal_limit" ] 2>/dev/null; then
         log "WARNING: WAL file is ${_wal_size} bytes (>100MB) — forcing TRUNCATE checkpoint"
-        if ! _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null; then
+        # P0-2: Wrap with timeout to prevent indefinite hang on sqlite3 lock-up
+        _wal_trunc_rc=0
+        run_with_timeout 10 sqlite3 "$DB_PATH" "PRAGMA wal_checkpoint(TRUNCATE);" >/dev/null 2>&1 || _wal_trunc_rc=$?
+        if [ "$_wal_trunc_rc" -eq 124 ] 2>/dev/null || [ "$_wal_trunc_rc" -eq 142 ] 2>/dev/null; then
+          log "WARNING: WAL checkpoint(TRUNCATE) timed out after 10s"
+          emit_event "db_wal_checkpoint_failed" "TRUNCATE checkpoint timed out — WAL is ${_wal_size} bytes"
+          _db_wal_healthy=false
+          _db_wal_checkpoint_failures=$((_db_wal_checkpoint_failures + 1))
+          echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
+        elif [ "$_wal_trunc_rc" -ne 0 ]; then
           log "CRITICAL: TRUNCATE checkpoint failed on oversized WAL"
           emit_event "db_wal_checkpoint_failed" "TRUNCATE checkpoint failed — WAL is ${_wal_size} bytes"
           _db_wal_healthy=false
@@ -1749,8 +1758,21 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     # OPS-P0-2: Capture checkpoint result with circuit-breaker observability.
     # On failure, log CRITICAL and emit event so operators are alerted.
     # On success, reset the WAL health flag.
-    _wal_result=$(_db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || echo "")
-    if [ -n "$_wal_result" ]; then
+    # P0-2: Wrap with timeout to prevent indefinite hang on sqlite3 lock-up.
+    # Capture exit code before || to detect timeout (124/142) vs normal failure.
+    _wal_restart_rc=0
+    _wal_result=$(run_with_timeout 10 sqlite3 "$DB_PATH" "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null) || _wal_restart_rc=$?
+    if [ "$_wal_restart_rc" -eq 124 ] 2>/dev/null || [ "$_wal_restart_rc" -eq 142 ] 2>/dev/null; then
+      log "WARNING: WAL checkpoint(RESTART) timed out after 10s"
+      emit_event "db_wal_checkpoint_failed" "WAL checkpoint(RESTART) timed out after 10s"
+      _db_wal_healthy=false
+      _db_wal_checkpoint_failures=$((_db_wal_checkpoint_failures + 1))
+      if [ "$_db_wal_checkpoint_failures" -ge 3 ]; then
+        log "CRITICAL: WAL checkpoint failed $_db_wal_checkpoint_failures consecutive cycles. New task claims are BLOCKED. Run: sqlite3 $DB_PATH 'PRAGMA wal_checkpoint(TRUNCATE);' to recover, or restart the pipeline."
+        emit_event "db_wal_circuit_breaker_open" "WAL checkpoint timed out $_db_wal_checkpoint_failures consecutive cycles — claims blocked"
+      fi
+      echo "$(date +%s)" > "$DEV_DIR/db-wal-unhealthy" 2>/dev/null || true
+    elif [ -n "$_wal_result" ]; then
       log "WAL checkpoint: $_wal_result"
       # P0-WAL: Detect recovery — if breaker was open, emit recovery event
       if [ "$_db_wal_checkpoint_failures" -ge 3 ]; then
