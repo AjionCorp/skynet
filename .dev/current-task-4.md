@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] [FEAT] Add task detail drawer to Tasks page
+## [INFRA] [INFRA] Prune stale local dev/* branches from resolved failed tasks
 **Status:** completed
-**Started:** 2026-02-24 16:39
+**Started:** 2026-02-24 16:50
 **Completed:** 2026-02-24
-**Branch:** dev/add-task-detail-drawer-to-tasks-page
+**Branch:** dev/prune-stale-local-dev-branches-from-reso
 **Worker:** 4
 
 ### Changes
