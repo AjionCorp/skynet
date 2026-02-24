@@ -64,6 +64,7 @@ export {
   SENSITIVE_KEYS,
   createEventsHandler,
   createMetricsHandler,
+  createPipelineHealthTrendHandler,
 } from "./handlers";
 
 // Dashboard UI components

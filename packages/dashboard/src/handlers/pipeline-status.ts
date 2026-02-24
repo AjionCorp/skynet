@@ -12,6 +12,17 @@ import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
 
+// Module-level ring buffer for health trend (persists across requests, resets on restart)
+const HEALTH_TREND_MAX = 60;
+export const healthTrendBuffer: { ts: number; score: number }[] = [];
+
+function pushHealthTrend(score: number) {
+  healthTrendBuffer.push({ ts: Date.now(), score });
+  if (healthTrendBuffer.length > HEALTH_TREND_MAX) {
+    healthTrendBuffer.shift();
+  }
+}
+
 /**
  * OPS-P2-4: Log unexpected handler errors to a persistent file for debugging.
  * Only writes if devDir is set. Lightweight — one JSON line per error.
@@ -551,6 +562,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         failedLines: failed,
         handlerCount,
       });
+
+      pushHealthTrend(healthScore);
 
       return Response.json({
         data: {

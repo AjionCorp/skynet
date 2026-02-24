@@ -28,6 +28,7 @@ import {
 import type { PipelineStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { ActivityFeed } from "./ActivityFeed";
+import { HealthSparkline } from "./HealthSparkline";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -304,6 +305,7 @@ export function PipelineDashboard() {
               {status.healthScore > 80 ? "Good" : status.healthScore > 50 ? "Degraded" : "Critical"}
             </span>
           </div>
+          <HealthSparkline />
         </div>
         <div className={`rounded-xl border p-4 ${levelClasses[scrLevel].card}`}>
           <p className={`text-xs font-medium uppercase tracking-wider ${levelClasses[scrLevel].label}`}>Self-Correction</p>
