@@ -2,13 +2,15 @@ import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { spawnSync } from "child_process";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
-import type { SkynetConfig, MissionProgress, CodexAuthStatus } from "../types";
+import type { SkynetConfig, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
 import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
+import { calculateHealthScore } from "../lib/health";
+import { parseMissionProgress } from "../lib/mission";
 
 /**
  * Parse current-task.md into a structured object.
@@ -83,169 +85,6 @@ function readCodexAuthStatus(
   } catch {
     return { status: "invalid", expiresInMs: null, hasRefreshToken: false, source: "invalid" };
   }
-}
-
-/**
- * Calculate a pipeline health score (0-100).
- * Starts at 100 and deducts for issues:
- *   -5 per pending failed task
- *  -10 per active blocker
- *   -2 per stale heartbeat
- *   -1 per task that has been in progress >24 hours
- *
- * Keep in sync with canonical formula in:
- *   - packages/dashboard/src/lib/db.ts (SkynetDB.calculateHealthScore)
- *   - packages/cli/src/commands/status.ts (healthScore calculation)
- *   - scripts/watchdog.sh (_health_score_alert)
- */
-function calculateHealthScore(opts: {
-  failedPendingCount: number;
-  blockerCount: number;
-  staleHeartbeatCount: number;
-  staleTasks24hCount: number;
-}): number {
-  let score = 100;
-  score -= opts.failedPendingCount * 5;
-  score -= opts.blockerCount * 10;
-  score -= opts.staleHeartbeatCount * 2;
-  score -= opts.staleTasks24hCount * 1;
-  return Math.max(0, Math.min(100, score));
-}
-
-/**
- * Parse mission.md success criteria and evaluate each against current pipeline state.
- * Returns an array of MissionProgress items with status and evidence.
- */
-function parseMissionProgress(opts: {
-  devDir: string;
-  completedCount: number;
-  failedLines: { status: string }[];
-  handlerCount: number;
-}): MissionProgress[] {
-  const { devDir, completedCount, failedLines, handlerCount } = opts;
-  const missionRaw = readDevFile(devDir, "mission.md");
-  if (!missionRaw) return [];
-
-  // Extract numbered criteria under ## Success Criteria
-  const scMatch = missionRaw.match(/## Success Criteria\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
-  if (!scMatch) return [];
-
-  const criteriaLines = scMatch[1]
-    .split("\n")
-    .filter((l) => /^\d+\.\s/.test(l.trim()));
-
-  const progress: MissionProgress[] = [];
-
-  for (const line of criteriaLines) {
-    const numMatch = line.trim().match(/^(\d+)\.\s+(.+)/);
-    if (!numMatch) continue;
-    const id = Number(numMatch[1]);
-    const criterion = numMatch[2];
-
-    const evaluated = evaluateCriterion(id, criterion, {
-      devDir,
-      completedCount,
-      failedLines,
-      handlerCount,
-    });
-    progress.push({ id, criterion, ...evaluated });
-  }
-
-  return progress;
-}
-
-/**
- * Evaluate a single success criterion against pipeline state.
- *
- * Criterion IDs (1-6) correspond to the standard mission.md format:
- *   1. Zero-to-autonomous setup
- *   2. Self-correction rate
- *   3. No zombies/deadlocks
- *   4. Dashboard visibility
- *   5. Measurable progress
- *   6. Multi-agent support
- * The default case handles unknown criteria safely (returns "not-met").
- */
-function evaluateCriterion(
-  id: number,
-  _criterion: string,
-  ctx: {
-    devDir: string;
-    completedCount: number;
-    failedLines: { status: string }[];
-    handlerCount: number;
-  }
-): { status: MissionProgress["status"]; evidence: string } {
-  switch (id) {
-    case 1: {
-      // "Any project can go from zero to autonomous AI development in under 5 minutes"
-      // Check: CLI init command exists + handlers are available (functional pipeline)
-      const hasInit = handlerCountCheck(ctx.handlerCount, 5);
-      if (hasInit) return { status: "met", evidence: `${ctx.handlerCount} dashboard handlers available, CLI init functional` };
-      return { status: "partial", evidence: `${ctx.handlerCount} handlers — more needed for full coverage` };
-    }
-    case 2: {
-      // "The pipeline self-corrects 95%+ of failures without human intervention"
-      const fixedCount = ctx.failedLines.filter((f) => f.status.includes("fixed")).length;
-      const supersededCount = ctx.failedLines.filter((f) => f.status.includes("superseded")).length;
-      const blockedCount = ctx.failedLines.filter((f) => f.status.includes("blocked")).length;
-      const selfCorrected = fixedCount + supersededCount;
-      const totalResolved = selfCorrected + blockedCount;
-      if (totalResolved === 0) return { status: "partial", evidence: "No failed tasks resolved yet" };
-      const fixRate = selfCorrected / totalResolved;
-      const pct = Math.round(fixRate * 100);
-      if (fixRate >= 0.95) return { status: "met", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved} resolved autonomously)` };
-      if (fixRate >= 0.5) return { status: "partial", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved}) — target 95%` };
-      return { status: "not-met", evidence: `${pct}% self-correction rate (${selfCorrected}/${totalResolved}) — target 95%` };
-    }
-    case 3: {
-      // "Workers never lose tasks, deadlock, or produce zombie processes"
-      // Check watchdog logs for zombie/deadlock references
-      const watchdogLog = readDevFile(`${ctx.devDir}/scripts`, "watchdog.log");
-      const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
-      const deadlockRefs = (watchdogLog.match(/deadlock/gi) || []).length;
-      const totalIssues = zombieRefs + deadlockRefs;
-      if (totalIssues === 0) return { status: "met", evidence: "No zombie/deadlock references in watchdog logs" };
-      if (totalIssues <= 3) return { status: "partial", evidence: `${totalIssues} zombie/deadlock reference(s) in watchdog logs` };
-      return { status: "not-met", evidence: `${totalIssues} zombie/deadlock references in watchdog logs` };
-    }
-    case 4: {
-      // "The dashboard provides full real-time visibility into pipeline health"
-      // Check number of dashboard handlers
-      if (ctx.handlerCount >= 8) return { status: "met", evidence: `${ctx.handlerCount} dashboard handlers providing full visibility` };
-      if (ctx.handlerCount >= 5) return { status: "partial", evidence: `${ctx.handlerCount} dashboard handlers — growing coverage` };
-      return { status: "not-met", evidence: `Only ${ctx.handlerCount} dashboard handlers` };
-    }
-    case 5: {
-      // "Mission progress is measurable — completed tasks map to mission objectives"
-      if (ctx.completedCount >= 10) return { status: "met", evidence: `${ctx.completedCount} tasks completed and tracked` };
-      if (ctx.completedCount >= 3) return { status: "partial", evidence: `${ctx.completedCount} tasks completed — building momentum` };
-      return { status: "not-met", evidence: `Only ${ctx.completedCount} tasks completed` };
-    }
-    case 6: {
-      // "The system works with any LLM agent (Claude, Codex, future models)"
-      // Check if agent plugin scripts exist under scripts/agents/
-      const projectRoot = ctx.devDir.replace(/\/?\.dev\/?$/, "");
-      const agentsDir = `${projectRoot}/scripts/agents`;
-      let agentPlugins: string[] = [];
-      try {
-        if (existsSync(agentsDir)) {
-          agentPlugins = readdirSync(agentsDir).filter((f: string) => f.endsWith(".sh"));
-        }
-      } catch {
-        /* ignore */
-      }
-      if (agentPlugins.length >= 2) return { status: "met", evidence: `${agentPlugins.length} agent plugins: ${agentPlugins.join(", ")}` };
-      if (agentPlugins.length === 1) return { status: "partial", evidence: `1 agent plugin: ${agentPlugins[0]} — need more for multi-agent support` };
-      return { status: "not-met", evidence: "No agent plugins found in scripts/agents/" };
-    }
-    default:
-      return { status: "not-met", evidence: "Unknown criterion — no evaluation logic" };
-  }
-}
-
-function handlerCountCheck(count: number, threshold: number): boolean {
-  return count >= threshold;
 }
 
 /**

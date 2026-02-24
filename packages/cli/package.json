@@ -24,6 +24,8 @@
     "templates",
     "README.md"
   ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "skynet": "dist/index.js"
   },
@@ -36,6 +38,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ajioncorp/skynet": "workspace:*",
     "commander": "^13.0.0"
   },
   "devDependencies": {

@@ -4,13 +4,11 @@ import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
 import { isSqliteReady, sqliteRows } from "../utils/sqliteQuery.js";
+import { STALE_THRESHOLD_SECONDS } from "@ajioncorp/skynet";
 
 interface WatchOptions {
   dir?: string;
 }
-
-// Keep in sync with packages/dashboard/src/lib/constants.ts STALE_THRESHOLD_SECONDS
-const STALE_THRESHOLD_SECONDS = 45 * 60;
 
 // ANSI color codes
 const GREEN = "\x1b[32m";

@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, renameSync } from "fs";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { VALID_CONFIG_KEY } from "../lib/constants";
 
 /**
  * Parse a skynet.config.sh file into key-value pairs.
@@ -162,7 +163,7 @@ function validateUpdates(updates: Record<string, string>): string | null {
       return `Unsafe characters in value for "${key}"`;
     }
     // Key must be a valid bash variable name
-    if (!/^[A-Z_][A-Z0-9_]*$/.test(key)) {
+    if (!VALID_CONFIG_KEY.test(key)) {
       return `Invalid config key "${key}"`;
     }
     // Only allow known mutable config keys

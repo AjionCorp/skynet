@@ -41,6 +41,7 @@ export { parseBacklog, backlogCounts, parseBacklogWithBlocked } from "./lib/back
 export { parseBody } from "./lib/parse-body";
 export type { ParsedBacklogItem, BacklogItemWithBlocked } from "./lib/backlog-parser";
 export { decodeJwtExp } from "./lib/jwt";
+export { STALE_THRESHOLD_SECONDS } from "./lib/constants";
 
 // Handler factories
 export {

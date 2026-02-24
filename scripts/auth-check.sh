@@ -333,18 +333,53 @@ check_gemini_auth() {
 }
 
 # Accept Claude, Codex, or Gemini auth. Returns 0 if any is available.
+# When ALL agents fail, sends a throttled notification (max once per hour)
+# and logs an explicit message to help operators diagnose the issue.
+ALL_AUTH_NOTIFY_INTERVAL="${SKYNET_ALL_AUTH_NOTIFY_INTERVAL:-3600}"  # max once per hour
+ALL_AUTH_FAIL_SENTINEL="/tmp/skynet-${SKYNET_PROJECT_NAME:-skynet}-all-auth-expired"
+
 check_any_auth() {
   if check_claude_auth; then
+    # At least one agent works — clear all-auth sentinel if it exists
+    rm -f "$ALL_AUTH_FAIL_SENTINEL" 2>/dev/null || true
     return 0
   fi
   if check_codex_auth; then
     log "Claude auth down — using Codex fallback."
+    rm -f "$ALL_AUTH_FAIL_SENTINEL" 2>/dev/null || true
     return 0
   fi
   if check_gemini_auth; then
     log "Claude + Codex auth down — using Gemini fallback."
+    rm -f "$ALL_AUTH_FAIL_SENTINEL" 2>/dev/null || true
     return 0
   fi
+
+  # ALL agent auth failed — pipeline cannot process tasks
+  log "ALL agent auth expired — pipeline cannot process tasks. Run 'claude /login' to refresh."
+
+  # Throttled notification: max once per hour using file mtime
+  local _now
+  _now=$(date +%s)
+  local _should_notify=true
+
+  if [ -f "$ALL_AUTH_FAIL_SENTINEL" ]; then
+    local _last_notify
+    _last_notify=$(cat "$ALL_AUTH_FAIL_SENTINEL" 2>/dev/null || echo 0)
+    local _elapsed=$((_now - _last_notify))
+    if [ "$_elapsed" -lt "$ALL_AUTH_NOTIFY_INTERVAL" ]; then
+      _should_notify=false
+    fi
+  fi
+
+  if $_should_notify; then
+    echo "$_now" > "$ALL_AUTH_FAIL_SENTINEL"
+    _notify_all "ALL agent auth expired for ${SKYNET_PROJECT_NAME_UPPER:-SKYNET} — pipeline cannot process tasks. Claude, Codex, and Gemini all failed. Run 'claude /login' to refresh."
+    log "All-auth-expired notification sent via all channels."
+  else
+    log "All agent auth still expired. (notification throttled, next in $(( ALL_AUTH_NOTIFY_INTERVAL - _elapsed ))s)"
+  fi
+
   return 1
 }
 

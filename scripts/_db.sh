@@ -534,11 +534,12 @@ db_add_task() {
       SELECT last_insert_rowid();
     "
   else
-    local max_pri
-    max_pri=$(_db "SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed');")
+    # Atomic subquery avoids TOCTOU: a separate SELECT MAX(priority) followed by
+    # INSERT could race with another worker inserting between the two statements.
     _db "
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', $max_pri);
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")',
+              (SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed')));
       SELECT last_insert_rowid();
     "
   fi

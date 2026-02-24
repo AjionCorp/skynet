@@ -53,6 +53,10 @@ trap _watchdog_cleanup EXIT INT TERM
 
 log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
+# Cycle counter for periodic maintenance (persists across subshell iterations)
+_CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
+echo 0 > "$_CYCLE_COUNTER_FILE"
+
 # --- Main loop ---
 while true; do
 (
@@ -208,7 +212,7 @@ _cr_phase2_orphaned_tasks() {
       local stuck_title
       stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
       if [ -n "$stuck_title" ]; then
-        db_unclaim_task_by_title "$stuck_title" 2>/dev/null || true
+        db_unclaim_task_by_title "$stuck_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$stuck_title' (worker $wid) — task may remain orphaned"
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -218,7 +222,7 @@ _cr_phase2_orphaned_tasks() {
         fi
       fi
       # Reset current-task file and SQLite worker status to idle
-      db_set_worker_idle "$wid" "dead worker recovered by watchdog" 2>/dev/null || true
+      db_set_worker_idle "$wid" "dead worker recovered by watchdog" 2>/dev/null || log "WARNING: db_set_worker_idle failed for worker $wid — dashboard may show stale status"
       cat > "$task_file" <<IDLE_EOF
 # Current Task
 **Status:** idle
@@ -253,7 +257,7 @@ IDLE_EOF
       if [ -n "$claimed_lines" ]; then
         while IFS= read -r line; do
           local title="${line#- \[>\] }"
-          db_unclaim_task_by_title "$title" 2>/dev/null || true
+          db_unclaim_task_by_title "$title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for orphaned task '$title' — task may stay claimed"
           log "Unclaimed orphaned task (no workers alive): $title"
           recovered=$((recovered + 1))
           _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -368,7 +372,7 @@ _orphaned_claimed=$(_db_sep "
 if [ -n "$_orphaned_claimed" ]; then
   while IFS="$_DB_SEP" read -r _oc_id _oc_title _oc_wid; do
     [ -z "$_oc_id" ] && continue
-    db_unclaim_task "$_oc_id" 2>/dev/null || true
+    db_unclaim_task "$_oc_id" 2>/dev/null || log "WARNING: db_unclaim_task failed for orphaned claim id=$_oc_id ('$_oc_title') — task may remain stuck as claimed"
     log "Reconciled orphaned claim: task '$_oc_title' (id=$_oc_id, worker=$_oc_wid)"
     emit_event "orphaned_claim_reconciled" "Task '$_oc_title' (id=$_oc_id) unclaimed — worker $_oc_wid not actively working on it" 2>/dev/null || true
   done <<< "$_orphaned_claimed"
@@ -402,7 +406,7 @@ if [ -n "$_stale_fixing" ]; then
     _db "
       UPDATE tasks SET status='failed', fixer_id=NULL, updated_at=datetime('now')
       WHERE id=$_sf_int_id AND status LIKE 'fixing-%';
-    " 2>/dev/null || true
+    " 2>/dev/null || log "WARNING: DB update failed for stale fixing task '$_sf_title' (id=$_sf_id) — task may remain stuck in fixing state"
     log "Reconciled stale fixing task: '$_sf_title' (id=$_sf_id, fixer=$_sf_fid) — reset to failed"
     emit_event "stale_fixing_reconciled" "Task '$_sf_title' (id=$_sf_id) reset to failed — fixer $_sf_fid is dead" 2>/dev/null || true
   done <<< "$_stale_fixing"
@@ -1240,6 +1244,80 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
   fi
 fi
 
+# --- Periodic maintenance (every 10 cycles ≈ 30 minutes) ---
+_maint_counter_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
+_maint_cycle=$(cat "$_maint_counter_file" 2>/dev/null || echo 0)
+if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
+  log "Running periodic maintenance (cycle $_maint_cycle)..."
+
+  # (a) SQLite WAL checkpoint — prevents unbounded WAL growth
+  if [ -f "$DB_PATH" ] && $_db_healthy; then
+    _wal_result=$(_db "PRAGMA wal_checkpoint(RESTART);" 2>/dev/null || echo "")
+    if [ -n "$_wal_result" ]; then
+      log "WAL checkpoint: $_wal_result"
+    else
+      log "WARNING: WAL checkpoint failed"
+    fi
+  fi
+
+  # (b) Stale worktree cleanup — remove worktrees with no corresponding worker lock
+  if [ -d "${WORKTREE_BASE:-}" ]; then
+    _maint_cleaned=0
+    for _maint_wt in "$WORKTREE_BASE"/*/; do
+      [ -d "$_maint_wt" ] || continue
+      _maint_wt_name=$(basename "$_maint_wt")
+      _maint_has_lock=false
+      case "$_maint_wt_name" in
+        w[0-9]*)
+          _maint_wid="${_maint_wt_name#w}"
+          is_running "${SKYNET_LOCK_PREFIX}-dev-worker-${_maint_wid}.lock" && _maint_has_lock=true
+          ;;
+        fixer-[0-9]*)
+          _maint_fid="${_maint_wt_name#fixer-}"
+          if [ "$_maint_fid" = "1" ]; then
+            is_running "${SKYNET_LOCK_PREFIX}-task-fixer.lock" && _maint_has_lock=true
+          else
+            is_running "${SKYNET_LOCK_PREFIX}-task-fixer-${_maint_fid}.lock" && _maint_has_lock=true
+          fi
+          ;;
+      esac
+      if ! $_maint_has_lock; then
+        cd "$PROJECT_DIR"
+        git worktree remove "$_maint_wt" --force 2>/dev/null || rm -rf "$_maint_wt" 2>/dev/null || true
+        _maint_cleaned=$((_maint_cleaned + 1))
+      fi
+    done
+    if [ "$_maint_cleaned" -gt 0 ]; then
+      git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+      log "Maintenance: cleaned $_maint_cleaned stale worktree(s)"
+    fi
+  fi
+
+  # (c) Git garbage collection (uses git's built-in threshold — won't run unless needed)
+  git -C "$PROJECT_DIR" gc --auto 2>/dev/null || log "WARNING: git gc --auto failed"
+
+  # (d) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
+  find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -delete 2>/dev/null || true
+
+  # (e) Stale branch cleanup — delete merged dev/* branches
+  _maint_merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null | grep "^  ${SKYNET_BRANCH_PREFIX}" || true)
+  if [ -n "$_maint_merged_branches" ]; then
+    _maint_branch_deleted=0
+    while IFS= read -r _maint_branch; do
+      _maint_branch=$(echo "$_maint_branch" | sed 's/^ *//')
+      [ -z "$_maint_branch" ] && continue
+      if git -C "$PROJECT_DIR" branch -d "$_maint_branch" 2>/dev/null; then
+        _maint_branch_deleted=$((_maint_branch_deleted + 1))
+      fi
+    done <<< "$_maint_merged_branches"
+    if [ "$_maint_branch_deleted" -gt 0 ]; then
+      log "Maintenance: deleted $_maint_branch_deleted merged ${SKYNET_BRANCH_PREFIX}* branch(es)"
+    fi
+  fi
+
+  log "Periodic maintenance complete"
+fi
+
 # --- Adaptive interval: shorter when work is available, longer when idle ---
 # NOTE: _adaptive_file path must match between this inner scope (subshell) and the
 # outer scope below that reads it. Both use "/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
@@ -1254,6 +1332,11 @@ else
 fi
 
 ) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
+
+# Increment cycle counter (outside subshell so it persists)
+_CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
+_cur_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)
+echo $((_cur_cycle + 1)) > "$_CYCLE_COUNTER_FILE"
 
 # Read adaptive interval from subshell output (falls back to default).
 # Guard against empty/stale reads: if cat returns empty string (slow write,

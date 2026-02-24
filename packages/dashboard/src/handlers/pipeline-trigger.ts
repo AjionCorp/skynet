@@ -3,6 +3,7 @@ import { openSync, closeSync, constants, existsSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { SAFE_SCRIPT_NAME } from "../lib/constants";
 
 /**
  * Create a POST handler for the pipeline/trigger endpoint.
@@ -32,7 +33,7 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
       }
 
       // Validate script name is safe (alphanumeric + hyphens only)
-      if (!/^[a-z0-9-]+$/.test(script)) {
+      if (!SAFE_SCRIPT_NAME.test(script)) {
         return Response.json(
           { data: null, error: "Invalid script name" },
           { status: 400 }
@@ -47,7 +48,7 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         );
       }
       for (const arg of args) {
-        if (typeof arg !== "string" || arg.length > 64 || !/^[a-z0-9-]+$/.test(arg)) {
+        if (typeof arg !== "string" || arg.length > 64 || !SAFE_SCRIPT_NAME.test(arg)) {
           return Response.json(
             { data: null, error: "Invalid argument" },
             { status: 400 }

@@ -3,6 +3,7 @@ import { openSync, closeSync, readFileSync, writeFileSync, unlinkSync, rmSync, e
 import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { SAFE_SCRIPT_NAME } from "../lib/constants";
 
 const SCALABLE_TYPES = ["dev-worker", "task-fixer", "project-driver"] as const;
 
@@ -164,7 +165,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
       // Validate workerType (alphanumeric + hyphens only)
       if (
         !workerType ||
-        !/^[a-z0-9-]+$/.test(workerType) ||
+        !SAFE_SCRIPT_NAME.test(workerType) ||
         !isScalable(workerType)
       ) {
         return Response.json(

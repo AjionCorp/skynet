@@ -12,8 +12,14 @@ MERGE_LOCK="${SKYNET_LOCK_PREFIX}-merge.lock"
 MERGE_FLOCK="${SKYNET_LOCK_PREFIX}-merge.flock"
 SKYNET_USE_FLOCK="${SKYNET_USE_FLOCK:-true}"
 
+# Auto-TTL: maximum age (seconds) for a merge lock before force-release.
+# Prevents pipeline deadlock when a worker dies while holding the merge lock.
+SKYNET_MERGE_LOCK_TTL="${SKYNET_MERGE_LOCK_TTL:-600}"  # 10 minutes
+
 # Acquire merge lock.
 # Delegates to the pluggable lock backend (file/redis).
+# Before delegating, checks for stale merge locks older than the TTL
+# whose holder PID is dead, and force-releases them.
 # Returns 0 on success, 1 on failure.
 acquire_merge_lock() {
   # Emergency unlock sentinel
@@ -29,6 +35,25 @@ acquire_merge_lock() {
       rm -f "$_emergency"
     else
       log "EMERGENCY UNLOCK: sentinel exists but owned by UID $_sentinel_owner (expected $(id -u)) — ignoring"
+    fi
+  fi
+
+  # Auto-TTL: force-release stale merge lock if holder PID is dead AND age > TTL.
+  # This covers the mkdir-based fallback path; flock releases automatically on
+  # process death, so only the legacy path needs this safety net.
+  if [ -d "$MERGE_LOCK" ] && [ -f "$MERGE_LOCK/pid" ]; then
+    local _ml_pid _ml_age _ml_mtime
+    _ml_pid=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
+    if [ "$(uname -s)" = "Darwin" ]; then
+      _ml_mtime=$(stat -f %m "$MERGE_LOCK/pid" 2>/dev/null || echo 0)
+    else
+      _ml_mtime=$(stat -c %Y "$MERGE_LOCK/pid" 2>/dev/null || echo 0)
+    fi
+    _ml_age=$(( $(date +%s) - _ml_mtime ))
+
+    if [ "$_ml_age" -gt "$SKYNET_MERGE_LOCK_TTL" ] && { [ -z "$_ml_pid" ] || ! kill -0 "$_ml_pid" 2>/dev/null; }; then
+      log "WARNING: Force-releasing stale merge lock (age=${_ml_age}s > TTL=${SKYNET_MERGE_LOCK_TTL}s, holder PID=${_ml_pid:-unknown})"
+      rm -rf "$MERGE_LOCK" 2>/dev/null || true
     fi
   fi
 

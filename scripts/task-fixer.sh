@@ -235,8 +235,8 @@ log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTE
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
 # Track fixer status in SQLite so dashboard/watchdog can see what we're doing
-db_set_worker_status "$FIXER_ID" "fixer" "in_progress" "$_db_task_id" "$task_title" "$branch_name" 2>/dev/null || true
-db_update_progress "$FIXER_ID" 2>/dev/null || true
+db_set_worker_status "$FIXER_ID" "fixer" "in_progress" "$_db_task_id" "$task_title" "$branch_name" 2>/dev/null || log "WARNING: db_set_worker_status failed for fixer $FIXER_ID — dashboard may show stale fixer status"
+db_update_progress "$FIXER_ID" 2>/dev/null || log "WARNING: db_update_progress failed for fixer $FIXER_ID — watchdog may detect false hung fixer"
 
 # Rotate log if it exceeds max size (prevents unbounded growth)
 rotate_log_if_needed "$LOG"
@@ -617,6 +617,6 @@ else
 fi
 
 # Ensure fixer is idle before exit (cleanup_on_exit also does this as a safety net)
-db_set_worker_idle "$FIXER_ID" "Fixer session ended" 2>/dev/null || true
+db_set_worker_idle "$FIXER_ID" "Fixer session ended" 2>/dev/null || log "WARNING: db_set_worker_idle failed for fixer $FIXER_ID — dashboard may show stale fixer status"
 emit_event "fixer_idle" "Fixer $FIXER_ID: session ended"
 log "Task-fixer finished."

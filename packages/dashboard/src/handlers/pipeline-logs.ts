@@ -2,6 +2,7 @@ import { spawnSync } from "child_process";
 import { statSync, openSync, readSync, closeSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig } from "../types";
+import { SAFE_SCRIPT_NAME } from "../lib/constants";
 
 /**
  * Sanitize a search string for use as a grep fixed-string pattern.
@@ -52,7 +53,7 @@ export function createPipelineLogsHandler(config: SkynetConfig) {
     }
 
     // Validate script name (alphanumeric + hyphens only)
-    if (!/^[a-z0-9-]+$/.test(script)) {
+    if (!SAFE_SCRIPT_NAME.test(script)) {
       return Response.json(
         { data: null, error: "Invalid script name" },
         { status: 400 }

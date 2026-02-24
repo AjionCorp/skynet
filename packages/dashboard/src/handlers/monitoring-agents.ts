@@ -2,6 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { spawnSync } from "child_process";
 import { homedir, platform } from "os";
 import type { SkynetConfig } from "../types";
+import { SAFE_SCRIPT_PATH, SAFE_AGENT_NAME } from "../lib/constants";
 
 /**
  * Format seconds into a human-friendly interval string.
@@ -33,7 +34,7 @@ function parsePlist(content: string) {
 
   const scriptMatch = content.match(/\.dev\/scripts\/([^<]+\.sh)/);
   let scriptPath = scriptMatch?.[1] ?? null;
-  if (scriptPath && !/^[a-zA-Z0-9._-]+$/.test(scriptPath)) scriptPath = null;
+  if (scriptPath && !SAFE_SCRIPT_PATH.test(scriptPath)) scriptPath = null;
 
   const logMatch = content.match(
     /<key>StandardOutPath<\/key>\s*<string>([^<]+)<\/string>/
@@ -187,7 +188,7 @@ function parseCrontab(
     if (!nameMatch) continue;
 
     const agentName = nameMatch[1];
-    if (!/^[a-zA-Z0-9_-]+$/.test(agentName)) continue;
+    if (!SAFE_AGENT_NAME.test(agentName)) continue;
     // scriptPath relative to .dev/scripts/ (matching plist handler output)
     const relScript = fullScriptPath.match(/\.dev\/scripts\/(.+\.sh)$/);
 

@@ -1,5 +1,6 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
+import { decodeJwtExp, STALE_THRESHOLD_SECONDS } from "@ajioncorp/skynet";
 import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
@@ -11,9 +12,6 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
-// Keep in sync with packages/dashboard/src/lib/constants.ts STALE_THRESHOLD_SECONDS
-const STALE_THRESHOLD_SECONDS = 45 * 60;
-
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -23,19 +21,6 @@ function formatDuration(ms: number): string {
   const hours = Math.floor(minutes / 60);
   const remainingMins = minutes % 60;
   return `${hours}h ${remainingMins}m`;
-}
-
-// NOTE: Duplicated from @ajioncorp/skynet/lib/jwt.ts — keep in sync
-// Kept separate to avoid pulling the full dashboard package into the lightweight CLI
-function decodeJwtExp(token: string): number | null {
-  const parts = token.split(".");
-  if (parts.length < 2) return null;
-  try {
-    const json = JSON.parse(Buffer.from(parts[1], "base64url").toString());
-    return typeof json.exp === "number" ? json.exp : null;
-  } catch {
-    return null;
-  }
 }
 
 function getCodexAuthStatus(vars: Record<string, string>): string {

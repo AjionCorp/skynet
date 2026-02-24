@@ -233,7 +233,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
 
   # Update progress epoch — proves the main loop is making forward progress
   # (distinct from heartbeat which runs in a background subshell)
-  db_update_progress "$WORKER_ID" 2>/dev/null || true
+  db_update_progress "$WORKER_ID" 2>/dev/null || log "WARNING: db_update_progress failed — watchdog may detect false hung worker"
 
   # Rotate log if it exceeds max size (prevents unbounded growth)
   rotate_log_if_needed "$LOG"
@@ -266,7 +266,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   fi
   if [ -z "$next_task" ]; then
     log "Backlog empty. Kicking off project-driver to refill."
-    db_set_worker_idle "$WORKER_ID" "Backlog empty — project-driver kicked off" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Backlog empty — project-driver kicked off" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: backlog empty"
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -422,7 +422,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree "$branch_name"
     [ -n "${_db_task_id:-}" ] && db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || true
-    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || true
+    db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed after claude failure — dashboard may show stale status"
     emit_event "worker_idle" "Worker $WORKER_ID: claude failed — $task_title"
     _CURRENT_TASK_TITLE=""
     _CURRENT_TASK_DB_TITLE=""
