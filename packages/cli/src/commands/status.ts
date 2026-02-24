@@ -1,6 +1,5 @@
 import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
-import { decodeJwtExp, STALE_THRESHOLD_SECONDS } from "@ajioncorp/skynet";
 import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
 import { readFile } from "../utils/readFile.js";
@@ -12,6 +11,18 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
+const STALE_THRESHOLD_SECONDS = 45 * 60;
+
+function decodeJwtExp(token: string): number | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString());
+    return typeof payload.exp === "number" ? payload.exp : null;
+  } catch {
+    return null;
+  }
+}
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);

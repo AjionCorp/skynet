@@ -27,15 +27,7 @@ assert_file() { [[ -f "$1" ]] && pass "$2" || fail "$2"; }
 assert_link() { [[ -L "$1" ]] && pass "$2" || fail "$2"; }
 assert_grep() { grep -q "$1" "$2" && pass "$3" || fail "$3"; }
 
-# ── Step 1: Build and pack the CLI (+ dashboard dependency) ─────────
-
-log "Building dashboard (CLI dependency)..."
-(cd "$REPO_ROOT/packages/dashboard" && npx tsc 2>&1)
-
-log "Packing dashboard tarball..."
-DASH_TARBALL_NAME=$(cd "$REPO_ROOT/packages/dashboard" && npm pack 2>/dev/null | tail -1)
-DASH_TARBALL="$REPO_ROOT/packages/dashboard/$DASH_TARBALL_NAME"
-CLEANUP+=("$DASH_TARBALL")
+# ── Step 1: Build and pack the CLI ──────────────────────────────────
 
 log "Building CLI..."
 (cd "$REPO_ROOT/packages/cli" && npx tsc 2>&1)
@@ -61,7 +53,7 @@ log "Temp project: $PROJECT_DIR"
 # ── Step 3: Install the tarball via npm ─────────────────────────────
 
 log "Installing CLI from tarball..."
-(cd "$PROJECT_DIR" && npm init -y >/dev/null 2>&1 && npm install "$DASH_TARBALL" "$TARBALL" >/dev/null 2>&1)
+(cd "$PROJECT_DIR" && npm init -y >/dev/null 2>&1 && npm install "$TARBALL" >/dev/null 2>&1)
 
 # ── Step 4: Run skynet init non-interactively ───────────────────────
 # Redirect stdin from /dev/null — the init command detects non-TTY stdin

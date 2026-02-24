@@ -103,7 +103,7 @@ jobs:
         run: |
           git config --global user.email "ci@ajioncorp.com"
           git config --global user.name "CI"
-      - run: pnpm --filter @ajioncorp/skynet build && pnpm --filter @ajioncorp/skynet-cli build
+      - run: pnpm --filter @ajioncorp/skynet-cli build
       - run: bash tests/e2e/init-smoke.test.sh
       - run: bash tests/e2e/cli-commands.test.sh
 
