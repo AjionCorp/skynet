@@ -6,6 +6,13 @@
 #   lock_backend_release "$name"
 #   lock_backend_check "$name"
 
+# Validate lock backend name: must be alphanumeric/underscore/hyphen only
+if [ -n "${SKYNET_LOCK_BACKEND:-}" ]; then
+  case "$SKYNET_LOCK_BACKEND" in
+    *[!a-zA-Z0-9_-]*) echo "FATAL: SKYNET_LOCK_BACKEND contains unsafe characters: $SKYNET_LOCK_BACKEND" >&2; exit 1 ;;
+  esac
+fi
+
 _lock_backend_file="${SKYNET_SCRIPTS_DIR}/lock-backends/${SKYNET_LOCK_BACKEND:-file}.sh"
 if [ -f "$_lock_backend_file" ]; then
   # shellcheck source=/dev/null

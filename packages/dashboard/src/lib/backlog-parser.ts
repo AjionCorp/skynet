@@ -150,7 +150,8 @@ export function parseBacklogWithBlocked(raw: string): {
   // Detect whether a task is blocked, including transitive dependency cycles.
   // Uses a visited set to break cycles: if we encounter a task already being
   // resolved, that means we have a circular dependency (A -> B -> A), so the
-  // task is blocked.
+  // task is blocked. This IS live code — called from the items.map() below
+  // to resolve blocked status for each backlog item.
   function isBlocked(title: string, visiting: Set<string>): boolean {
     const deps = titleToBlockedBy.get(title);
     if (!deps || deps.length === 0) return false;

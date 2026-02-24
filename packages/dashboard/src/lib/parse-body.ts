@@ -9,6 +9,10 @@ const MAX_BODY_SIZE = 1_000_000; // 1 MB
  * a schema validator (Zod, etc.) would increase bundle size for minimal benefit since
  * all callers already validate their specific required fields.
  *
+ * Example: Callers must validate required fields:
+ *   const { data } = await parseBody<{ name: string }>(req);
+ *   if (!data || typeof data.name !== "string") return error;
+ *
  * Checks Content-Length header first as an early-reject optimization,
  * then stream-reads with a hard size limit to prevent memory exhaustion.
  * Returns { data, error } — caller should check error before using data.

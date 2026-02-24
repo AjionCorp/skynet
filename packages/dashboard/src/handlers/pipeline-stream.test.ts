@@ -46,6 +46,13 @@ async function flushAsync() {
   await vi.advanceTimersByTimeAsync(0);
 }
 
+/** Read and discard the initial "retry: 5000" SSE instruction. */
+async function skipRetryInstruction(reader: ReadableStreamDefaultReader<Uint8Array>) {
+  const { value } = await reader.read();
+  const text = new TextDecoder().decode(value);
+  expect(text).toBe("retry: 5000\n\n");
+}
+
 describe("createPipelineStreamHandler", () => {
   let mockWatcher: FSWatcher & EventEmitter;
 
@@ -65,7 +72,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     expect(res.headers.get("Content-Type")).toBe("text/event-stream");
-    expect(res.headers.get("Cache-Control")).toBe("no-cache");
+    expect(res.headers.get("Cache-Control")).toBe("no-cache, no-transform");
     expect(res.headers.get("Connection")).toBe("keep-alive");
     res.body?.cancel();
   });
@@ -77,6 +84,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
     expect(text).toMatch(/^data: /);
@@ -90,6 +98,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig({ devDir: "/my/.dev" }));
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
     expect(mockWatch).toHaveBeenCalledWith("/my/.dev", expect.any(Function));
@@ -106,6 +115,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 
@@ -125,6 +135,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 
@@ -141,6 +152,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 
@@ -163,6 +175,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 
@@ -181,6 +194,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read(); // initial status
     await flushAsync();
 
@@ -198,6 +212,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 
@@ -214,6 +229,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
     const parsed = JSON.parse(text.replace("data: ", "").trim());
@@ -227,6 +243,7 @@ describe("createPipelineStreamHandler", () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     await reader.read();
     await flushAsync();
 

@@ -133,6 +133,8 @@ _acquire_file_lock() {
     local _ready_pipe
     _ready_pipe=$(mktemp /tmp/skynet-flock-pipe-XXXXXX)
     rm -f "$_ready_pipe"
+    # FIFO is cleaned up at rm -f below. If the process is killed between
+    # mkfifo and rm, the orphaned FIFO in /tmp is harmless (cleaned on reboot).
     mkfifo "$_ready_pipe" 2>/dev/null || { rm -f "$_ready_pipe"; return 1; }
 
     perl -e '

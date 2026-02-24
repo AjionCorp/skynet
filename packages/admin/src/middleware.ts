@@ -31,6 +31,7 @@ export function middleware(request: NextRequest) {
     pathname === "/login" ||
     pathname === "/healthz" ||
     pathname.startsWith("/api/auth/") ||
+    // /_next — Next.js static assets and client-side bundles (must bypass auth)
     pathname.startsWith("/_next")
   ) {
     return NextResponse.next();

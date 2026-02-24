@@ -21,6 +21,9 @@ emit_event() {
   local events_log="$DEV_DIR/events.log"
   local max_kb="${SKYNET_MAX_EVENTS_LOG_KB:-1024}"
   if [ -f "$events_log" ]; then
+    # Size check uses bytes (wc -c) for file rotation threshold,
+    # while truncation uses characters (${var:0:N}) to avoid mid-codepoint splits.
+    # This is intentional: rotation cares about disk usage, truncation cares about correctness.
     local sz
     sz=$(wc -c < "$events_log" 2>/dev/null || echo 0)
     if [ "$sz" -gt $((max_kb * 1024)) ]; then
@@ -30,6 +33,7 @@ emit_event() {
       # NOTE: Pruned events are permanently deleted. For forensic retention,
       # configure an external log sink before enabling aggressive pruning.
       if mkdir "$_rot_lock" 2>/dev/null; then
+        # gzip runs in foreground (not &) so no orphan risk
         gzip -f "${events_log}.2" 2>/dev/null || true
         rm -f "${events_log}.2"
         if [ -f "${events_log}.1" ]; then
@@ -48,6 +52,6 @@ emit_event() {
   # preserved intact — no mid-codepoint splits.
   local _safe_desc="${description:0:3000}"
   # Strip trailing backslash to avoid corrupted escape sequences after truncation
-  [[ "$_safe_desc" == *'\' ]] && _safe_desc="${_safe_desc%?}"
+  case "$_safe_desc" in *'\\') _safe_desc="${_safe_desc%?}" ;; esac
   printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc" >> "$events_log"
 }

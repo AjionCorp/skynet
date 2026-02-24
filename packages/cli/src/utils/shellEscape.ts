@@ -1,6 +1,10 @@
 /**
  * Shell-escape a value for safe embedding in bash double-quoted strings.
  * Escapes: " \ $ ` ! \n \r
+ *
+ * `!` is escaped for defense-in-depth. Bash history expansion (where `!` is
+ * special) only triggers in interactive shells, not in scripts. But escaping
+ * it has zero cost and prevents surprises in edge cases.
  */
 export function shellEscape(s: string): string {
   return s.replace(/["\\$`!\n\r]/g, (ch) => {

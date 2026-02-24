@@ -46,5 +46,5 @@ if [ -f "$_events_log" ]; then
 fi
 
 # Clean up rotated log backups older than 24h
-find "$SCRIPTS_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true
-find "$DEV_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -delete 2>/dev/null || true
+find "$SCRIPTS_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -exec rm -f {} + 2>/dev/null || true
+find "$DEV_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -exec rm -f {} + 2>/dev/null || true

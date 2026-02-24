@@ -55,15 +55,7 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
           try {
             controller.enqueue(encoder.encode(text));
           } catch {
-            // Enqueue failed (stream likely closed by client).
-            // NOTE: The error-event enqueue below is effectively dead code — if the
-            // first enqueue threw because the stream is closed, this one will too.
-            // Kept for defence-in-depth in case the first failure was transient.
-            try {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ data: null, error: "Stream closed" })}\n\n`));
-            } catch {
-              /* stream is fully dead — nothing more we can do */
-            }
+            // Stream closed by client — clean up
             cleanup();
           }
         }
@@ -87,6 +79,9 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
             });
           }
         }
+
+        // Tell EventSource clients to retry after 5 seconds on disconnect
+        send("retry: 5000\n\n");
 
         // Send initial status immediately
         await pushStatus();
@@ -146,8 +141,9 @@ export function createPipelineStreamHandler(config: SkynetConfig) {
     return new Response(stream, {
       headers: {
         "Content-Type": "text/event-stream",
-        "Cache-Control": "no-cache",
+        "Cache-Control": "no-cache, no-transform",
         Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
       },
     });
   };

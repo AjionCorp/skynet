@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+# Seed $RANDOM with PID and nanosecond timestamp to reduce thundering herd
+# when multiple workers start simultaneously from watchdog
+RANDOM=$((RANDOM ^ $$ ^ $(date +%N 2>/dev/null || echo 0)))
+
 # Resolve the scripts directory (where this file lives)
 SKYNET_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -239,6 +243,8 @@ _json_escape() {
   s="${s//$'\n'/\\n}"
   s="${s//$'\r'/\\r}"
   s="${s//$'\t'/\\t}"
+  # Strip remaining ASCII control chars 0x00-0x1F (tab/newline/CR already handled above)
+  s=$(printf '%s' "$s" | tr -d '\001-\010\013\014\016-\037')
   printf '%s' "$s"
 }
 

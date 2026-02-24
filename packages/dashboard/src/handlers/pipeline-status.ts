@@ -99,7 +99,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
   // Cache handler count — handlers don't change at runtime
   let _cachedHandlerCount: number | null = null;
   function getHandlerCount(): number {
-    if (_cachedHandlerCount !== null) return _cachedHandlerCount;
+    // In development, handler files may change via HMR — skip cache
+    if (_cachedHandlerCount !== null && process.env.NODE_ENV !== "development") return _cachedHandlerCount;
     try {
       const handlersDir = dirname(fileURLToPath(import.meta.url));
       _cachedHandlerCount = readdirSync(handlersDir).filter(

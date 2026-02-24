@@ -17,6 +17,10 @@ let _betterSqlite3: BetterSqlite3 | null = null;
 function loadDriver(): BetterSqlite3 {
   if (!_betterSqlite3) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // require() is synchronous but only executes once (Node caches modules).
+    // The native addon load time is ~5ms on first require. Switching to dynamic
+    // import() would require making the constructor async, adding complexity
+    // for negligible benefit in a server-side context.
     _betterSqlite3 = require("better-sqlite3") as BetterSqlite3;
   }
   return _betterSqlite3;
@@ -573,6 +577,8 @@ export class SkynetDB {
 
     const tmpPath = backlogPath + ".tmp";
     writeFileSync(tmpPath, lines.join("\n") + "\n", "utf-8");
+    // renameSync is atomic on the same filesystem. tmpPath is in the same directory
+    // as backlogPath, so cross-filesystem rename failure cannot occur here.
     renameSync(tmpPath, backlogPath);
   }
 

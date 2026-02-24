@@ -12,7 +12,7 @@ DB_PATH="${SKYNET_DEV_DIR}/skynet.db"
 # but a SIGTERM between mktemp and rm would leak them. _db_cleanup_tmpfiles()
 # sweeps any survivors — callers with their own EXIT traps should call it.
 # SIGKILL is uncatchable — leaked files use a fixed prefix so a cron job
-# like `find /tmp -name 'skynet-sql-*' -mmin +60 -delete` can clean up.
+# like `find /tmp -name 'skynet-sql-*' -mmin +60 -exec rm -f {} +` can clean up.
 _DB_TMPFILES=""
 _db_register_tmp() { _DB_TMPFILES="$_DB_TMPFILES $1"; }
 _db_cleanup_tmpfiles() {
@@ -34,6 +34,8 @@ _DB_SEP=$'\x1f'
 # --- SQL injection prevention ---
 _sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
 # Strip non-digits and leading zeros — defense-in-depth for integer params.
+# Intentionally rejects negative values — all DB integer fields in skynet
+# (worker IDs, counts, epochs) are non-negative.
 _sql_int() {
   local v="${1%%[^0-9]*}"
   v="${v:-0}"

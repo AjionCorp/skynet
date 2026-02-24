@@ -1,7 +1,10 @@
 /**
  * Stale threshold for worker heartbeats, in seconds.
- * A heartbeat older than this is considered stale/stuck.
- * Default matches SKYNET_STALE_MINUTES (30 min) from skynet.config.sh.
+ * Default: 30 minutes (1800s) — MUST match SKYNET_STALE_MINUTES in _config.sh (line 63).
+ * Not to be confused with SKYNET_AGENT_TIMEOUT_MINUTES (45m default), which is the
+ * maximum allowed time for a single agent invocation.
+ * When SkynetConfig.staleMinutes is available (set from config), that value takes precedence.
+ * This constant is only used as a fallback when the config value is not available.
  */
 export const STALE_THRESHOLD_SECONDS = 30 * 60;
 

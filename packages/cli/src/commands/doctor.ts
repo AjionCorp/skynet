@@ -11,6 +11,7 @@ interface DoctorOptions {
   fix?: boolean;
 }
 
+// cmd values are hardcoded constants (not user input), so execSync string form is safe here.
 function getToolVersion(cmd: string): string | null {
   try {
     return execSync(cmd, { stdio: ["ignore", "pipe", "ignore"], timeout: 10000 })

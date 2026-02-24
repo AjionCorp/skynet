@@ -92,7 +92,13 @@ echo 0 > "$_CYCLE_COUNTER_FILE"
 # --- Main loop ---
 while ! $_DRAINING; do
 (
+# NOTE: set -euo pipefail inside this subshell is intentional. The outer loop
+# catches subshell exit via `|| { ... }` so a single cycle failure does NOT
+# kill the watchdog — it logs the failure and retries next cycle. This is
+# preferred over set +e inside the subshell because it surfaces unexpected
+# errors immediately rather than silently continuing with corrupted state.
 set -euo pipefail
+# NOTE: $LINENO in ERR trap may be relative to function/subshell scope, not the file.
 trap 'log "Watchdog cycle failed at line $LINENO: $BASH_COMMAND"' ERR
 
 # Rotate watchdog's own log if it exceeds configurable threshold
@@ -572,7 +578,7 @@ if [ -f "$DB_PATH" ] && $_db_healthy && [ ! -f "$_backup_sentinel" ]; then
 fi
 
 # Clean up old /tmp sentinel files (older than 7 days) to prevent accumulation
-find /tmp -maxdepth 1 -name "skynet-${SKYNET_PROJECT_NAME}-*" -mtime +7 -type f -delete 2>/dev/null || true
+find /tmp -maxdepth 1 -name "skynet-${SKYNET_PROJECT_NAME}-*" -mtime +7 -type f -exec rm -f {} + 2>/dev/null || true
 
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
@@ -1412,7 +1418,7 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
   git -C "$PROJECT_DIR" gc --auto 2>/dev/null || log "WARNING: git gc --auto failed"
 
   # (d) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
-  find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -delete 2>/dev/null || true
+  find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -exec rm -f {} + 2>/dev/null || true
 
   # (e) Stale branch cleanup — delete merged dev/* branches
   _maint_merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null | grep "^  ${SKYNET_BRANCH_PREFIX}" || true)

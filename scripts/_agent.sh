@@ -93,7 +93,7 @@ _load_plugin_as() {
 
   if [ ! -f "$plugin_path" ]; then
     eval "${prefix}_agent_check() { return 1; }"
-    eval "${prefix}_agent_run() { echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent plugin not found: $plugin_path\" >> \"\${2:-/dev/null}\"; return 1; }"
+    eval "${prefix}_agent_run() { return 1; }"
     return
   fi
 
@@ -101,7 +101,7 @@ _load_plugin_as() {
   if ! bash -n "$plugin_path" 2>/dev/null; then
     log "ERROR: Agent plugin has syntax errors: $plugin_path"
     eval "${prefix}_agent_check() { return 1; }"
-    eval "${prefix}_agent_run() { echo \"[\$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Plugin syntax invalid: $plugin_path\" >> \"\${2:-/dev/null}\"; return 1; }"
+    eval "${prefix}_agent_run() { return 1; }"
     return
   fi
 

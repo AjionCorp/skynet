@@ -141,6 +141,7 @@ cleanup_on_exit() {
   rm -rf "$LOCKFILE"
 }
 trap cleanup_on_exit EXIT
+# NOTE: $LINENO in ERR trap may be relative to function/subshell scope, not the file.
 trap 'log "ERR on line $LINENO: $BASH_COMMAND"; exit 1' ERR
 
 # --- Graceful shutdown handling ---

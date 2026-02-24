@@ -58,6 +58,8 @@ fi
 #   _pd_cleanup() { rm -rf "$LOCKFILE"; eval "$_pd_prev_trap"; }
 #   trap '_pd_cleanup' EXIT
 trap 'rm -rf "$LOCKFILE"' EXIT
+trap 'log "Caught SIGTERM — shutting down"; exit 143' TERM
+trap 'log "Caught SIGINT — shutting down"; exit 130' INT
 
 # --- Pipeline pause check ---
 if [ -f "$DEV_DIR/pipeline-paused" ]; then

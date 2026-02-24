@@ -12,7 +12,7 @@ interface StatusOptions {
   quiet?: boolean;
 }
 
-const STALE_THRESHOLD_SECONDS = 30 * 60; // NOTE: default; should match SKYNET_STALE_MINUTES from config
+// Stale threshold is computed inside statusCommand() from SKYNET_STALE_MINUTES config value.
 
 // decodeJwtExp imported from @ajioncorp/skynet (see packages/dashboard/src/lib/jwt.ts)
 
@@ -221,7 +221,9 @@ export async function statusCommand(options: StatusOptions) {
 
   // --- Heartbeat staleness (SQLite only) ---
   const maxWorkers = Number(vars.SKYNET_MAX_WORKERS) || 2;
-  const staleThresholdMs = STALE_THRESHOLD_SECONDS * 1000;
+  // Use SKYNET_STALE_MINUTES from config if available, fallback to 30 minutes
+  const staleMinutesFromConfig = vars ? Number(vars.SKYNET_STALE_MINUTES) : 0;
+  const staleThresholdMs = ((staleMinutesFromConfig > 0 ? staleMinutesFromConfig : 30) * 60) * 1000;
 
   if (usingSqlite) {
     try {
@@ -383,9 +385,14 @@ export async function statusCommand(options: StatusOptions) {
   print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
-  // NOTE: Mission evaluation logic is duplicated from packages/dashboard/src/lib/mission.ts.
-  // Changes to criteria evaluation MUST be kept in sync. The duplication exists because
-  // the CLI evaluates from the filesystem while the dashboard evaluates from its own context.
+  // NOTE: Mission evaluation logic is duplicated from packages/dashboard/src/lib/mission.ts
+  // (parseMissionProgress / evaluateCriterion). The canonical implementation lives in
+  // @ajioncorp/skynet but is not currently exported for CLI use because:
+  //   1. The dashboard version expects MissionEvaluationContext (pre-computed counts).
+  //   2. The CLI version reads directly from the filesystem and computes its own inputs.
+  // Changes to criteria evaluation (IDs 1-6, thresholds) MUST be kept in sync manually.
+  // TODO: Consider exporting parseMissionProgress from @ajioncorp/skynet with a
+  //       filesystem-friendly adapter to eliminate this duplication.
   const missionRaw = readFile(join(devDir, "mission.md"));
   const missionProgress: { id: number; criterion: string; status: string; evidence: string }[] = [];
   if (missionRaw) {

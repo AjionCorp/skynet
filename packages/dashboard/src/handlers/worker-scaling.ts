@@ -279,6 +279,8 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             );
           }
 
+          // TOCTOU: A worker may acquire the merge lock between our check and kill.
+          // Mitigated by: worker's merge lock extends past kill, watchdog detects orphaned locks.
           try {
             process.kill(instance.pid, "SIGTERM");
           } catch (err: unknown) {

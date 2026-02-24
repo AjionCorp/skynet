@@ -97,6 +97,13 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
   renameSync(tmpPath, configPath);
 }
 
+/**
+ * Keys that can be updated via the dashboard config POST endpoint.
+ * Hardcoded (not derived from config template) because:
+ * 1. Security: each key is manually reviewed for safety implications
+ * 2. Stability: template changes shouldn't auto-expose new keys
+ * 3. Auditability: git blame shows when each key was added
+ */
 const MUTABLE_KEYS = new Set([
   "SKYNET_MAX_WORKERS",
   "SKYNET_MAX_FIXERS",
@@ -133,16 +140,12 @@ const MUTABLE_KEYS = new Set([
   "SKYNET_BRANCH_PREFIX",
   "SKYNET_MAIN_BRANCH",
   "SKYNET_CLAUDE_BIN",
-  "SKYNET_CLAUDE_FLAGS",
   "SKYNET_CODEX_BIN",
   "SKYNET_CODEX_SUBCOMMAND",
-  "SKYNET_CODEX_FLAGS",
   "SKYNET_CODEX_MODEL",
   "SKYNET_GEMINI_BIN",
   "SKYNET_GEMINI_FLAGS",
   "SKYNET_GEMINI_MODEL",
-  "SKYNET_AGENT_PLUGIN",
-  "SKYNET_EXTRA_PATH",
   "SKYNET_WORKER_CONTEXT",
   "SKYNET_WORKER_CONVENTIONS",
 ]);
@@ -161,7 +164,7 @@ function validateUpdates(updates: Record<string, string>): string | null {
     // Bare $VAR references are also blocked — they would be expanded by bash when
     // sourcing the config, allowing exfiltration of environment variables or
     // unintended value injection.
-    if (/[`"'|&><()]|\$[({a-zA-Z_]|;|\n|\r|\t/.test(value)) {
+    if (/[`"'|&><()#]|\$[({a-zA-Z_]|;|\n|\r|\t/.test(value)) {
       errors.push(`Unsafe characters in value for "${key}"`);
       continue;
     }

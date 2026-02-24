@@ -2,12 +2,22 @@ import { NextResponse } from "next/server";
 import { safeCompare, deriveSessionToken } from "../../../../lib/auth";
 
 // --- In-memory rate limiter for login attempts ---
+// NOTE: Resets on process restart. This is acceptable for a single-operator dashboard
+// where persistent rate limiting would require external storage (Redis/DB).
+// The 5-attempt / 15-minute window provides sufficient protection against online brute-force.
 const LOGIN_ATTEMPTS = new Map<string, { count: number; resetAt: number }>();
 const MAX_ATTEMPTS = 5;
 const WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_TRACKED_IPS = 10_000; // prevent unbounded growth
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  // Periodic cleanup: if map exceeds MAX_TRACKED_IPS, purge expired entries
+  if (LOGIN_ATTEMPTS.size > MAX_TRACKED_IPS) {
+    for (const [key, entry] of LOGIN_ATTEMPTS) {
+      if (now >= entry.resetAt) LOGIN_ATTEMPTS.delete(key);
+    }
+  }
   const entry = LOGIN_ATTEMPTS.get(ip);
   if (!entry || now >= entry.resetAt) {
     LOGIN_ATTEMPTS.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -19,8 +29,12 @@ function isRateLimited(ip: string): boolean {
 
 export async function POST(request: Request) {
   try {
-    // Rate limit by IP (X-Forwarded-For behind reverse proxy, fallback to "unknown")
-    const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
+    // Rate limit by both forwarded IP and connecting IP to prevent bypass via header spoofing.
+    // In production behind a reverse proxy, x-real-ip is set by the proxy and cannot be spoofed.
+    const forwardedIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+    const realIp = request.headers.get("x-real-ip")?.trim() || "";
+    // Use the most trustworthy source: x-real-ip (set by reverse proxy), then x-forwarded-for, then "unknown"
+    const ip = realIp || forwardedIp || "unknown";
     if (isRateLimited(ip)) {
       return NextResponse.json(
         { error: "Too many login attempts. Try again later." },

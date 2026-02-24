@@ -158,8 +158,15 @@ do_merge_to_main() {
   fi
 
   set -e
+  # Restore the caller's ERR trap. trap -p ERR returns a shell-escaped string
+  # like `trap -- 'handler' ERR` which is safe to eval. We validate the prefix
+  # to ensure no injection from corrupted trap output.
   if [ -n "$_saved_err_trap" ]; then
-    eval "$_saved_err_trap"
+    case "$_saved_err_trap" in
+      "trap -- "*)  eval "$_saved_err_trap" ;;
+      "trap -"*)    eval "$_saved_err_trap" ;;
+      *)            echo "[WARN] Unexpected ERR trap format, skipping restore: $_saved_err_trap" >&2 ;;
+    esac
   fi
 
   if ! $_merge_succeeded; then
