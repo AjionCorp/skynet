@@ -375,6 +375,24 @@ describe("SkynetDB", () => {
       const result = db.getHeartbeats(2);
       expect(result["worker-1"].isStale).toBe(false);
     });
+
+    it("uses custom staleMinutes when provided", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      // Heartbeat 3 minutes ago — stale with 2-minute threshold, fresh with default 30-minute threshold
+      const epoch = Math.floor(Date.now() / 1000) - 180;
+      rawDb.exec(`INSERT INTO workers (id, heartbeat_epoch) VALUES (1, ${epoch})`);
+      rawDb.close();
+
+      // With default staleMinutes (30 min), 3 minutes ago is fresh
+      const defaultResult = db.getHeartbeats(1);
+      expect(defaultResult["worker-1"].isStale).toBe(false);
+
+      // With custom staleMinutes of 2, 3 minutes ago is stale
+      const customResult = db.getHeartbeats(1, 2);
+      expect(customResult["worker-1"].isStale).toBe(true);
+    });
   });
 
   describe("getRecentEvents", () => {
@@ -616,6 +634,184 @@ describe("SkynetDB", () => {
     it("closes the underlying database connection without error", () => {
       // Calling close should not throw
       expect(() => db.close()).not.toThrow();
+    });
+  });
+
+  // ── P1-10: exportBacklog() tests ──────────────────────────────────
+  describe("exportBacklog", () => {
+    it("produces valid header-only output for empty database", () => {
+      const { readFileSync } = require("fs") as typeof import("fs");
+      const outPath = join(tmpDir, "backlog.md");
+      db.exportBacklog(outPath);
+      const content = readFileSync(outPath, "utf-8");
+      expect(content).toContain("# Backlog");
+      // No actual task lines (lines starting with "- [" outside comments)
+      const taskLines = content.split("\n").filter(
+        (l: string) => /^- \[[ >x]\] \[/.test(l)
+      );
+      expect(taskLines).toHaveLength(0);
+    });
+
+    it("pending items appear before done items; claimed items use [>] marker", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('Pending task', 'FEAT', 'pending', 0)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('Claimed task', 'FIX', 'claimed', 1)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority, updated_at) VALUES ('Done task', 'INFRA', 'done', 2, datetime('now'))");
+      rawDb.close();
+
+      const { readFileSync } = require("fs") as typeof import("fs");
+      const outPath = join(tmpDir, "backlog.md");
+      db.exportBacklog(outPath);
+      const content = readFileSync(outPath, "utf-8");
+
+      // Pending and claimed come before done
+      const pendingIdx = content.indexOf("- [ ] [FEAT] Pending task");
+      const claimedIdx = content.indexOf("- [>] [FIX] Claimed task");
+      const doneIdx = content.indexOf("- [x] [INFRA] Done task");
+
+      expect(pendingIdx).toBeGreaterThan(-1);
+      expect(claimedIdx).toBeGreaterThan(-1);
+      expect(doneIdx).toBeGreaterThan(-1);
+      expect(pendingIdx).toBeLessThan(doneIdx);
+      expect(claimedIdx).toBeLessThan(doneIdx);
+    });
+
+    it("done items limited to 30 in the recent history section", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      for (let i = 0; i < 40; i++) {
+        rawDb.exec(`INSERT INTO tasks (title, tag, status, priority, updated_at) VALUES ('Done ${i}', 'FEAT', 'done', ${i}, datetime('now', '-${i} minutes'))`);
+      }
+      rawDb.close();
+
+      const { readFileSync } = require("fs") as typeof import("fs");
+      const outPath = join(tmpDir, "backlog.md");
+      db.exportBacklog(outPath);
+      const content = readFileSync(outPath, "utf-8");
+      const doneLines = content.split("\n").filter((l: string) => l.startsWith("- [x]"));
+      expect(doneLines.length).toBe(30);
+    });
+  });
+
+  // ── P1-11: Export methods tests ───────────────────────────────────
+  describe("exportAllTasks", () => {
+    it("returns all rows", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('T1', 'FEAT', 'pending', 0)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, priority) VALUES ('T2', 'FIX', 'completed', 1)");
+      rawDb.close();
+      const rows = db.exportAllTasks();
+      expect(rows).toHaveLength(2);
+      expect(rows[0].title).toBe("T1");
+      expect(rows[1].title).toBe("T2");
+    });
+
+    it("returns empty array for empty table", () => {
+      expect(db.exportAllTasks()).toEqual([]);
+    });
+  });
+
+  describe("exportAllBlockers", () => {
+    it("returns all rows", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('B1', 'active')");
+      rawDb.exec("INSERT INTO blockers (description, status) VALUES ('B2', 'resolved')");
+      rawDb.close();
+      const rows = db.exportAllBlockers();
+      expect(rows).toHaveLength(2);
+    });
+
+    it("returns empty array for empty table", () => {
+      expect(db.exportAllBlockers()).toEqual([]);
+    });
+  });
+
+  describe("exportAllEvents", () => {
+    it("returns all rows", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      rawDb.exec(`INSERT INTO events (epoch, event, detail) VALUES (${now}, 'evt1', 'detail1')`);
+      rawDb.exec(`INSERT INTO events (epoch, event, detail) VALUES (${now}, 'evt2', 'detail2')`);
+      rawDb.close();
+      const rows = db.exportAllEvents();
+      expect(rows).toHaveLength(2);
+    });
+
+    it("returns empty array for empty table", () => {
+      expect(db.exportAllEvents()).toEqual([]);
+    });
+  });
+
+  describe("exportAllFixerStats", () => {
+    it("returns all rows", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      const now = Math.floor(Date.now() / 1000);
+      rawDb.exec(`INSERT INTO fixer_stats (epoch, result, task_title) VALUES (${now}, 'success', 'T1')`);
+      rawDb.exec(`INSERT INTO fixer_stats (epoch, result, task_title) VALUES (${now}, 'failure', 'T2')`);
+      rawDb.close();
+      const rows = db.exportAllFixerStats();
+      expect(rows).toHaveLength(2);
+    });
+
+    it("returns empty array for empty table", () => {
+      expect(db.exportAllFixerStats()).toEqual([]);
+    });
+  });
+
+  // ── P1-13: getCleanupBranches() and getTaskBranches() tests ───────
+  describe("getCleanupBranches", () => {
+    it("returns branches from fixed/superseded/blocked tasks only", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T1', 'FIX', 'fixed', 'dev/fix-1', 0)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T2', 'FIX', 'superseded', 'dev/fix-2', 1)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T3', 'FIX', 'blocked', 'dev/fix-3', 2)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T4', 'FIX', 'pending', 'dev/fix-4', 3)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T5', 'FIX', 'completed', 'dev/fix-5', 4)");
+      rawDb.close();
+
+      const branches = db.getCleanupBranches();
+      expect(branches).toContain("dev/fix-1");
+      expect(branches).toContain("dev/fix-2");
+      expect(branches).toContain("dev/fix-3");
+      expect(branches).not.toContain("dev/fix-4");
+      expect(branches).not.toContain("dev/fix-5");
+    });
+
+    it("returns empty array for empty DB", () => {
+      expect(db.getCleanupBranches()).toEqual([]);
+    });
+  });
+
+  describe("getTaskBranches", () => {
+    it("returns all tasks with branches", () => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Database = require("better-sqlite3");
+      const rawDb = new Database(join(tmpDir, "skynet.db"));
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T1', 'FIX', 'fixed', 'dev/fix-1', 0)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T2', 'FIX', 'pending', 'dev/fix-2', 1)");
+      rawDb.exec("INSERT INTO tasks (title, tag, status, branch, priority) VALUES ('T3', 'FIX', 'pending', '', 2)");
+      rawDb.close();
+
+      const branches = db.getTaskBranches();
+      expect(branches).toHaveLength(2); // T3 has empty branch, excluded
+      expect(branches[0]).toMatchObject({ branch: expect.any(String), status: expect.any(String), title: expect.any(String) });
+    });
+
+    it("returns empty array for empty DB", () => {
+      expect(db.getTaskBranches()).toEqual([]);
     });
   });
 });

@@ -35,6 +35,10 @@ _REDIS_LOCK_VALUE=$(printf '%.128s' "$_REDIS_LOCK_VALUE")
 lock_backend_acquire() {
   local name="$1"
   local timeout="${2:-30}"
+  # TTL controls how long the key lives in Redis (auto-expiry for crash safety).
+  # Separate from timeout (how long to wait for acquisition) to avoid conflation:
+  # a short timeout should not create a short-lived lock key.
+  local ttl="${SKYNET_REDIS_LOCK_TTL:-300}"
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value="$_REDIS_LOCK_VALUE"
 
@@ -42,7 +46,7 @@ lock_backend_acquire() {
   local max_attempts=$(( timeout * 2 ))
   while [ "$attempts" -lt "$max_attempts" ]; do
     local result
-    result=$(_redis_cmd SET "$key" "$value" EX "$timeout" NX)
+    result=$(_redis_cmd SET "$key" "$value" EX "$ttl" NX)
     if [ "$result" = "OK" ]; then
       return 0
     fi

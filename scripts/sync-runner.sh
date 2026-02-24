@@ -15,46 +15,19 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# --- PID lock (mkdir-based atomic lock) ---
-LOCKFILE="${SKYNET_LOCK_PREFIX}-sync-runner.lock"
-
-acquire_lock() {
-  if mkdir "$LOCKFILE" 2>/dev/null; then
-    echo $$ > "$LOCKFILE/pid"
-    return 0
-  fi
-  # Lock exists — check for stale lock (owner PID no longer running)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-      log "Removing stale lock (PID $lock_pid no longer running)."
-      rm -rf "$LOCKFILE" 2>/dev/null || true
-      if mkdir "$LOCKFILE" 2>/dev/null; then
-        echo $$ > "$LOCKFILE/pid"
-        return 0
-      fi
-    fi
-  fi
-  return 1
-}
-
-release_lock() {
-  # Only release if we own the lock (PID matches $$)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ "$lock_pid" = "$$" ]; then
-      rm -rf "$LOCKFILE" 2>/dev/null || true
-    fi
-  fi
-}
-
-if ! acquire_lock; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE/pid" 2>/dev/null || echo '?')). Exiting." >> "$LOG"
+# Guard: validate SKYNET_SYNC_ENDPOINTS is defined and non-empty
+if [ -z "${SKYNET_SYNC_ENDPOINTS+x}" ] || [ "${#SKYNET_SYNC_ENDPOINTS[@]}" -eq 0 ]; then
+  log "WARNING: SKYNET_SYNC_ENDPOINTS is not defined or empty"
   exit 0
 fi
-trap 'release_lock' EXIT INT TERM
+
+# --- PID lock (shared helper from _locks.sh via _config.sh) ---
+LOCKFILE="${SKYNET_LOCK_PREFIX}-sync-runner.lock"
+
+if ! acquire_worker_lock "$LOCKFILE" "$LOG" "SYNC"; then
+  exit 0
+fi
+trap 'rm -rf "$LOCKFILE"' EXIT INT TERM
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL/api/admin/pipeline/status" > /dev/null 2>&1; then

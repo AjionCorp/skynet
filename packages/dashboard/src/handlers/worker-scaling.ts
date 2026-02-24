@@ -304,12 +304,12 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
             }
           }
 
-          // Clean up lock directory (mkdir-based mutex)
-          try {
-            rmSync(instance.lockFile, { recursive: true, force: true });
-          } catch {
-            // Already cleaned up by EXIT trap
-          }
+          // Do NOT remove the lock directory here — the worker's EXIT trap
+          // handles cleanup. Removing it prematurely creates a race condition
+          // where a new worker can be spawned into the same slot before the
+          // dying worker has finished its cleanup (e.g., worktree removal,
+          // task unclaim). The watchdog's crash recovery will clean up stale
+          // locks if the EXIT trap fails to fire.
 
           // Clean up heartbeat file for dev-workers
           if (workerType === "dev-worker") {

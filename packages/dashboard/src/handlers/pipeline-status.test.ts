@@ -441,12 +441,82 @@ describe("createPipelineStatusHandler", () => {
     });
   });
 
+  it("uses custom staleMinutes config for heartbeat classification", async () => {
+    const nowEpoch = Math.floor(Date.now() / 1000);
+    // Heartbeat from 10 minutes ago
+    const hbEpoch = nowEpoch - 10 * 60;
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "worker-1.heartbeat") return String(hbEpoch);
+      return "";
+    });
+
+    // With default staleMinutes (undefined -> 30min default), 10min should be fresh
+    const handler1 = createPipelineStatusHandler(makeConfig({ maxWorkers: 1 }));
+    const res1 = await handler1();
+    const { data: data1 } = await res1.json();
+    expect(data1.heartbeats["worker-1"].isStale).toBe(false);
+
+    // With staleMinutes=5, 10 minutes old should be stale
+    const handler2 = createPipelineStatusHandler(makeConfig({ maxWorkers: 1, staleMinutes: 5 }));
+    const res2 = await handler2();
+    const { data: data2 } = await res2.json();
+    expect(data2.heartbeats["worker-1"].isStale).toBe(true);
+  });
+
+  it("populates currentTasks from per-worker files when present", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "current-task-2.md") {
+        return "## Build API endpoint\n**Status:** in_progress\n**Branch:** dev/api\n**Started:** 2025-01-15\n**Worker:** dev-worker-2";
+      }
+      return "";
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig({ maxWorkers: 3 }));
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.currentTasks["worker-2"]).toBeDefined();
+    expect(data.currentTasks["worker-2"].status).toBe("in_progress");
+    expect(data.currentTasks["worker-2"].title).toBe("Build API endpoint");
+    expect(data.currentTasks["worker-2"].branch).toBe("dev/api");
+  });
+
   it("includes missionProgress field as an array in response", async () => {
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
     const { data } = await res.json();
     expect(data).toHaveProperty("missionProgress");
     expect(Array.isArray(data.missionProgress)).toBe(true);
+  });
+
+  // ── P1-14: Self-correction stats assertion ─────────────────────────
+  it("populates selfCorrectionStats from failed-tasks with mixed statuses", async () => {
+    mockReadDevFile.mockImplementation((_dir, filename) => {
+      if (filename === "failed-tasks.md")
+        return [
+          "| Date | Task | Branch | Error | Attempts | Status |",
+          "| --- | --- | --- | --- | --- | --- |",
+          "| 2026-02-20 | T1 | fix/t1 | OOM | 2 | fixed |",
+          "| 2026-02-20 | T2 | fix/t2 | OOM | 1 | fixed |",
+          "| 2026-02-19 | T3 | fix/t3 | err | 3 | superseded |",
+          "| 2026-02-19 | T4 | fix/t4 | err | 1 | blocked |",
+          "| 2026-02-18 | T5 | fix/t5 | err | 1 | pending-retry |",
+          "| 2026-02-18 | T6 | fix/t6 | err | 2 | pending-retry |",
+        ].join("\n");
+      return "";
+    });
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    // selfCorrectionStats should reflect file-based counts when SQLite is unavailable
+    expect(data).toHaveProperty("selfCorrectionStats");
+    const stats = data.selfCorrectionStats;
+    expect(stats.fixed).toBe(2);
+    expect(stats.superseded).toBe(1);
+    expect(stats.blocked).toBe(1);
+    expect(stats.selfCorrected).toBe(3); // fixed + superseded
+    // selfCorrectionRate should be present and numeric
+    expect(typeof data.selfCorrectionRate).toBe("number");
   });
 
   it("returns structured mission items when mission.md has criteria", async () => {

@@ -380,6 +380,43 @@ if run_agent "$PROMPT" "$LOG"; then
     rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
   fi
 
+  # --- Reconcile backlog.md back to SQLite ---
+  # The agent writes backlog.md directly. Parse new pending task lines that
+  # don't exist in SQLite yet and insert them, then regenerate backlog.md
+  # from SQLite to ensure file and DB stay in sync.
+  _reconciled=0
+  if [ -f "$BACKLOG" ]; then
+    while IFS= read -r _bline; do
+      # Extract tag and title from "- [ ] [TAG] Title" or "- [ ] [TAG] Title — Desc"
+      _btag=$(echo "$_bline" | sed -n 's/^- \[ \] \[\([^]]*\)\].*/\1/p')
+      [ -z "$_btag" ] && continue
+      _brest=$(echo "$_bline" | sed 's/^- \[ \] \[[^]]*\] *//')
+      # Split on " — " to separate title from description
+      _btitle=$(echo "$_brest" | sed 's/ — .*//')
+      _bdesc=""
+      case "$_brest" in
+        *" — "*) _bdesc=$(echo "$_brest" | sed 's/^[^—]*— //') ;;
+      esac
+      # Skip if task already exists in SQLite
+      if db_task_exists "[$_btag] $_btitle" 2>/dev/null; then
+        continue
+      fi
+      if db_task_exists "$_btitle" 2>/dev/null; then
+        continue
+      fi
+      # Insert into SQLite (bottom position — project-driver manages priority)
+      if db_add_task "[$_btag] $_btitle" "$_btag" "$_bdesc" "bottom" "" >/dev/null 2>&1; then
+        log "Reconciled new task to SQLite: [$_btag] $_btitle"
+        _reconciled=$((_reconciled + 1))
+      fi
+    done < <(grep '^\- \[ \] \[' "$BACKLOG" 2>/dev/null || true)
+  fi
+  if [ "$_reconciled" -gt 0 ]; then
+    log "Reconciled $_reconciled new task(s) from backlog.md into SQLite"
+  fi
+  # Regenerate backlog.md from SQLite (single source of truth)
+  db_export_state_files 2>/dev/null || log "WARNING: db_export_state_files failed after reconciliation"
+
   new_remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   new_remaining=${new_remaining:-0}
   case "$new_remaining" in ''|*[!0-9]*) new_remaining=0 ;; esac

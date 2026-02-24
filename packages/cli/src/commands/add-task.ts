@@ -63,15 +63,24 @@ export async function addTaskCommand(title: string, options: AddTaskOptions) {
   const root = sqlEscape(title.trim().replace(/\[[A-Z]*\]\s*/g, "").toLowerCase().replace(/\s+/g, " ").trim().slice(0, 120));
   const now = sqlEscape(new Date().toISOString());
 
-  if (position === "top") {
-    sqliteQuery(devDir, `UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');`);
-  }
   const pri = position === "top" ? 0 : 999;
-  sqliteQuery(devDir,
-    `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
-    `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
-    `${pri}, '${root}', '${now}', '${now}');`
-  );
+  if (position === "top") {
+    // Wrap in a transaction to atomically bump priorities and insert the new task
+    sqliteQuery(devDir,
+      `BEGIN IMMEDIATE; ` +
+      `UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed'); ` +
+      `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
+      `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
+      `${pri}, '${root}', '${now}', '${now}'); ` +
+      `COMMIT;`
+    );
+  } else {
+    sqliteQuery(devDir,
+      `INSERT INTO tasks (title, tag, description, status, priority, normalized_root, created_at, updated_at) ` +
+      `VALUES ('${safeTitle}', '${safeTag}', '${safeDesc}', 'pending', ` +
+      `${pri}, '${root}', '${now}', '${now}');`
+    );
+  }
 
   const taskLine = `[${tag}] ${title.trim()}${options.description ? ` — ${options.description.trim()}` : ""}`;
   console.log(`\n  Added task to backlog (position: ${position}):\n`);

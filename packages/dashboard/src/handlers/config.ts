@@ -66,16 +66,18 @@ function parseConfigFile(raw: string): { key: string; value: string; comment: st
  * Write key-value pairs back to a skynet.config.sh file.
  * Preserves the original file structure — only updates values of existing keys.
  */
-function writeConfigFile(configPath: string, updates: Record<string, string>): void {
+function writeConfigFile(configPath: string, updates: Record<string, string>): string[] {
   const raw = readFileSync(configPath, "utf-8");
   const lines = raw.split("\n");
   const result: string[] = [];
+  const matchedKeys = new Set<string>();
 
   for (const line of lines) {
     const trimmed = line.trim();
     const exportMatch = trimmed.match(/^export\s+([A-Z_][A-Z0-9_]*)=(.*)$/);
     if (exportMatch && exportMatch[1] in updates) {
       const key = exportMatch[1];
+      matchedKeys.add(key);
       // NOTE: validateUpdates() already rejects " and ` characters, so only
       // $, \, \n, and \r can actually reach this escaping logic.
       // IMPORTANT: Backslashes MUST be escaped first (separate pass) to avoid
@@ -95,6 +97,10 @@ function writeConfigFile(configPath: string, updates: Record<string, string>): v
   const tmpPath = configPath + ".tmp";
   writeFileSync(tmpPath, result.join("\n"), "utf-8");
   renameSync(tmpPath, configPath);
+
+  // Return keys that were requested but not found in the file
+  const missingKeys = Object.keys(updates).filter(k => !matchedKeys.has(k));
+  return missingKeys;
 }
 
 /**
@@ -311,7 +317,7 @@ export function createConfigHandler(config: SkynetConfig) {
         );
       }
 
-      writeConfigFile(configPath, updates);
+      const missingKeys = writeConfigFile(configPath, updates);
 
       // Re-read to return updated state
       const raw = readFileSync(configPath, "utf-8");
@@ -320,8 +326,12 @@ export function createConfigHandler(config: SkynetConfig) {
         value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
       }));
 
+      const warning = missingKeys.length > 0
+        ? `Keys not found in config file (not updated): ${missingKeys.join(", ")}`
+        : null;
+
       return Response.json({
-        data: { entries, configPath, updatedKeys: Object.keys(updates) },
+        data: { entries, configPath, updatedKeys: Object.keys(updates), ...(warning ? { warning } : {}) },
         error: null,
       });
     } catch (err) {

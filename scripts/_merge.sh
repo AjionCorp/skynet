@@ -78,7 +78,10 @@ _do_revert() {
       return 1
     fi
   fi
-  git commit -m "revert: auto-revert ($reason)" --no-verify 2>/dev/null || true
+  if ! git commit -m "revert: auto-revert ($reason)" --no-verify 2>/dev/null; then
+    log "CRITICAL: git commit for revert failed"
+    return 1
+  fi
   return 0
 }
 

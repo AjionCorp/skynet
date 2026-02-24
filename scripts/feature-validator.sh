@@ -6,8 +6,13 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 LOG="$SCRIPTS_DIR/feature-validator.log"
-WEB_DIR="$PROJECT_DIR/$SKYNET_PLAYWRIGHT_DIR"
 BASE_URL="$SKYNET_DEV_SERVER_URL"
+
+if [ -z "${SKYNET_PLAYWRIGHT_DIR:-}" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: SKYNET_PLAYWRIGHT_DIR is not set" >> "$LOG"
+  exit 1
+fi
+WEB_DIR="$PROJECT_DIR/$SKYNET_PLAYWRIGHT_DIR"
 
 mkdir -p "$(dirname "$LOG")"
 
@@ -15,46 +20,13 @@ cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
-# --- PID lock (mkdir-based atomic lock) ---
+# --- PID lock (shared helper from _locks.sh via _config.sh) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-feature-validator.lock"
 
-acquire_lock() {
-  if mkdir "$LOCKFILE" 2>/dev/null; then
-    echo $$ > "$LOCKFILE/pid"
-    return 0
-  fi
-  # Lock exists — check for stale lock (owner PID no longer running)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ -n "$lock_pid" ] && ! kill -0 "$lock_pid" 2>/dev/null; then
-      log "Removing stale lock (PID $lock_pid no longer running)."
-      rm -rf "$LOCKFILE" 2>/dev/null || true
-      if mkdir "$LOCKFILE" 2>/dev/null; then
-        echo $$ > "$LOCKFILE/pid"
-        return 0
-      fi
-    fi
-  fi
-  return 1
-}
-
-release_lock() {
-  # Only release if we own the lock (PID matches $$)
-  if [ -d "$LOCKFILE" ] && [ -f "$LOCKFILE/pid" ]; then
-    local lock_pid
-    lock_pid=$(cat "$LOCKFILE/pid" 2>/dev/null || echo "")
-    if [ "$lock_pid" = "$$" ]; then
-      rm -rf "$LOCKFILE" 2>/dev/null || true
-    fi
-  fi
-}
-
-if ! acquire_lock; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Already running (PID $(cat "$LOCKFILE/pid" 2>/dev/null || echo '?')). Exiting." >> "$LOG"
+if ! acquire_worker_lock "$LOCKFILE" "$LOG" "FEAT-VALIDATOR"; then
   exit 0
 fi
-trap 'release_lock' EXIT INT TERM
+trap 'rm -rf "$LOCKFILE"' EXIT INT TERM
 
 log "Feature validator starting."
 tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURE-VALIDATOR* starting — deep page + API tests"

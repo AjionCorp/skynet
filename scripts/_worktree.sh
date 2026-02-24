@@ -69,7 +69,10 @@ setup_worktree() {
 
   # Install dependencies (fast — pnpm content-addressable store is cached)
   log "Installing deps in worktree..."
-  if ! (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1; then
+  local _cmd="${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}"
+  # Validate install command against allowed character set (defense-in-depth)
+  case "$_cmd" in *".."*|*";"*|*"|"*|*'$('*|*'`'*) log "ERROR: SKYNET_INSTALL_CMD contains disallowed characters"; return 1 ;; esac
+  if ! (cd "$WORKTREE_DIR" && eval "$_cmd") >> "$LOG" 2>&1; then
     log "ERROR: Dependency install failed in worktree"
     if [ "${WORKTREE_INSTALL_STRICT:-true}" = "true" ]; then
       WORKTREE_LAST_ERROR="install_failed"

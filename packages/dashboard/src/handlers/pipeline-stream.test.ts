@@ -256,6 +256,71 @@ describe("createPipelineStreamHandler", () => {
     reader.cancel();
   });
 
+  it("closes stream after 5-minute lifetime timeout", async () => {
+    // Return same data on every poll so deduplication suppresses SSE events,
+    // preventing buffered data chunks from blocking the done signal.
+    const sameData = { workers: [] };
+    mockGetStatus.mockResolvedValue(makeStatusResponse(sameData));
+
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
+    await reader.read(); // initial status
+    await flushAsync();
+
+    // Advance past the 5-minute lifetime
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 100);
+
+    // Drain any buffered chunks until we hit the stream end
+    let done = false;
+    for (let i = 0; i < 100 && !done; i++) {
+      const result = await reader.read();
+      done = result.done;
+    }
+    expect(done).toBe(true);
+    expect(mockWatcher.close).toHaveBeenCalled();
+  });
+
+  it("suppresses duplicate consecutive payloads (deduplication)", async () => {
+    const sameData = { workers: [{ name: "w1" }] };
+    // Return the same data for initial + poll
+    mockGetStatus
+      .mockResolvedValueOnce(makeStatusResponse(sameData))
+      .mockResolvedValueOnce(makeStatusResponse(sameData));
+
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
+    await reader.read(); // initial status event
+    await flushAsync();
+
+    // Trigger a poll that returns the same data
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    // getStatus was called twice (initial + poll), but only one data event should
+    // have been emitted because the payload is identical
+    expect(mockGetStatus).toHaveBeenCalledTimes(2);
+
+    // Verify no second data event is available — advance a bit more and check
+    // that we can advance timers without reading additional data. The reader
+    // should not have a new chunk unless data actually changed.
+    // We'll use a different approach: return new data on the third call and verify
+    // we only got 2 total data events (initial + the new one, not the duplicate).
+    const newData = { workers: [{ name: "w2" }] };
+    mockGetStatus.mockResolvedValueOnce(makeStatusResponse(newData));
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toEqual(newData);
+    // 3 calls total: initial, duplicate (suppressed), new
+    expect(mockGetStatus).toHaveBeenCalledTimes(3);
+    reader.cancel();
+  });
+
   it("returns 503 when MAX_SSE_CONNECTIONS is exceeded", async () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const connections: Response[] = [];

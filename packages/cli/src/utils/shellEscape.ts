@@ -16,11 +16,13 @@ export function shellEscape(s: string): string {
 
 /**
  * Reject values containing shell injection patterns.
- * Blocks: backticks, $(), ${}, semicolons, pipes, ampersands, redirects, parens, quotes, newlines.
+ * Blocks: backticks, $(), ${}, $VAR, positional/special params ($1, $?, $!, $@, $*, $#, $$, $-),
+ * semicolons, pipes, ampersands, redirects, parens, hash, quotes, tabs, newlines.
+ * Aligned with dashboard's validateUpdates regex in config.ts.
  * Returns an error message or null if the value looks safe.
  */
 export function validateShellValue(value: string): string | null {
-  if (/[`"'|&><()]|\$[({]|;|\n|\r/.test(value)) {
+  if (/[`"'|&><()#]|\$[({a-zA-Z_0-9?!@*#$\-]|;|\n|\r|\t/.test(value)) {
     return "Value contains disallowed shell characters";
   }
   return null;

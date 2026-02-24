@@ -37,6 +37,9 @@ if [ -z "${SKYNET_DEV_SERVER_CMD:-}" ]; then
   exit 1
 fi
 
+# Validate dev server command against disallowed characters (defense-in-depth)
+case "$SKYNET_DEV_SERVER_CMD" in *";"*|*"|"*|*'$('*|*'`'*) echo "ERROR: SKYNET_DEV_SERVER_CMD contains unsafe characters" >&2; exit 1 ;; esac
+
 # Start server in background with log capture
 # shellcheck disable=SC2086
 nohup ${SKYNET_DEV_SERVER_CMD} >> "$LOG" 2>&1 &

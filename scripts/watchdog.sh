@@ -86,7 +86,8 @@ trap _watchdog_drain INT TERM
 log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
 # Cycle counter for periodic maintenance (persists across subshell iterations)
-_CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
+# Stored in $DEV_DIR (project-private) instead of /tmp to avoid predictable path exploits.
+_CYCLE_COUNTER_FILE="$DEV_DIR/.watchdog-cycle-count"
 (umask 077; echo 0 > "$_CYCLE_COUNTER_FILE")
 
 # --- Main loop ---
@@ -629,8 +630,11 @@ if check_codex_auth; then
 fi
 
 # --- Token expiry pre-warning ---
-# Check Claude token and Codex token expiry. Alert once if within 24h.
-# Sentinel files use restrictive permissions to prevent local tampering
+# Check Claude and Codex token expiry. Alert once if within 24h.
+# Sentinel files use restrictive permissions to prevent local tampering.
+# NOTE: OPENAI_API_KEY has no JWT expiry mechanism — it's a static key that
+# doesn't expire. Gemini tokens also lack a standard JWT exp field. Only
+# Claude (OAuth) and Codex (OAuth via ~/.codex/auth.json) support pre-warning.
 _expiry_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-token-expiry-alert"
 if $claude_auth_ok && [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
   _claude_expiry=$(_check_token_expiry "$SKYNET_AUTH_TOKEN_CACHE" 86400)
@@ -650,6 +654,43 @@ if $claude_auth_ok && [ -f "$SKYNET_AUTH_TOKEN_CACHE" ]; then
       rm -f "$_expiry_sentinel" 2>/dev/null || true
       ;;
   esac
+fi
+
+# Codex OAuth token expiry check (only when using auth.json, not OPENAI_API_KEY)
+_codex_expiry_sentinel="/tmp/skynet-${SKYNET_PROJECT_NAME}-codex-expiry-alert"
+_codex_auth_file="${SKYNET_CODEX_AUTH_FILE:-$HOME/.codex/auth.json}"
+if $_codex_auth_ok && [ -z "${OPENAI_API_KEY:-}" ] && [ -f "$_codex_auth_file" ]; then
+  # Extract id_token or access_token from Codex auth.json for expiry check
+  _codex_token=""
+  if command -v python3 >/dev/null 2>&1; then
+    _codex_token=$(python3 -c "
+import json, sys
+try:
+  d = json.load(open('$_codex_auth_file'))
+  t = d.get('tokens', {})
+  print(t.get('id_token', '') or t.get('access_token', ''))
+except: pass
+" 2>/dev/null || true)
+  fi
+  if [ -n "$_codex_token" ]; then
+    _codex_expiry=$(_check_token_expiry "$_codex_token" 86400)
+    case "$_codex_expiry" in
+      expired)
+        log "Codex token expired (detected via JWT exp)"
+        ;;
+      warning:*)
+        _hours="${_codex_expiry#warning:}"
+        if [ ! -f "$_codex_expiry_sentinel" ]; then
+          log "Codex token expires in ${_hours}h — consider re-authenticating"
+          tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Codex token expires in ${_hours}h. Run codex login to refresh."
+          (umask 077; touch "$_codex_expiry_sentinel")
+        fi
+        ;;
+      ok:*)
+        rm -f "$_codex_expiry_sentinel" 2>/dev/null || true
+        ;;
+    esac
+  fi
 fi
 
 # Count backlog tasks (prefer SQLite, fallback to grep)
@@ -789,18 +830,6 @@ if [ -n "$_hung_workers" ]; then
   done <<< "$_hung_workers"
 fi
 
-# --- Normalize a task title for fuzzy matching ---
-# Strips tags ([FIX], [FEAT], etc.), strips "FRESH implementation" suffix,
-# lowercases, collapses whitespace, and truncates to first 50 characters.
-_normalize_title() {
-  echo "$1" | \
-    sed 's/\[[A-Z][A-Z]*\] *//g' | \
-    sed 's/ *[-—]* *FRESH implementation.*$//' | \
-    tr '[:upper:]' '[:lower:]' | \
-    sed 's/  */ /g; s/^ *//; s/ *$//' | \
-    cut -c1-50
-}
-
 # --- Run auto-supersede before branch cleanup (so newly-superseded entries get cleaned) ---
 # SQLite auto-supersede (atomic, handles normalized root matching)
 _db_superseded=$(db_auto_supersede_completed 2>/dev/null || echo 0)
@@ -868,16 +897,38 @@ _archive_old_completions() {
     return 0
   fi
 
-  # Create or append to archive file (with header if new)
-  if [ ! -f "$archive" ]; then
-    head -n "$header_lines" "$COMPLETED" > "$archive"
-  fi
-  printf '%s' "$archive_lines" >> "$archive"
+  # Crash-safe archival: write new archive to temp file, then rename both files.
+  # If we crash between renames, the worst case is archive has the old content
+  # (no data loss) while completed.md still has old entries (duplicates on next
+  # run are prevented by the dedup check below).
 
-  # Rewrite completed.md with header + kept entries
-  head -n "$header_lines" "$COMPLETED" > "$COMPLETED.tmp"
-  printf '%s' "$keep_lines" >> "$COMPLETED.tmp"
-  mv "$COMPLETED.tmp" "$COMPLETED"
+  # Build the new archive content in a temp file
+  local archive_tmp="${archive}.tmp.$$"
+  if [ -f "$archive" ]; then
+    cp "$archive" "$archive_tmp"
+  else
+    head -n "$header_lines" "$COMPLETED" > "$archive_tmp"
+  fi
+
+  # Deduplicate: only append lines not already present in the archive.
+  # This makes archival idempotent — if we crash after writing the archive
+  # but before rewriting completed.md, re-running won't create duplicates.
+  while IFS= read -r _aline; do
+    [ -z "$_aline" ] && continue
+    if ! grep -qF "$_aline" "$archive_tmp" 2>/dev/null; then
+      printf '%s\n' "$_aline" >> "$archive_tmp"
+    fi
+  done <<< "$archive_lines"
+
+  # Write new completed.md to temp file
+  local completed_tmp="$COMPLETED.tmp.$$"
+  head -n "$header_lines" "$COMPLETED" > "$completed_tmp"
+  printf '%s' "$keep_lines" >> "$completed_tmp"
+
+  # Rename archive first (safe — if we crash here, completed.md still has all entries)
+  mv "$archive_tmp" "$archive"
+  # Then rename completed.md (archive already has the old entries as backup)
+  mv "$completed_tmp" "$COMPLETED"
 
   log "Archived $archived_count completed entries older than $max_age_days days"
 }
@@ -1393,8 +1444,7 @@ elif [ -f "$DEV_DIR/fixer-stats.log" ]; then
 fi
 
 # --- Periodic maintenance (every 10 cycles ≈ 30 minutes) ---
-_maint_counter_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
-_maint_cycle=$(cat "$_maint_counter_file" 2>/dev/null || echo 0)
+_maint_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)
 # Sanitize cycle counter to numeric value
 case "$_maint_cycle" in ''|*[!0-9]*) _maint_cycle=0 ;; esac
 if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
@@ -1410,6 +1460,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     fi
     # Prune events older than 7 days to prevent unbounded table growth
     db_prune_old_events 7
+    # Prune fixer_stats older than 90 days to prevent unbounded table growth
+    db_prune_old_fixer_stats 90
   fi
 
   # (b) Stale worktree cleanup — remove worktrees with no corresponding worker lock
@@ -1534,7 +1586,6 @@ fi
 ) || { log "Watchdog cycle failed (exit $?) — will retry next cycle"; true; }
 
 # Increment cycle counter (outside subshell so it persists)
-_CYCLE_COUNTER_FILE="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-cycle-count"
 _cur_cycle=$(cat "$_CYCLE_COUNTER_FILE" 2>/dev/null || echo 0)
 # Sanitize cycle counter to numeric value (P2-13)
 case "$_cur_cycle" in ''|*[!0-9]*) _cur_cycle=0 ;; esac

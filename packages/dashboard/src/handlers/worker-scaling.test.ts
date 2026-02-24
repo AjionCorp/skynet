@@ -263,10 +263,11 @@ describe("createWorkerScalingHandler", () => {
       // Should kill highest-numbered worker (worker 2)
       expect(process.kill).toHaveBeenCalledWith(1002, "SIGTERM");
 
-      // Should clean up PID lock directory
-      expect(mockRmSync).toHaveBeenCalledWith(
+      // P1-15: Lock directory is NOT removed by the dashboard — the worker's
+      // EXIT trap owns cleanup. Verify rmSync was NOT called on the lock file.
+      expect(mockRmSync).not.toHaveBeenCalledWith(
         "/tmp/skynet-test-dev-worker-2.lock",
-        { recursive: true, force: true }
+        expect.anything()
       );
     });
 

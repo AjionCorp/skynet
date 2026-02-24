@@ -183,7 +183,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         heartbeats = db.getHeartbeats(maxW, config.staleMinutes);
       } else {
         // Use config.staleMinutes if set, otherwise fall back to STALE_THRESHOLD_SECONDS default
-        const staleThresholdSeconds = (config.staleMinutes ?? STALE_THRESHOLD_SECONDS / 60) * 60;
+        const staleThresholdSeconds = config.staleMinutes != null ? config.staleMinutes * 60 : STALE_THRESHOLD_SECONDS;
         const staleThresholdMs = staleThresholdSeconds * 1000;
         for (let wid = 1; wid <= maxW; wid++) {
           const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();

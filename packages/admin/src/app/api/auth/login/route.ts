@@ -40,10 +40,16 @@ export async function POST(request: Request) {
   try {
     // Rate limit by both forwarded IP and connecting IP to prevent bypass via header spoofing.
     // In production behind a reverse proxy, x-real-ip is set by the proxy and cannot be spoofed.
+    // WARNING: Without a trusted reverse proxy, both x-forwarded-for and x-real-ip can be
+    // spoofed by the client. When deploying without a proxy, rate limiting falls back to
+    // the "unknown" key, effectively sharing a single bucket for all unauthenticated clients.
     const forwardedIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
     const realIp = request.headers.get("x-real-ip")?.trim() || "";
     // Use the most trustworthy source: x-real-ip (set by reverse proxy), then x-forwarded-for, then "unknown"
     const ip = realIp || forwardedIp || "unknown";
+    if (ip === "unknown") {
+      console.warn("[auth/login] Rate limiting with ip='unknown' — no x-forwarded-for or x-real-ip header present. Deploy behind a reverse proxy for accurate per-IP rate limiting.");
+    }
     if (isRateLimited(ip)) {
       return NextResponse.json(
         { data: null, error: "Too many login attempts. Try again later." },

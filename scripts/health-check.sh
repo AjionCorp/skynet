@@ -38,6 +38,9 @@ typecheck_ok=false
 while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
   attempt=$((attempt + 1))
 
+  # Validate typecheck command against disallowed characters (defense-in-depth)
+  case "$SKYNET_TYPECHECK_CMD" in *";"*|*"|"*|*'$('*|*'`'*) log "ERROR: SKYNET_TYPECHECK_CMD contains unsafe characters"; break ;; esac
+
   if eval "$SKYNET_TYPECHECK_CMD" >> "$LOG" 2>&1; then
     log "Typecheck passed (attempt $attempt)."
     typecheck_ok=true
@@ -60,7 +63,15 @@ Fix these type errors. Do NOT change the behavior of the code — only fix the t
 After fixing, run '$SKYNET_TYPECHECK_CMD' to verify.
 Commit fixes with message 'fix: resolve type errors (auto health-check)'."
 
-      run_agent "$PROMPT" "$LOG" || true
+      # LIMITATION: The health-check agent runs in the main project directory
+      # (not a worktree). Concurrent worker merges to main could cause git
+      # conflicts if the agent modifies files while a merge is in progress.
+      # Guard: skip agent run if git working tree is dirty to avoid conflicts.
+      if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+        log "WARNING: git working tree is dirty — skipping auto-fix agent to avoid merge conflicts"
+      else
+        run_agent "$PROMPT" "$LOG" || true
+      fi
     fi
   fi
 done
@@ -77,6 +88,10 @@ if ! $typecheck_ok; then
 fi
 
 # --- Lint (informational, don't block on it) ---
+if [ -n "$SKYNET_LINT_CMD" ]; then
+  # Validate lint command against disallowed characters (defense-in-depth)
+  case "$SKYNET_LINT_CMD" in *";"*|*"|"*|*'$('*|*'`'*) log "ERROR: SKYNET_LINT_CMD contains unsafe characters"; SKYNET_LINT_CMD="" ;; esac
+fi
 if [ -n "$SKYNET_LINT_CMD" ]; then
   log "Running lint..."
   if eval "$SKYNET_LINT_CMD" >> "$LOG" 2>&1; then

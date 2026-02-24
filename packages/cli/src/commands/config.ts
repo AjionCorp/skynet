@@ -72,7 +72,11 @@ const KNOWN_VARS: Record<string, string> = {
   SKYNET_ONE_SHOT_TASK: "Task description for single-task mode (set automatically by skynet run)",
 };
 
-/** Keys that `config set` is allowed to modify (mirrors dashboard MUTABLE_KEYS). */
+/**
+ * Keys that `config set` is allowed to modify.
+ * CANONICAL SOURCE: packages/dashboard/src/handlers/config.ts (MUTABLE_KEYS).
+ * Keep these two lists in sync when adding or removing keys.
+ */
 const MUTABLE_KEYS = new Set([
   "SKYNET_MAX_WORKERS",
   "SKYNET_MAX_FIXERS",
@@ -144,12 +148,12 @@ function readConfigFile(projectDir: string): string {
 function parseConfig(content: string): ParsedVar[] {
   const vars: ParsedVar[] = [];
   const resolved: Record<string, string> = {};
-  const ALLOWED_ENV = new Set(["HOME", "USER", "PATH"]);
+  const ALLOWED_ENV = new Set(["HOME", "USER"]);
   const lines = content.split("\n");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const match = line.match(/^(?:export\s+)?(\w+)="(.*)"/);
+    const match = line.match(/^(?:export\s+)?(\w+)="([^"]*)"/);
     if (match) {
       let value = match[2];
       // Resolve variable references

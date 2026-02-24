@@ -60,5 +60,11 @@ emit_event() {
   # Flat-file format: timestamp|event|description (pipe-delimited).
   # Description field has pipes sanitized to prevent column corruption.
   # The SQLite path (primary) does not have this limitation.
-  printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc" >> "$events_log"
+  local _line
+  _line=$(printf '%s|%s|%s\n' "$(date +%s)" "$event" "$_safe_desc")
+  if command -v flock >/dev/null 2>&1; then
+    (flock -x 200; printf '%s\n' "$_line" >> "$events_log") 200>"${events_log}.lock"
+  else
+    printf '%s\n' "$_line" >> "$events_log"
+  fi
 }

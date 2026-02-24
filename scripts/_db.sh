@@ -586,10 +586,12 @@ db_add_task() {
 
   if [ "$position" = "top" ]; then
     _db "
+      BEGIN IMMEDIATE;
       UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');
       INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
       VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$(_sql_escape "$norm_root")', 0);
       SELECT last_insert_rowid();
+      COMMIT;
     "
   else
     # Atomic subquery avoids TOCTOU: a separate SELECT MAX(priority) followed by
@@ -1136,6 +1138,15 @@ db_detect_circular_deps() {
 # ============================================================
 # MAINTENANCE
 # ============================================================
+
+# Prune fixer_stats older than N days (default 90). Returns silently on no-op.
+db_prune_old_fixer_stats() {
+  local days="${1:-90}"
+  local cutoff_epoch=$(( $(date +%s) - days * 86400 ))
+  local deleted
+  deleted=$(_db "DELETE FROM fixer_stats WHERE epoch < $cutoff_epoch; SELECT changes();")
+  [ "${deleted:-0}" -gt 0 ] && log "Pruned $deleted fixer_stats entries older than ${days} days" 2>/dev/null || true
+}
 
 # Prune events older than N days (default 7). Returns silently on no-op.
 db_prune_old_events() {

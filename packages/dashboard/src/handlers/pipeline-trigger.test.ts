@@ -164,4 +164,37 @@ describe("createPipelineTriggerHandler", () => {
     expect(body.data).toBeNull();
     expect(body.error).toBeTruthy();
   });
+
+  // ── P1-12: Previously untested branches ──────────────────────────
+  it("returns 404 when script file does not exist", async () => {
+    const { existsSync } = await import("fs");
+    const mockExistsSync = vi.mocked(existsSync);
+    mockExistsSync.mockReturnValue(false);
+
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const res = await handler(makePostRequest({ script: "watchdog" }));
+    const body = await res.json();
+    expect(res.status).toBe(404);
+    expect(body.data).toBeNull();
+    expect(body.error).toBe("Script not found");
+  });
+
+  it("returns 400 when args exceed 10 items", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const tooManyArgs = Array.from({ length: 11 }, (_, i) => String(i));
+    const res = await handler(makePostRequest({ script: "watchdog", args: tooManyArgs }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toContain("Too many arguments");
+  });
+
+  it("returns 400 for unsafe script name with special characters", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig({
+      triggerableScripts: ["watchdog", "dev-worker", "BAD_SCRIPT"],
+    }));
+    const res = await handler(makePostRequest({ script: "BAD_SCRIPT" }));
+    const body = await res.json();
+    expect(res.status).toBe(400);
+    expect(body.error).toBe("Invalid script name");
+  });
 });

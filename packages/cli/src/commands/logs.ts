@@ -180,10 +180,22 @@ export async function logsCommand(type: string | undefined, options: LogsOptions
     process.exit(1);
   }
 
-  const content = readFileSync(logPath, "utf-8");
-  const tailed = tailLines(content, tailCount);
-  if (tailed) {
-    process.stdout.write(tailed + "\n");
+  // Use `tail` to avoid loading entire log file into memory for large files
+  const { spawnSync } = await import("child_process");
+  const tailResult = spawnSync("tail", ["-n", String(tailCount), logPath], {
+    encoding: "utf-8",
+    timeout: 10_000,
+  });
+  if (tailResult.status === 0 && tailResult.stdout) {
+    process.stdout.write(tailResult.stdout);
+    if (!tailResult.stdout.endsWith("\n")) process.stdout.write("\n");
+  } else {
+    // Fallback: read entire file if tail is not available
+    const content = readFileSync(logPath, "utf-8");
+    const tailed = tailLines(content, tailCount);
+    if (tailed) {
+      process.stdout.write(tailed + "\n");
+    }
   }
 
   // Follow mode
