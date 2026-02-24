@@ -122,11 +122,17 @@ export SKYNET_POST_MERGE_TYPECHECK="${SKYNET_POST_MERGE_TYPECHECK:-true}"
 # 120s accommodates large diffs and slow networks; override via env var if needed.
 export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-120}"
 
+# Orphan process cutoff: processes older than this are considered orphans.
+export SKYNET_ORPHAN_CUTOFF_SECONDS="${SKYNET_ORPHAN_CUTOFF_SECONDS:-120}"
+
 # Canary deployment: when enabled, script changes (scripts/*.sh) trigger single-worker
 # validation before full dispatch. Prevents self-modifying bugs from crashing all workers.
 export SKYNET_CANARY_ENABLED="${SKYNET_CANARY_ENABLED:-true}"
 # Auto-clear canary after this many minutes if no crash detected (prevents pipeline stall)
 export SKYNET_CANARY_TIMEOUT_MINUTES="${SKYNET_CANARY_TIMEOUT_MINUTES:-30}"
+
+# NOTE: .dev/ is inside the git repo for convenience. Ensure it is not
+# served by any web server (add to .dockerignore, nginx deny rules, etc.).
 
 # Convenience aliases used by all scripts (sourced externally)
 # shellcheck disable=SC2034

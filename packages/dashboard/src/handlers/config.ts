@@ -151,40 +151,52 @@ const MUTABLE_KEYS = new Set([
  * Validate config updates — reject dangerous values.
  */
 function validateUpdates(updates: Record<string, string>): string | null {
+  const errors: string[] = [];
   for (const [key, value] of Object.entries(updates)) {
     if (typeof key !== "string" || typeof value !== "string") {
-      return `Invalid type for key "${key}"`;
+      errors.push(`Invalid type for key "${key}"`);
+      continue;
     }
     // Block shell injection: no backticks, $(), ${}, $VAR, semicolons, pipes, ampersands, redirects, parens, newlines, or quotes.
     // Bare $VAR references are also blocked — they would be expanded by bash when
     // sourcing the config, allowing exfiltration of environment variables or
     // unintended value injection.
     if (/[`"'|&><()]|\$[({a-zA-Z_]|;|\n|\r|\t/.test(value)) {
-      return `Unsafe characters in value for "${key}"`;
+      errors.push(`Unsafe characters in value for "${key}"`);
+      continue;
+    }
+    // Block non-ASCII control characters and Unicode whitespace
+    if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200B-\u200F\u2028-\u2029\uFEFF]/.test(value)) {
+      errors.push(`Non-printable characters in value for "${key}"`);
+      continue;
     }
     // Key must be a valid bash variable name
     if (!VALID_CONFIG_KEY.test(key)) {
-      return `Invalid config key "${key}"`;
+      errors.push(`Invalid config key "${key}"`);
+      continue;
     }
     // Only allow known mutable config keys
     if (!MUTABLE_KEYS.has(key)) {
-      return `Key '${key}' is not in the list of updatable configuration keys`;
+      errors.push(`Key '${key}' is not in the list of updatable configuration keys`);
+      continue;
     }
     // Key-specific validation
     if (key === "SKYNET_MAX_WORKERS") {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 1) {
-        return `SKYNET_MAX_WORKERS must be a positive integer, got "${value}"`;
+        errors.push(`SKYNET_MAX_WORKERS must be a positive integer, got "${value}"`);
+        continue;
       }
     }
     if (key === "SKYNET_STALE_MINUTES") {
       const n = Number(value);
       if (!Number.isInteger(n) || n < 5) {
-        return `SKYNET_STALE_MINUTES must be an integer >= 5, got "${value}"`;
+        errors.push(`SKYNET_STALE_MINUTES must be an integer >= 5, got "${value}"`);
+        continue;
       }
     }
   }
-  return null;
+  return errors.length > 0 ? errors.join("; ") : null;
 }
 
 /**

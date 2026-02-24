@@ -94,6 +94,25 @@ function readCodexAuthStatus(
 export function createPipelineStatusHandler(config: SkynetConfig) {
   const { devDir, lockPrefix, workers: workerDefs } = config;
 
+  // Cache handler count — handlers don't change at runtime
+  let _cachedHandlerCount: number | null = null;
+  function getHandlerCount(): number {
+    if (_cachedHandlerCount !== null) return _cachedHandlerCount;
+    try {
+      const handlersDir = dirname(fileURLToPath(import.meta.url));
+      _cachedHandlerCount = readdirSync(handlersDir).filter(
+        (f: string) =>
+          (f.endsWith(".ts") || f.endsWith(".js")) &&
+          !f.includes(".test.") &&
+          f !== "index.ts" &&
+          f !== "index.js"
+      ).length;
+    } catch {
+      _cachedHandlerCount = 0;
+    }
+    return _cachedHandlerCount;
+  }
+
   return async function GET(): Promise<Response> {
     try {
       // Worker statuses
@@ -451,19 +470,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       }
 
       // Mission progress — count handlers from this package
-      let handlerCount = 0;
-      try {
-        const handlersDir = dirname(fileURLToPath(import.meta.url));
-        handlerCount = readdirSync(handlersDir).filter(
-          (f: string) =>
-            (f.endsWith(".ts") || f.endsWith(".js")) &&
-            !f.includes(".test.") &&
-            f !== "index.ts" &&
-            f !== "index.js"
-        ).length;
-      } catch {
-        /* ignore */
-      }
+      const handlerCount = getHandlerCount();
 
       // NOTE: getCompletedCount() queries all terminal success states: completed, fixed, done.
       // Keep in sync with CLI status.ts and db.ts.

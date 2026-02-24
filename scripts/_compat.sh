@@ -66,7 +66,7 @@ run_with_timeout() {
     gtimeout "$secs" "$@"
   elif command -v perl >/dev/null 2>&1; then
     # perl fallback — available on all macOS
-    perl -e 'alarm shift; exec @ARGV' "$secs" "$@"
+    perl -e 'alarm shift; exec @ARGV' "$secs" "$@" 2>/dev/null
   else
     # No timeout mechanism available — run without timeout and warn
     echo "[WARN] run_with_timeout: no timeout/gtimeout/perl found, running without timeout" >&2

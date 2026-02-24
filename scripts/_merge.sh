@@ -236,9 +236,10 @@ do_merge_to_main() {
       emit_event "push_diverged" "Force-syncing to origin/main after push failure" || true
       log "CRITICAL: Push failed after revert — force-syncing local main to origin"
       # RECOVERY: Hard reset to remote state after push failure.
-      # This discards the local revert commit. The original (possibly broken)
-      # merge is already on remote, so we sync to that state. The watchdog's
-      # next cycle will detect and handle any main-branch issues.
+      # This is intentional — when both push and revert-push fail, local main
+      # has diverged from remote. Resetting to origin ensures consistency.
+      # Any merged code that couldn't be pushed will be retried by the worker.
+      # The watchdog's next cycle will detect and handle any main-branch issues.
       git fetch origin "$SKYNET_MAIN_BRANCH" 2>>"$log_file" && git reset --hard "origin/$SKYNET_MAIN_BRANCH" 2>>"$log_file" || true
       release_merge_lock
       return 3

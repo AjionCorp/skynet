@@ -28,6 +28,8 @@ lock_backend_acquire() {
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value
   value="$$:$(hostname -s 2>/dev/null || echo unknown)"
+  # Truncate value to prevent redis-cli issues with unexpectedly long hostnames
+  value=$(printf '%.128s' "$value")
 
   local attempts=0
   local max_attempts=$(( timeout * 2 ))
@@ -48,6 +50,8 @@ lock_backend_release() {
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value
   value="$$:$(hostname -s 2>/dev/null || echo unknown)"
+  # Truncate value to prevent redis-cli issues with unexpectedly long hostnames
+  value=$(printf '%.128s' "$value")
 
   # Atomic release: only delete if we own it (Lua script)
   _redis_cmd EVAL \
@@ -61,6 +65,8 @@ lock_backend_extend() {
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value
   value="$$:$(hostname -s 2>/dev/null || echo unknown)"
+  # Truncate value to prevent redis-cli issues with unexpectedly long hostnames
+  value=$(printf '%.128s' "$value")
   # Only extend if we still own the lock (atomic check + extend via Lua)
   _redis_cmd EVAL \
     "if redis.call('get',KEYS[1]) == ARGV[1] then return redis.call('expire',KEYS[1],ARGV[2]) else return 0 end" \
@@ -72,6 +78,8 @@ lock_backend_check() {
   local key="skynet:lock:${SKYNET_PROJECT_NAME:-default}:${name}"
   local value
   value="$$:$(hostname -s 2>/dev/null || echo unknown)"
+  # Truncate value to prevent redis-cli issues with unexpectedly long hostnames
+  value=$(printf '%.128s' "$value")
 
   local current
   current=$(_redis_cmd GET "$key")

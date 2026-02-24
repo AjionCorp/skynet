@@ -215,7 +215,9 @@ if ! echo "$fix_attempts" | grep -Eq '^[0-9]+$'; then
   fix_attempts=0
 fi
 
-# Check if max attempts reached
+# Defensive max-attempts guard. The claiming loop above already skips tasks
+# at max attempts and blocks them, so this should never fire. Kept as a
+# safety net in case db_get_pending_failures returns stale data.
 if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
   log "Task '$task_title' has reached max fix attempts ($MAX_FIX_ATTEMPTS). Marking as blocked."
   [ -n "$_db_task_id" ] && { db_block_task "$_db_task_id" 2>/dev/null || log "WARNING: db_block_task failed — task may remain in failed state"; }

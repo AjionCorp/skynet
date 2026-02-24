@@ -43,7 +43,7 @@ setup_worktree() {
     fi
     if ! _wt_out=$(git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH" 2>&1); then
       log "Worktree add failed for $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+      if echo "$_wt_out" | grep -qi "already used by worktree\|already checked out\|is already checked out"; then
         WORKTREE_LAST_ERROR="branch_in_use"
       else
         WORKTREE_LAST_ERROR="worktree_add_failed"
@@ -53,7 +53,7 @@ setup_worktree() {
   else
     if ! _wt_out=$(git worktree add "$WORKTREE_DIR" "$branch" 2>&1); then
       log "Worktree add failed for existing branch $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
+      if echo "$_wt_out" | grep -qi "already used by worktree\|already checked out\|is already checked out"; then
         WORKTREE_LAST_ERROR="branch_in_use"
       else
         WORKTREE_LAST_ERROR="worktree_add_failed"

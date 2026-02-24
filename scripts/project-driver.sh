@@ -23,6 +23,9 @@ _normalize_task_line() {
     | cut -c1-60
 }
 
+# NOTE: PID reuse between kill -0 check and lock reclaim is theoretically
+# possible but practically negligible — the TOCTOU window is microseconds
+# and Linux/macOS PID allocation is sequential up to pid_max (32768+ default).
 # --- PID lock ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver.lock"
 if mkdir "$LOCKFILE" 2>/dev/null; then

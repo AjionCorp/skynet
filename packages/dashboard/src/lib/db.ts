@@ -634,6 +634,9 @@ export class SkynetDB {
   }
 }
 
+// WARNING: Node.js fork() would inherit this file descriptor. If you add
+// child_process.fork() consumers, close and reopen the connection in the child.
+
 // ─── Singleton factory ───────────────────────────────────────────────
 // Connection pooling is unnecessary here: the dashboard runs as a single
 // Next.js server process with WAL-mode SQLite, so a single reused

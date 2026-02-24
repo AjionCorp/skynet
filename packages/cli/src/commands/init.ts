@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync, lstatSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync, symlinkSync, readdirSync, statSync, lstatSync, chmodSync } from "fs";
 import { resolve, join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execSync } from "child_process";
@@ -118,8 +118,8 @@ export async function initCommand(options: InitOptions) {
     options.name || (await prompt("Project name", projectDir.split("/").pop()));
 
   // Validate project name
-  if (!/^[a-z0-9-]+$/.test(projectName)) {
-    console.error("  Error: Project name must be lowercase alphanumeric with hyphens only (e.g. 'my-project')");
+  if (!/^[a-z][a-z0-9-]*$/.test(projectName)) {
+    console.error("  Error: Project name must start with a lowercase letter and contain only lowercase alphanumeric characters and hyphens (e.g. 'my-project')");
     process.exit(1);
   }
 
@@ -153,6 +153,9 @@ export async function initCommand(options: InitOptions) {
   // Create directories
   mkdirSync(join(devDir, "prompts"), { recursive: true });
   mkdirSync(scriptsTarget, { recursive: true });
+
+  // Restrict .dev/ permissions — contains DB and config with potential secrets
+  try { chmodSync(devDir, 0o700); } catch { /* non-POSIX */ }
 
   // Generate skynet.config.sh from template
   let configContent = readFileSync(join(TEMPLATES_DIR, "skynet.config.sh"), "utf-8");

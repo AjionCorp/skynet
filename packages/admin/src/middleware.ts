@@ -35,8 +35,11 @@ export function middleware(request: NextRequest) {
   // Check Authorization header (for API clients) or cookie (for browser)
   const authHeader = request.headers.get("authorization");
   const cookie = request.cookies.get("skynet-api-key");
-  const token = authHeader?.replace("Bearer ", "") || cookie?.value;
+  const token = authHeader?.replace(/^Bearer /i, "") || cookie?.value;
 
+  // NOTE: Session tokens (derived from SKYNET_DASHBOARD_API_KEY via HMAC) cannot
+  // be revoked individually. To invalidate all sessions, rotate the API key.
+  // This is acceptable for a single-operator pipeline dashboard.
   // Accepts both raw API key (for backward compatibility / CLI usage) and HMAC session token.
   // Prefer session token for browser-based access to avoid key exposure in logs.
   const expectedSessionToken = deriveSessionToken(apiKey);

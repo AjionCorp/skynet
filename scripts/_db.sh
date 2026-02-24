@@ -33,8 +33,12 @@ _DB_SEP=$'\x1f'
 
 # --- SQL injection prevention ---
 _sql_escape() { printf '%s\n' "$1" | sed "s/'/''/g"; }
-# Strip non-digits — defense-in-depth for integer params used in WHERE clauses.
-_sql_int() { local v="${1%%[^0-9]*}"; echo "${v:-0}"; }
+# Strip non-digits and leading zeros — defense-in-depth for integer params.
+_sql_int() {
+  local v="${1%%[^0-9]*}"
+  v="${v:-0}"
+  echo $((10#$v + 0))
+}
 
 # Portable millisecond timer (macOS date lacks %N, use perl Time::HiRes)
 _db_now_ms() {
@@ -402,6 +406,10 @@ _db_retry() {
   return "$rc"
 }
 
+# blocked_by values are stored as comma-separated task titles (CSV format).
+# This is enforced by addTask() in both TS and bash layers.
+# The dep_split CTE below relies on this format — do NOT change the separator.
+#
 # Find + atomically claim the next unblocked pending task for a worker.
 # Output: id|title|tag|description|branch  or empty string if none available.
 # Uses a single SQL statement with BEGIN IMMEDIATE + recursive CTE to resolve
@@ -961,6 +969,11 @@ db_export_all_tasks() {
 # ============================================================
 # STATE FILE EXPORT (regenerate markdown from SQLite)
 # ============================================================
+#
+# NOTE: File writes use atomic rename (write to .tmp, then mv) to prevent
+# partial reads. Callers reading exported files may still see stale data
+# during the window between two export cycles — this is acceptable for
+# display purposes.
 
 # Generate backlog.md from tasks table.
 # Atomic write via tmp+mv to prevent partial reads.

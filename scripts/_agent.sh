@@ -46,7 +46,7 @@ _agent_exec() {
   fi
 
   # macOS: perl alarm (bash 3.2 compatible, no GNU coreutils dependency)
-  perl -e 'alarm shift; exec @ARGV' "$timeout_secs" "$@"
+  perl -e 'alarm shift; exec @ARGV' "$timeout_secs" "$@" 2>/dev/null
   local rc=$?
   # SIGALRM (signal 14) → exit 142 (128+14). Normalize to 124.
   [ "$rc" -eq 142 ] && return 124

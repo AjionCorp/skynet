@@ -100,6 +100,7 @@ function fetchFromSqlite(devDir: string): DashboardData | null {
     }
 
     // Stale heartbeats + stale tasks
+    // staleSecs is derived from STALE_THRESHOLD_SECONDS (hardcoded constant) — safe for interpolation
     const staleSecs = STALE_THRESHOLD_SECONDS;
     const hbRow = sqliteRows(devDir,
       `SELECT

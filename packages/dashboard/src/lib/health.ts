@@ -16,6 +16,12 @@ export interface HealthScoreParams {
   staleTasks24hCount: number;
 }
 
+// Penalty weights per issue type
+const PENALTY_FAILED_TASK = 5;
+const PENALTY_BLOCKER = 10;
+const PENALTY_STALE_HEARTBEAT = 2;
+const PENALTY_STALE_TASK = 1;
+
 /**
  * Calculate a pipeline health score (0-100).
  * Starts at 100 and deducts for issues:
@@ -26,9 +32,9 @@ export interface HealthScoreParams {
  */
 export function calculateHealthScore(opts: HealthScoreParams): number {
   let score = 100;
-  score -= opts.failedPendingCount * 5;
-  score -= opts.blockerCount * 10;
-  score -= opts.staleHeartbeatCount * 2;
-  score -= opts.staleTasks24hCount * 1;
+  score -= opts.failedPendingCount * PENALTY_FAILED_TASK;
+  score -= opts.blockerCount * PENALTY_BLOCKER;
+  score -= opts.staleHeartbeatCount * PENALTY_STALE_HEARTBEAT;
+  score -= opts.staleTasks24hCount * PENALTY_STALE_TASK;
   return Math.max(0, Math.min(100, score));
 }

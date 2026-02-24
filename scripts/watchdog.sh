@@ -335,9 +335,9 @@ _cr_phase3_orphan_worktrees() {
     # path as a directory argument to bash (not as a substring of log messages or other
     # paths). Exclude our own PID and pgrep/grep processes.
     if command -v pgrep >/dev/null 2>&1; then
-      orphan_pids=$(pgrep -f "bash.*${resolved_wt_dir}" 2>/dev/null | grep -v "^$$\$" || true)
+      orphan_pids=$(pgrep -f "bash.*${resolved_wt_dir}([ /]|$)" 2>/dev/null | grep -v "^$$\$" || true)
     else
-      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${resolved_wt_dir}" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
+      orphan_pids=$(ps ax -o pid= -o command= 2>/dev/null | grep -E "bash.*${resolved_wt_dir}([ /]|$)" | grep -v grep | grep -v "^ *$$ " | awk '{print $1}' || true)
     fi
     if [ -n "$orphan_pids" ]; then
       log "Killing orphan processes in $wt_dir: $(echo "$orphan_pids" | tr '\n' ' ')"
@@ -453,6 +453,10 @@ fi
 # waiting for the 120s stale timeout to expire.
 # TOCTOU guard: re-read the PID right before removal. If it changed between the
 # first and second read, a new worker legitimately acquired the lock — skip.
+# NOTE: There is an inherent TOCTOU race between reading the PID file and
+# checking kill -0. A new process could reuse the PID in between. This is
+# mitigated by: (1) the double-read pattern that catches PID changes, and
+# (2) the short time window making PID reuse statistically improbable.
 if [ -d "$MERGE_LOCK" ]; then
   _ml_pid_first=""
   [ -f "$MERGE_LOCK/pid" ] && _ml_pid_first=$(cat "$MERGE_LOCK/pid" 2>/dev/null || echo "")
@@ -1149,6 +1153,9 @@ if [ "${SKYNET_CANARY_ENABLED:-false}" = "true" ] && [ -f "$_canary_file" ]; the
     fi
   fi
 
+  # LIMITATION: Canary validation only monitors worker 1. If worker 1 is idle
+  # while other workers run with the new code, canary validation may not trigger.
+  # Future improvement: watch any worker running post-canary-commit code.
   # Check for canary worker crash (dead PID + stale heartbeat)
   if $_canary_active; then
     _stale_in_canary=$(db_get_stale_heartbeats 300 1 | head -1)  # 5min, worker 1 only
