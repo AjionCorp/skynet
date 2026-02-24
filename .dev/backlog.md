@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FEAT] Add pipeline health trend sparkline to Pipeline dashboard — Create a HealthSparkline component in packages/dashboard/src/components/HealthSparkline.tsx using recharts LineChart. Read the last 50 entries from /events endpoint, filter for health_check events, plot health scores over time as a small inline sparkline next to the Health Score card in PipelineDashboard.tsx. Mission: Criterion #4 trustworthy visibility.
 - [>] [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard — In packages/dashboard/src/components/PipelineDashboard.tsx, add a Worker Performance section showing per-worker cards with: tasks completed count, average duration, success rate percentage, current task title, last heartbeat age. Derive data from the existing /pipeline/status response which includes workerTasks array. Mission: Criterion #4 trustworthy visibility and Criterion #5 measurable progress.
 
 # Recent checked history (last 30)

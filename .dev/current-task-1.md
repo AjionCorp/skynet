@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Canonicalize duplicate `status=blocked` root variants during watchdog reconciliation — in `scripts/watchdog.sh`, when multiple blocked rows share one normalized root and no `fixing-*` row owns that root, keep one deterministic canonical blocked row (latest row index tie-break, highest attempts preserved), mark lower-priority blocked variants `superseded`, and emit `blocked_duplicates_compacted` counters. Mission: Criterion #2 self-correction throughput and Criterion #3 one-root-one-active-row convergence.
+## [FEAT] Add pipeline health trend sparkline to Pipeline dashboard
 **Status:** completed
-**Started:** 2026-02-20 18:54
-**Completed:** 2026-02-20
-**Branch:** dev/canonicalize-duplicate-statusblocked-roo
+**Started:** 2026-02-24 16:43
+**Completed:** 2026-02-24
+**Branch:** dev/add-pipeline-health-trend-sparkline-to-p
 **Worker:** 1
 
 ### Changes
