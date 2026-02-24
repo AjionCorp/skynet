@@ -179,9 +179,9 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
       )}
 
       {/* Config sections */}
-      {sections.map((section) => (
+      {sections.map((section, idx) => (
         <div
-          key={section.label}
+          key={`${section.label}-${idx}`}
           className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6"
         >
           <div className="mb-4 flex items-center gap-2">
