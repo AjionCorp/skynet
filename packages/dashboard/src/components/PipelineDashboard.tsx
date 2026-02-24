@@ -20,6 +20,10 @@ import {
   ChevronDown,
   ChevronRight,
   Wrench,
+  Timer,
+  TrendingUp,
+  Target,
+  Gauge,
 } from "lucide-react";
 import type { PipelineStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
@@ -247,6 +251,20 @@ export function PipelineDashboard() {
       : status.selfCorrectionRate >= 70
         ? "medium"
         : "low";
+
+  // Worker efficiency metrics
+  const today = new Date().toISOString().slice(0, 10);
+  const completedToday = status.completed.filter((t) => t.date === today).length;
+  const totalAttempted = status.completedCount + status.failed.length;
+  const successRate = totalAttempted > 0
+    ? Math.round((status.completedCount / totalAttempted) * 100)
+    : 0;
+  const successLevel: "high" | "medium" | "low" = successRate >= 80 ? "high" : successRate >= 60 ? "medium" : "low";
+  const runningWorkers = status.workers.filter((w) => w.running && w.ageMs !== null);
+  const avgUptimeMs = runningWorkers.length > 0
+    ? runningWorkers.reduce((sum, w) => sum + (w.ageMs ?? 0), 0) / runningWorkers.length
+    : null;
+
   const levelClasses = {
     high: { card: 'border-emerald-500/20 bg-emerald-500/5', label: 'text-emerald-400', badge: 'bg-emerald-500/20 text-emerald-400' },
     medium: { card: 'border-amber-500/20 bg-amber-500/5', label: 'text-amber-400', badge: 'bg-amber-500/20 text-amber-400' },
@@ -311,6 +329,46 @@ export function PipelineDashboard() {
         <div className={`rounded-xl border p-4 ${status.failedPendingCount > 0 ? "border-red-500/20 bg-red-500/5" : "border-zinc-800 bg-zinc-900"}`}>
           <p className={`text-xs font-medium uppercase tracking-wider ${status.failedPendingCount > 0 ? "text-red-400" : "text-zinc-500"}`}>Failed</p>
           <p className="mt-1 text-2xl font-bold text-white">{status.failedPendingCount}</p>
+        </div>
+      </div>
+
+      {/* Worker Efficiency Cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
+          <div className="flex items-center gap-1.5">
+            <Timer className="h-3.5 w-3.5 text-violet-400" />
+            <p className="text-xs font-medium uppercase tracking-wider text-violet-400">Avg Duration</p>
+          </div>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {status.averageTaskDuration ?? "--"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="flex items-center gap-1.5">
+            <TrendingUp className="h-3.5 w-3.5 text-cyan-400" />
+            <p className="text-xs font-medium uppercase tracking-wider text-cyan-400">Today&apos;s Throughput</p>
+          </div>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {completedToday} <span className="text-sm font-normal text-zinc-500">tasks</span>
+          </p>
+        </div>
+        <div className={`rounded-xl border p-4 ${levelClasses[successLevel].card}`}>
+          <div className="flex items-center gap-1.5">
+            <Target className={`h-3.5 w-3.5 ${levelClasses[successLevel].label}`} />
+            <p className={`text-xs font-medium uppercase tracking-wider ${levelClasses[successLevel].label}`}>Success Rate</p>
+          </div>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {totalAttempted > 0 ? `${successRate}%` : "--"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4">
+          <div className="flex items-center gap-1.5">
+            <Gauge className="h-3.5 w-3.5 text-blue-400" />
+            <p className="text-xs font-medium uppercase tracking-wider text-blue-400">Avg Worker Uptime</p>
+          </div>
+          <p className="mt-1 text-2xl font-bold text-white">
+            {avgUptimeMs !== null ? formatAge(avgUptimeMs) : "--"}
+          </p>
         </div>
       </div>
 
