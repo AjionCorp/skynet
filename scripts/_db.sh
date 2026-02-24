@@ -323,6 +323,8 @@ SCHEMA
 
   # Schema migrations — add columns that may not exist in older databases
   _db "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
+  _db "ALTER TABLE tasks ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
+  _db "ALTER TABLE events ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
@@ -562,6 +564,20 @@ db_get_task() {
 }
 
 # ============================================================
+# TRACE ID
+# ============================================================
+
+db_set_trace_id() {
+  local task_id="$1" trace_id="$2"
+  _db "UPDATE tasks SET trace_id='$(_sql_escape "$trace_id")' WHERE id=$(_sql_int "$task_id");"
+}
+
+db_get_trace_id() {
+  local task_id="$1"
+  _db "SELECT trace_id FROM tasks WHERE id=$(_sql_int "$task_id");"
+}
+
+# ============================================================
 # FAILURE MANAGEMENT
 # ============================================================
 
@@ -796,13 +812,14 @@ db_count_active_blockers() {
 # ============================================================
 
 db_add_event() {
-  local event="$1" detail="${2:-}" wid="${3:-}"
+  local event="$1" detail="${2:-}" wid="${3:-}" trace_id="${4:-}"
   local detail_esc; detail_esc=$(_sql_escape "$detail")
   local event_esc; event_esc=$(_sql_escape "$event")
+  local trace_esc; trace_esc=$(_sql_escape "$trace_id")
   local epoch; epoch=$(date +%s)
   local wid_val="NULL"
   [ -n "$wid" ] && wid_val=$(_sql_int "$wid")
-  _sql_exec "INSERT INTO events (epoch, event, detail, worker_id) VALUES ($epoch, '$event_esc', '$detail_esc', $wid_val);"
+  _sql_exec "INSERT INTO events (epoch, event, detail, worker_id, trace_id) VALUES ($epoch, '$event_esc', '$detail_esc', $wid_val, '$trace_esc');"
 }
 
 db_get_recent_events() {

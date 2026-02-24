@@ -80,11 +80,12 @@ is_running() {
 
 
 # --- Crash recovery: detect stale locks, orphaned tasks, and zombie processes ---
-crash_recovery() {
-  local recovered=0
-  local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
+# Decomposed into three phase helpers. All share the caller's scope for
+# `recovered`, `_cr_stale_pids`, `_cr_orphaned_tasks`, `_cr_cleaned_worktrees`.
+# IMPORTANT: Do NOT call these in subshells — they modify shared counters.
 
-  # Phase 1: Check all known lock files for stale/zombie PIDs
+# Phase 1: Check all known lock files for stale/zombie PIDs
+_cr_phase1_stale_locks() {
   local all_locks=()
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
     all_locks+=("${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
@@ -112,12 +113,23 @@ crash_recovery() {
     local lock_pid=""
     if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
       lock_pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+      if [ -z "$lock_pid" ]; then
+        # Zero-length PID file (crash between open and write) — treat as orphaned
+        local lock_age_secs=$(( $(date +%s) - $(file_mtime "$lockfile") ))
+        if [ "$lock_age_secs" -gt 60 ]; then
+          log "Removing lock with empty PID file (${lock_age_secs}s old): $lockfile"
+          rm -rf "$lockfile"
+          recovered=$((recovered + 1))
+          _cr_stale_pids=$((_cr_stale_pids + 1))
+        fi
+        continue
+      fi
     elif [ -f "$lockfile" ]; then
       lock_pid=$(cat "$lockfile" 2>/dev/null || echo "")
     else
       continue
     fi
-    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); if [ "$recovered" -gt 500 ]; then log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"; break; fi; continue; }
+    [ -z "$lock_pid" ] && { rm -rf "$lockfile"; recovered=$((recovered + 1)); _cr_stale_pids=$((_cr_stale_pids + 1)); if [ "$recovered" -gt 500 ]; then log "WARNING: Crash recovery exceeded 500 items — possible cascading failure"; break; fi; continue; }
 
     local stale=false
 
@@ -180,8 +192,10 @@ crash_recovery() {
       fi
     fi
   done
+}
 
-  # Phase 2: Recover partial task states — unclaim [>] tasks from dead workers
+# Phase 2: Recover partial task states — unclaim [>] tasks from dead workers
+_cr_phase2_orphaned_tasks() {
   for wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
     local wid_lock="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
     local task_file="$DEV_DIR/current-task-${wid}.md"
@@ -251,15 +265,17 @@ IDLE_EOF
       fi
     fi
   fi
+}
 
-  # Phase 3: Kill orphan processes in worktree directories and clean up worktrees
+# Phase 3: Kill orphan processes in worktree directories and clean up worktrees
+_cr_phase3_orphan_worktrees() {
   local worktree_dirs=()
   for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
-  worktree_dirs+=("${WORKTREE_BASE}/w${_wid}|${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
+    worktree_dirs+=("${WORKTREE_BASE}/w${_wid}|${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock")
   done
-worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock")
+  worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock")
   for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
-  worktree_dirs+=("${WORKTREE_BASE}/fixer-${_fid}|${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
+    worktree_dirs+=("${WORKTREE_BASE}/fixer-${_fid}|${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
   done
 
   for entry in "${worktree_dirs[@]}"; do
@@ -306,6 +322,15 @@ worktree_dirs+=("${WORKTREE_BASE}/fixer-1|${SKYNET_LOCK_PREFIX}-task-fixer.lock"
       break
     fi
   done
+}
+
+crash_recovery() {
+  local recovered=0
+  local _cr_stale_pids=0 _cr_orphaned_tasks=0 _cr_cleaned_worktrees=0
+
+  _cr_phase1_stale_locks
+  _cr_phase2_orphaned_tasks
+  _cr_phase3_orphan_worktrees
 
   if [ "$recovered" -gt 0 ]; then
     log "Crash recovery: $recovered item(s) — ${_cr_stale_pids} stale PIDs, ${_cr_orphaned_tasks} orphaned tasks, ${_cr_cleaned_worktrees} worktrees cleaned"

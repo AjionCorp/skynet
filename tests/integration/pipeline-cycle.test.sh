@@ -618,21 +618,98 @@ ECHO_COMMITS=$(cd "$PROJECT_DIR" && git log --oneline | grep -c "echo-agent" || 
 assert_gt "$ECHO_COMMITS" "2" "multi-task: multiple echo-agent commits on main"
 
 # ============================================================
-# TEST 8: Database counts after full run
+# TEST 8: Agent failure moves task to failed
 # ============================================================
 
 echo ""
-_tlog "=== Test 8: Database state consistency ==="
+_tlog "=== Test 8: Agent failure moves task to failed ==="
+
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
+
+# Save the original agent_run function
+eval "$(declare -f agent_run | sed '1s/agent_run/_orig_agent_run/')"
+
+# Override agent_run to simulate failure (non-zero exit)
+agent_run() {
+  local prompt="$1"
+  local log_file="${2:-/dev/null}"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] failing-agent: simulated failure" >> "$log_file"
+  return 1
+}
+
+# Add a task that will fail via the broken agent
+FAIL_AGENT_ID=$(db_add_task "Agent failure test task" "TEST" "This task will fail" "top")
+assert_not_empty "$FAIL_AGENT_ID" "agent-fail: task added"
+
+# Claim the task
+FAIL_CLAIM=$(db_claim_next_task 1)
+FAIL_CLAIM_ID=$(echo "$FAIL_CLAIM" | cut -d"$SEP" -f1)
+FAIL_CLAIM_TITLE=$(echo "$FAIL_CLAIM" | cut -d"$SEP" -f2)
+assert_eq "$FAIL_CLAIM_TITLE" "Agent failure test task" "agent-fail: correct task claimed"
+
+# Create worktree and run the failing agent
+BRANCH_FAIL="dev/agent-failure-test-task"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w1"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_FAIL" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@integration.test"
+  git config user.name "Integration Test"
+  agent_run "Agent failure test task" "$LOG"
+)
+AGENT_FAIL_RC=$?
+
+# Agent should have returned non-zero
+if [ "$AGENT_FAIL_RC" -ne 0 ]; then
+  pass "agent-fail: agent returned non-zero ($AGENT_FAIL_RC)"
+else
+  fail "agent-fail: agent should have returned non-zero"
+fi
+
+# Simulate what dev-worker.sh does on agent failure: mark task as failed
+cleanup_worktree "$BRANCH_FAIL"
+db_fail_task "$FAIL_CLAIM_ID" "$BRANCH_FAIL" "claude exit code $AGENT_FAIL_RC" 2>/dev/null || true
+
+# Verify the task is now failed
+FAIL_STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$FAIL_CLAIM_ID;")
+assert_eq "$FAIL_STATUS" "failed" "agent-fail: task status set to failed"
+
+# Verify error message is recorded
+FAIL_ERROR=$(sqlite3 "$DB_PATH" "SELECT error FROM tasks WHERE id=$FAIL_CLAIM_ID;")
+assert_contains "$FAIL_ERROR" "exit code" "agent-fail: error message recorded"
+
+# Verify the worker can continue to process more tasks (claim next)
+NEXT_TASK_ID=$(db_add_task "Task after agent failure" "TEST" "Should be claimable" "top")
+NEXT_CLAIM=$(db_claim_next_task 1)
+NEXT_CLAIM_TITLE=$(echo "$NEXT_CLAIM" | cut -d"$SEP" -f2)
+assert_eq "$NEXT_CLAIM_TITLE" "Task after agent failure" "agent-fail: worker claims next task after failure"
+
+# Clean up: complete the next task so it doesn't affect counts
+NEXT_CLAIM_ID=$(echo "$NEXT_CLAIM" | cut -d"$SEP" -f1)
+db_complete_task "$NEXT_CLAIM_ID" "dev/task-after-failure" "1m" 60 "success" 2>/dev/null || true
+
+# Restore original agent_run
+eval "$(declare -f _orig_agent_run | sed '1s/_orig_agent_run/agent_run/')"
+
+# ============================================================
+# TEST 9: Database counts after full run
+# ============================================================
+
+echo ""
+_tlog "=== Test 9: Database state consistency ==="
 
 TOTAL_COMPLETED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed';")
 TOTAL_FAILED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';")
 TOTAL_PENDING=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='pending';")
 
-# We completed: hello world, feature A, feature B, dashboard, alpha, beta, gamma = 7
-assert_eq "$TOTAL_COMPLETED" "7" "db state: 7 total completed tasks"
+# We completed: hello world, feature A, feature B, dashboard, alpha, beta, gamma, task-after-failure = 8
+assert_eq "$TOTAL_COMPLETED" "8" "db state: 8 total completed tasks"
 
-# We failed: failing task test = 1
-assert_eq "$TOTAL_FAILED" "1" "db state: 1 total failed task"
+# We failed: failing task test + agent failure test = 2
+assert_eq "$TOTAL_FAILED" "2" "db state: 2 total failed tasks"
 
 # Pending task one and two were marked done in Test 7 setup, so 0 pending remain
 assert_eq "$TOTAL_PENDING" "0" "db state: 0 remaining pending tasks"

@@ -6,15 +6,16 @@
 #   epoch|event_name|description
 # This mirrors the fixer-stats.log pattern for structured log data.
 
-# Emit a named pipeline event with optional description.
-# Usage: emit_event "event_name" "description"
+# Emit a named pipeline event with optional description and trace_id.
+# Usage: emit_event "event_name" "description" ["trace_id"]
 emit_event() {
   local event="$1"
   local description="${2:-}"
+  local trace_id="${3:-${TRACE_ID:-}}"
 
   # Write to SQLite (primary)
   local _wid="${WORKER_ID:-${FIXER_ID:-}}"
-  db_add_event "$event" "$description" "$_wid" 2>/dev/null || true
+  db_add_event "$event" "$description" "$_wid" "$trace_id" 2>/dev/null || true
 
   # Also append to flat file for backward compat during transition
   local events_log="$DEV_DIR/events.log"

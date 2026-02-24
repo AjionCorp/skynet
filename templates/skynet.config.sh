@@ -49,6 +49,7 @@ export SKYNET_MAX_FIX_ATTEMPTS=3     # Max fix attempts before a failed task is 
 export SKYNET_FIXER_IGNORE_USAGE_LIMIT=true  # Don't count usage-limit failures toward fixer cooldown/attempts (default: true)
 export SKYNET_DRIVER_BACKLOG_THRESHOLD=5  # Project-driver kicks off when backlog has fewer than N tasks (default: 5)
 export SKYNET_HEALTH_ALERT_THRESHOLD="50"  # Health score threshold (0-100) — watchdog alerts when score drops below this (default: 50)
+export SKYNET_ORPHAN_CUTOFF_SECONDS="120"  # Seconds before a claimed task with no active worker is considered orphaned (default: 120)
 export SKYNET_MAX_LOG_SIZE_KB=1024        # Max log file size in KB before rotation (default: 1024 = 1MB)
 # Log format: "text" (human-readable) or "json" (machine-parseable JSON lines)
 export SKYNET_LOG_FORMAT="text"
@@ -64,7 +65,7 @@ export SKYNET_GIT_PUSH_TIMEOUT=30           # Timeout in seconds for each git pu
 # When enabled, changes to scripts/*.sh trigger single-worker validation
 # before resuming full dispatch. Prevents self-modifying bugs from crashing
 # all workers simultaneously.
-export SKYNET_CANARY_ENABLED="false"
+export SKYNET_CANARY_ENABLED="true"
 # Auto-clear canary if no crash after this many minutes (prevents pipeline stall)
 export SKYNET_CANARY_TIMEOUT_MINUTES="30"
 
@@ -79,6 +80,10 @@ export SKYNET_DB_SLOW_QUERY_MS="100"
 export SKYNET_LOCK_BACKEND="file"
 # Redis URL for distributed locking (only used when SKYNET_LOCK_BACKEND=redis)
 # export SKYNET_REDIS_URL="redis://localhost:6379"
+# Redis CLI binary name/path (default: redis-cli)
+# export SKYNET_REDIS_CLI="redis-cli"
+# Use kernel-level flock for file locks (default: true). Set false to force mkdir-based locks.
+export SKYNET_USE_FLOCK="true"
 
 # ---- Auth (Claude Code OAuth) ----
 ## SECURITY WARNING: Token cache is written with umask 077 (owner-only) by

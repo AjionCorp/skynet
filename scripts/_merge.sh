@@ -144,6 +144,7 @@ do_merge_to_main() {
 
   # --- Post-merge typecheck gate (validates main still builds) ---
   if [ "${SKYNET_POST_MERGE_TYPECHECK:-true}" = "true" ]; then
+    extend_merge_lock 2>/dev/null || true
     log "Running post-merge typecheck on main..."
     # Ensure deps are fresh if lock file changed in merge
     if [ -f "pnpm-lock.yaml" ] && [ -f "node_modules/.modules.yaml" ]; then
@@ -209,6 +210,7 @@ do_merge_to_main() {
   fi
 
   # --- Push merged changes to origin (while still holding merge lock) ---
+  extend_merge_lock 2>/dev/null || true
   if ! git_push_with_retry; then
     log "PUSH FAILED after merge — reverting to prevent split-brain"
     if $_MERGE_STATE_COMMITTED; then

@@ -55,6 +55,8 @@ lock_backend_release() {
   fi
 }
 
+lock_backend_extend() { :; }  # flock doesn't expire — no-op
+
 lock_backend_check() {
   local name="$1"
   local flockfile="${SKYNET_LOCK_PREFIX}-${name}.flock"

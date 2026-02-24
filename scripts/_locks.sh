@@ -77,6 +77,12 @@ acquire_worker_lock() {
   fi
 }
 
+# Extend merge lock TTL (prevents expiry during long operations).
+# No-op for file backend (flock doesn't expire); extends Redis key TTL.
+extend_merge_lock() {
+  lock_backend_extend "merge" 30
+}
+
 # Release merge lock (delegates to pluggable backend).
 release_merge_lock() {
   lock_backend_release "merge"

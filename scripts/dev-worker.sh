@@ -94,69 +94,11 @@ _stop_heartbeat() {
   rm -f "$HEARTBEAT_FILE"
 }
 
-# --- Worktree helpers ---
+# --- Worktree helpers (shared module) ---
 # Each worker gets its own worktree directory so multiple workers can run
 # on different branches without conflicting in the same working directory.
-# NOTE: Similar setup_worktree/cleanup_worktree exists in task-fixer.sh — keep in sync
-
-# Create a worktree for a feature branch. Installs deps via pnpm.
-setup_worktree() {
-  mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
-  local branch="$1"
-  local from_main="${2:-true}"  # true = create new branch from main, false = use existing
-  WORKTREE_LAST_ERROR=""
-
-  # Clean any leftover worktree from previous runs
-  cleanup_worktree 2>/dev/null || true
-
-  if $from_main; then
-    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH" 2>&1); then
-      log "Worktree add failed for $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
-        WORKTREE_LAST_ERROR="branch_in_use"
-      else
-        WORKTREE_LAST_ERROR="worktree_add_failed"
-      fi
-      return 1
-    fi
-  else
-    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" "$branch" 2>&1); then
-      log "Worktree add failed for existing branch $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
-        WORKTREE_LAST_ERROR="branch_in_use"
-      else
-        WORKTREE_LAST_ERROR="worktree_add_failed"
-      fi
-      return 1
-    fi
-  fi
-  if [ ! -d "$WORKTREE_DIR" ]; then
-    log "Worktree directory missing after add: $WORKTREE_DIR"
-    WORKTREE_LAST_ERROR="worktree_missing"
-    return 1
-  fi
-
-  # Install dependencies (fast — pnpm content-addressable store is cached)
-  log "Installing deps in worktree..."
-  if ! (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1; then
-    log "ERROR: Dependency install failed in worktree"
-    WORKTREE_LAST_ERROR="install_failed"
-    return 1
-  fi
-}
-
-# Remove worktree. Optionally delete the branch too.
-cleanup_worktree() {
-  local delete_branch="${1:-}"
-  cd "$PROJECT_DIR"  # ensure we're not inside the worktree
-  if [ -d "$WORKTREE_DIR" ]; then
-    git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
-  fi
-  git worktree prune 2>/dev/null || true
-  if [ -n "$delete_branch" ]; then
-    git branch -D "$delete_branch" 2>/dev/null || true
-  fi
-}
+# WORKTREE_INSTALL_STRICT=true (default) — fail on install error.
+source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
 
 # --- PID lock to prevent duplicate runs (per worker ID, mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-dev-worker-${WORKER_ID}.lock"
@@ -284,6 +226,7 @@ tasks_attempted=0
 tasks_completed=0
 tasks_failed=0
 _one_shot_exit=0
+TRACE_ID=""
 
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   tasks_attempted=$((tasks_attempted + 1))
@@ -356,6 +299,13 @@ EOF
   # Load skills matching this task's tag
   SKILL_CONTENT="$(get_skills_for_tag "${task_type:-}")"
 
+  # Generate trace ID for task lifecycle tracing
+  TRACE_ID=$(_generate_trace_id)
+  if [ -n "${_db_task_id:-}" ]; then
+    db_set_trace_id "$_db_task_id" "$TRACE_ID" 2>/dev/null || true
+  fi
+
+  log "TRACE=$TRACE_ID Claimed task ${_db_task_id:-}: $task_title"
   log "Starting task ($tasks_attempted/$MAX_TASKS_PER_RUN): $task_title"
   log "Branch: $branch_name"
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
@@ -488,6 +438,7 @@ EOF
 
   # Update progress epoch after agent finishes — long runs may have staled it
   db_update_progress "$WORKER_ID" 2>/dev/null || true
+  log "TRACE=$TRACE_ID Agent completed"
   log "Claude Code completed. Running checks before merge..."
 
   if [ ! -d "$WORKTREE_DIR" ]; then
@@ -569,6 +520,7 @@ EOF
     continue
   fi
 
+  log "TRACE=$TRACE_ID Gates passed"
   log "All quality gates passed."
 
   # --- Shell syntax gate: bash -n on changed .sh files ---
@@ -690,6 +642,7 @@ WEOF
   _merge_rc=0
   do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
   _IN_MERGE=false
+  log "TRACE=$TRACE_ID Merge result: rc=$_merge_rc"
 
   # If shutdown was requested during merge, exit now that merge is complete
   if $SHUTDOWN_REQUESTED; then
@@ -783,6 +736,7 @@ WEOF
       ;;
   esac
 
+  log "TRACE=$TRACE_ID Task completed"
   log "Task completed and merged to $SKYNET_MAIN_BRANCH: $task_title"
   remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   remaining=${remaining:-0}

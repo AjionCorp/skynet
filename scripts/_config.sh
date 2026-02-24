@@ -110,7 +110,7 @@ export SKYNET_GIT_PUSH_TIMEOUT="${SKYNET_GIT_PUSH_TIMEOUT:-60}"
 
 # Canary deployment: when enabled, script changes (scripts/*.sh) trigger single-worker
 # validation before full dispatch. Prevents self-modifying bugs from crashing all workers.
-export SKYNET_CANARY_ENABLED="${SKYNET_CANARY_ENABLED:-false}"
+export SKYNET_CANARY_ENABLED="${SKYNET_CANARY_ENABLED:-true}"
 # Auto-clear canary after this many minutes if no crash detected (prevents pipeline stall)
 export SKYNET_CANARY_TIMEOUT_MINUTES="${SKYNET_CANARY_TIMEOUT_MINUTES:-30}"
 
@@ -134,6 +134,40 @@ CURRENT_TASK="$DEV_DIR/current-task.md"
 SYNC_HEALTH="$DEV_DIR/sync-health.md"
 # shellcheck disable=SC2034
 MISSION="$DEV_DIR/mission.md"
+
+# --- Startup config validation ---
+_validate_config() {
+  local errors=0
+  # Validate gate commands exist
+  for _gate_var in SKYNET_GATE_1 SKYNET_GATE_2 SKYNET_GATE_3; do
+    local _gate_val="${!_gate_var:-}"
+    [ -z "$_gate_val" ] && continue
+    local _gate_cmd="${_gate_val%% *}"  # first word
+    if ! command -v "$_gate_cmd" >/dev/null 2>&1; then
+      echo "WARNING: $_gate_var command '$_gate_cmd' not found in PATH" >&2
+    fi
+  done
+  # Validate numeric configs
+  for _num_var in SKYNET_MAX_WORKERS SKYNET_MAX_FIXERS SKYNET_STALE_MINUTES SKYNET_AGENT_TIMEOUT_MINUTES; do
+    local _num_val="${!_num_var:-}"
+    case "$_num_val" in
+      ''|*[!0-9]*) echo "WARNING: $_num_var='$_num_val' is not a positive integer" >&2; errors=$((errors + 1)) ;;
+    esac
+  done
+  # Validate lock backend
+  if [ "${SKYNET_LOCK_BACKEND:-file}" = "redis" ]; then
+    if [ -z "${SKYNET_REDIS_URL:-}" ]; then
+      echo "ERROR: SKYNET_LOCK_BACKEND=redis requires SKYNET_REDIS_URL to be set" >&2
+      errors=$((errors + 1))
+    fi
+    if ! command -v "${SKYNET_REDIS_CLI:-redis-cli}" >/dev/null 2>&1; then
+      echo "ERROR: SKYNET_LOCK_BACKEND=redis requires redis-cli in PATH" >&2
+      errors=$((errors + 1))
+    fi
+  fi
+  return 0  # warnings only, don't block startup
+}
+_validate_config
 
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
@@ -162,6 +196,9 @@ source "$SKYNET_SCRIPTS_DIR/_locks.sh"
 
 # Source shared merge-to-main logic (needs _locks.sh for merge mutex)
 source "$SKYNET_SCRIPTS_DIR/_merge.sh"
+
+# Source shared worktree setup/cleanup helpers (used by dev-worker, task-fixer)
+source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
 
 # Source SQLite database abstraction layer
 source "$SKYNET_SCRIPTS_DIR/_db.sh"
@@ -221,6 +258,18 @@ rotate_log_if_needed() {
     [ -f "${logfile}.1" ] && mv "${logfile}.1" "${logfile}.2"
     mv "$logfile" "${logfile}.1"
   fi
+}
+
+# --- Task lifecycle trace ID ---
+# Generate a short trace ID for task lifecycle tracing.
+# Uses /dev/urandom for randomness, falls back to PID+epoch.
+_generate_trace_id() {
+  local id
+  id=$(head -c 8 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n' | head -c 12)
+  if [ -z "$id" ]; then
+    id="$$-$(date +%s)"
+  fi
+  printf '%s' "$id"
 }
 
 # --- Git helpers ---

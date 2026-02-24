@@ -55,63 +55,12 @@ usage_limit_hit() {
   tail -n 200 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"
 }
 
-# --- Worktree helpers ---
-# NOTE: Similar setup_worktree/cleanup_worktree exists in dev-worker.sh — keep in sync
-setup_worktree() {
-  mkdir -p "$SKYNET_WORKTREE_BASE" 2>/dev/null || true
-  local branch="$1"
-  local from_main="${2:-true}"
-  WORKTREE_LAST_ERROR=""
-  cleanup_worktree 2>/dev/null || true
-  if $from_main; then
-    # Delete stale fix branch if it exists (left over from a previous crashed attempt)
-    if git show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null; then
-      log "Deleting stale branch $branch before creating worktree"
-      git branch -D "$branch" 2>/dev/null || true
-    fi
-    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" -b "$branch" "$SKYNET_MAIN_BRANCH" 2>&1); then
-      log "Worktree add failed for $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
-        WORKTREE_LAST_ERROR="branch_in_use"
-      else
-        WORKTREE_LAST_ERROR="worktree_add_failed"
-      fi
-      return 1
-    fi
-  else
-    if ! _wt_out=$(git worktree add "$WORKTREE_DIR" "$branch" 2>&1); then
-      log "Worktree add failed for existing branch $branch: $_wt_out"
-      if echo "$_wt_out" | grep -qi "already used by worktree"; then
-        WORKTREE_LAST_ERROR="branch_in_use"
-      else
-        WORKTREE_LAST_ERROR="worktree_add_failed"
-      fi
-      return 1
-    fi
-  fi
-  if [ ! -d "$WORKTREE_DIR" ]; then
-    log "Worktree directory missing after add: $WORKTREE_DIR"
-    WORKTREE_LAST_ERROR="worktree_missing"
-    return 1
-  fi
-  log "Installing deps in worktree..."
-  if ! (cd "$WORKTREE_DIR" && eval "${SKYNET_INSTALL_CMD:-pnpm install --frozen-lockfile}") >> "$LOG" 2>&1; then
-    log "ERROR: Dependency install failed in worktree"
-    # continue to agent anyway — some projects don't need install
-  fi
-}
-
-cleanup_worktree() {
-  local delete_branch="${1:-}"
-  cd "$PROJECT_DIR"
-  if [ -d "$WORKTREE_DIR" ]; then
-    git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
-  fi
-  git worktree prune 2>/dev/null || true
-  if [ -n "$delete_branch" ]; then
-    git branch -D "$delete_branch" 2>/dev/null || true
-  fi
-}
+# --- Worktree helpers (shared module) ---
+# Task-fixer uses non-strict install (continue on failure) and deletes stale
+# branches before creating worktrees from main.
+WORKTREE_INSTALL_STRICT=false
+WORKTREE_DELETE_STALE_BRANCH=true
+source "$SKYNET_SCRIPTS_DIR/_worktree.sh"
 
 # --- PID lock (instance-specific: fixer 1 → -task-fixer.lock, fixer 2+ → -task-fixer-N.lock) ---
 if [ "$FIXER_ID" = "1" ]; then
@@ -126,6 +75,7 @@ fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
 _db_task_id=""
+TRACE_ID=""
 
 cleanup_on_exit() {
   local exit_code=$?
@@ -271,6 +221,14 @@ if [ "$fix_attempts" -ge "$MAX_FIX_ATTEMPTS" ] 2>/dev/null; then
 fi
 
 _CURRENT_TASK_TITLE="$task_title"
+
+# Generate trace ID for task lifecycle tracing
+TRACE_ID=$(_generate_trace_id)
+if [ -n "$_db_task_id" ]; then
+  db_set_trace_id "$_db_task_id" "$TRACE_ID" 2>/dev/null || true
+fi
+
+log "TRACE=$TRACE_ID Claimed failed task $_db_task_id: $task_title"
 log "Attempting to fix: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 tg "🔧 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}* starting — fixing: $task_title (attempt $((fix_attempts + 1))/$MAX_FIX_ATTEMPTS)"
 
@@ -448,6 +406,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
   fi
   # Update progress epoch after agent finishes — long runs may have staled it
   db_update_progress "$FIXER_ID" 2>/dev/null || true
+  log "TRACE=$TRACE_ID Agent completed"
   log "Task-fixer succeeded. Running quality gates before merge..."
 
   if [ ! -d "$WORKTREE_DIR" ]; then
@@ -533,6 +492,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       fi
     fi
 
+    log "TRACE=$TRACE_ID Gates passed"
     log "All quality gates passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
 
     # Define state commit hook for do_merge_to_main
@@ -554,6 +514,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
     # Call shared merge function
     _merge_rc=0
     do_merge_to_main "$branch_name" "$WORKTREE_DIR" "$LOG" "$_pre_lock_rebased" || _merge_rc=$?
+    log "TRACE=$TRACE_ID Merge result: rc=$_merge_rc"
 
     new_attempts=$((fix_attempts + 1))
 
@@ -561,6 +522,7 @@ if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
       0)
         # Success — merged + pushed
         _CURRENT_TASK_TITLE=""
+        log "TRACE=$TRACE_ID Task completed"
         log "Fixed and merged to $SKYNET_MAIN_BRANCH: $task_title"
         tg "✅ *$SKYNET_PROJECT_NAME_UPPER FIXED*: $task_title (attempt $new_attempts)"
         emit_event "fix_succeeded" "Fixer $FIXER_ID: $task_title"

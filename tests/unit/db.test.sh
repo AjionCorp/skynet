@@ -74,6 +74,16 @@ log() { :; }
 # Source _db.sh directly (it only needs $SKYNET_DEV_DIR)
 source "$REPO_ROOT/scripts/_db.sh"
 
+# Source _generate_trace_id from _config.sh (defined standalone, no dependencies)
+_generate_trace_id() {
+  local id
+  id=$(head -c 8 /dev/urandom 2>/dev/null | od -An -tx1 2>/dev/null | tr -d ' \n' | head -c 12)
+  if [ -z "$id" ]; then
+    id="$$-$(date +%s)"
+  fi
+  printf '%s' "$id"
+}
+
 # _db_sep uses \x1f (Unit Separator), not '|'. Use this for cut/IFS on db output.
 SEP=$'\x1f'
 
@@ -768,6 +778,82 @@ sqlite3 "$DB_PATH" "DELETE FROM tasks;"
 db_add_task "Explain test" "FEAT" "" "top" >/dev/null
 PLAN=$(db_explain_claim 1)
 [ -n "$PLAN" ] && pass "db_explain_claim: returns query plan" || fail "db_explain_claim: empty plan"
+
+# ============================================================
+# TEST: trace_id column and functions
+# ============================================================
+echo ""
+printf "  %s\n" "=== trace_id ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+TRACE_TASK=$(db_add_task "Trace test" "FEAT" "" "top")
+TRACE_ID=$(_generate_trace_id)
+db_set_trace_id "$TRACE_TASK" "$TRACE_ID"
+GOT_TRACE=$(db_get_trace_id "$TRACE_TASK")
+assert_eq "$GOT_TRACE" "$TRACE_ID" "trace_id: set and retrieved"
+[ ${#TRACE_ID} -gt 0 ] && pass "trace_id: non-empty" || fail "trace_id: empty"
+
+# ── Test: concurrent claim stress (8 parallel workers) ────────────
+
+echo ""
+log "=== concurrent claim stress (8 parallel workers) ==="
+
+# Clean slate
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Create 8 fresh pending tasks with no blockers
+STRESS8_IDS=""
+for _i in 1 2 3 4 5 6 7 8; do
+  _sid=$(db_add_task "Stress8 task $_i" "TEST" "8-worker parallel claim test" "bottom")
+  STRESS8_IDS="$STRESS8_IDS $_sid"
+done
+
+STRESS8_PENDING=$(db_count_pending)
+assert_eq "$STRESS8_PENDING" "8" "stress8: 8 pending tasks created"
+
+# Launch 8 parallel db_claim_next_task calls in background subshells
+STRESS8_TMPDIR=$(mktemp -d)
+for _w in 1 2 3 4 5 6 7 8; do
+  (
+    _result=$(db_claim_next_task "$_w")
+    echo "$_result" > "$STRESS8_TMPDIR/worker-$_w.out"
+  ) &
+done
+wait
+
+# Collect results
+STRESS8_CLAIMED=0
+STRESS8_TITLES=""
+STRESS8_WORKER_IDS=""
+for _w in 1 2 3 4 5 6 7 8; do
+  _out=""
+  [ -f "$STRESS8_TMPDIR/worker-$_w.out" ] && _out=$(cat "$STRESS8_TMPDIR/worker-$_w.out")
+  if [ -n "$_out" ]; then
+    STRESS8_CLAIMED=$((STRESS8_CLAIMED + 1))
+    _t=$(echo "$_out" | cut -d"$SEP" -f2)
+    STRESS8_TITLES="$STRESS8_TITLES|$_t"
+    STRESS8_WORKER_IDS="$STRESS8_WORKER_IDS|$_w"
+  fi
+done
+rm -rf "$STRESS8_TMPDIR"
+
+assert_eq "$STRESS8_CLAIMED" "8" "stress8: exactly 8 tasks claimed"
+
+# Verify no double-claims: each task should have a different worker_id
+STRESS8_UNIQUE_WORKERS=$(sqlite3 "$DB_PATH" "SELECT COUNT(DISTINCT worker_id) FROM tasks WHERE status='claimed';")
+assert_eq "$STRESS8_UNIQUE_WORKERS" "8" "stress8: no double-claims (8 unique worker_ids)"
+
+# Verify each claimed task has a unique title
+STRESS8_UNIQUE_TITLES=$(sqlite3 "$DB_PATH" "SELECT COUNT(DISTINCT title) FROM tasks WHERE status='claimed';")
+assert_eq "$STRESS8_UNIQUE_TITLES" "8" "stress8: 8 unique titles claimed"
+
+# Verify 0 double-claims: no task has more than one worker assigned
+STRESS8_DOUBLE_CLAIMS=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM (SELECT id FROM tasks WHERE status='claimed' GROUP BY id HAVING COUNT(*) > 1);")
+assert_eq "$STRESS8_DOUBLE_CLAIMS" "0" "stress8: 0 double-claims detected"
+
+# Verify no tasks left unclaimed
+STRESS8_UNCLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='pending';")
+assert_eq "$STRESS8_UNCLAIMED" "0" "stress8: 0 unclaimed tasks remain"
 
 # ── Summary ──────────────────────────────────────────────────────
 
