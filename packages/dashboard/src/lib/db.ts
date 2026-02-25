@@ -128,6 +128,7 @@ interface FixerStatRow {
 export class SkynetDB {
   private db: Database;
   readonly isReadonly: boolean;
+  private hasMissionHash: boolean;
 
   constructor(dbPath: string, options?: { readonly?: boolean }) {
     const Database = loadDriver();
@@ -156,6 +157,10 @@ export class SkynetDB {
     // Lightweight call that only runs ANALYZE when statistics are stale.
     // Safe to call on every connection — no-op when stats are fresh.
     this.db.pragma("optimize");
+
+    // Detect optional columns (schema migrations add mission_hash).
+    const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+    this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
   }
 
   close(): void {
@@ -165,25 +170,31 @@ export class SkynetDB {
   // ── Backlog / Tasks ────────────────────────────────────────────────
 
   /** Returns backlog items matching the dashboard shape. */
-  getBacklogItems(): {
+  getBacklogItems(missionHash = ""): {
     items: BacklogItem[];
     pendingCount: number;
     claimedCount: number;
     manualDoneCount: number;
   } {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
     const rows = this.db
       .prepare(
         `SELECT id, title, tag, description, status, blocked_by, priority
          FROM tasks
-         WHERE status IN ('pending','claimed')
+         WHERE status IN ('pending','claimed')${missionFilter}
          ORDER BY priority ASC`
       )
-      .all() as Pick<TaskRow, "id" | "title" | "tag" | "description" | "status" | "blocked_by" | "priority">[];
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "id" | "title" | "tag" | "description" | "status" | "blocked_by" | "priority">[];
 
     // Compute manualDoneCount separately — these rows are not needed for backlog display
     const doneRow = this.db
-      .prepare(`SELECT COUNT(*) AS cnt FROM tasks WHERE status='done'`)
-      .get() as { cnt: number } | undefined;
+      .prepare(
+        `SELECT COUNT(*) AS cnt FROM tasks WHERE status='done'${missionFilter}`
+      )
+      .get(...(missionFilter ? [missionHash] : [])) as { cnt: number } | undefined;
     const manualDoneCount = doneRow?.cnt ?? 0;
 
     // Build title→status map for blocked resolution (include done items for dependency checks)
@@ -191,8 +202,8 @@ export class SkynetDB {
     for (const r of rows) titleToStatus.set(r.title, r.status);
     // Also load done titles so blockedBy resolution can find them
     const doneRows = this.db
-      .prepare(`SELECT title FROM tasks WHERE status='done'`)
-      .all() as Pick<TaskRow, "title">[];
+      .prepare(`SELECT title FROM tasks WHERE status='done'${missionFilter}`)
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "title">[];
     for (const r of doneRows) titleToStatus.set(r.title, "done");
 
     let pendingCount = 0;
@@ -226,16 +237,20 @@ export class SkynetDB {
   }
 
   /** Completed tasks (most recent first). */
-  getCompletedTasks(limit = 50): CompletedTask[] {
+  getCompletedTasks(limit = 50, missionHash = ""): CompletedTask[] {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
     const rows = this.db
       .prepare(
         `SELECT completed_at, title, branch, duration, notes
          FROM tasks
-         WHERE status IN ('completed','fixed')
+         WHERE status IN ('completed','fixed')${missionFilter}
          ORDER BY completed_at DESC
          LIMIT ?`
       )
-      .all(limit) as Pick<TaskRow, "completed_at" | "title" | "branch" | "duration" | "notes">[];
+      .all(...(missionFilter ? [missionHash, limit] : [limit])) as Pick<TaskRow, "completed_at" | "title" | "branch" | "duration" | "notes">[];
 
     return rows.map((r) => ({
       date: r.completed_at ? r.completed_at.slice(0, 10) : "",
@@ -246,10 +261,14 @@ export class SkynetDB {
     }));
   }
 
-  getCompletedCount(): number {
+  getCompletedCount(missionHash = ""): number {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
     const row = this.db
-      .prepare("SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed','done')")
-      .get() as { cnt: number };
+      .prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed','done')${missionFilter}`)
+      .get(...(missionFilter ? [missionHash] : [])) as { cnt: number };
     return row.cnt;
   }
 
@@ -272,16 +291,20 @@ export class SkynetDB {
   }
 
   /** Failed tasks for the pipeline-status handler. */
-  getFailedTasks(): FailedTask[] {
+  getFailedTasks(missionHash = ""): FailedTask[] {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
     const rows = this.db
       .prepare(
         `SELECT failed_at, title, branch, error, attempts, status
          FROM tasks
-         WHERE status IN ('failed','blocked','fixed','superseded')
-            OR status LIKE 'fixing-%'
+         WHERE (status IN ('failed','blocked','fixed','superseded')
+            OR status LIKE 'fixing-%')${missionFilter}
          ORDER BY failed_at DESC`
       )
-      .all() as Pick<TaskRow, "failed_at" | "title" | "branch" | "error" | "attempts" | "status">[];
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "failed_at" | "title" | "branch" | "error" | "attempts" | "status">[];
 
     return rows.map((r) => ({
       date: r.failed_at ? r.failed_at.slice(0, 10) : "",
@@ -294,16 +317,20 @@ export class SkynetDB {
   }
 
   /** Self-correction breakdown. */
-  getSelfCorrectionStats(): SelfCorrectionStats {
+  getSelfCorrectionStats(missionHash = ""): SelfCorrectionStats {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
     const rows = this.db
       .prepare(
         `SELECT status, COUNT(*) as cnt
          FROM tasks
-         WHERE status IN ('failed','blocked','fixed','superseded')
-            OR status LIKE 'fixing-%'
+         WHERE (status IN ('failed','blocked','fixed','superseded')
+            OR status LIKE 'fixing-%')${missionFilter}
          GROUP BY status`
       )
-      .all() as { status: string; cnt: number }[];
+      .all(...(missionFilter ? [missionHash] : [])) as { status: string; cnt: number }[];
 
     let fixed = 0;
     let blocked = 0;
@@ -326,7 +353,8 @@ export class SkynetDB {
     tag: string,
     description = "",
     position: "top" | "bottom" = "top",
-    blockedBy = ""
+    blockedBy = "",
+    missionHash = ""
   ): number {
     const normalizedRoot = title
       .replace(/\[[A-Z]*\]\s*/g, "")
@@ -339,12 +367,19 @@ export class SkynetDB {
     // priorities shifted without the new row (corrupting priority order).
     const insertAtTop = this.db.transaction(() => {
       this.db.prepare("UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed')").run();
-      const info = this.db
-        .prepare(
-          `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-           VALUES (?, ?, ?, 'pending', ?, ?, 0)`
-        )
-        .run(title, tag, description, blockedBy, normalizedRoot);
+      const info = this.hasMissionHash
+        ? this.db
+            .prepare(
+              `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority, mission_hash)
+               VALUES (?, ?, ?, 'pending', ?, ?, 0, ?)`
+            )
+            .run(title, tag, description, blockedBy, normalizedRoot, missionHash)
+        : this.db
+            .prepare(
+              `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
+               VALUES (?, ?, ?, 'pending', ?, ?, 0)`
+            )
+            .run(title, tag, description, blockedBy, normalizedRoot);
       return Number(info.lastInsertRowid);
     });
 
@@ -352,12 +387,19 @@ export class SkynetDB {
       const row = this.db
         .prepare("SELECT COALESCE(MAX(priority),0)+1 as next FROM tasks WHERE status IN ('pending','claimed')")
         .get() as { next: number };
-      const info = this.db
-        .prepare(
-          `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-           VALUES (?, ?, ?, 'pending', ?, ?, ?)`
-        )
-        .run(title, tag, description, blockedBy, normalizedRoot, row.next);
+      const info = this.hasMissionHash
+        ? this.db
+            .prepare(
+              `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority, mission_hash)
+               VALUES (?, ?, ?, 'pending', ?, ?, ?, ?)`
+            )
+            .run(title, tag, description, blockedBy, normalizedRoot, row.next, missionHash)
+        : this.db
+            .prepare(
+              `INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
+               VALUES (?, ?, ?, 'pending', ?, ?, ?)`
+            )
+            .run(title, tag, description, blockedBy, normalizedRoot, row.next);
       return Number(info.lastInsertRowid);
     });
 
