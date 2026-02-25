@@ -626,6 +626,31 @@ if [ -n "$_stale_fixing" ]; then
 fi
 } || { log "Phase: stale-fixing reconciliation failed, continuing"; true; }
 
+# --- Sync backlog.md markers after reconciliation ---
+# After crash recovery and orphaned-claim reconciliation, SQLite may have tasks
+# reset from 'claimed' to 'pending' — but backlog.md still shows stale [>]
+# markers. Regenerate backlog.md from the authoritative SQLite state so the
+# markdown view matches reality. Uses the existing atomic export (tmp+mv).
+# Only runs when there's a DB and a backlog file to update.
+{
+if [ -f "$DB_PATH" ] && [ -f "$BACKLOG" ]; then
+  # Check if any tasks were just reconciled (orphaned claims or stale fixing).
+  # Rather than tracking separate counters across error-isolated blocks, just
+  # detect if backlog.md would change — compare the pending/claimed counts in
+  # SQLite vs the markers in the current file. This is cheaper than always
+  # regenerating and catches all reconciliation paths.
+  _bl_db_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='pending';" 2>/dev/null || echo "")
+  _bl_db_claimed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='claimed';" 2>/dev/null || echo "")
+  _bl_md_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
+  _bl_md_claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+  if [ "${_bl_db_pending:-}" != "$_bl_md_pending" ] || [ "${_bl_db_claimed:-}" != "$_bl_md_claimed" ]; then
+    db_export_backlog "$BACKLOG" 2>/dev/null || log "WARNING: db_export_backlog failed during stale-claim sync"
+    log "Synced backlog.md markers (DB: ${_bl_db_pending} pending/${_bl_db_claimed} claimed, was: ${_bl_md_pending} pending/${_bl_md_claimed} claimed)"
+    emit_event "backlog_marker_synced" "pending=${_bl_db_pending} claimed=${_bl_db_claimed} was_pending=${_bl_md_pending} was_claimed=${_bl_md_claimed}" 2>/dev/null || true
+  fi
+fi
+} || { log "Phase: backlog marker sync failed, continuing"; true; }
+
 # --- Proactive merge lock cleanup ---
 # If the merge lock holder's PID is dead (or PID file is missing, indicating a
 # crash between mkdir and PID write), remove the lock immediately rather than
