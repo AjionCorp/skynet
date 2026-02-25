@@ -116,7 +116,6 @@ interface FixerStatRow {
 // overhead with no practical benefit since the schema is deterministic.
 
 /**
-/**
  * SkynetDB wraps a better-sqlite3 connection.
  *
  * Pass `readonly: true` to open the database in read-only mode (recommended for
@@ -125,67 +124,6 @@ interface FixerStatRow {
  *
  * Rate limiting is handled by the separate in-memory rate-limiter module
  * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
-/**
- * SkynetDB wraps a better-sqlite3 connection.
- *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
- */
  */
 export class SkynetDB {
   private db: Database;
@@ -721,7 +659,6 @@ export class SkynetDB {
       .all() as FixerStatRow[];
   }
 }
-
 
 // WARNING: Node.js fork() would inherit this file descriptor. If you add
 // child_process.fork() consumers, close and reopen the connection in the child.
