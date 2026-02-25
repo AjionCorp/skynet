@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size
+## [INFRA] [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers
 **Status:** completed
-**Started:** 2026-02-24 16:49
+**Started:** 2026-02-24 21:33
 **Completed:** 2026-02-24
-**Branch:** dev/archive-resolved-failed-task-rows-to-bou
+**Branch:** dev/backlog-markers
 **Worker:** 3
 
 ### Changes
