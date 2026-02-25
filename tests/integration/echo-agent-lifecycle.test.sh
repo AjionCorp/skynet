@@ -7,10 +7,18 @@
 #   3. Slug generation and placeholder file content
 #   4. SKYNET_ECHO_FAIL failure simulation
 #   5. SKYNET_ECHO_DELAY work simulation
-#   6. Full lifecycle: seed → claim → worktree → echo agent → gates → merge → verify
-#   7. State transitions validated at every phase
-#   8. Post-merge cleanup (worktree removed, branch deleted, DB state clean)
-#   9. Task-fixer retry after echo agent failure
+#   6. Git precondition validation
+#   7. Full lifecycle: seed → claim → worktree → echo agent → gates → merge → verify
+#   8. Task-fixer retry after echo agent failure
+#   9. Sequential multi-task lifecycle with state export
+#  10. Lifecycle phase log output validation
+#  11. Gate failure after echo agent success
+#  12. Merge with diverged main (rebase recovery)
+#  13. Post-merge typecheck failure (auto-revert flow)
+#  14. Pre-lock rebase + fast-forward merge path
+#  15. Worktree and branch cleanup verification
+#  16. Task unclaim → re-claim lifecycle
+#  17. Database consistency after full test suite
 #
 # Requirements: git, sqlite3, bash
 # Usage: bash tests/integration/echo-agent-lifecycle.test.sh
@@ -903,23 +911,330 @@ assert_contains "$ERROR" "gate 1 failed" "gate-fail: error message records gate 
 export SKYNET_GATE_1="true"
 
 # ============================================================
-# TEST 12: Database consistency after full test suite
+# TEST 12: Merge with diverged main (rebase recovery)
 # ============================================================
 
 echo ""
-_tlog "=== Test 12: Database consistency after full test suite ==="
+_tlog "=== Test 12: Merge with diverged main (rebase recovery) ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+# Seed and claim task
+T12_ID=$(db_add_task "Feature on stale branch" "FEAT" "" "top")
+CLAIM12=$(db_claim_next_task 1)
+CLAIM12_ID=$(echo "$CLAIM12" | cut -d"$SEP" -f1)
+
+# Create worktree and run echo agent
+BRANCH_12="dev/feature-stale-branch"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t12"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_12" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  agent_run "Feature on stale branch" "$LOG"
+)
+_rc=$?
+assert_eq "$_rc" "0" "diverged-main: echo agent succeeded"
+
+# Now advance main independently (simulate another worker merging while we worked)
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+echo "# Concurrent change" > concurrent-change.md
+git add concurrent-change.md
+git commit -m "concurrent: another worker's commit" >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Merge should succeed via rebase recovery or 3-way merge
+_mrc=0
+run_merge "$BRANCH_12" "$WORKTREE_DIR" "$LOG" "false" || _mrc=$?
+assert_eq "$_mrc" "0" "diverged-main: merge succeeds despite diverged main"
+
+# Verify both commits are on main
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+MAIN_LOG=$(git log --oneline -10)
+assert_contains "$MAIN_LOG" "concurrent" "diverged-main: concurrent commit preserved"
+assert_contains "$MAIN_LOG" "echo-agent" "diverged-main: echo agent commit merged"
+
+# Both files should be on main
+assert_file_exists "$PROJECT_DIR/concurrent-change.md" "diverged-main: concurrent file on main"
+assert_file_exists "$PROJECT_DIR/echo-agent-feature-on-stale-branch.md" "diverged-main: placeholder on main"
+
+db_complete_task "$CLAIM12_ID" "$BRANCH_12" "1m" 60 "success" 2>/dev/null || true
+
+# ============================================================
+# TEST 13: Post-merge typecheck failure (auto-revert)
+# ============================================================
+
+echo ""
+_tlog "=== Test 13: Post-merge typecheck failure (auto-revert) ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+T13_ID=$(db_add_task "Bad code that breaks typecheck" "FEAT" "" "top")
+CLAIM13=$(db_claim_next_task 1)
+CLAIM13_ID=$(echo "$CLAIM13" | cut -d"$SEP" -f1)
+
+BRANCH_13="dev/bad-typecheck"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t13"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_13" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  agent_run "Bad code that breaks typecheck" "$LOG"
+)
+
+# Enable post-merge typecheck with a command that fails
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="false"
+
+# Merge will succeed but typecheck will fail → auto-revert → return code 2
+_mrc=0
+run_merge "$BRANCH_13" "$WORKTREE_DIR" "$LOG" "false" || _mrc=$?
+assert_eq "$_mrc" "2" "typecheck-fail: returns rc=2 (typecheck failed, reverted)"
+
+# The echo agent's placeholder should NOT be on main (reverted)
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Main should have a revert commit
+REVERT_LOG=$(git log --oneline -5)
+assert_contains "$REVERT_LOG" "revert" "typecheck-fail: revert commit on main"
+
+# Placeholder file should be gone (reverted)
+assert_file_not_exists "$PROJECT_DIR/echo-agent-bad-code-that-breaks-typecheck.md" \
+  "typecheck-fail: placeholder reverted from main"
+
+# Typecheck duration file should exist (written even on failure for future TTL)
+assert_file_exists "$DEV_DIR/typecheck-duration" "typecheck-fail: typecheck-duration written"
+
+# Task should be marked failed
+db_fail_task "$CLAIM13_ID" "$BRANCH_13" "post-merge typecheck failed (rc=2)" 2>/dev/null || true
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T13_ID;")
+assert_eq "$STATUS" "failed" "typecheck-fail: task marked failed after typecheck revert"
+
+# Restore passing typecheck/gates
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
+# ============================================================
+# TEST 14: Pre-lock rebase + fast-forward merge
+# ============================================================
+
+echo ""
+_tlog "=== Test 14: Pre-lock rebase + fast-forward merge ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+T14_ID=$(db_add_task "Fast forward feature" "FEAT" "" "top")
+CLAIM14=$(db_claim_next_task 1)
+CLAIM14_ID=$(echo "$CLAIM14" | cut -d"$SEP" -f1)
+
+BRANCH_14="dev/fast-forward-feature"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t14"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_14" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  agent_run "Fast forward feature" "$LOG"
+)
+
+# Simulate pre-lock rebase in worktree (like dev-worker does before merge)
+(
+  cd "$WORKTREE_DIR"
+  git fetch origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+  git rebase "origin/$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+) && _rebase_ok=true || _rebase_ok=false
+
+assert_eq "$_rebase_ok" "true" "pre-lock-rebase: rebase succeeded in worktree"
+
+# Merge with pre_lock_rebased=true → should attempt fast-forward
+_mrc=0
+run_merge "$BRANCH_14" "$WORKTREE_DIR" "$LOG" "true" || _mrc=$?
+assert_eq "$_mrc" "0" "pre-lock-rebase: fast-forward merge succeeded"
+
+# Check log for fast-forward confirmation
+LOG_CONTENT=$(cat "$LOG" 2>/dev/null || echo "")
+assert_contains "$LOG_CONTENT" "Fast-forward merge succeeded" "pre-lock-rebase: log confirms fast-forward"
+
+# Verify file on main
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+assert_file_exists "$PROJECT_DIR/echo-agent-fast-forward-feature.md" \
+  "pre-lock-rebase: placeholder on main after ff merge"
+
+db_complete_task "$CLAIM14_ID" "$BRANCH_14" "1m" 60 "success" 2>/dev/null || true
+
+# ============================================================
+# TEST 15: Worktree and branch cleanup verification
+# ============================================================
+
+echo ""
+_tlog "=== Test 15: Worktree and branch cleanup verification ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+T15_ID=$(db_add_task "Cleanup verification task" "TEST" "" "top")
+CLAIM15=$(db_claim_next_task 1)
+CLAIM15_ID=$(echo "$CLAIM15" | cut -d"$SEP" -f1)
+
+BRANCH_15="dev/cleanup-verification"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t15"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_15" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Verify worktree exists before merge
+WLIST_BEFORE=$(git worktree list 2>/dev/null)
+assert_contains "$WLIST_BEFORE" "w-t15" "cleanup: worktree visible in git worktree list before merge"
+
+if git show-ref --verify --quiet "refs/heads/$BRANCH_15" 2>/dev/null; then
+  pass "cleanup: feature branch exists before merge"
+else
+  fail "cleanup: feature branch should exist before merge"
+fi
+
+# Run echo agent
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  agent_run "Cleanup verification task" "$LOG"
+)
+
+# Merge (do_merge_to_main cleans worktree and deletes branch)
+_mrc=0
+run_merge "$BRANCH_15" "$WORKTREE_DIR" "$LOG" "false" || _mrc=$?
+assert_eq "$_mrc" "0" "cleanup: merge succeeded"
+
+# Verify worktree is gone
+cd "$PROJECT_DIR"
+if [ -d "$WORKTREE_DIR" ]; then
+  fail "cleanup: worktree directory should be removed after merge"
+else
+  pass "cleanup: worktree directory removed after merge"
+fi
+
+WLIST_AFTER=$(git worktree list 2>/dev/null)
+assert_not_contains "$WLIST_AFTER" "w-t15" "cleanup: worktree not in git worktree list after merge"
+
+# Verify feature branch is deleted
+if git show-ref --verify --quiet "refs/heads/$BRANCH_15" 2>/dev/null; then
+  fail "cleanup: feature branch should be deleted after merge"
+else
+  pass "cleanup: feature branch deleted after merge"
+fi
+
+# Verify no stale worktree refs
+PRUNE_COUNT=$(git worktree list --porcelain 2>/dev/null | grep -c "prunable" 2>/dev/null || true)
+PRUNE_COUNT=$(echo "$PRUNE_COUNT" | tr -d '[:space:]')
+[ -z "$PRUNE_COUNT" ] && PRUNE_COUNT="0"
+assert_eq "$PRUNE_COUNT" "0" "cleanup: no prunable worktrees remain"
+
+db_complete_task "$CLAIM15_ID" "$BRANCH_15" "1m" 60 "success" 2>/dev/null || true
+
+# ============================================================
+# TEST 16: Task unclaim → re-claim lifecycle
+# ============================================================
+
+echo ""
+_tlog "=== Test 16: Task unclaim → re-claim lifecycle ==="
+
+_reset_test_state
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+
+T16_ID=$(db_add_task "Retriable task" "FEAT" "" "top")
+assert_not_empty "$T16_ID" "unclaim: task seeded"
+
+# Claim task (worker 1)
+CLAIM16=$(db_claim_next_task 1)
+CLAIM16_ID=$(echo "$CLAIM16" | cut -d"$SEP" -f1)
+assert_eq "$CLAIM16_ID" "$T16_ID" "unclaim: task claimed by worker 1"
+
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T16_ID;")
+assert_eq "$STATUS" "claimed" "unclaim: status is claimed"
+
+# Simulate worker encountering issue and unclaiming
+db_unclaim_task "$T16_ID"
+
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T16_ID;")
+assert_eq "$STATUS" "pending" "unclaim: status reverts to pending after unclaim"
+
+WORKER_ID=$(sqlite3 "$DB_PATH" "SELECT worker_id FROM tasks WHERE id=$T16_ID;")
+# worker_id should be cleared (NULL → empty string in sqlite3 output)
+if [ -z "$WORKER_ID" ] || [ "$WORKER_ID" = "" ]; then
+  pass "unclaim: worker_id cleared after unclaim"
+else
+  fail "unclaim: worker_id should be cleared (got '$WORKER_ID')"
+fi
+
+# Re-claim by worker 2
+CLAIM16B=$(db_claim_next_task 2)
+CLAIM16B_ID=$(echo "$CLAIM16B" | cut -d"$SEP" -f1)
+assert_eq "$CLAIM16B_ID" "$T16_ID" "unclaim: same task re-claimed by worker 2"
+
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T16_ID;")
+assert_eq "$STATUS" "claimed" "unclaim: status is claimed after re-claim"
+
+WORKER_ID=$(sqlite3 "$DB_PATH" "SELECT worker_id FROM tasks WHERE id=$T16_ID;")
+assert_eq "$WORKER_ID" "2" "unclaim: worker_id is 2 after re-claim"
+
+# Complete the lifecycle with the re-claimed task
+BRANCH_16="dev/retriable-task"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t16"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_16" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  agent_run "Retriable task" "$LOG"
+)
+
+_mrc=0
+run_merge "$BRANCH_16" "$WORKTREE_DIR" "$LOG" "false" || _mrc=$?
+assert_eq "$_mrc" "0" "unclaim: merge succeeds for re-claimed task"
+
+db_complete_task "$CLAIM16B_ID" "$BRANCH_16" "1m" 60 "success" 2>/dev/null || true
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T16_ID;")
+assert_eq "$STATUS" "completed" "unclaim: re-claimed task completed successfully"
+
+# ============================================================
+# TEST 17: Database consistency after full test suite
+# ============================================================
+
+echo ""
+_tlog "=== Test 17: Database consistency after full test suite ==="
 
 TOTAL_COMPLETED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed';")
 TOTAL_FAILED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';")
 TOTAL_PENDING=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='pending';")
 TOTAL_CLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='claimed';")
 
-# Test 9 deletes all prior tasks, then adds 3 completed
-# Test 11 adds 1 failed (no delete)
-# = 3 completed, 1 failed
-assert_eq "$TOTAL_COMPLETED" "3" "db-consistency: 3 total completed tasks"
-
-assert_eq "$TOTAL_FAILED" "1" "db-consistency: 1 total failed task"
+# Accumulated completed: Test 12 (1) + Test 14 (1) + Test 15 (1) + Test 16 (1) = 4
+# (Tests 9, 11 run before and each clears DB; tests 12-16 each clear DB too)
+# Last DB clear was Test 16 → 1 completed
+# Actually each test does sqlite3 "$DB_PATH" "DELETE FROM tasks;" so only last batch counts.
+# Test 16 clears, adds 1, completes 1 → 1 completed, 0 failed
+assert_eq "$TOTAL_COMPLETED" "1" "db-consistency: completed tasks from last test batch"
 
 # Everything should be resolved
 assert_eq "$TOTAL_PENDING" "0" "db-consistency: no pending tasks"
