@@ -279,6 +279,28 @@ export interface EventEntry {
   detail: string;
 }
 
+// ===== Project Driver Types =====
+
+export interface ProjectDriverTelemetry {
+  ts: string;
+  pendingBacklog: number;
+  claimedBacklog: number;
+  pendingRetries: number;
+  fixRate: number;
+  duplicateSkipped: number;
+  maxNewTasks: number;
+  driver_low_fix_rate_mode: boolean;
+}
+
+export interface ProjectDriverStatus {
+  running: boolean;
+  pid: number | null;
+  ageMs: number | null;
+  lastLog: string | null;
+  lastLogTime: string | null;
+  telemetry: ProjectDriverTelemetry | null;
+}
+
 // ===== Worker Scaling Types =====
 
 export interface WorkerScalePayload {

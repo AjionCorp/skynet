@@ -15,3 +15,4 @@ export { createEventsHandler } from "./events";
 export { createMetricsHandler } from "./metrics";
 export { createPipelineHealthTrendHandler } from "./pipeline-health-trend";
 export { createTaskVelocityHandler } from "./task-velocity";
+export { createProjectDriverStatusHandler } from "./project-driver-status";
