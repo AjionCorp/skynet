@@ -420,6 +420,152 @@ assert_eq "$event" "test/special:chars" "special chars: event name preserved"
 desc=$(echo "$line" | cut -d'|' -f3)
 assert_not_empty "$desc" "special chars: description is not empty"
 
+# ── Test 16: Stale rotation lock recovered by timestamp (>60s) ────────
+
+echo ""
+log "=== Test 16: Stale rotation lock recovered when lock is older than 60s ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Create a stale rotation lock with a live PID but old timestamp
+rot_lock="${SKYNET_LOCK_PREFIX}-events-rotate.lock"
+mkdir -p "$rot_lock"
+echo "$$" > "$rot_lock/pid"  # Our own PID (alive)
+# Backdate the PID file by 120 seconds using touch
+touch -t "$(date -v-120S +%Y%m%d%H%M.%S 2>/dev/null || date -d '120 seconds ago' +%Y%m%d%H%M.%S 2>/dev/null)" "$rot_lock/pid" 2>/dev/null || true
+
+# Write enough data to trigger rotation
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "stale_time_recovery" "first attempt detects old lock" 2>/dev/null
+
+# First emit reclaims the lock. Second emit should rotate.
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "stale_time_recovery" "second attempt should rotate" 2>/dev/null
+
+if [ ! -d "$rot_lock" ]; then
+  pass "stale timestamp: old lock was cleaned up"
+else
+  fail "stale timestamp: lock older than 60s should have been removed"
+  rm -rf "$rot_lock"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 17: Missing PID file in stale lock triggers recovery ────────
+
+echo ""
+log "=== Test 17: Missing PID file in stale lock triggers recovery ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Create a lock directory WITHOUT a PID file (simulates crash between mkdir and PID write)
+rot_lock="${SKYNET_LOCK_PREFIX}-events-rotate.lock"
+mkdir -p "$rot_lock"
+# No PID file inside — the missing-PID-file branch should reclaim it
+
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "no_pid_recovery" "first attempt detects missing PID" 2>/dev/null
+
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "no_pid_recovery" "second attempt should rotate" 2>/dev/null
+
+if [ ! -d "$rot_lock" ]; then
+  pass "missing PID: stale lock without PID file was cleaned up"
+else
+  fail "missing PID: lock without PID file should have been removed"
+  rm -rf "$rot_lock"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 18: Rotation archive chain (.1 → .2 → .2.gz) ───────────────
+
+echo ""
+log "=== Test 18: Rotation archive chain shifts .1 to .2 ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# First rotation: fill and rotate to create .1
+local_k=0
+while [ "$local_k" -lt 30 ]; do
+  emit_event "chain_event_1" "first rotation filling to create events.log.1 archive file"
+  local_k=$((local_k + 1))
+done
+
+if [ -f "${events_log}.1" ]; then
+  pass "archive chain: first rotation created .1"
+else
+  fail "archive chain: first rotation should create .1"
+fi
+
+# Second rotation: fill again — should shift .1 → .2, current → .1
+local_k=0
+while [ "$local_k" -lt 30 ]; do
+  emit_event "chain_event_2" "second rotation filling to shift .1 to .2 and create new .1"
+  local_k=$((local_k + 1))
+done
+
+# Wait for background gzip to finish
+sleep 1
+
+if [ -f "${events_log}.1" ]; then
+  pass "archive chain: second rotation created new .1"
+else
+  fail "archive chain: second rotation should create new .1"
+fi
+
+if [ -f "${events_log}.2.gz" ] || [ -f "${events_log}.2" ]; then
+  pass "archive chain: old .1 shifted to .2 (or .2.gz)"
+else
+  fail "archive chain: old .1 should have been shifted to .2 or .2.gz"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 19: Both WORKER_ID and FIXER_ID unset → empty worker_id ─────
+
+echo ""
+log "=== Test 19: Empty worker identity when both WORKER_ID and FIXER_ID unset ==="
+
+_DB_CALLS=()
+unset WORKER_ID 2>/dev/null || true
+unset FIXER_ID 2>/dev/null || true
+
+emit_event "no_worker" "no worker or fixer identity"
+
+last_call="${_DB_CALLS[${#_DB_CALLS[@]}-1]}"
+# Format: event|desc|worker_id|trace_id — worker_id should be empty
+worker_field=$(echo "$last_call" | cut -d'|' -f3)
+assert_eq "$worker_field" "" "empty identity: worker_id is empty when both IDs unset"
+
+# ── Test 20: Description exactly at 3000 chars (boundary) ────────────
+
+echo ""
+log "=== Test 20: Description at exactly 3000 chars is not truncated ==="
+
+> "$events_log"
+
+# Generate a description of exactly 3000 characters
+exact_desc=$(printf 'C%.0s' $(seq 1 3000))
+emit_event "test_boundary" "$exact_desc"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+desc_len=${#desc}
+
+assert_eq "$desc_len" "3000" "boundary: description at exactly 3000 chars is preserved"
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""
