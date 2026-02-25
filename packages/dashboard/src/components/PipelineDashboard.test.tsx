@@ -47,6 +47,7 @@ const MOCK_STATUS: PipelineStatus = {
   git: { branch: "main", commitsAhead: 0, dirtyFiles: 0, lastCommit: "abc123" },
   postCommitGate: { lastResult: "pass", lastCommit: "abc123", lastTime: "2024-01-01" },
   missionProgress: [],
+  pipelinePaused: false,
   timestamp: "2024-01-01T00:00:00Z",
 };
 

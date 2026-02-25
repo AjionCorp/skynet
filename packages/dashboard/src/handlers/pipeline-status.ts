@@ -6,7 +6,7 @@ import type { SkynetConfig, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
-import { getSkynetReadonlyDB } from "../lib/db";
+import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
@@ -20,6 +20,22 @@ function pushHealthTrend(score: number) {
   healthTrendBuffer.push({ ts: Date.now(), score });
   if (healthTrendBuffer.length > HEALTH_TREND_MAX) {
     healthTrendBuffer.shift();
+  }
+}
+
+function getActiveMissionSlug(devDir: string | undefined): string | null {
+  if (!devDir) return null;
+  try {
+    const configPath = resolve(devDir, "missions", "_config.json");
+    if (!existsSync(configPath)) return null;
+    const config = JSON.parse(readFileSync(configPath, "utf-8")) as { activeMission?: string };
+    const slug = config.activeMission;
+    if (!slug) return null;
+    const missionPath = resolve(devDir, "missions", `${slug}.md`);
+    if (!existsSync(missionPath)) return null;
+    return slug;
+  } catch {
+    return null;
   }
 }
 
@@ -205,9 +221,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // --- Try SQLite as primary data source ---
       let usingSqlite = false;
-      let db: ReturnType<typeof getSkynetReadonlyDB> | null = null;
+      let db: ReturnType<typeof getSkynetDB> | null = null;
       try {
-        db = getSkynetReadonlyDB(devDir);
+        db = getSkynetDB(devDir);
         // Verify the DB is initialized (tables exist) with a cheap query
         db.countPending();
         usingSqlite = true;
@@ -220,6 +236,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const maxW = config.maxWorkers ?? 4;
 
       // Current tasks
+      const activeMission = getActiveMissionSlug(devDir);
+
       let currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
       if (usingSqlite && db) {
         currentTasks = db.getAllCurrentTasks(maxW);
@@ -272,7 +290,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // Backlog
       let backlog: ReturnType<typeof parseBacklogWithBlocked>;
       if (usingSqlite && db) {
-        backlog = db.getBacklogItems();
+        backlog = db.getBacklogItems(activeMission ?? "");
       } else {
         const backlogRaw = readDevFile(devDir, "backlog.md");
         backlog = parseBacklogWithBlocked(backlogRaw);
@@ -282,7 +300,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       let completed: { date: string; task: string; branch: string; duration: string; notes: string }[];
       let averageTaskDuration: string | null;
       if (usingSqlite && db) {
-        completed = db.getCompletedTasks(50);
+        completed = db.getCompletedTasks(50, activeMission ?? "");
         averageTaskDuration = db.getAverageTaskDuration();
       } else {
         const completedRaw = readDevFile(devDir, "completed.md");
@@ -319,7 +337,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // Failed tasks
       let failed: { date: string; task: string; branch: string; error: string; attempts: string; status: string }[];
       if (usingSqlite && db) {
-        failed = db.getFailedTasks();
+        failed = db.getFailedTasks(activeMission ?? "");
       } else {
         const failedRaw = readDevFile(devDir, "failed-tasks.md");
         const failedLines = failedRaw
@@ -504,7 +522,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       if (usingSqlite && db) {
         healthScore = db.calculateHealthScore(maxW, config.staleMinutes);
-        const stats = db.getSelfCorrectionStats();
+        const stats = db.getSelfCorrectionStats(activeMission ?? "");
         selfCorrectionStats = stats;
         failedPendingCount = stats.pending;
         const totalResolved = stats.selfCorrected + stats.blocked;
@@ -554,7 +572,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // NOTE: getCompletedCount() queries all terminal success states: completed, fixed, done.
       // Keep in sync with CLI status.ts and db.ts.
-      const completedTotal = (usingSqlite && db) ? db.getCompletedCount() : completed.length;
+      const completedTotal = (usingSqlite && db) ? db.getCompletedCount(activeMission ?? "") : completed.length;
 
       const missionProgress = parseMissionProgress({
         devDir,
@@ -606,6 +624,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             lastTime: postCommitLastTime,
           },
           missionProgress,
+          pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
           warnings,
           timestamp: new Date().toISOString(),
         },

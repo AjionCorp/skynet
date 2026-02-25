@@ -1,5 +1,5 @@
 import type { SkynetConfig } from "../types";
-import { getSkynetReadonlyDB } from "../lib/db";
+import { getSkynetDB } from "../lib/db";
 
 /**
  * Create a GET handler for the /api/metrics endpoint.
@@ -17,7 +17,7 @@ export function createMetricsHandler(config: SkynetConfig) {
     const lines: string[] = [];
 
     try {
-      const db = getSkynetReadonlyDB(config.devDir);
+      const db = getSkynetDB(config.devDir);
       // Verify DB is initialized
       db.countPending();
 

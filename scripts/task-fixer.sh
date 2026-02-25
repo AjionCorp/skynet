@@ -364,8 +364,15 @@ fi
 # Get git diff of what was changed on the failed branch vs main
 previous_diff=$(cd "$PROJECT_DIR" && git diff "${SKYNET_MAIN_BRANCH}...${branch_name}" 2>/dev/null | head -500 || echo "No diff available (branch may have no changes yet)")
 
-# Load skills matching this task's tag
-_fixer_task_type="$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')"
+# Load skills matching this task's tag.
+# Avoid grep here because set -e + pipefail would crash the fixer when no [TAG] exists.
+_fixer_task_type=""
+case "$task_title" in
+  \[*\]*)
+    _fixer_task_type="${task_title#\[}"
+    _fixer_task_type="${_fixer_task_type%%]*}"
+    ;;
+esac
 SKILL_CONTENT="$(get_skills_for_tag "${_fixer_task_type:-}")"
 
 PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.

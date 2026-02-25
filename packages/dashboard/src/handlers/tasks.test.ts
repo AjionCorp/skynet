@@ -19,13 +19,6 @@ vi.mock("../lib/db", () => ({
     addTask: vi.fn(),
     exportBacklog: vi.fn(() => { throw new Error("SQLite export not available"); }),
   })),
-  getSkynetReadonlyDB: vi.fn(() => ({
-    countPending: vi.fn(() => { throw new Error("SQLite not available"); }),
-    getBacklogItems: vi.fn(() => { throw new Error("SQLite not available"); }),
-  })),
-}));
-vi.mock("../lib/rate-limiter", () => ({
-  checkRateLimit: vi.fn(() => true),
 }));
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
@@ -443,24 +436,15 @@ describe("createTasksHandlers", () => {
   // is module-level state and exhausting the limit pollutes later tests.
   // -----------------------------------------------------------------------
   describe("POST rate limiting", () => {
-    beforeEach(async () => {
-      // Use the real checkRateLimit implementation for rate-limit tests
-      const { checkRateLimit: realCheckRateLimit, _resetRateLimits } = await vi.importActual<typeof import("../lib/rate-limiter")>("../lib/rate-limiter");
-      const { checkRateLimit } = await import("../lib/rate-limiter");
-      vi.mocked(checkRateLimit).mockImplementation(realCheckRateLimit);
-      _resetRateLimits();
-
+    beforeEach(() => {
       // Advance time past the 60s rate-limit window so any timestamps
       // accumulated by earlier tests are pruned on the next POST call.
       vi.useFakeTimers();
       vi.setSystemTime(Date.now() + 120_000);
     });
 
-    afterEach(async () => {
+    afterEach(() => {
       vi.useRealTimers();
-      // Restore mock to default (allow all) for subsequent tests
-      const { checkRateLimit } = await import("../lib/rate-limiter");
-      vi.mocked(checkRateLimit).mockImplementation(() => true);
     });
 
     it("allows requests within rate limit window", async () => {

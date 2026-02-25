@@ -38,7 +38,7 @@ with open(p) as f:
 tokens = data.get('tokens', {})
 refresh = tokens.get('refresh_token', '')
 access = tokens.get('access_token', '')
-id_token = tokens.get('id_token', '') or access
+id_token = tokens.get('id_token', '')
 
 auth_mode = data.get('auth_mode', '')
 issuer = ''
@@ -56,17 +56,27 @@ def decode_claims(token):
     except Exception:
         return {}
 
-if id_token:
-    claims = decode_claims(id_token)
-    issuer = claims.get('iss', '') or ''
-    exp = claims.get('exp', 0) or 0
-    aud = claims.get('aud')
-    if isinstance(aud, list) and aud:
-        client_id = aud[0]
-    elif isinstance(aud, str):
-        client_id = aud
+for token in (id_token, access):
+    if not token:
+        continue
+    claims = decode_claims(token)
+    token_exp = claims.get('exp', 0) or 0
+    try:
+        token_exp = int(token_exp)
+    except Exception:
+        token_exp = 0
+    if token_exp > exp:
+        exp = token_exp
+    if not issuer:
+        issuer = claims.get('iss', '') or ''
     if not client_id:
-        client_id = claims.get('azp', '') or ''
+        aud = claims.get('aud')
+        if isinstance(aud, list) and aud:
+            client_id = aud[0]
+        elif isinstance(aud, str):
+            client_id = aud
+        if not client_id:
+            client_id = claims.get('azp', '') or ''
 
 print(refresh)
 print(access)

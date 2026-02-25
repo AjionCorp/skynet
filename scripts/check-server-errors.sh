@@ -24,8 +24,13 @@ errors_found=0
 error_messages=""
 
 # Check configured env var keys for missing values in logs
-IFS=' ' read -ra _env_keys <<< "${SKYNET_ERROR_ENV_KEYS:-}"
-for key in "${_env_keys[@]}"; do
+_env_keys_raw="${SKYNET_ERROR_ENV_KEYS:-}"
+if [ -n "$_env_keys_raw" ]; then
+  IFS=' ' read -ra _env_keys <<< "$_env_keys_raw"
+else
+  _env_keys=()
+fi
+for key in "${_env_keys[@]:-}"; do
   [ -z "$key" ] && continue
   if echo "$recent" | grep -qi "$key.*missing\|$key.*undefined\|$key.*not set\|$key.*required\|Cannot read.*$key\|env.*$key" 2>/dev/null; then
     errors_found=1

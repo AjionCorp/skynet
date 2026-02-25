@@ -392,6 +392,8 @@ SCHEMA
   _db "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
   _db "ALTER TABLE tasks ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
   _db "ALTER TABLE events ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
+  _db "ALTER TABLE tasks ADD COLUMN mission_hash TEXT DEFAULT '';" 2>/dev/null || true
+  _db "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
@@ -432,6 +434,49 @@ db_count_claimed() {
 db_count_by_status() {
   local status; status=$(_sql_escape "$1")
   _db "SELECT COUNT(*) FROM tasks WHERE status = '$status';"
+}
+
+# --- Mission-filtered counts (for project-driver backlog isolation) ---
+
+db_count_pending_for_mission() {
+  local hash; hash=$(_sql_escape "$1")
+  _db "SELECT COUNT(*) FROM tasks WHERE status='pending' AND mission_hash='$hash';"
+}
+
+db_count_claimed_for_mission() {
+  local hash; hash=$(_sql_escape "$1")
+  _db "SELECT COUNT(*) FROM tasks WHERE status='claimed' AND mission_hash='$hash';"
+}
+
+# Supersede pending tasks from old missions. Returns count of superseded tasks.
+# Only affects pending tasks — claimed (in-flight) tasks are left alone.
+db_supersede_old_mission_tasks() {
+  local hash; hash=$(_sql_escape "$1")
+  _db "
+    UPDATE tasks SET status='superseded', notes='mission changed', updated_at=datetime('now')
+    WHERE status='pending' AND mission_hash != '$hash' AND mission_hash != '';
+    SELECT changes();
+  "
+}
+
+# Backfill mission_hash for existing tasks that predate this feature.
+# Tags pending/claimed tasks with the given hash if they have no hash set.
+db_backfill_mission_hash() {
+  local hash; hash=$(_sql_escape "$1")
+  _db "UPDATE tasks SET mission_hash='$hash' WHERE mission_hash='' AND status IN ('pending','claimed');"
+}
+
+# --- Metadata key-value helpers ---
+
+db_get_metadata() {
+  local key; key=$(_sql_escape "$1")
+  _db "SELECT value FROM _metadata WHERE key='$key';"
+}
+
+db_set_metadata() {
+  local key; key=$(_sql_escape "$1")
+  local val; val=$(_sql_escape "$2")
+  _db "INSERT OR REPLACE INTO _metadata (key, value) VALUES ('$key', '$val');"
 }
 
 # --- Retry wrapper for critical mutations under SQLITE_BUSY ---
@@ -533,6 +578,58 @@ db_claim_next_task() {
   _db_retry _db_claim_next_task_inner "$@"
 }
 
+# Mission-filtered variant: same claim logic but restricts to tasks with matching mission_hash.
+# Used when a worker is assigned to a specific mission via _config.json.
+_db_claim_next_task_for_mission_inner() {
+  local worker_id; worker_id=$(_sql_int "$1")
+  local mhash; mhash=$(_sql_escape "$2")
+
+  _db_sep "
+    BEGIN IMMEDIATE;
+    WITH RECURSIVE dep_split(task_id, dep, rest) AS (
+      SELECT id,
+        TRIM(SUBSTR(blocked_by, 1, INSTR(blocked_by || ',', ',') - 1)),
+        SUBSTR(blocked_by, INSTR(blocked_by || ',', ',') + 1)
+      FROM tasks WHERE status = 'pending' AND blocked_by != '' AND mission_hash = '$mhash'
+      UNION ALL
+      SELECT task_id,
+        TRIM(SUBSTR(rest, 1, INSTR(rest || ',', ',') - 1)),
+        SUBSTR(rest, INSTR(rest || ',', ',') + 1)
+      FROM dep_split WHERE rest != ''
+    ),
+    unresolved AS (
+      SELECT DISTINCT task_id FROM dep_split
+      WHERE dep IS NOT NULL AND dep != ''
+        AND NOT EXISTS (
+          SELECT 1 FROM tasks t
+          WHERE t.title = dep_split.dep
+            AND t.status IN ('completed', 'done', 'fixed', 'superseded')
+        )
+    ),
+    target AS (
+      SELECT id FROM tasks
+      WHERE status = 'pending' AND mission_hash = '$mhash'
+        AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
+      ORDER BY priority ASC
+      LIMIT 1
+    )
+    UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
+      claimed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = (SELECT id FROM target) AND status = 'pending';
+    SELECT id, title, tag, description, branch FROM tasks
+      WHERE worker_id = $worker_id AND status = 'claimed'
+      ORDER BY claimed_at DESC LIMIT 1;
+    COMMIT;
+  "
+}
+db_claim_next_task_for_mission() {
+  if ! db_is_wal_healthy; then
+    log "WARNING: task claim blocked — WAL checkpoint has failed 3+ consecutive cycles, database degraded"
+    return 0
+  fi
+  _db_retry _db_claim_next_task_for_mission_inner "$@"
+}
+
 # Diagnostic: show query plan for the claim CTE.
 # Usage: db_explain_claim 1
 db_explain_claim() {
@@ -588,6 +685,16 @@ db_unclaim_task_by_title() {
   "
 }
 
+# Unclaim all claimed tasks (used for mission switches or emergency resets).
+# Returns number of tasks updated.
+db_unclaim_all_tasks() {
+  _db "
+    UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
+    WHERE status='claimed';
+    SELECT changes();
+  "
+}
+
 # Complete a task (successful merge)
 _db_complete_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
@@ -624,12 +731,14 @@ _db_fail_task_inner() {
 db_fail_task() { _db_retry _db_fail_task_inner "$@"; }
 
 # Add a new task. Echoes the new task ID.
+# Args: title [tag] [desc] [position] [blocked_by] [mission_hash]
 db_add_task() {
-  local title="$1" tag="${2:-FEAT}" desc="${3:-}" position="${4:-top}" blocked_by="${5:-}"
+  local title="$1" tag="${2:-FEAT}" desc="${3:-}" position="${4:-top}" blocked_by="${5:-}" mission_hash="${6:-}"
   local title_esc; title_esc=$(_sql_escape "$title")
   local tag_esc; tag_esc=$(_sql_escape "$tag")
   local desc_esc; desc_esc=$(_sql_escape "$desc")
   local blocked_esc; blocked_esc=$(_sql_escape "$blocked_by")
+  local mhash_esc; mhash_esc=$(_sql_escape "$mission_hash")
   local norm_root
   norm_root=$(echo "$title" | sed 's/\[[A-Z]*\] *//g' | tr '[:upper:]' '[:lower:]' | sed 's/  */ /g;s/^ *//;s/ *$//' | cut -c1-120)
   # SH-P2-8: Capture _sql_escape result before embedding in SQL string
@@ -639,8 +748,8 @@ db_add_task() {
     _db "
       BEGIN IMMEDIATE;
       UPDATE tasks SET priority=priority+1 WHERE status IN ('pending','claimed');
-      INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
-      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$norm_root_esc', 0);
+      INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority, mission_hash)
+      VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$norm_root_esc', 0, '$mhash_esc');
       SELECT last_insert_rowid();
       COMMIT;
     "
@@ -648,9 +757,9 @@ db_add_task() {
     # Atomic subquery avoids TOCTOU: a separate SELECT MAX(priority) followed by
     # INSERT could race with another worker inserting between the two statements.
     _db "
-      INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority)
+      INSERT INTO tasks (title, tag, description, status, blocked_by, normalized_root, priority, mission_hash)
       VALUES ('$title_esc', '$tag_esc', '$desc_esc', 'pending', '$blocked_esc', '$norm_root_esc',
-              (SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed')));
+              (SELECT COALESCE(MAX(priority),0)+1 FROM tasks WHERE status IN ('pending','claimed')), '$mhash_esc');
       SELECT last_insert_rowid();
     "
   fi
@@ -1023,6 +1132,32 @@ db_export_context() {
   " | sqlite3 -separator ' | ' "$DB_PATH" 2>/dev/null || true
 }
 
+# Mission-scoped context export (filters tasks by mission_hash).
+db_export_context_for_mission() {
+  local hash; hash=$(_sql_escape "$1")
+  printf '.timeout 15000\n%s\n' "
+    SELECT '## Backlog (pending tasks)';
+    SELECT '- [ ] [' || tag || '] ' || title FROM tasks WHERE status='pending' AND mission_hash='$hash' ORDER BY priority ASC;
+    SELECT '';
+    SELECT '## Claimed tasks';
+    SELECT '- [>] [' || tag || '] ' || title FROM tasks WHERE status='claimed' AND mission_hash='$hash' ORDER BY priority ASC;
+    SELECT '';
+    SELECT '## Recent completed (last 30)';
+    SELECT completed_at, title, branch, duration, notes FROM tasks WHERE status IN ('completed','fixed') AND mission_hash='$hash' ORDER BY completed_at DESC LIMIT 30;
+    SELECT '';
+    SELECT '## Failed tasks (pending retry)';
+    SELECT title, branch, error, attempts, status FROM tasks WHERE (status IN ('failed','blocked') OR status LIKE 'fixing-%') AND mission_hash='$hash' ORDER BY failed_at DESC;
+    SELECT '';
+    SELECT '## Active blockers';
+    SELECT '- ' || description FROM blockers WHERE status='active' AND task_title IN (
+      SELECT title FROM tasks WHERE mission_hash='$hash'
+    );
+    SELECT '';
+    SELECT '## Recent done (last 40)';
+    SELECT '- [x] [' || tag || '] ' || title FROM tasks WHERE status='done' AND mission_hash='$hash' ORDER BY updated_at DESC LIMIT 40;
+  " | sqlite3 -separator ' | ' "$DB_PATH" 2>/dev/null || true
+}
+
 # Get branches for stale cleanup (fixed/superseded/blocked tasks)
 db_get_cleanup_branches() {
   _db "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded','blocked') AND branch != '' AND branch NOT LIKE 'merged%';"
@@ -1083,6 +1218,8 @@ db_export_backlog() {
        ORDER BY priority ASC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _status _blocked; do
       _marker=" "
       [ "$_status" = "claimed" ] && _marker=">"
+      # Strip leading [TAG] from title if already present (legacy data)
+      _title=$(echo "$_title" | sed "s/^\[${_tag}\] *//")
       _line="- [${_marker}] [${_tag}] ${_title}"
       [ -n "$_desc" ] && _line="${_line} — ${_desc}"
       [ -n "$_blocked" ] && _line="${_line} | blockedBy: ${_blocked}"
@@ -1098,6 +1235,8 @@ db_export_backlog() {
         "SELECT tag, title, description, blocked_by, notes FROM tasks
          WHERE status='done'
          ORDER BY updated_at DESC LIMIT 30;" 2>/dev/null | while IFS="$_DB_SEP" read -r _tag _title _desc _blocked _notes; do
+        # Strip leading [TAG] from title if already present (legacy data)
+        _title=$(echo "$_title" | sed "s/^\[${_tag}\] *//")
         _line="- [x] [${_tag}] ${_title}"
         [ -n "$_desc" ] && _line="${_line} — ${_desc}"
         [ -n "$_notes" ] && [ "$_notes" != "success" ] && _line="${_line} _(${_notes})_"
@@ -1127,6 +1266,8 @@ db_export_completed() {
        LIMIT 200;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
+      # Strip leading [TAG] from title if already present (legacy data)
+      _title=$(echo "$_title" | sed "s/^\[${_tag}\] *//")
       _task="[${_tag}] ${_title}"
       echo "| ${_datestr} | ${_task} | ${_branch:-merged to main} | ${_dur:-0m} | ${_notes:-success} |"
     done
@@ -1159,6 +1300,8 @@ db_export_failed() {
        END, failed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _error _attempts _status; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
+      # Strip leading [TAG] from title if already present (legacy data)
+      _title=$(echo "$_title" | sed "s/^\[${_tag}\] *//")
       _task="[${_tag}] ${_title}"
       echo "| ${_datestr} | ${_task} | ${_branch} | ${_error} | ${_attempts:-0} | ${_status} |"
     done
@@ -1341,4 +1484,3 @@ db_check_integrity() {
   fi
   [ "$integrity" = "ok" ] && return 0 || return 1
 }
-

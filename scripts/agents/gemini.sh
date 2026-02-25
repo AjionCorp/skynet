@@ -22,6 +22,10 @@ agent_check() {
   if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
     return 0
   fi
+  # Check for Gemini CLI native OAuth credentials
+  if [ -f "$HOME/.gemini/oauth_creds.json" ] && [ -s "$HOME/.gemini/oauth_creds.json" ]; then
+    return 0
+  fi
   # Check for Google ADC (Application Default Credentials)
   local adc_path="${GOOGLE_APPLICATION_CREDENTIALS:-$HOME/.config/gcloud/application_default_credentials.json}"
   if [ -f "$adc_path" ] && [ -s "$adc_path" ]; then

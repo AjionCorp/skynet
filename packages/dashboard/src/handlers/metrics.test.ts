@@ -23,7 +23,7 @@ const mockDB = {
 };
 
 vi.mock("../lib/db", () => ({
-  getSkynetReadonlyDB: vi.fn(() => mockDB),
+  getSkynetDB: vi.fn(() => mockDB),
 }));
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
@@ -154,9 +154,9 @@ describe("createMetricsHandler", () => {
   });
 
   it("returns 200 with skynet_up 0 when DB is unavailable", async () => {
-    // Re-mock getSkynetReadonlyDB to throw
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    vi.mocked(getSkynetReadonlyDB).mockImplementationOnce(() => {
+    // Re-mock getSkynetDB to throw
+    const { getSkynetDB } = await import("../lib/db");
+    vi.mocked(getSkynetDB).mockImplementationOnce(() => {
       throw new Error("SQLite not available");
     });
 

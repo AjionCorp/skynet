@@ -1,4 +1,6 @@
-import type { SkynetConfig, MissionCriterion } from "../types";
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
+import type { SkynetConfig, MissionCriterion, MissionConfig } from "../types";
 import { readDevFile } from "../lib/file-reader";
 
 /**
@@ -146,9 +148,32 @@ function crossReferenceCompleted(
 export function createMissionStatusHandler(config: SkynetConfig) {
   const { devDir } = config;
 
-  return async function GET(): Promise<Response> {
+  return async function GET(request?: Request): Promise<Response> {
     try {
-      const raw = readDevFile(devDir, "mission.md");
+      let raw = "";
+      // Support ?slug= query param for multi-mission
+      if (request) {
+        try {
+          const url = new URL(request.url);
+          const slug = url.searchParams.get("slug");
+          if (slug && /^[a-z0-9-]+$/i.test(slug)) {
+            raw = readDevFile(devDir, `missions/${slug}.md`);
+          }
+        } catch { /* ignore URL parse errors in test environments */ }
+      }
+      // Fall back to active mission or legacy mission.md
+      if (!raw) {
+        const configPath = resolve(devDir, "missions", "_config.json");
+        if (existsSync(configPath)) {
+          try {
+            const mc = JSON.parse(readFileSync(configPath, "utf-8")) as MissionConfig;
+            if (mc.activeMission) {
+              raw = readDevFile(devDir, `missions/${mc.activeMission}.md`);
+            }
+          } catch { /* fall through */ }
+        }
+        if (!raw) raw = readDevFile(devDir, "mission.md");
+      }
 
       if (!raw) {
         return Response.json({

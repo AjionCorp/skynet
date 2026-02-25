@@ -55,6 +55,14 @@ fi
 # .gitignore excludes .dev/worktrees/ to prevent git status noise.
 WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/w${WORKER_ID}"
 
+# Multi-mission: read worker's assigned mission (empty = use global backlog)
+_worker_mission_slug=$(_get_worker_mission_slug "dev-worker-${WORKER_ID}")
+_worker_mission_hash=""
+if [ -n "$_worker_mission_slug" ] && [ -f "$MISSIONS_DIR/${_worker_mission_slug}.md" ]; then
+  # Use slug as mission_hash for task filtering (matches what project-driver uses)
+  _worker_mission_hash="$_worker_mission_slug"
+fi
+
 cd "$PROJECT_DIR"
 
 log() { _log "info" "W${WORKER_ID}" "$*" "$LOG"; }
@@ -286,6 +294,15 @@ TRACE_ID=""
 while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   tasks_attempted=$((tasks_attempted + 1))
 
+  # Mission switch detection: if assignment/active mission changed, reset worker.
+  _latest_mission_slug=$(_get_worker_mission_slug "dev-worker-${WORKER_ID}")
+  if [ "${_latest_mission_slug:-}" != "${_worker_mission_slug:-}" ]; then
+    log "Mission changed from '${_worker_mission_slug:-none}' to '${_latest_mission_slug:-none}' — resetting worker"
+    db_set_worker_idle "$WORKER_ID" "Mission switched — resetting worker" 2>/dev/null || true
+    emit_event "mission_worker_reset" "Worker $WORKER_ID: mission switched from '${_worker_mission_slug:-none}' to '${_latest_mission_slug:-none}'" 2>/dev/null || true
+    break
+  fi
+
   # Update progress epoch — proves the main loop is making forward progress
   # (distinct from heartbeat which runs in a background subshell)
   db_update_progress "$WORKER_ID" 2>/dev/null || log "WARNING: db_update_progress failed — watchdog may detect false hung worker"
@@ -315,7 +332,11 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
     next_task="- [ ] ${SKYNET_ONE_SHOT_TASK}"
     _db_task_id=""
   else
-    _db_result=$(db_claim_next_task "$WORKER_ID")
+    if [ -n "$_worker_mission_hash" ]; then
+      _db_result=$(db_claim_next_task_for_mission "$WORKER_ID" "$_worker_mission_hash")
+    else
+      _db_result=$(db_claim_next_task "$WORKER_ID")
+    fi
     if [ -n "$_db_result" ]; then
       _db_task_id=$(echo "$_db_result" | cut -d$'\x1f' -f1)
       _db_title=$(echo "$_db_result" | cut -d$'\x1f' -f2)
@@ -417,10 +438,15 @@ EOF
     # NOTE: -f on the pid file (not -d on the lock dir) is intentional — checking
     # the pid file implicitly confirms the mkdir-based lock directory exists AND
     # that the PID was written (vs. a crash between mkdir and pid-write).
-    if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver.lock/pid")" 2>/dev/null); then
-      nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
-      log "Project-driver launched (PID $!)."
-      tg "📋 *WATCHDOG*: Backlog empty — project-driver kicked off to replenish"
+    _pd_suffix="${_worker_mission_hash:-global}"
+    if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver-${_pd_suffix}.lock/pid" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver-${_pd_suffix}.lock/pid")" 2>/dev/null); then
+      if [ -n "$_worker_mission_hash" ]; then
+        SKYNET_MISSION_SLUG="$_worker_mission_hash" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
+      else
+        nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
+      fi
+      log "Project-driver launched (PID $!)${_worker_mission_hash:+ for mission $_worker_mission_hash}."
+      tg "📋 *WATCHDOG*: Backlog empty — project-driver kicked off to replenish${_worker_mission_hash:+ (mission: $_worker_mission_hash)}"
     else
       log "Project-driver already running."
     fi

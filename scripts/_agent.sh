@@ -86,44 +86,6 @@ _agent_exec() {
   return $_perl_rc
 }
 
-# --- Prompt size guardrail ---
-# Truncates oversized prompts to prevent LLM token limit failures (claude exit code 1).
-# Keeps the first 60% (task description, context) and last 30% (instructions,
-# conventions) of the limit, inserting a truncation marker between them.
-# Usage: prompt="$(_guardrail_prompt_size "$prompt")"
-_guardrail_prompt_size() {
-  local prompt="$1"
-  local max_bytes="${SKYNET_MAX_PROMPT_BYTES:-102400}"
-
-  # Skip if guardrail disabled (max_bytes=0)
-  [ "$max_bytes" -le 0 ] 2>/dev/null && printf '%s' "$prompt" && return 0
-
-  # Measure byte size (wc -c counts bytes; trim macOS whitespace padding)
-  local prompt_bytes
-  prompt_bytes=$(printf '%s' "$prompt" | wc -c)
-  prompt_bytes="${prompt_bytes#"${prompt_bytes%%[! ]*}"}"
-
-  if [ "$prompt_bytes" -le "$max_bytes" ]; then
-    printf '%s' "$prompt"
-    return 0
-  fi
-
-  # Truncate: keep first 60% and last 30% of limit
-  local head_bytes=$(( max_bytes * 60 / 100 ))
-  local tail_bytes=$(( max_bytes * 30 / 100 ))
-  local truncated_bytes=$(( prompt_bytes - head_bytes - tail_bytes ))
-
-  local head_part tail_part
-  head_part=$(printf '%s' "$prompt" | head -c "$head_bytes")
-  tail_part=$(printf '%s' "$prompt" | tail -c "$tail_bytes")
-
-  printf '%s\n\n--- [TRUNCATED: %d bytes removed (%d total exceeded %d limit)] ---\n\n%s' \
-    "$head_part" "$truncated_bytes" "$prompt_bytes" "$max_bytes" "$tail_part"
-
-  # Log the truncation event
-  emit_event "prompt_truncated" "Prompt truncated from ${prompt_bytes} to ~${max_bytes} bytes (removed ${truncated_bytes})" "${TRACE_ID:-}" 2>/dev/null || true
-}
-
 # Agent plugin selection (default: auto)
 export SKYNET_AGENT_PLUGIN="${SKYNET_AGENT_PLUGIN:-auto}"
 
@@ -225,9 +187,6 @@ if [ "$_plugin_resolved" = "auto" ]; then
     local prompt="$1"
     local log_file="${2:-/dev/null}"
 
-    # Prompt size guardrail: truncate if over SKYNET_MAX_PROMPT_BYTES
-    prompt="$(_guardrail_prompt_size "$prompt")"
-
     # Try Claude first
     if _claude_agent_check; then
       _claude_agent_run "$prompt" "$log_file"
@@ -308,9 +267,6 @@ else
   run_agent() {
     local prompt="$1"
     local log_file="${2:-/dev/null}"
-
-    # Prompt size guardrail: truncate if over SKYNET_MAX_PROMPT_BYTES
-    prompt="$(_guardrail_prompt_size "$prompt")"
 
     if ! agent_check; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent not available (plugin: $SKYNET_AGENT_PLUGIN)" >> "$log_file"

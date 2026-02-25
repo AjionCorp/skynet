@@ -127,6 +127,7 @@ export interface PipelineStatus {
   git: GitStatus;
   postCommitGate: PostCommitGate;
   missionProgress: MissionProgress[];
+  pipelinePaused: boolean;
   timestamp: string;
 }
 
@@ -252,6 +253,39 @@ export interface MissionProgress {
   evidence: string;
 }
 
+// ===== Multi-Mission Types =====
+
+export interface MissionSummary {
+  slug: string;
+  name: string;
+  isActive: boolean;
+  assignedWorkers: string[];
+}
+
+export interface MissionConfig {
+  activeMission: string;
+  assignments: Record<string, string | null>;
+}
+
+// ===== Mission Creator Types =====
+
+export interface MissionCreatorSuggestion {
+  id: string;
+  title: string;
+  content: string;
+  applied: boolean;
+  children: MissionCreatorSuggestion[];
+  loading: boolean;
+}
+
+export interface MissionCreatorResult {
+  mission: string;
+  suggestions: Array<{
+    title: string;
+    content: string;
+  }>;
+}
+
 // ===== Self-Correction Stats =====
 
 export interface SelfCorrectionStats {
@@ -262,14 +296,6 @@ export interface SelfCorrectionStats {
   selfCorrected: number;
 }
 
-// ===== Task Velocity Types =====
-
-export interface VelocityDataPoint {
-  date: string;
-  count: number;
-  avgDurationMins: number | null;
-}
-
 // ===== Event Types =====
 
 export interface EventEntry {
@@ -277,28 +303,6 @@ export interface EventEntry {
   event: string;
   worker?: number;
   detail: string;
-}
-
-// ===== Project Driver Types =====
-
-export interface ProjectDriverTelemetry {
-  ts: string;
-  pendingBacklog: number;
-  claimedBacklog: number;
-  pendingRetries: number;
-  fixRate: number;
-  duplicateSkipped: number;
-  maxNewTasks: number;
-  driver_low_fix_rate_mode: boolean;
-}
-
-export interface ProjectDriverStatus {
-  running: boolean;
-  pid: number | null;
-  ageMs: number | null;
-  lastLog: string | null;
-  lastLogTime: string | null;
-  telemetry: ProjectDriverTelemetry | null;
 }
 
 // ===== Worker Scaling Types =====

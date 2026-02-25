@@ -37,6 +37,13 @@ playwright-report/
 .dev/skynet.db-shm
 .dev/skynet.db-wal
 .dev/md-backup/
+.dev/missions/
+.dev/*.md
+.dev/.*-sentinel-*
+.dev/.pipeline-state
+.dev/.watchdog-cycle-count
+.dev/cr-consecutive-caps
+.dev/typecheck-duration
 
 # Skynet runtime data
 .dev/db-backups/

@@ -164,7 +164,8 @@ except Exception:
 
 tokens = data.get('tokens', {})
 refresh = tokens.get('refresh_token', '')
-id_token = tokens.get('id_token') or tokens.get('access_token') or ''
+id_token = tokens.get('id_token', '')
+access_token = tokens.get('access_token', '')
 
 def decode_claims(token):
     parts = token.split('.')
@@ -178,9 +179,17 @@ def decode_claims(token):
         return {}
 
 exp = 0
-if id_token:
-    claims = decode_claims(id_token)
-    exp = claims.get('exp', 0) or 0
+for token in (id_token, access_token):
+    if not token:
+        continue
+    claims = decode_claims(token)
+    token_exp = claims.get('exp', 0) or 0
+    try:
+        token_exp = int(token_exp)
+    except Exception:
+        token_exp = 0
+    if token_exp > exp:
+        exp = token_exp
 
 print(exp)
 print(1 if refresh else 0)
@@ -221,8 +230,11 @@ PY
     if ! $_codex_auth_ok; then
       # Final check via Codex CLI status (non-interactive)
       local status_rc
-      "${SKYNET_CODEX_BIN:-codex}" login status 2>/dev/null || true
-      status_rc=$?
+      if "${SKYNET_CODEX_BIN:-codex}" login status >/dev/null 2>&1; then
+        status_rc=0
+      else
+        status_rc=$?
+      fi
       if [ "$status_rc" -eq 0 ]; then
         _codex_auth_ok=true
       fi
@@ -284,6 +296,8 @@ check_gemini_auth() {
   local _gemini_auth_ok=false
 
   if [ -n "${GEMINI_API_KEY:-}" ] || [ -n "${GOOGLE_API_KEY:-}" ]; then
+    _gemini_auth_ok=true
+  elif [ -f "$HOME/.gemini/oauth_creds.json" ] && [ -s "$HOME/.gemini/oauth_creds.json" ]; then
     _gemini_auth_ok=true
   else
     # Check Google ADC (Application Default Credentials)

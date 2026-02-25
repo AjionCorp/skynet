@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createEventsHandler } from "./events";
 import type { SkynetConfig } from "../types";
 
-// Mock getSkynetReadonlyDB so the SQLite path always throws (forcing tail fallback)
+// Mock getSkynetDB so the SQLite path always throws (forcing tail fallback)
 vi.mock("../lib/db", () => ({
-  getSkynetReadonlyDB: vi.fn(() => {
+  getSkynetDB: vi.fn(() => {
     throw new Error("SQLite not available in tests");
   }),
 }));
@@ -237,8 +237,8 @@ describe("createEventsHandler — SQLite path", () => {
 
   it("returns events from SQLite when DB is available", async () => {
     // Override the mock to return a functioning DB stub
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    const mockGetSkynetDB = vi.mocked(getSkynetReadonlyDB);
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
     const fakeDb = {
       countPending: vi.fn(() => 0),
       getRecentEvents: vi.fn(() => [
@@ -261,8 +261,8 @@ describe("createEventsHandler — SQLite path", () => {
   });
 
   it("falls back to tail when SQLite countPending throws", async () => {
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    const mockGetSkynetDB = vi.mocked(getSkynetReadonlyDB);
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
     mockGetSkynetDB.mockReturnValue({
       countPending: () => { throw new Error("DB not initialized"); },
     } as never);
@@ -278,9 +278,9 @@ describe("createEventsHandler — SQLite path", () => {
     expect(body.data[0].detail).toBe("Fallback works");
   });
 
-  it("falls back to tail when getSkynetReadonlyDB itself throws", async () => {
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    const mockGetSkynetDB = vi.mocked(getSkynetReadonlyDB);
+  it("falls back to tail when getSkynetDB itself throws", async () => {
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
     mockGetSkynetDB.mockImplementation(() => { throw new Error("better-sqlite3 not installed"); });
 
     mockTailOutput(`${EPOCH_1}|task_claimed|Tail fallback`);
@@ -298,8 +298,8 @@ describe("createEventsHandler — SQLite path", () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "development";
 
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    const mockGetSkynetDB = vi.mocked(getSkynetReadonlyDB);
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
     mockGetSkynetDB.mockImplementation(() => { throw new Error("DB unavailable"); });
 
     // Make tail fail by having spawnSync throw
@@ -320,8 +320,8 @@ describe("createEventsHandler — SQLite path", () => {
     const originalNodeEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = "production";
 
-    const { getSkynetReadonlyDB } = await import("../lib/db");
-    const mockGetSkynetDB = vi.mocked(getSkynetReadonlyDB);
+    const { getSkynetDB } = await import("../lib/db");
+    const mockGetSkynetDB = vi.mocked(getSkynetDB);
     mockGetSkynetDB.mockImplementation(() => { throw new Error("secret DB error"); });
     mockSpawnSync.mockImplementation(() => { throw new Error("internal details"); });
 

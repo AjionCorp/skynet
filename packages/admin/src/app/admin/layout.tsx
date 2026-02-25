@@ -1,9 +1,9 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@ajioncorp/skynet/components";
-import { Activity, Monitor, ListTodo, Database, FileText, Target, Users, ScrollText, ListOrdered, Settings, Brain } from "lucide-react";
+import { Activity, Monitor, ListTodo, Database, FileText, Target, Users, ScrollText, ListOrdered, Settings } from "lucide-react";
 
 const pages = [
   { href: "/admin/pipeline", label: "Pipeline", icon: Activity },
@@ -14,14 +14,12 @@ const pages = [
   { href: "/admin/workers", label: "Workers", icon: Users },
   { href: "/admin/logs", label: "Logs", icon: ScrollText },
   { href: "/admin/mission", label: "Mission", icon: Target },
-  { href: "/admin/project-driver", label: "Driver", icon: Brain },
   { href: "/admin/events", label: "Events", icon: ListOrdered },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const router = useRouter();
 
   return (
     <AdminLayout
@@ -30,7 +28,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       backHref="/"
       backLabel="Skynet"
       linkComponent={Link}
-      onNavigate={router.push}
     >
       {children}
     </AdminLayout>

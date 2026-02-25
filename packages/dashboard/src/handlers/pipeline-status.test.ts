@@ -24,7 +24,7 @@ vi.mock("child_process", () => ({
   spawnSync: vi.fn(() => ({ stdout: "", stderr: "", status: 0 })),
 }));
 vi.mock("../lib/db", () => ({
-  getSkynetReadonlyDB: vi.fn(() => { throw new Error("SQLite not available"); }),
+  getSkynetDB: vi.fn(() => { throw new Error("SQLite not available"); }),
 }));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";

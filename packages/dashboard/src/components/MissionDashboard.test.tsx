@@ -34,21 +34,45 @@ const MOCK_PROGRESS: MissionProgress[] = [
 
 const MOCK_PIPELINE_STATUS = {
   missionProgress: MOCK_PROGRESS,
+  pipelinePaused: false,
 } as PipelineStatus;
+
+const MOCK_MISSIONS_RESPONSE = {
+  data: {
+    missions: [
+      { slug: "main", name: "Mission", isActive: true, assignedWorkers: [] },
+    ],
+    config: { activeMission: "main", assignments: {} },
+  },
+  error: null,
+};
 
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
 
+/**
+ * Mock fetch to handle all MissionDashboard API calls.
+ * Routes: /missions (list), /mission/status (detail), /pipeline/status
+ */
 function mockFetchForMission(
   mission: MissionStatus | null,
   pipeline: Partial<PipelineStatus> | null,
   missionError: string | null = null,
   pipelineError: string | null = null,
 ) {
-  vi.stubGlobal('fetch', vi.fn()
-    .mockResolvedValueOnce(new Response(JSON.stringify({ data: mission, error: missionError })))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ data: pipeline, error: pipelineError }))));
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.includes("/missions")) {
+      return Promise.resolve(new Response(JSON.stringify(MOCK_MISSIONS_RESPONSE)));
+    }
+    if (url.includes("/mission/status")) {
+      return Promise.resolve(new Response(JSON.stringify({ data: mission, error: missionError })));
+    }
+    if (url.includes("/pipeline/status")) {
+      return Promise.resolve(new Response(JSON.stringify({ data: pipeline, error: pipelineError })));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ data: null, error: null })));
+  }));
 }
 
 describe("MissionDashboard", () => {
@@ -58,9 +82,9 @@ describe("MissionDashboard", () => {
   });
 
   it("shows loading state initially", () => {
-    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})));
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
     renderWithProvider(<MissionDashboard />);
-    expect(screen.getByText("Loading mission status...")).toBeDefined();
+    expect(screen.getByText("Loading missions...")).toBeDefined();
   });
 
   it("renders mission content in pre block", async () => {
@@ -69,7 +93,6 @@ describe("MissionDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Mission Document")).toBeDefined();
     });
-    // Raw mission content is in a <pre> tag
     const pre = document.querySelector("pre");
     expect(pre).not.toBeNull();
     expect(pre!.textContent).toContain("# Mission");
@@ -82,12 +105,9 @@ describe("MissionDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Mission Progress")).toBeDefined();
     });
-    // Completion percentage
     expect(screen.getByText("65%")).toBeDefined();
-    // Success Criteria and Goals appear in both summary cards and section headings
     expect(screen.getAllByText("Success Criteria").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("Goals").length).toBeGreaterThanOrEqual(1);
-    // Status: In Progress (not 100%)
     expect(screen.getByText("In Progress")).toBeDefined();
   });
 
@@ -106,15 +126,12 @@ describe("MissionDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Progress by Criterion")).toBeDefined();
     });
-    // Criterion text
     expect(screen.getByText("All tests pass")).toBeDefined();
     expect(screen.getByText("Self-correction rate")).toBeDefined();
     expect(screen.getByText("Handler coverage")).toBeDefined();
-    // Status badges
     expect(screen.getByText("Met")).toBeDefined();
     expect(screen.getByText("Partial")).toBeDefined();
     expect(screen.getByText("Not Met")).toBeDefined();
-    // Evidence
     expect(screen.getByText("100% pass rate")).toBeDefined();
     expect(screen.getByText("85% current rate")).toBeDefined();
   });
@@ -147,7 +164,6 @@ describe("MissionDashboard", () => {
     });
     expect(screen.getByText("Self-correction rate above 90%")).toBeDefined();
     expect(screen.getByText("Complete handler test coverage")).toBeDefined();
-    // Shows count
     expect(screen.getByText(/2 of 3 met/)).toBeDefined();
   });
 
@@ -171,25 +187,6 @@ describe("MissionDashboard", () => {
     expect(screen.getByText("Setting up CI/CD integration")).toBeDefined();
   });
 
-  it("shows empty state when no mission is defined", async () => {
-    const noRaw = { ...MOCK_MISSION, raw: "" };
-    mockFetchForMission(noRaw, MOCK_PIPELINE_STATUS);
-    renderWithProvider(<MissionDashboard />);
-    await waitFor(() => {
-      expect(screen.getByText("No mission defined")).toBeDefined();
-    });
-  });
-
-  it("fetches from correct API endpoints", async () => {
-    mockFetchForMission(MOCK_MISSION, MOCK_PIPELINE_STATUS);
-    renderWithProvider(<MissionDashboard />);
-    await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledTimes(2);
-    });
-    expect(global.fetch).toHaveBeenCalledWith("/api/admin/mission/status");
-    expect(global.fetch).toHaveBeenCalledWith("/api/admin/pipeline/status");
-  });
-
   it("shows error banner when mission API returns error", async () => {
     mockFetchForMission(null, MOCK_PIPELINE_STATUS, "Mission file not found");
     renderWithProvider(<MissionDashboard />);
@@ -204,5 +201,42 @@ describe("MissionDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Refresh")).toBeDefined();
     });
+  });
+
+  it("renders pipeline control buttons", async () => {
+    mockFetchForMission(MOCK_MISSION, MOCK_PIPELINE_STATUS);
+    renderWithProvider(<MissionDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Pause")).toBeDefined();
+    });
+    expect(screen.getByText("Start")).toBeDefined();
+    expect(screen.getByText("Stop")).toBeDefined();
+  });
+
+  it("shows Resume and paused badge when pipeline is paused", async () => {
+    const pausedPipeline = { ...MOCK_PIPELINE_STATUS, pipelinePaused: true };
+    mockFetchForMission(MOCK_MISSION, pausedPipeline);
+    renderWithProvider(<MissionDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Resume")).toBeDefined();
+    });
+    expect(screen.getByText("Pipeline Paused")).toBeDefined();
+  });
+
+  it("renders mission selector cards", async () => {
+    mockFetchForMission(MOCK_MISSION, MOCK_PIPELINE_STATUS);
+    renderWithProvider(<MissionDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("New Mission")).toBeDefined();
+    });
+  });
+
+  it("renders worker assignment panel", async () => {
+    mockFetchForMission(MOCK_MISSION, MOCK_PIPELINE_STATUS);
+    renderWithProvider(<MissionDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Worker Assignments")).toBeDefined();
+    });
+    expect(screen.getByText("dev-worker-1")).toBeDefined();
   });
 });

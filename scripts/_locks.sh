@@ -111,8 +111,8 @@ acquire_worker_lock() {
     _existing_pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
     # P0-3: PID reuse guard — also check lock mtime. If the PID is alive but
     # the lock is older than the stale threshold, it is likely a reused PID from
-    # a dead process. Default 120s matches SKYNET_STALE_MINUTES * 60.
-    _stale_threshold="${SKYNET_WORKER_LOCK_STALE_SECS:-120}"
+    # a dead process. Default 1800s (30m) matches high-load worst-case.
+    _stale_threshold="${SKYNET_WORKER_LOCK_STALE_SECS:-1800}"
     if [ "$(uname -s)" = "Darwin" ]; then
       _lock_mtime=$(stat -f %m "$lockfile/pid" 2>/dev/null || echo 0)
     else
@@ -120,15 +120,13 @@ acquire_worker_lock() {
     fi
     _lock_age=$(( $(date +%s) - _lock_mtime ))
     if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      # PID is alive — but if lock is older than threshold, assume PID reuse
-      if [ "$_lock_age" -gt "$_stale_threshold" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Stale lock detected: PID $_existing_pid alive but lock age ${_lock_age}s > ${_stale_threshold}s (likely PID reuse). Reclaiming." >> "$logfile"
-      else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Already running (PID $_existing_pid, age ${_lock_age}s). Exiting." >> "$logfile"
-        return 1
-      fi
+      # PID is alive — but if lock is older than threshold AND it's a huge delta, assume PID reuse.
+      # However, for worker locks, we trust heartbeat/watchdog. Reclaiming a live PID's lock
+      # is dangerous (leads to worktree clobbering). We only reclaim if PID is actually dead.
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] [${label}] Already running (PID $_existing_pid, age ${_lock_age}s). Exiting." >> "$logfile"
+      return 1
     fi
-    # Stale lock — reclaim atomically
+    # Stale lock (PID dead) — reclaim atomically
     mv "$lockfile" "$lockfile.stale.$$" 2>/dev/null || true
     rm -rf "$lockfile.stale.$$" 2>/dev/null || true
     if mkdir "$lockfile" 2>/dev/null; then

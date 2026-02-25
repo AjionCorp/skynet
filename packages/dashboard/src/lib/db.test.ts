@@ -819,6 +819,29 @@ describe("SkynetDB", () => {
     });
   });
 
+  describe("checkRateLimit", () => {
+    it("allows requests within the window", () => {
+      expect(db.checkRateLimit("test_key", 5, 60000)).toBe(true);
+      expect(db.checkRateLimit("test_key", 5, 60000)).toBe(true);
+    });
+
+    it("rejects requests after maxCount is reached", () => {
+      for (let i = 0; i < 5; i++) {
+        expect(db.checkRateLimit("limit_key", 5, 60000)).toBe(true);
+      }
+      expect(db.checkRateLimit("limit_key", 5, 60000)).toBe(false);
+    });
+
+    it("resets counter after window expires", () => {
+      // Use a very short window so it expires immediately
+      expect(db.checkRateLimit("expire_key", 1, 1)).toBe(true);
+      // Wait a tiny bit for the window to expire
+      const start = Date.now();
+      while (Date.now() - start < 5) { /* busy wait */ }
+      expect(db.checkRateLimit("expire_key", 1, 1)).toBe(true);
+    });
+  });
+
   describe("getCurrentTask", () => {
     it("returns unknown status for non-existent worker", () => {
       const result = db.getCurrentTask(99);

@@ -116,24 +116,21 @@ interface FixerStatRow {
 // overhead with no practical benefit since the schema is deterministic.
 
 /**
- * SkynetDB wraps a better-sqlite3 connection.
+ * SkynetDB opens the database in read-write mode because the `rate_limits` table
+ * requires write access for POST rate-limit tracking. All other dashboard queries
+ * are read-only. If rate limiting is moved to a separate mechanism (e.g., in-memory
+ * or Redis), this class should be refactored to accept a `readonly?: boolean` option
+ * and open with `{ readonly: true }` for read-only consumers.
  *
- * Pass `readonly: true` to open the database in read-only mode (recommended for
- * GET handlers that only query data). Write handlers (e.g., addTask, exportBacklog)
- * must use the default read-write mode.
- *
- * Rate limiting is handled by the separate in-memory rate-limiter module
- * (see `src/lib/rate-limiter.ts`), so read-only consumers never need write access.
+ * TODO: Separate rate_limits writes from read-only query path to allow readonly DB access.
  */
 export class SkynetDB {
   private db: Database;
-  readonly isReadonly: boolean;
   private hasMissionHash: boolean;
 
-  constructor(dbPath: string, options?: { readonly?: boolean }) {
+  constructor(dbPath: string) {
     const Database = loadDriver();
-    this.isReadonly = options?.readonly ?? false;
-    this.db = new Database(dbPath, { readonly: this.isReadonly });
+    this.db = new Database(dbPath);
     // Set busy_timeout first so that the journal_mode = WAL pragma does not
     // fail with SQLITE_BUSY if another process holds the database lock.
     this.db.pragma("busy_timeout = 15000");
@@ -700,6 +697,63 @@ export class SkynetDB {
       .prepare("SELECT * FROM fixer_stats ORDER BY id")
       .all() as FixerStatRow[];
   }
+
+  // ── Rate Limiting ────────────────────────────────────────────────────
+
+  /** Ensure the rate_limits table exists (idempotent, runs once per instance). */
+  private _rateLimitsTableCreated = false;
+  private ensureRateLimitsTable(): void {
+    if (this._rateLimitsTableCreated) return;
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS rate_limits (
+        key TEXT PRIMARY KEY,
+        count INTEGER DEFAULT 0,
+        window_start INTEGER DEFAULT 0
+      );
+    `);
+    this._rateLimitsTableCreated = true;
+  }
+
+  /**
+   * Check whether a rate limit key has exceeded the allowed count within the window.
+   * Returns true if the request is allowed, false if rate-limited.
+   * On success, increments the counter atomically.
+   *
+   * Wrapped in a transaction to prevent TOCTOU races: without it, two concurrent
+   * requests could both read under the limit and both increment past it.
+   */
+  checkRateLimit(key: string, maxCount: number, windowMs: number): boolean {
+    this.ensureRateLimitsTable();
+
+    return this.db.transaction(() => {
+      const nowMs = Date.now();
+      const windowStartThreshold = nowMs - windowMs;
+
+      const row = this.db
+        .prepare("SELECT count, window_start FROM rate_limits WHERE key = ?")
+        .get(key) as { count: number; window_start: number } | undefined;
+
+      if (!row || row.window_start <= windowStartThreshold) {
+        // No record or window expired — reset the window
+        this.db
+          .prepare(
+            "INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)"
+          )
+          .run(key, nowMs);
+        return true;
+      }
+
+      if (row.count >= maxCount) {
+        return false;
+      }
+
+      // Increment within the current window
+      this.db
+        .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
+        .run(key);
+      return true;
+    })();
+  }
 }
 
 // WARNING: Node.js fork() would inherit this file descriptor. If you add
@@ -714,94 +768,57 @@ export class SkynetDB {
 // level pool management. If this were PostgreSQL or MySQL, a pool would be warranted;
 // for SQLite, a single reused connection is both simpler and optimal.
 
-// Separate singletons for read-write and read-only connections.
-// SQLite WAL mode supports concurrent readers alongside a single writer,
-// so a dedicated readonly connection avoids contention from GET handlers.
-let _rwInstance: SkynetDB | null = null;
-let _rwIno: bigint | number | null = null;
-let _rwPath: string | null = null;
+let _instance: SkynetDB | null = null;
+let _instanceIno: bigint | number | null = null;
+let _instancePath: string | null = null;
 
-let _roInstance: SkynetDB | null = null;
-let _roIno: bigint | number | null = null;
-let _roPath: string | null = null;
-
-function _getOrCreate(
-  devDir: string,
-  readonly: boolean,
-): SkynetDB {
+export function getSkynetDB(devDir: string): SkynetDB {
   const dbPath = `${devDir}/skynet.db`;
-
-  // Select the appropriate singleton slot
-  let instance = readonly ? _roInstance : _rwInstance;
-  let cachedIno = readonly ? _roIno : _rwIno;
-  let cachedPath = readonly ? _roPath : _rwPath;
-
-  // Close stale instance when devDir changes
-  if (instance && cachedPath !== dbPath) {
-    instance.close();
-    instance = null;
-    cachedIno = null;
+  // SINGLETON LIMITATION: This factory caches a single SkynetDB instance keyed
+  // by dbPath. If multiple devDirs are used in the same process (e.g., a future
+  // multi-project dashboard), only the first-opened connection is cached — calls
+  // with a different devDir will create a new instance but the old one remains
+  // cached. For multi-devDir support, this would need a Map<string, SkynetDB>.
+  // Currently the dashboard only serves one project at a time, so this is safe.
+  //
+  // Check if the database file's inode has changed (e.g., restored from backup).
+  // If so, close the stale connection and create a fresh one.
+  // TS-P2-1: Close stale instance when devDir changes (different dbPath)
+  if (_instance && _instancePath !== dbPath) {
+    _instance.close();
+    _instance = null;
+    _instanceIno = null;
   }
-  // Check if the database file's inode has changed (e.g., restored from backup)
-  if (instance && cachedPath === dbPath) {
+  if (_instance && _instancePath === dbPath) {
     try {
       const currentIno = fsStatSync(dbPath).ino;
-      if (cachedIno !== null && currentIno !== cachedIno) {
-        instance.close();
-        instance = null;
-        cachedIno = null;
+      if (_instanceIno !== null && currentIno !== _instanceIno) {
+        _instance.close();
+        _instance = null;
+        _instanceIno = null;
       }
     } catch {
       // File missing — let the constructor handle the error
     }
   }
-  if (!instance) {
-    instance = new SkynetDB(dbPath, { readonly });
-    cachedPath = dbPath;
+  if (!_instance) {
+    _instance = new SkynetDB(dbPath);
+    _instancePath = dbPath;
     try {
-      cachedIno = fsStatSync(dbPath).ino;
+      _instanceIno = fsStatSync(dbPath).ino;
     } catch {
-      cachedIno = null;
+      _instanceIno = null;
     }
   }
-
-  // Write back to the correct slot
-  if (readonly) {
-    _roInstance = instance;
-    _roIno = cachedIno;
-    _roPath = cachedPath;
-  } else {
-    _rwInstance = instance;
-    _rwIno = cachedIno;
-    _rwPath = cachedPath;
-  }
-
-  return instance;
+  return _instance;
 }
 
-/** Get a read-write SkynetDB connection. Use for handlers that write (addTask, exportBacklog). */
-export function getSkynetDB(devDir: string): SkynetDB {
-  return _getOrCreate(devDir, false);
-}
+process.on("exit", () => { _instance?.close(); _instance = null; });
 
-/** Get a read-only SkynetDB connection. Use for GET handlers that only query data. */
-export function getSkynetReadonlyDB(devDir: string): SkynetDB {
-  return _getOrCreate(devDir, true);
-}
-
-process.on("exit", () => {
-  _rwInstance?.close(); _rwInstance = null;
-  _roInstance?.close(); _roInstance = null;
-});
-
-/** @internal — Reset singletons for tests only. */
+/** @internal — Reset singleton for tests only. */
 export function _resetSingleton() {
-  if (_rwInstance) { _rwInstance.close(); }
-  _rwInstance = null;
-  _rwPath = null;
-  _rwIno = null;
-  if (_roInstance) { _roInstance.close(); }
-  _roInstance = null;
-  _roPath = null;
-  _roIno = null;
+  if (_instance) { _instance.close(); }
+  _instance = null;
+  _instancePath = null;
+  _instanceIno = null;
 }

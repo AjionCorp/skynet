@@ -143,6 +143,70 @@ is_running() {
   [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
 }
 
+# Kill a process by lockfile (dir or file). Best-effort, logs actions.
+_kill_by_lock() {
+  local lockfile="$1"
+  local label="${2:-process}"
+  local pid=""
+  if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+    pid=$(cat "$lockfile/pid" 2>/dev/null || echo "")
+  elif [ -f "$lockfile" ]; then
+    pid=$(cat "$lockfile" 2>/dev/null || echo "")
+  fi
+  [ -z "$pid" ] && return 1
+  if kill -0 "$pid" 2>/dev/null; then
+    log "Resetting $label (PID $pid)"
+    kill -TERM "$pid" 2>/dev/null || true
+    sleep 2
+    kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+
+# --- Mission switch reset ---
+_active_mission_slug=$(_get_active_mission_slug)
+_prev_mission_slug=$(db_get_metadata "active_mission_slug" 2>/dev/null || echo "")
+if [ -n "$_active_mission_slug" ] && [ "$_active_mission_slug" != "$_prev_mission_slug" ]; then
+  log "Active mission switched from '${_prev_mission_slug:-none}' to '$_active_mission_slug' — resetting workers"
+  emit_event "mission_switched" "Active mission switched from '${_prev_mission_slug:-none}' to '$_active_mission_slug'" 2>/dev/null || true
+
+  # Backfill legacy tasks so unscoped tasks are assigned to a mission.
+  if [ -n "$_prev_mission_slug" ]; then
+    _bf_count=$(db_backfill_mission_hash "$_prev_mission_slug" 2>/dev/null || echo 0)
+    if [ "${_bf_count:-0}" -gt 0 ] 2>/dev/null; then
+      log "Backfilled $_bf_count legacy task(s) to mission '$_prev_mission_slug'"
+    fi
+  else
+    _bf_count=$(db_backfill_mission_hash "$_active_mission_slug" 2>/dev/null || echo 0)
+    if [ "${_bf_count:-0}" -gt 0 ] 2>/dev/null; then
+      log "Backfilled $_bf_count legacy task(s) to mission '$_active_mission_slug'"
+    fi
+  fi
+
+  # Unclaim in-flight tasks so workers restart cleanly on the new mission.
+  _unclaimed=$(db_unclaim_all_tasks 2>/dev/null || echo 0)
+  if [ "${_unclaimed:-0}" -gt 0 ] 2>/dev/null; then
+    log "Reset claimed tasks: $_unclaimed unclaimed"
+  fi
+
+  db_set_metadata "active_mission_slug" "$_active_mission_slug" 2>/dev/null || true
+
+  # Kill workers, fixers, and project-driver so they restart on the new mission.
+  for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
+    _kill_by_lock "${SKYNET_LOCK_PREFIX}-dev-worker-${_wid}.lock" "dev-worker-${_wid}" || true
+    db_set_worker_idle "$_wid" "Mission switched — reset by watchdog" 2>/dev/null || true
+  done
+  _kill_by_lock "${SKYNET_LOCK_PREFIX}-task-fixer.lock" "task-fixer-1" || true
+  for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
+    _kill_by_lock "${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock" "task-fixer-${_fid}" || true
+  done
+  for _pd_lock in "${SKYNET_LOCK_PREFIX}"-project-driver-*.lock; do
+    [ -e "$_pd_lock" ] || continue
+    _kill_by_lock "$_pd_lock" "project-driver" || true
+  done
+fi
+
 # --- Backlog mutex helpers (same pattern as dev-worker.sh) ---
 
 
@@ -161,7 +225,11 @@ _cr_phase1_stale_locks() {
   for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
     all_locks+=("${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock")
   done
-  all_locks+=("${SKYNET_LOCK_PREFIX}-project-driver.lock")
+  all_locks+=("${SKYNET_LOCK_PREFIX}-project-driver-${_active_mission_slug:-global}.lock")
+  for _pd_lock in "${SKYNET_LOCK_PREFIX}"-project-driver-*.lock; do
+    [ -e "$_pd_lock" ] || continue
+    all_locks+=("$_pd_lock")
+  done
 
   for lockfile in "${all_locks[@]}"; do
     # Handle orphaned lock dirs (mkdir succeeded but process died before writing pid file)
@@ -632,54 +700,21 @@ fi
 # markers. Regenerate backlog.md from the authoritative SQLite state so the
 # markdown view matches reality. Uses the existing atomic export (tmp+mv).
 # Only runs when there's a DB and a backlog file to update.
-#
-# Two-level check:
-#   1. Quick count comparison catches most divergences cheaply.
-#   2. Per-title verification catches cases where counts coincidentally match
-#      but different tasks are claimed (e.g., Task A unclaimed + Task B claimed
-#      in the same cycle). Without this, stale [>] markers persist silently.
 {
 if [ -f "$DB_PATH" ] && [ -f "$BACKLOG" ]; then
+  # Check if any tasks were just reconciled (orphaned claims or stale fixing).
+  # Rather than tracking separate counters across error-isolated blocks, just
+  # detect if backlog.md would change — compare the pending/claimed counts in
+  # SQLite vs the markers in the current file. This is cheaper than always
+  # regenerating and catches all reconciliation paths.
   _bl_db_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='pending';" 2>/dev/null || echo "")
   _bl_db_claimed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='claimed';" 2>/dev/null || echo "")
   _bl_md_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   _bl_md_claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
-
-  _bl_needs_sync=false
-  _bl_stale_count=0
-
   if [ "${_bl_db_pending:-}" != "$_bl_md_pending" ] || [ "${_bl_db_claimed:-}" != "$_bl_md_claimed" ]; then
-    # Count mismatch — definitely need to sync
-    _bl_needs_sync=true
-    # Estimate stale markers from the count surplus in backlog vs DB
-    _bl_stale_count=$(( ${_bl_md_claimed:-0} - ${_bl_db_claimed:-0} ))
-    [ "$_bl_stale_count" -lt 0 ] && _bl_stale_count=0
-  elif [ "${_bl_md_claimed:-0}" -gt 0 ]; then
-    # Counts match but there are claimed entries — verify individual titles.
-    # Get claimed titles from DB (one per line, sorted for reproducibility).
-    _bl_db_claimed_titles=$(_db "SELECT title FROM tasks WHERE status='claimed' ORDER BY title;" 2>/dev/null || true)
-    # For each [>] line in backlog.md, check if its title is actually claimed in DB.
-    while IFS= read -r _scl_line; do
-      [ -z "$_scl_line" ] && continue
-      # Extract title: "- [>] [TAG] Title — Desc | blockedBy: x" → "Title"
-      _scl_title=$(echo "$_scl_line" | sed 's/^- \[>\] \[[^]]*\] //;s/ — .*//;s/ | blockedBy:.*//')
-      [ -z "$_scl_title" ] && continue
-      # Exact whole-line match (-xF) to avoid substring false positives
-      if ! echo "$_bl_db_claimed_titles" | grep -qxF "$_scl_title"; then
-        _bl_stale_count=$((_bl_stale_count + 1))
-      fi
-    done < <(grep '^\- \[>\]' "$BACKLOG" 2>/dev/null || true)
-    [ "$_bl_stale_count" -gt 0 ] && _bl_needs_sync=true
-  fi
-
-  if $_bl_needs_sync; then
     db_export_backlog "$BACKLOG" 2>/dev/null || log "WARNING: db_export_backlog failed during stale-claim sync"
     log "Synced backlog.md markers (DB: ${_bl_db_pending} pending/${_bl_db_claimed} claimed, was: ${_bl_md_pending} pending/${_bl_md_claimed} claimed)"
     emit_event "backlog_marker_synced" "pending=${_bl_db_pending} claimed=${_bl_db_claimed} was_pending=${_bl_md_pending} was_claimed=${_bl_md_claimed}" 2>/dev/null || true
-    if [ "$_bl_stale_count" -gt 0 ]; then
-      log "Reverted ${_bl_stale_count} stale [>] claimed markers (no matching claimed task in DB)"
-      emit_event "stale_claims_reverted" "count=${_bl_stale_count}" 2>/dev/null || true
-    fi
   fi
 fi
 } || { log "Phase: backlog marker sync failed, continuing"; true; }
@@ -931,7 +966,11 @@ except: pass
 fi
 
 # Count backlog tasks (prefer SQLite, fallback to grep)
-backlog_count=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+if [ -n "${_active_mission_slug:-}" ]; then
+  backlog_count=$(db_count_pending_for_mission "$_active_mission_slug" 2>/dev/null || echo 0)
+else
+  backlog_count=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+fi
 backlog_count=${backlog_count:-0}
 backlog_count=$((backlog_count + 0))
 
@@ -953,7 +992,7 @@ for _fid in $(seq 2 "${SKYNET_MAX_FIXERS:-3}"); do
 done
 
 driver_running=false
-is_running "${SKYNET_LOCK_PREFIX}-project-driver.lock" && driver_running=true
+is_running "${SKYNET_LOCK_PREFIX}-project-driver-${_active_mission_slug:-global}.lock" && driver_running=true
 
 # --- Stale heartbeat detection ---
 # Dual-source design: The file-based heartbeat check below uses .dev/worker-N.heartbeat
@@ -1719,7 +1758,7 @@ elif $agent_auth_ok && ! $pipeline_paused; then
   # Rule 3: Kick off project-driver if needed (rate-limited)
   if ! $driver_running; then
     should_kick=false
-    last_kick_file="${SKYNET_LOCK_PREFIX}-project-driver-last-kick"
+    last_kick_file="${SKYNET_LOCK_PREFIX}-project-driver-${_active_mission_slug:-global}-last-kick"
     if [ "$backlog_count" -lt "${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}" ]; then
       should_kick=true
     elif [ ! -f "$last_kick_file" ]; then
@@ -1734,11 +1773,15 @@ elif $agent_auth_ok && ! $pipeline_paused; then
     if $should_kick; then
       date +%s > "$last_kick_file"
       log "Project-driver idle (backlog: $backlog_count). Kicking off."
-      tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)"
+      tg "📋 *$SKYNET_PROJECT_NAME_UPPER*: Kicking off project-driver (backlog: $backlog_count tasks)${_active_mission_slug:+ (mission: $_active_mission_slug)}"
       if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
         log "DRY-RUN: Would kick off project-driver"
       else
-        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver.log" 2>&1 &
+        if [ -n "$_active_mission_slug" ]; then
+          SKYNET_DEV_DIR="$DEV_DIR" SKYNET_MISSION_SLUG="$_active_mission_slug" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_active_mission_slug}.log" 2>&1 &
+        else
+          SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-global.log" 2>&1 &
+        fi
       fi
     fi
   fi
@@ -2035,6 +2078,20 @@ _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
 _cycle_interval="$WATCHDOG_INTERVAL"
 [ -f "$_adaptive_file" ] && _cycle_interval=$(cat "$_adaptive_file" 2>/dev/null)
 _cycle_interval="${_cycle_interval:-$WATCHDOG_INTERVAL}"
-sleep "$_cycle_interval"
+
+# Interruptible sleep: run sleep in background and `wait` for it.
+# `wait` returns immediately when SIGUSR1 fires (plain `sleep` blocks signals).
+# Workers send SIGUSR1 on exit so the watchdog can dispatch without delay.
+_WAKEUP=false
+sleep "$_cycle_interval" &
+_sleep_pid=$!
+wait "$_sleep_pid" 2>/dev/null || true
+# Kill any leftover sleep process (SIGUSR1 wakes wait but not the child sleep)
+kill "$_sleep_pid" 2>/dev/null || true
+wait "$_sleep_pid" 2>/dev/null || true
+if $_WAKEUP; then
+  log "Woken early by worker signal (SIGUSR1) — running dispatch cycle"
+  _WAKEUP=false
+fi
 
 done  # end main loop

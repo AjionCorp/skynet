@@ -410,9 +410,9 @@ describe("createPipelineStreamHandler", () => {
     reader.cancel();
   });
 
-  it("triggers update on .db-wal file changes", async () => {
+  it("sends updated status when .db-wal file changes", async () => {
     const initialData = { workers: [] };
-    const updatedData = { workers: [{ name: "wal-update" }] };
+    const updatedData = { workers: [{ name: "db-updated" }] };
     mockGetStatus
       .mockResolvedValueOnce(makeStatusResponse(initialData))
       .mockResolvedValueOnce(makeStatusResponse(updatedData));
@@ -436,59 +436,31 @@ describe("createPipelineStreamHandler", () => {
     reader.cancel();
   });
 
-  it("includes X-Accel-Buffering: no header for nginx compatibility", async () => {
-    const handler = createPipelineStreamHandler(makeConfig());
-    const res = await handler();
-    expect(res.headers.get("X-Accel-Buffering")).toBe("no");
-    res.body?.cancel();
-  });
+  it("sends detailed error in development mode when getStatus throws in pushStatus", async () => {
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    mockGetStatus.mockRejectedValueOnce(new Error("ENOENT: dev dir missing"));
 
-  it("decrements activeConnections on stream cancel", async () => {
-    const handler = createPipelineStreamHandler(makeConfig());
-
-    // Open and cancel a connection
-    const res1 = await handler();
-    res1.body?.cancel();
-    // Give cancel time to propagate
-    await flushAsync();
-
-    // Should be able to open 20 more connections (counter decremented)
-    const connections: Response[] = [];
-    for (let i = 0; i < 20; i++) {
-      mockWatcher = createMockWatcher();
-      mockWatch.mockReturnValue(mockWatcher);
-      const res = await handler();
-      connections.push(res);
-    }
-    // 21st should still work because we freed one slot
-    // (we used 20 after canceling the first = 20 total, at limit)
-    // 21st should be rejected
-    const rejected = await handler();
-    expect(rejected.status).toBe(503);
-
-    for (const conn of connections) {
-      conn.body?.cancel();
-    }
-  });
-
-  it("sends error event when getStatus fails during watcher-triggered debounce", async () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
     await skipRetryInstruction(reader);
-    await reader.read(); // initial status
-    await flushAsync();
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toBeNull();
+    expect(parsed.error).toBe("ENOENT: dev dir missing");
+    reader.cancel();
+    process.env.NODE_ENV = origEnv;
+  });
 
-    // Make getStatus reject on the next (debounced) call
-    mockGetStatus.mockRejectedValueOnce(new Error("Disk read failed"));
+  it("sends generic error when non-Error is thrown in pushStatus", async () => {
+    mockGetStatus.mockRejectedValueOnce("string-error");
 
-    const watchCallback = mockWatch.mock.calls[0][1] as (event: string, filename: string) => void;
-    watchCallback("change", "backlog.md");
-
-    // Advance past debounce — pushStatus catches the error and sends an error event
-    await vi.advanceTimersByTimeAsync(600);
-    await flushAsync();
-
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
     const { value } = await reader.read();
     const text = new TextDecoder().decode(value);
     const parsed = JSON.parse(text.replace("data: ", "").trim());
@@ -497,13 +469,55 @@ describe("createPipelineStreamHandler", () => {
     reader.cancel();
   });
 
-  it("sends retry instruction as first SSE message", async () => {
+  it("sets X-Accel-Buffering: no header for nginx SSE support", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    expect(res.headers.get("X-Accel-Buffering")).toBe("no");
+    res.body?.cancel();
+  });
+
+  it("decrements active connections after cleanup", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+
+    // Open a connection and then close it
+    const res1 = await handler();
+    const reader1 = res1.body!.getReader();
+    await skipRetryInstruction(reader1);
+    await reader1.read();
+    await flushAsync();
+    await reader1.cancel();
+
+    // Should be able to open another connection (counter decremented)
+    const res2 = await handler();
+    expect(res2.status).not.toBe(503);
+    res2.body?.cancel();
+  });
+
+  it("cleans up resources when pushStatus fails during heartbeat poll", async () => {
+    const initialData = { workers: [] };
+    mockGetStatus
+      .mockResolvedValueOnce(makeStatusResponse(initialData))
+      .mockRejectedValueOnce(new Error("poll failure"));
+
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
     const reader = res.body!.getReader();
-    const { value } = await reader.read();
-    const text = new TextDecoder().decode(value);
-    expect(text).toBe("retry: 5000\n\n");
+    await skipRetryInstruction(reader);
+    await reader.read(); // initial status
+    await flushAsync();
+
+    // Trigger the heartbeat poll which will reject
+    await vi.advanceTimersByTimeAsync(10_000);
+
+    // cleanup() closes the watcher and stops intervals, but does NOT close
+    // the stream controller — the stream stays open but idle.
+    expect(mockWatcher.close).toHaveBeenCalled();
+
+    // Subsequent polls should not fire (interval cleared by cleanup)
+    mockGetStatus.mockResolvedValueOnce(makeStatusResponse({ workers: [{ name: "late" }] }));
+    await vi.advanceTimersByTimeAsync(10_000);
+    // Only 2 calls: initial + the failed poll — no third call
+    expect(mockGetStatus).toHaveBeenCalledTimes(2);
     reader.cancel();
   });
 

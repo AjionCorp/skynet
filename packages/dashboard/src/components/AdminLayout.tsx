@@ -1,9 +1,7 @@
 "use client";
 
 import type { ReactNode, ComponentType } from "react";
-import { RefreshCw, ArrowLeft, Keyboard } from "lucide-react";
-import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
-import { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
+import { RefreshCw, ArrowLeft } from "lucide-react";
 
 export interface AdminLayoutPage {
   href: string;
@@ -24,8 +22,6 @@ export interface AdminLayoutProps {
   backLabel?: string;
   /** The Link component to use for navigation (e.g. Next.js Link). Defaults to a plain <a> tag. */
   linkComponent?: ComponentType<{ href: string; className?: string; children: ReactNode }>;
-  /** Callback for programmatic navigation (e.g. router.push). Enables keyboard shortcuts. */
-  onNavigate?: (href: string) => void;
   children: ReactNode;
 }
 
@@ -36,15 +32,12 @@ export function AdminLayout({
   backHref = "/",
   backLabel = "Dashboard",
   linkComponent,
-  onNavigate,
   children,
 }: AdminLayoutProps) {
   // Use the provided Link component or fall back to a plain <a> tag
   const Link = linkComponent ?? (({ href, className, children: c }: { href: string; className?: string; children: ReactNode }) => (
     <a href={href} className={className}>{c}</a>
   ));
-
-  const { showHelp, setShowHelp } = useKeyboardShortcuts({ pages, onNavigate });
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -81,23 +74,14 @@ export function AdminLayout({
             </>
           )}
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowHelp(true)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-300"
-            title="Keyboard shortcuts (?)"
-          >
-            <Keyboard className="h-4 w-4" />
-          </button>
-          {user && (
-            <>
-              <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-white">
-                {user.email?.charAt(0).toUpperCase() ?? "U"}
-              </div>
-              <span className="text-sm text-zinc-400">{user.email}</span>
-            </>
-          )}
-        </div>
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-zinc-700 text-xs font-semibold text-white">
+              {user.email?.charAt(0).toUpperCase() ?? "U"}
+            </div>
+            <span className="text-sm text-zinc-400">{user.email}</span>
+          </div>
+        )}
       </header>
 
       {/* Sub-nav tabs */}
@@ -126,13 +110,6 @@ export function AdminLayout({
       )}
 
       <main className="mx-auto max-w-7xl p-8">{children}</main>
-
-      {showHelp && (
-        <KeyboardShortcutsHelp
-          pages={pages}
-          onClose={() => setShowHelp(false)}
-        />
-      )}
     </div>
   );
 }

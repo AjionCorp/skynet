@@ -6,12 +6,32 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 _require_db
 
-LOG="$SCRIPTS_DIR/project-driver.log"
+# --- Load mission (supports multi-mission via SKYNET_MISSION_SLUG env) ---
+_mission_slug="${SKYNET_MISSION_SLUG:-}"
+_mission_file="$MISSION"
+_mission_hash=""
+if [ -n "$_mission_slug" ] && [ -f "$MISSIONS_DIR/${_mission_slug}.md" ]; then
+  _mission_file="$MISSIONS_DIR/${_mission_slug}.md"
+  _mission_hash="$_mission_slug"
+elif [ -f "$MISSION_CONFIG" ]; then
+  # Fall back to active mission from _config.json
+  _active=$(_resolve_active_mission)
+  [ -f "$_active" ] && _mission_file="$_active"
+fi
+
+# Ensure mission hash is set when using active mission config (for task scoping).
+if [ -z "$_mission_hash" ]; then
+  _active_slug=$(_get_active_mission_slug)
+  [ -n "$_active_slug" ] && _mission_hash="$_active_slug"
+fi
+
+_log_suffix="${_mission_hash:-global}"
+LOG="$SCRIPTS_DIR/project-driver-${_log_suffix}.log"
 BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 cd "$PROJECT_DIR"
 
-# Per-script log — writes to project-driver.log (not shared _log)
+# Per-script log — writes to project-driver-<mission>.log (not shared _log)
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 # --- Task normalization for deduplication ---
@@ -27,8 +47,8 @@ _normalize_task_line() {
 # NOTE: PID reuse between kill -0 check and lock reclaim is theoretically
 # possible but practically negligible — the TOCTOU window is microseconds
 # and Linux/macOS PID allocation is sequential up to pid_max (32768+ default).
-# --- PID lock ---
-LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver.lock"
+# --- PID lock (per-mission) ---
+LOCKFILE="${SKYNET_LOCK_PREFIX}-project-driver-${_log_suffix}.lock"
 if mkdir "$LOCKFILE" 2>/dev/null; then
   if ! echo "$$" > "$LOCKFILE/pid" 2>/dev/null; then
     rmdir "$LOCKFILE" 2>/dev/null || true
@@ -84,21 +104,24 @@ if ! check_any_auth; then
   exit 1
 fi
 
-log "Project driver starting."
-tg "🧠 *$SKYNET_PROJECT_NAME_UPPER PROJECT-DRIVER* starting — analyzing state and driving mission forward"
+log "Project driver starting${_mission_hash:+ (mission: $_mission_hash)}."
+tg "🧠 *$SKYNET_PROJECT_NAME_UPPER PROJECT-DRIVER* starting — analyzing state and driving mission forward${_mission_hash:+ (mission: $_mission_hash)}"
 
-# --- Load mission ---
-if [ -f "$MISSION" ]; then
-  mission_content=$(cat "$MISSION")
-  log "Mission loaded from $MISSION"
+if [ -f "$_mission_file" ]; then
+  mission_content=$(cat "$_mission_file")
+  log "Mission loaded from $_mission_file${_mission_hash:+ (hash: $_mission_hash)}"
 else
   mission_content="${SKYNET_PROJECT_VISION:-No mission defined. Create .dev/mission.md to drive autonomous development.}"
-  log "No mission.md found. Using SKYNET_PROJECT_VISION fallback."
+  log "No mission file found. Using SKYNET_PROJECT_VISION fallback."
 fi
 
 # --- Gather all state (prefer SQLite, fallback to files on fresh projects) ---
 # SQLite-based context (primary — structured, consistent)
-_db_context=$(db_export_context 2>/dev/null || true)
+if [ -n "$_mission_hash" ]; then
+  _db_context=$(db_export_context_for_mission "$_mission_hash" 2>/dev/null || true)
+else
+  _db_context=$(db_export_context 2>/dev/null || true)
+fi
 
 # File-based fallback for data not yet in SQLite
 if [ -f "$BACKLOG" ]; then
@@ -123,10 +146,18 @@ if [ -f "$BLOCKERS" ]; then blockers_content=$(cat "$BLOCKERS"); else blockers_c
 if [ -f "$SYNC_HEALTH" ]; then sync_health_content=$(cat "$SYNC_HEALTH"); else sync_health_content="(file not found)"; fi
 
 # Count task metrics (prefer SQLite, fallback to file)
-remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+if [ -n "$_mission_hash" ]; then
+  remaining=$(db_count_pending_for_mission "$_mission_hash" 2>/dev/null || echo 0)
+else
+  remaining=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+fi
 remaining=${remaining:-0}
 case "$remaining" in ''|*[!0-9]*) remaining=0 ;; esac
-claimed=$(db_count_claimed 2>/dev/null || grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo 0)
+if [ -n "$_mission_hash" ]; then
+  claimed=$(db_count_claimed_for_mission "$_mission_hash" 2>/dev/null || echo 0)
+else
+  claimed=$(db_count_claimed 2>/dev/null || grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo 0)
+fi
 claimed=${claimed:-0}
 case "$claimed" in ''|*[!0-9]*) claimed=0 ;; esac
 # shellcheck disable=SC2034
@@ -416,7 +447,7 @@ if run_agent "$PROMPT" "$LOG"; then
         continue
       fi
       # Insert into SQLite (bottom position — project-driver manages priority)
-      if db_add_task "[$_btag] $_btitle" "$_btag" "$_bdesc" "bottom" "" >/dev/null 2>&1; then
+      if db_add_task "$_btitle" "$_btag" "$_bdesc" "bottom" "" "$_mission_hash" >/dev/null 2>&1; then
         log "Reconciled new task to SQLite: [$_btag] $_btitle"
         _reconciled=$((_reconciled + 1))
       fi

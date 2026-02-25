@@ -99,11 +99,6 @@ export SKYNET_MAX_FIX_ATTEMPTS="${SKYNET_MAX_FIX_ATTEMPTS:-3}"
 export SKYNET_FIXER_IGNORE_USAGE_LIMIT="${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-true}"
 export SKYNET_DRIVER_BACKLOG_THRESHOLD="${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}"
 export SKYNET_MAX_LOG_SIZE_KB="${SKYNET_MAX_LOG_SIZE_KB:-1024}"
-
-# Max prompt size in bytes before truncation (default 100KB).
-# Oversized prompts cause claude exit code 1; this guardrail truncates
-# context sections to keep prompts within LLM token limits.
-export SKYNET_MAX_PROMPT_BYTES="${SKYNET_MAX_PROMPT_BYTES:-102400}"
 export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 # --dangerously-skip-permissions is required for autonomous workers to modify files
 # without interactive approval prompts. Only safe in isolated worktrees where no
@@ -201,6 +196,10 @@ CURRENT_TASK="$DEV_DIR/current-task.md"
 SYNC_HEALTH="$DEV_DIR/sync-health.md"
 # shellcheck disable=SC2034
 MISSION="$DEV_DIR/mission.md"
+# shellcheck disable=SC2034
+MISSIONS_DIR="$DEV_DIR/missions"
+# shellcheck disable=SC2034
+MISSION_CONFIG="$DEV_DIR/missions/_config.json"
 
 # --- Startup config validation ---
 _validate_config() {
@@ -282,6 +281,54 @@ _validate_config_numerics() {
   _clamp SKYNET_WATCHDOG_INTERVAL 30 600
 }
 _validate_config_numerics
+
+# --- Multi-mission helpers ---
+# Resolve the active mission slug from _config.json (empty if not set/invalid).
+# Bash 3.2 compatible — uses grep/sed, no jq.
+_get_active_mission_slug() {
+  if [ -f "$MISSION_CONFIG" ]; then
+    local active
+    active=$(grep '"activeMission"' "$MISSION_CONFIG" 2>/dev/null \
+      | sed 's/.*: *"\([^"]*\)".*/\1/' | head -1)
+    if [ -n "$active" ] && [ -f "$MISSIONS_DIR/${active}.md" ]; then
+      echo "$active"
+      return
+    fi
+  fi
+  echo ""
+}
+
+# Read a worker's mission assignment from _config.json.
+# Returns the slug (e.g. "main", "dashboard-features") or empty string if unassigned.
+# If unassigned, defaults to active mission (if configured).
+_get_worker_mission_slug() {
+  local worker_name="$1"
+  [ -f "$MISSION_CONFIG" ] || { echo ""; return; }
+  local line slug
+  line=$(grep "\"$worker_name\"" "$MISSION_CONFIG" 2>/dev/null | head -1)
+  if [ -n "$line" ]; then
+    # Extract quoted value: "worker": "slug" → slug
+    slug=$(echo "$line" | sed -n 's/.*: *"\([^"]*\)".*/\1/p')
+  fi
+  if [ -n "${slug:-}" ]; then
+    echo "$slug"
+    return
+  fi
+  _get_active_mission_slug
+}
+
+# Resolve the active mission file path.
+# If MISSIONS_DIR exists and _config.json has activeMission, use that.
+# Otherwise fall back to MISSION (legacy .dev/mission.md).
+_resolve_active_mission() {
+  local active
+  active=$(_get_active_mission_slug)
+  if [ -n "$active" ] && [ -f "$MISSIONS_DIR/${active}.md" ]; then
+    echo "$MISSIONS_DIR/${active}.md"
+    return
+  fi
+  echo "$MISSION"
+}
 
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"

@@ -1,18 +1,39 @@
 import { readFileSync, writeFileSync, renameSync, mkdirSync, rmdirSync, existsSync, rmSync } from "fs";
+import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
-import { getSkynetDB, getSkynetReadonlyDB } from "../lib/db";
-import { checkRateLimit } from "../lib/rate-limiter";
+import { getSkynetDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 
 // Rate limiting for POST requests: max 30 per 60 seconds.
-// Uses in-memory sliding-window rate limiter (decoupled from DB to allow
-// read-only DB connections for GET handlers).
+// Uses SQLite-backed rate limiting for cross-process accuracy.
+// Falls back to in-memory limiting if DB is unavailable.
 const RATE_LIMIT_MAX = 30;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const RATE_LIMIT_KEY = "task_create";
+// In-memory rate limit fallback (used only when SQLite is unavailable).
+// NOTE: This in-memory array resets on process restart and is secondary to
+// SQLite-backed rate limiting which persists across restarts. It exists only
+// as a safety net when the DB is unreachable.
+// Uses shift() on a max-30-element array — O(n) reindex is negligible at this scale.
+const _postTimestamps: number[] = [];
+
+function getActiveMissionSlug(devDir: string): string | null {
+  try {
+    const configPath = resolve(devDir, "missions", "_config.json");
+    if (!existsSync(configPath)) return null;
+    const config = JSON.parse(readFileSync(configPath, "utf-8")) as { activeMission?: string };
+    const slug = config.activeMission;
+    if (!slug) return null;
+    const missionPath = resolve(devDir, "missions", `${slug}.md`);
+    if (!existsSync(missionPath)) return null;
+    return slug;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Create GET and POST handlers for the tasks endpoint.
@@ -29,9 +50,10 @@ export function createTasksHandlers(config: SkynetConfig) {
     try {
       // Prefer SQLite, fallback to file
       try {
-        const db = getSkynetReadonlyDB(devDir);
+        const db = getSkynetDB(devDir);
         db.countPending(); // verify DB is initialized
-        const backlog = db.getBacklogItems();
+        const missionHash = getActiveMissionSlug(devDir);
+        const backlog = db.getBacklogItems(missionHash ?? "");
         const items = backlog.items.filter((i) => i.status !== "done");
         return Response.json({
           data: {
@@ -72,8 +94,27 @@ export function createTasksHandlers(config: SkynetConfig) {
   }
 
   async function POST(request: Request): Promise<Response> {
-    // Rate limiting via in-memory sliding window (no DB writes needed).
-    if (!checkRateLimit(RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
+    // Rate limiting: prefer SQLite-backed (cross-process), fall back to in-memory.
+    // In-memory fallback records the timestamp AFTER successful task creation
+    // (see _postTimestamps.push below) to avoid consuming a slot on validation failure.
+    let rateLimitAllowed = true;
+    let _usingSqliteRateLimit = false;
+    try {
+      const db = getSkynetDB(devDir);
+      rateLimitAllowed = db.checkRateLimit(RATE_LIMIT_KEY, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS);
+      _usingSqliteRateLimit = true;
+    } catch {
+      // SQLite unavailable — fall back to in-memory rate limiting
+      const now = Date.now();
+      while (_postTimestamps.length > 0 && _postTimestamps[0] <= now - RATE_LIMIT_WINDOW_MS) {
+        _postTimestamps.shift();
+      }
+      if (_postTimestamps.length >= RATE_LIMIT_MAX) {
+        rateLimitAllowed = false;
+      }
+      // Do NOT push here — slot is recorded after successful task creation
+    }
+    if (!rateLimitAllowed) {
       return Response.json(
         { data: null, error: "Rate limit exceeded. Max 30 tasks per minute." },
         { status: 429 }
@@ -194,7 +235,21 @@ export function createTasksHandlers(config: SkynetConfig) {
 
         // Write to SQLite first (authoritative source)
         const db = getSkynetDB(devDir);
-        db.addTask(title.trim(), tag, description?.trim() ?? "", position ?? "top", blockedBy?.trim() ?? "");
+        const missionHash = getActiveMissionSlug(devDir);
+        db.addTask(
+          title.trim(),
+          tag,
+          description?.trim() ?? "",
+          position ?? "top",
+          blockedBy?.trim() ?? "",
+          missionHash ?? ""
+        );
+
+        // Record in-memory rate-limit timestamp AFTER successful task creation
+        // so validation failures don't consume a rate-limit slot.
+        if (!_usingSqliteRateLimit) {
+          _postTimestamps.push(Date.now());
+        }
 
         // SQLite is authoritative — backlog.md is a best-effort regeneration for legacy compatibility.
         // If exportBacklog fails, the task is still safely in SQLite.
