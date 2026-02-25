@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-25 | [TEST] Validate echo agent end-to-end lifecycle from claim through merge | merged to main | 10m | success |
 | 2026-02-25 | [FEAT] Project driver | merged to main | 8m | success |
 | 2026-02-25 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | 0m | success |
 | 2026-02-25 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [INFRA] Add `permissions: contents: read` to CI workflow and npm metadata to published packages | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Add `pnpm install --frozen-lockfile` to worker flow before typecheck | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Add `timeout-minutes` to all CI workflow jobs to prevent runaway builds | merged to main | 0m | success |
-| 2026-02-20 | [INFRA] Add a dedicated failed-task mutex for all writers | merged to main | 2m | success |

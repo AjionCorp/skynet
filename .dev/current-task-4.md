@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] [INFRA] Prune stale local dev/* branches from resolved failed tasks
+## [TEST] Validate echo agent end-to-end lifecycle from claim through merge
 **Status:** completed
-**Started:** 2026-02-24 16:50
-**Completed:** 2026-02-24
-**Branch:** dev/prune-stale-local-dev-branches-from-reso
+**Started:** 2026-02-25 15:24
+**Completed:** 2026-02-25
+**Branch:** dev/validate-echo-agent-end-to-end-lifecycle
 **Worker:** 4
 
 ### Changes
