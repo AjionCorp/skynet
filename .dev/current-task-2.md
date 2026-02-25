@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] [DATA] Refresh blockers.md Active section to match current resolved state
+## [INFRA] [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures
 **Status:** completed
-**Started:** 2026-02-24 16:54
+**Started:** 2026-02-24 21:30
 **Completed:** 2026-02-24
-**Branch:** dev/refresh-blockersmd-active-section-to-mat
+**Branch:** dev/harden-worktree-lifecycle-to-prevent-wor
 **Worker:** 2
 
 ### Changes

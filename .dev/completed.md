@@ -2,7 +2,12 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
-| 2026-02-24 | [DATA] [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
+| 2026-02-25 | [DATA] [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |
+| 2026-02-25 | [TEST] [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | merged to main | 1m | success |
+| 2026-02-24 | [INFRA] [INFRA] Add task-fixer structured diagnostics for fix rate improvement | merged to main | 6m | success |
+| 2026-02-24 | [FIX] [FIX] Extract duplicated mission evaluation logic from CLI status to shared module | merged to main | 13m | success |
+| 2026-02-24 | [FIX] [FIX] Deduplicate repeated entries in completed.md | merged to main | 9m | success |
+| 2026-02-24 | [TEST] [TEST] Add Linux cron setup-agents regression test | merged to main | 4m | success |
 | 2026-02-24 | [INFRA] [INFRA] Prune stale local dev/* branches from resolved failed tasks | merged to main | 5m | success |
 | 2026-02-24 | [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size | merged to main | 4m | success |
 | 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
@@ -29,22 +34,8 @@
 | 2026-02-20 | [FEAT] Add `skynet doctor --fix` auto-remediation mode | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Add automatic merge retry with rebase in dev-worker.sh | merged to main | 1m | success |
 | 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 2m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
 | 2026-02-20 | [TEST] Add `export.test.ts`, `dashboard.test.ts`, and `import.test.ts` CLI unit tests | merged to main | 5m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add agent execution timeout to prevent zombie agent processes | merged to main | 6m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 1m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
-| 2026-02-20 | [FEAT] Add shell completions for bash and zsh | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add SSE auto-reconnection with backoff to PipelineDashboard | 'reconnecting' | 0m | 'disconnected') displayed as a small colored indicator (green/yellow/red dot) next to the page title, (d) handle `document.visibilitychange` — close SSE when tab is hidden, reopen when visible to save server resources. Keep the existing polling fallback intact for browsers that don't support SSE. Criterion #4 (reliable real-time dashboard visibility) |
 | 2026-02-20 | [FEAT] Add config auto-migration to detect and add new variables on upgrade | merged to main | 2m | success |
 | 2026-02-20 | [TEST] Expand E2E CLI test suite with export/import round-trip and doctor --fix verification | merged to main | 5m | success |
@@ -120,7 +111,6 @@
 | 2026-02-20 | [INFRA] Add `pnpm install --frozen-lockfile` to worker flow before typecheck | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Add `worker` field to `EventEntry` interface and display in dashboard | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Fix dashboard typecheck | merged to main | 12m | success |
-| 2026-02-20 | [FIX] Fix dashboard typecheck | merged to main | 0m | success |
 | 2026-02-20 | [FIX] Fix `sed -n 'Ip'` GNU extension breaking `blockedBy` dependency parsing on macOS | *blockedBy: *\(.*\)$/\1/Ip'` uses the `I` (case-insensitive) flag which is a GNU sed extension NOT available in macOS BSD sed. On macOS (the primary target platform), `blocked_by` is always empty, meaning `is_task_blocked()` never detects blocked tasks — workers attempt blocked tasks immediately, wasting cycles and producing incorrect results. Same issue in `scripts/_config.sh` line 231 inside `validate_backlog()`. Fix: replace `sed -n 's/.* | 0m | *blockedBy: *\(.*\)$/\1/Ip'` with `sed -n 's/.* |
 | 2026-02-20 | [FIX] Add `git pull` before first merge attempt in dev-worker.sh and task-fixer.sh to reduce unnecessary conflicts | merged to main | 0m | true` between lines 588 and 590 (after `cd "$PROJECT_DIR"`, before the first `git merge`). Apply the same fix in `scripts/task-fixer.sh` before its merge attempt at line 445. Run `bash -n` on both files and `pnpm typecheck`. Criterion #3 (reliability — proactively prevent merge conflicts instead of recovering from them) |
 | 2026-02-20 | [FIX] Add backlog mutex lock to CLI `add-task` and `reset-task` commands to prevent data corruption | merged to main | 2m | success |
@@ -131,7 +121,6 @@
 | 2026-02-20 | [FIX] Add canonical failed-task reconciliation in watchdog | merged to main | 0m | success |
 | 2026-02-20 | [FIX] Add `files` field and `prepublishOnly` script to dashboard package.json for correct npm publish | merged to main | 1m | fixed (attempt 3) |
 | 2026-02-20 | [FIX] Prevent duplicate pending failed rows at write-time in `scripts/task-fixer.sh` | merged to main | 2m | success |
-| 2026-02-20 | [FIX] Fix Node.js version prerequisite mismatch in README | merged to main | 0m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Add `SKYNET_INSTALL_CMD` config variable for non-pnpm projects | merged to main | 1m | fixed (attempt 2) |
 | 2026-02-20 | [FIX] Read `SKYNET_STALE_MINUTES` from config in pipeline-status handler and CLI status instead of hardcoding 45 | merged to main | 2m | fixed (attempt 2) |
 | 2026-02-20 | [INFRA] Commit and verify orphaned `main` working-tree fixes from killed workers | merged to main | 1m | fixed (attempt 1) |
@@ -155,21 +144,16 @@
 | 2026-02-20 | [TEST] Add regression coverage for stale-threshold + health-score parity | merged to main | 4m | fixed (attempt 1) |
 | 2026-02-20 | [TEST] Re-open CLI operational E2E smoke coverage (single canonical task) | merged to main | 4m | success |
 | 2026-02-20 | [INFRA] Add project-driver guardrail when backlog is empty but retries exist | merged to main | 1m | fixed (attempt 1) |
-| 2026-02-20 | [FIX] Finish backlog parser DRY extraction with behavior-parity tests | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Run one canonical failed-task reconciliation sweep and supersede variants | merged to main | 3m | success |
-| 2026-02-20 | [NMI] Canonicalize blocked retry roots from `.dev/failed-tasks.md` | merged to main | 1m | success |
 | 2026-02-20 | [DOCS] Add a concise “Mission Achieved / Hardening Phase” operator note to README | merged to main | 1m | fixed (attempt 2) |
 | 2026-02-20 | [INFRA] Execute one canonical failed-task cleanup pass after reconciliation | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Stabilize Codex large-prompt path with deterministic exit-code preservation | merged to main | 3m | success |
-| 2026-02-20 | [TEST] Re-open CLI operational E2E smoke coverage (single canonical task) | merged to main | 5m | success |
 | 2026-02-20 | [FIX] Consolidate duplicate pending failed-task entries at write time in `task-fixer.sh` | merged to main | 2m | fixed (attempt 2) |
-| 2026-02-20 | [INFRA] Run one canonical failed-task reconciliation sweep and supersede variants | merged to main | 2m | success |
 | 2026-02-20 | [NMI] Produce diagnostics bundle for blocked roots before requeue | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Land orphaned main working-tree fixes with clean commits | merged to main | 1m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Restore config template parity for watchdog and one-shot knobs | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Remove shell-eval injection path from `skynet config set` | merged to main | 1m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Finish Codex large-prompt reliability path | merged to main | 3m | fixed (attempt 3) |
-| 2026-02-20 | [INFRA] Enforce canonical failed-task convergence before fixer dispatch | fixing-* | 0m | blocked`) in `.dev/failed-tasks.md`, supersedes duplicates, and emits per-root reconciliation counts. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state. |
 | 2026-02-20 | [FIX] Throttle net-new task generation when retry queue is overloaded | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Prevent project-driver re-queue variants for known failed roots | merged to main | 1m | success |
 | 2026-02-20 | [NMI] Emit blocked-root diagnostics snapshot from current logs | merged to main | 2m | success |
@@ -190,15 +174,31 @@
 | 2026-02-20 | [TEST] Unblock canonical CLI operational E2E smoke root (`stop`, `pause/resume`, `completions`, `validate`) | merged to main | 7m | success |
 | 2026-02-20 | [TEST] Add regression coverage for canonicalization invariants across watchdog/task-fixer/project-driver | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity | merged to main | 2m | success |
-| 2026-02-20 | [INFRA] Canonicalize active failed-task roots and collapse duplicate variants | fixing-* | 0m | blocked`), supersede redundant variants, and emit before/after root counts to logs/events. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state. |
 | 2026-02-20 | [NMI] Refresh blocked-root diagnostics snapshot to one canonical row per root cause | merged to main | 3m | success |
 | 2026-02-20 | [INFRA] Harden project-driver prompt/task postfilter for durable root-cause titles | merged to main | 2m | success |
 | 2026-02-20 | [TEST] Re-open parity regression coverage for stale-threshold and health-score math | merged to main | 4m | fixed (attempt 1) |
-| 2026-02-20 | [INFRA] Execute one idempotent failed-task canonical cleanup run and verify convergence | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Execute one idempotent failed-task canonical cleanup run and verify convergence | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Re-open Codex large-prompt reliability path | merged to main | 3m | fixed (attempt 2) |
 | 2026-02-20 | [INFRA] Land orphaned `main` hardening changes with clean commit split | merged to main | 1m | fixed (attempt 2) |
 | 2026-02-20 | [FIX] Unblock Codex large-prompt reliability root (canonical) | merged to main | 3m | success |
 | 2026-02-20 | [FIX] Unblock config template parity root for one-shot/watchdog vars | merged to main | 1m | success |
-| 2026-02-20 | [INFRA] Land orphaned `main` hardening changes with clean commit split | merged to main | 2m | fixed (attempt 2) |
-| 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity | merged to main | 3m | success |
+| 2026-02-20 | [FIX] Unblock dashboard backlog-parser DRY extraction root | merged to main | 1m | success |
+| 2026-02-20 | [FIX] Unblock CLI shared helper DRY root for `readFile`/`isProcessRunning` | merged to main | 1m | success |
+| 2026-02-20 | [INFRA] Supersede legacy duplicate pending failed roots after canonicalization pass | merged to main | 1m | success |
+| 2026-02-20 | [TEST] Unblock CLI operational E2E smoke root in one canonical task | merged to main | 2m | success |
+| 2026-02-20 | [NMI] Publish canonical blocked-root repro matrix for top active roots | merged to main | 2m | success |
+| 2026-02-20 | [FIX] Complete Codex large-prompt reliability path | merged to main | 4m | fixed (attempt 1) |
+| 2026-02-20 | [FIX] Unify stale-threshold and health-score math across CLI/dashboard/watchdog | merged to main | 4m | fixed (attempt 3) |
+| 2026-02-20 | [DOCS] Add hardening-phase operator runbook to README | merged to main | 1m | fixed (attempt 1) |
+| 2026-02-20 | [FIX] Restore config template parity for one-shot/watchdog vars from canonical repro | merged to main | 2m | success |
+| 2026-02-20 | [FIX] Unblock Codex large-prompt stdin/exit-code reliability from canonical repro | merged to main | 2m | success |
+| 2026-02-20 | [FIX] Land canonical backlog-parser DRY extraction without behavior drift | merged to main | 2m | success |
+| 2026-02-20 | [NMI] Triage blocked retries with failed 3-attempt loops | merged to main | 2m | fixed (attempt 1) |
+| 2026-02-20 | [FIX] Land canonical pipeline-logs line-count optimization with strict response parity | merged to main | 2m | success |
+| 2026-02-20 | [FIX] Land canonical CLI helper DRY extraction for `readFile`/`isProcessRunning` | merged to main | 2m | success |
+| 2026-02-20 | [INFRA] Enforce continuous failed-task root convergence beyond one-time sweep | merged to main | 2m | success |
+| 2026-02-20 | [TEST] Add parity regression coverage for stale-threshold + health-score alignment | merged to main | 4m | fixed (attempt 2) |
+| 2026-02-20 | [INFRA] Land orphaned `main` hardening sweep with coherent commits | merged to main | 1m | fixed (attempt 1) |
+| 2026-02-20 | [TEST] Add regression coverage for failed-task convergence across `pending | fixing-* | 0m | blocked` states — extend shell tests for `scripts/watchdog.sh` and `scripts/task-fixer.sh` to prove duplicate active variants collapse to one canonical root and stale `fixing-*` rows return to `pending` when fixer lock is absent. Mission: Criterion #2 quality gates and Criterion #3 deterministic recovery. |
+| 2026-02-20 | [INFRA] Run one-time failed-task cleanup after reconciliation lands | merged to main | 2m | fixed (attempt 1) |
+| 2026-02-20 | [INFRA] Run one deterministic failed-task compaction pass after active claims settle | superseded` rows by normalized root+branch in `.dev/failed-tasks.md`, keep one canonical active row, and emit before/after counters via `emit_event`. Mission: Criterion #2 self-correction throughput and Criterion #3 convergent state. | 0m | merged to main |

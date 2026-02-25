@@ -92,7 +92,6 @@
 
 - **2026-02-24**: 21 stale `pending` entries in `failed-tasks.md` for tasks already completed via fresh implementations. **Fixed** — all 21 entries superseded. Watchdog auto-supersede with fuzzy title normalization prevents recurrence. See completed tasks: "Supersede 21 stale pending entries in failed-tasks.md", "Improve watchdog auto-supersede to catch stale failed-tasks with title variations".
 
-- **2026-02-24 16:52**: Claude Code authentication expired, pausing all pipeline jobs. **Resolved** — authentication restored, pipeline resumed.
 
 ## Active
 
