@@ -1,0 +1,433 @@
+#!/usr/bin/env bash
+# tests/unit/events.test.sh — Unit tests for scripts/_events.sh event emission
+#
+# Tests emit_event() output format, description sanitization, truncation,
+# and file rotation logic in isolation.
+#
+# Usage: bash tests/unit/events.test.sh
+
+# NOTE: -e is intentionally omitted — the test uses its own PASS/FAIL counters
+set -uo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+PASS=0
+FAIL=0
+
+log()  { printf "  %s\n" "$*"; }
+pass() { PASS=$((PASS + 1)); printf "  \033[32m✓\033[0m %s\n" "$*"; }
+fail() { FAIL=$((FAIL + 1)); printf "  \033[31m✗\033[0m %s\n" "$*"; }
+
+assert_eq() {
+  local actual="$1" expected="$2" msg="$3"
+  if [ "$actual" = "$expected" ]; then
+    pass "$msg"
+  else
+    fail "$msg (expected '$expected', got '$actual')"
+  fi
+}
+
+assert_contains() {
+  local haystack="$1" needle="$2" msg="$3"
+  if echo "$haystack" | grep -qF "$needle"; then
+    pass "$msg"
+  else
+    fail "$msg (expected to contain '$needle')"
+  fi
+}
+
+assert_not_empty() {
+  local val="$1" msg="$2"
+  if [ -n "$val" ]; then
+    pass "$msg"
+  else
+    fail "$msg (was empty)"
+  fi
+}
+
+# ── Setup: create isolated environment ──────────────────────────────
+
+TMPDIR_ROOT=$(mktemp -d)
+cleanup() {
+  rm -rf "$TMPDIR_ROOT"
+}
+trap cleanup EXIT
+
+export DEV_DIR="$TMPDIR_ROOT/.dev"
+export SKYNET_PROJECT_NAME="test-events"
+export SKYNET_LOCK_PREFIX="$TMPDIR_ROOT/locks/skynet-test"
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+mkdir -p "$DEV_DIR" "$TMPDIR_ROOT/locks"
+
+# Stub db_add_event before sourcing _events.sh (it's sourced before _db.sh)
+_DB_CALLS=()
+db_add_event() {
+  _DB_CALLS+=("$1|${2:-}|${3:-}|${4:-}")
+}
+
+source "$REPO_ROOT/scripts/_events.sh"
+
+# ── Test 1: Basic event emission writes to flat file ────────────────
+
+echo ""
+log "=== Test 1: Basic event emission writes to flat file ==="
+
+emit_event "task_started" "Worker 1 starting task"
+events_log="$DEV_DIR/events.log"
+
+if [ -f "$events_log" ]; then
+  pass "emit_event: events.log file created"
+else
+  fail "emit_event: events.log file should be created"
+fi
+
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+assert_eq "$line_count" "1" "emit_event: exactly one line written"
+
+# ── Test 2: Pipe-delimited format (epoch|event|description) ────────
+
+echo ""
+log "=== Test 2: Pipe-delimited format ==="
+
+line=$(head -1 "$events_log")
+# Split on pipes — should have exactly 3 fields
+field_count=$(echo "$line" | awk -F'|' '{print NF}')
+assert_eq "$field_count" "3" "format: line has exactly 3 pipe-delimited fields"
+
+epoch=$(echo "$line" | cut -d'|' -f1)
+event=$(echo "$line" | cut -d'|' -f2)
+desc=$(echo "$line" | cut -d'|' -f3)
+
+# Epoch should be numeric (Unix timestamp)
+case "$epoch" in
+  ''|*[!0-9]*)
+    fail "format: epoch field should be numeric (got '$epoch')"
+    ;;
+  *)
+    pass "format: epoch field is numeric ($epoch)"
+    ;;
+esac
+
+assert_eq "$event" "task_started" "format: event field matches"
+assert_eq "$desc" "Worker 1 starting task" "format: description field matches"
+
+# ── Test 3: Pipe characters in description are sanitized ────────────
+
+echo ""
+log "=== Test 3: Pipe sanitization in description ==="
+
+# Reset events.log
+> "$events_log"
+
+emit_event "test_pipe" "has|pipe|chars|in it"
+line=$(head -1 "$events_log")
+field_count=$(echo "$line" | awk -F'|' '{print NF}')
+assert_eq "$field_count" "3" "pipe sanitization: output still has exactly 3 fields"
+
+desc=$(echo "$line" | cut -d'|' -f3)
+assert_eq "$desc" "has-pipe-chars-in it" "pipe sanitization: pipes replaced with dashes"
+
+# ── Test 4: Description truncation at 3000 characters ───────────────
+
+echo ""
+log "=== Test 4: Description truncation at 3000 characters ==="
+
+> "$events_log"
+
+# Generate a description longer than 3000 characters
+long_desc=$(printf 'A%.0s' $(seq 1 3500))
+emit_event "test_truncate" "$long_desc"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+desc_len=${#desc}
+
+if [ "$desc_len" -le 3000 ]; then
+  pass "truncation: description truncated to <= 3000 chars (got $desc_len)"
+else
+  fail "truncation: description should be <= 3000 chars (got $desc_len)"
+fi
+
+# ── Test 5: Trailing backslash stripped after truncation ────────────
+
+echo ""
+log "=== Test 5: Trailing backslash stripped ==="
+
+> "$events_log"
+
+# Create a description that ends with backslash at exactly the truncation boundary
+long_with_backslash=$(printf 'B%.0s' $(seq 1 2999))
+long_with_backslash="${long_with_backslash}\\"
+emit_event "test_backslash" "$long_with_backslash"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+
+# Description should NOT end with a backslash
+case "$desc" in
+  *'\\')
+    fail "backslash: description should not end with trailing backslash"
+    ;;
+  *)
+    pass "backslash: trailing backslash stripped from description"
+    ;;
+esac
+
+# ── Test 6: Empty description is handled gracefully ─────────────────
+
+echo ""
+log "=== Test 6: Empty description ==="
+
+> "$events_log"
+
+emit_event "test_empty" ""
+line=$(head -1 "$events_log")
+field_count=$(echo "$line" | awk -F'|' '{print NF}')
+event=$(echo "$line" | cut -d'|' -f2)
+
+assert_eq "$event" "test_empty" "empty desc: event name is correct"
+# Should have 3 fields (epoch|event|empty)
+if [ "$field_count" -ge 2 ]; then
+  pass "empty desc: line is well-formed"
+else
+  fail "empty desc: line should have at least 2 pipe-delimited fields (got $field_count)"
+fi
+
+# ── Test 7: db_add_event is called with correct arguments ───────────
+
+echo ""
+log "=== Test 7: db_add_event receives correct arguments ==="
+
+_DB_CALLS=()
+export WORKER_ID="3"
+export TRACE_ID="abc-123"
+
+emit_event "worker_done" "finished task" "trace-override"
+
+if [ "${#_DB_CALLS[@]}" -ge 1 ]; then
+  pass "db_add_event: was called"
+else
+  fail "db_add_event: should have been called"
+fi
+
+last_call="${_DB_CALLS[${#_DB_CALLS[@]}-1]}"
+assert_contains "$last_call" "worker_done" "db_add_event: event name passed"
+assert_contains "$last_call" "finished task" "db_add_event: description passed"
+assert_contains "$last_call" "3" "db_add_event: worker_id passed"
+assert_contains "$last_call" "trace-override" "db_add_event: explicit trace_id passed"
+
+# ── Test 8: TRACE_ID fallback when no explicit trace_id ─────────────
+
+echo ""
+log "=== Test 8: TRACE_ID env var fallback ==="
+
+_DB_CALLS=()
+export TRACE_ID="env-trace-456"
+
+emit_event "test_trace_fallback" "desc"
+
+last_call="${_DB_CALLS[${#_DB_CALLS[@]}-1]}"
+assert_contains "$last_call" "env-trace-456" "trace fallback: TRACE_ID env var used when no explicit trace_id"
+
+# ── Test 9: FIXER_ID fallback when WORKER_ID unset ──────────────────
+
+echo ""
+log "=== Test 9: FIXER_ID fallback for worker identity ==="
+
+_DB_CALLS=()
+unset WORKER_ID
+export FIXER_ID="7"
+
+emit_event "fixer_event" "from fixer"
+
+last_call="${_DB_CALLS[${#_DB_CALLS[@]}-1]}"
+assert_contains "$last_call" "7" "fixer fallback: FIXER_ID used when WORKER_ID unset"
+
+unset FIXER_ID
+
+# ── Test 10: Multiple events append to same file ────────────────────
+
+echo ""
+log "=== Test 10: Multiple events append correctly ==="
+
+> "$events_log"
+
+emit_event "event_a" "first"
+emit_event "event_b" "second"
+emit_event "event_c" "third"
+
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+assert_eq "$line_count" "3" "append: three events produce three lines"
+
+# Verify ordering
+event_b=$(sed -n '2p' "$events_log" | cut -d'|' -f2)
+assert_eq "$event_b" "event_b" "append: second line has correct event name"
+
+# ── Test 11: Soft rotation when file exceeds max_kb ─────────────────
+
+echo ""
+log "=== Test 11: Soft rotation at SKYNET_MAX_EVENTS_LOG_KB ==="
+
+> "$events_log"
+
+# Set a very low rotation threshold (1 KB) to trigger rotation
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Write enough data to exceed 1 KB
+local_i=0
+while [ "$local_i" -lt 30 ]; do
+  emit_event "bulk_event" "padding data to fill up the log file beyond one kilobyte threshold"
+  local_i=$((local_i + 1))
+done
+
+# After rotation, current events.log should be small or absent (replaced)
+# and events.log.1 should exist
+if [ -f "${events_log}.1" ]; then
+  pass "soft rotation: events.log.1 created after threshold exceeded"
+else
+  fail "soft rotation: events.log.1 should exist after rotation"
+fi
+
+# Reset threshold
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+
+# ── Test 12: Hard cap (5MB) force-rotation ──────────────────────────
+
+echo ""
+log "=== Test 12: Hard cap force-rotation at 5MB ==="
+
+# Clean up from previous test
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# Create an events.log that exceeds 5MB
+# Set max_kb very high so soft rotation doesn't trigger
+export SKYNET_MAX_EVENTS_LOG_KB="999999"
+dd if=/dev/zero bs=1024 count=5500 2>/dev/null | tr '\0' 'X' > "$events_log"
+# Add a newline so it's a valid log
+echo "" >> "$events_log"
+
+# Emit one event — should trigger hard cap check
+emit_event "hard_cap_test" "trigger force rotation" 2>/dev/null
+
+# After force rotation, the oversized file should be moved to .1
+if [ -f "${events_log}.1" ]; then
+  pass "hard cap: events.log.1 created after 5MB exceeded"
+else
+  fail "hard cap: events.log.1 should exist after force-rotation"
+fi
+
+# The new events.log (if it exists) should be small
+if [ -f "$events_log" ]; then
+  new_sz=$(wc -c < "$events_log" | tr -d ' ')
+  if [ "$new_sz" -lt 5242880 ]; then
+    pass "hard cap: new events.log is under 5MB ($new_sz bytes)"
+  else
+    fail "hard cap: new events.log should be under 5MB (got $new_sz bytes)"
+  fi
+else
+  pass "hard cap: events.log rotated away (new file not yet created)"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+
+# ── Test 13: Rotation skip counter and warning ──────────────────────
+
+echo ""
+log "=== Test 13: Rotation skip counter warning after 5+ skips ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# Set low threshold to trigger rotation on every emit
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Create a lock that is held by a live process to prevent rotation
+rot_lock="${SKYNET_LOCK_PREFIX}-events-rotate.lock"
+mkdir -p "$rot_lock"
+sleep 300 &
+_blocker_pid=$!
+echo "$_blocker_pid" > "$rot_lock/pid"
+touch "$rot_lock/pid"  # Fresh timestamp so it won't be reclaimed as stale
+
+# Emit enough events to trigger rotation attempts that get skipped.
+# Must NOT use $() — subshells reset _EVENTS_ROTATION_SKIPS.
+# Redirect stderr to a temp file instead.
+_stderr_file="$TMPDIR_ROOT/stderr_capture"
+> "$_stderr_file"
+local_j=0
+while [ "$local_j" -lt 8 ]; do
+  # Create a file big enough each time to trigger rotation check
+  dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+  emit_event "skip_test" "pad" 2>>"$_stderr_file"
+  local_j=$((local_j + 1))
+done
+
+if grep -q "rotation skipped" "$_stderr_file"; then
+  pass "skip counter: warning emitted after repeated rotation skips"
+else
+  fail "skip counter: expected 'rotation skipped' warning in stderr"
+fi
+
+# Clean up
+kill "$_blocker_pid" 2>/dev/null; wait "$_blocker_pid" 2>/dev/null || true
+rm -rf "$rot_lock"
+_EVENTS_ROTATION_SKIPS=0
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+
+# ── Test 14: Stale rotation lock recovery (dead PID) ────────────────
+
+echo ""
+log "=== Test 14: Stale rotation lock recovered when holder PID is dead ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Create a stale rotation lock with a dead PID
+rot_lock="${SKYNET_LOCK_PREFIX}-events-rotate.lock"
+mkdir -p "$rot_lock"
+echo "4999999" > "$rot_lock/pid"  # Almost certainly not running
+
+# Write enough data to trigger rotation
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "stale_recovery" "first attempt detects stale lock" 2>/dev/null
+
+# The first emit detects the dead PID and removes the lock.
+# The next emit should actually rotate.
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "stale_recovery" "second attempt should rotate" 2>/dev/null
+
+if [ ! -d "$rot_lock" ]; then
+  pass "stale lock: dead PID lock was cleaned up"
+else
+  fail "stale lock: lock with dead PID should have been removed"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 15: Special characters in event name and description ───────
+
+echo ""
+log "=== Test 15: Special characters handled correctly ==="
+
+> "$events_log" 2>/dev/null || true
+
+emit_event "test/special:chars" "desc with \"quotes\" and \$vars and (parens)"
+line=$(head -1 "$events_log")
+event=$(echo "$line" | cut -d'|' -f2)
+
+assert_eq "$event" "test/special:chars" "special chars: event name preserved"
+
+desc=$(echo "$line" | cut -d'|' -f3)
+assert_not_empty "$desc" "special chars: description is not empty"
+
+# ── Summary ──────────────────────────────────────────────────────────
+
+echo ""
+TOTAL=$((PASS + FAIL))
+log "Results: $PASS/$TOTAL passed, $FAIL failed"
+if [ "$FAIL" -eq 0 ]; then
+  printf "  \033[32mAll checks passed!\033[0m\n"
+else
+  printf "  \033[31mSome checks failed!\033[0m\n"
+  exit 1
+fi
