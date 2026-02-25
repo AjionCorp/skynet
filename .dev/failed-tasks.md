@@ -3,36 +3,36 @@
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
 | 2026-02-25 | [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] Add handler unit tests for mission-raw and pipeline-stream endpoints | dev/add-handler-unit-tests-for-mission-raw-a | claude exit code 1 | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Add pipeline idle detection and automatic restart signaling to watchdog | dev/add-pipeline-idle-detection-and-automati | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [TEST] Add handler unit tests for mission-raw and pipeline-stream endpoints | dev/add-handler-unit-tests-for-mission-raw-a | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [INFRA] Add pipeline idle detection and automatic restart signaling to watchdog | dev/add-pipeline-idle-detection-and-automati | claude exit code 1 | 0 | failed |
 | 2026-02-25 | [INFRA] Supersede completed-root `status=failed` rows during watchdog reconciliation | dev/supersede-completed-root-statusfailed-ro | claude exit code 1 | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Add per-mission backlog isolation in project-driver task generation | dev/add-per-mission-backlog-isolation-in-pro | claude exit code 1 | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | dev/add-multi-mission-cli-integration-tests- | typecheck failed post-merge | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | failed |
-| 2026-02-25 | [FIX] [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] Add standalone unit tests for `_agent.sh` agent dispatch, timeout, and fallback selection | dev/add-standalone-unit-tests-for-agentsh-ag | worktree missing before gates | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | failed |
-| 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | merge conflict | 0 | failed |
-| 2026-02-25 | [FIX] [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | typecheck failed post-merge | 0 | failed |
-| 2026-02-25 | [DATA] [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | dev/refresh-devblockersmd-active-status-from | merge conflict | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | dev/auto-supersede-stale-statusfailed-rows-w | merge conflict | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | failed |
-| 2026-02-24 | [TEST] [TEST] Add unit tests for _merge.sh shared merge-to-main logic | dev/add-unit-tests-for-mergesh-shared-merge- | claude exit code 1 | 0 | failed |
-| 2026-02-24 | [TEST] [TEST] Add unit tests for _config.sh shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | claude exit code 1 | 0 | failed |
-| 2026-02-24 | [TEST] [TEST] Add integration test for watchdog crash recovery end-to-end | dev/add-integration-test-for-watchdog-crash- | claude exit code 1 | 0 | failed |
-| 2026-02-24 | [INFRA] [INFRA] Add pipeline idle detection and completion signaling to watchdog | dev/add-pipeline-idle-detection-and-completi | claude exit code 1 | 0 | fixing-3 |
-| 2026-02-24 | [TEST] [TEST] Add handler unit tests for mission-raw and pipeline-stream | dev/add-handler-unit-tests-for-mission-raw-a | typecheck failed | 0 | fixing-2 |
-| 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | fixing-1 |
-| 2026-02-24 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | merge conflict | 1 | fixed |
-| 2026-02-24 | [INFRA] [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | worktree missing before gates | 1 | fixed |
-| 2026-02-24 | [TEST] [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | typecheck failed | 1 | fixed |
-| 2026-02-24 | [FIX] [FIX] Separate rate_limits write path from read-only DB access | merged to main | worktree missing before gates | 1 | fixed |
-| 2026-02-24 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | typecheck failed | 1 | fixed |
-| 2026-02-24 | [DATA] [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | merge conflict | 1 | fixed |
-| 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |
+| 2026-02-25 | [INFRA] Add per-mission backlog isolation in project-driver task generation | dev/add-per-mission-backlog-isolation-in-pro | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | dev/add-multi-mission-cli-integration-tests- | typecheck failed post-merge | 0 | failed |
+| 2026-02-25 | [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | failed |
+| 2026-02-25 | [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | failed |
+| 2026-02-25 | [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | failed |
+| 2026-02-25 | [TEST] Add standalone unit tests for `_agent.sh` agent dispatch, timeout, and fallback selection | dev/add-standalone-unit-tests-for-agentsh-ag | worktree missing before gates | 0 | failed |
+| 2026-02-25 | [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | failed |
+| 2026-02-25 | [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | merge conflict | 0 | failed |
+| 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | failed |
+| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | failed |
+| 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | typecheck failed post-merge | 0 | failed |
+| 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | dev/refresh-devblockersmd-active-status-from | merge conflict | 0 | failed |
+| 2026-02-25 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | dev/auto-supersede-stale-statusfailed-rows-w | merge conflict | 0 | failed |
+| 2026-02-25 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | failed |
+| 2026-02-24 | [TEST] Add unit tests for _merge.sh shared merge-to-main logic | dev/add-unit-tests-for-mergesh-shared-merge- | claude exit code 1 | 0 | failed |
+| 2026-02-24 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | claude exit code 1 | 0 | failed |
+| 2026-02-24 | [TEST] Add integration test for watchdog crash recovery end-to-end | dev/add-integration-test-for-watchdog-crash- | claude exit code 1 | 0 | failed |
+| 2026-02-24 | [INFRA] Add pipeline idle detection and completion signaling to watchdog | dev/add-pipeline-idle-detection-and-completi | claude exit code 1 | 0 | fixing-3 |
+| 2026-02-24 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | dev/add-handler-unit-tests-for-mission-raw-a | typecheck failed | 0 | fixing-2 |
+| 2026-02-24 | [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | merge conflict | 1 | fixed |
+| 2026-02-24 | [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | worktree missing before gates | 1 | fixed |
+| 2026-02-24 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | typecheck failed | 1 | fixed |
+| 2026-02-24 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | worktree missing before gates | 1 | fixed |
+| 2026-02-24 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | typecheck failed | 1 | fixed |
+| 2026-02-24 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | merge conflict | 1 | fixed |
+| 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | merge conflict | 1 | fixed |
+| 2026-02-24 | [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |
 | 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | worktree missing before gates | 1 | fixed |
 | 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | critical merge failure | 1 | fixed |
 | 2026-02-20 | [TEST] Add EventsDashboard component tests | merged to main | merge conflict | 1 | fixed |
@@ -159,8 +159,8 @@
 | 2026-02-19 | [FEAT] Add `skynet pause` and `skynet resume` CLI commands for pipeline flow control | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [FIX] Fix SKYNET_MAX_WORKERS default mismatch between config template and watchdog | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [TEST] Add events handler unit tests and ActivityFeed component tests | merged to main | merge conflict | 1 | fixed |
-| 2026-02-25 | [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | dev/surface-failed-row-reconciliation-counte | claude exit code 1 | 0 | superseded |
-| 2026-02-25 | [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | merge conflict | 0 | superseded |
+| 2026-02-25 | [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | dev/surface-failed-row-reconciliation-counte | claude exit code 1 | 0 | superseded |
+| 2026-02-25 | [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | merge conflict | 0 | superseded |
 | 2026-02-20 | [FEAT] Add `echo` agent plugin for pipeline dry-run testing | dev/add-echo-agent-plugin-for-pipeline-dry-r | typecheck failed | 0 | superseded |
 | 2026-02-20 | [FIX] Fix duplicate Activity icon for events page in admin navigation | dev/fix-duplicate-activity-icon-for-events-p | typecheck failed | 0 | superseded |
 | 2026-02-20 | [TEST] Add E2E tests for `skynet stop`, `skynet pause`/`resume`, and remaining CLI smoke tests | dev/add-e2e-tests-for-skynet-stop-skynet-pau | typecheck failed after fix attempt 3 | 3 | superseded |
