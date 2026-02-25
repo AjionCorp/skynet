@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for `_events.sh` event emission and file formatting
+## [FEAT] Project driver
 **Status:** completed
-**Started:** 2026-02-25 15:17
+**Started:** 2026-02-25 15:32
 **Completed:** 2026-02-25
-**Branch:** dev/add-unit-tests-for-eventssh-event-emissi
+**Branch:** dev/project-driver
 **Worker:** 3
 
 ### Changes
