@@ -99,6 +99,11 @@ export SKYNET_MAX_FIX_ATTEMPTS="${SKYNET_MAX_FIX_ATTEMPTS:-3}"
 export SKYNET_FIXER_IGNORE_USAGE_LIMIT="${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-true}"
 export SKYNET_DRIVER_BACKLOG_THRESHOLD="${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}"
 export SKYNET_MAX_LOG_SIZE_KB="${SKYNET_MAX_LOG_SIZE_KB:-1024}"
+
+# Max prompt size in bytes before truncation (default 100KB).
+# Oversized prompts cause claude exit code 1; this guardrail truncates
+# context sections to keep prompts within LLM token limits.
+export SKYNET_MAX_PROMPT_BYTES="${SKYNET_MAX_PROMPT_BYTES:-102400}"
 export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 # --dangerously-skip-permissions is required for autonomous workers to modify files
 # without interactive approval prompts. Only safe in isolated worktrees where no
