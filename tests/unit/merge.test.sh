@@ -450,22 +450,19 @@ _reset_test_state
 BRANCH_6="dev/test-push-fail"
 _create_feature_branch "$BRANCH_6" "push-fail-file.txt" "push fail content"
 
-# Override git_push_with_retry to fail (simulates unreachable remote on push)
-_push_fail_count=0
-git_push_with_retry() {
-  _push_fail_count=$((_push_fail_count + 1))
-  if [ "$_push_fail_count" -le 1 ]; then
-    # First push fails (the merge push)
-    return 1
-  fi
-  # Second push succeeds (the revert push)
-  git push origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG"
-  return $?
+# Override _merge_push_with_ttl_guard to fail (the initial merge push uses this,
+# not git_push_with_retry). git_push_with_retry is used for the revert push.
+_saved_merge_push_fn=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() {
+  return 1  # Simulate push failure
 }
 
 _merge_rc=0
 run_merge "$BRANCH_6" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
 assert_eq "$_merge_rc" "6" "rc6: merge returned 6 (push failure)"
+
+# Restore _merge_push_with_ttl_guard
+eval "$_saved_merge_push_fn"
 
 # Verify merge lock is released
 if lock_backend_check "merge" 2>/dev/null; then
@@ -481,20 +478,6 @@ if [ -f "push-fail-file.txt" ]; then
 else
   pass "rc6: file correctly reverted after push failure"
 fi
-
-# Restore git_push_with_retry
-git_push_with_retry() {
-  local max_attempts="${1:-3}"
-  local attempt=1
-  while [ "$attempt" -le "$max_attempts" ]; do
-    if git push origin "$SKYNET_MAIN_BRANCH" 2>>"$LOG"; then
-      return 0
-    fi
-    attempt=$((attempt + 1))
-    [ "$attempt" -le "$max_attempts" ] && sleep 0.5
-  done
-  return 1
-}
 
 # ============================================================
 # TEST 7: RC 7 — Smoke test failure (auto-revert)
