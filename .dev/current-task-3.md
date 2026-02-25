@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] [INFRA] Add per-mission backlog isolation in project-driver task generation
+## [TEST] [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection
 **Status:** completed
-**Started:** 2026-02-24 21:37
+**Started:** 2026-02-24 21:40
 **Completed:** 2026-02-24
-**Branch:** dev/add-per-mission-backlog-isolation-in-pro
+**Branch:** dev/add-standalone-unit-tests-for-worktreesh
 **Worker:** 3
 
 ### Changes

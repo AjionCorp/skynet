@@ -2,6 +2,8 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-02-25 | [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | failed |
+| 2026-02-25 | [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | failed |
 | 2026-02-25 | [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | failed |
 | 2026-02-25 | [TEST] Add standalone unit tests for `_agent.sh` agent dispatch, timeout, and fallback selection | dev/add-standalone-unit-tests-for-agentsh-ag | worktree missing before gates | 0 | failed |
 | 2026-02-25 | [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | failed |
