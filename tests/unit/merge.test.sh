@@ -1587,6 +1587,433 @@ fi
 # Clean up the ERR trap
 trap - ERR
 
+# ============================================================
+# TEST 34: Smoke test failure with state commit (dual revert)
+# ============================================================
+
+echo ""
+_tlog "=== Test 34: Smoke test failure with state commit — dual revert ==="
+
+_reset_test_state
+
+BRANCH_34="dev/test-smoke-state-revert"
+_create_feature_branch "$BRANCH_34" "smoke-state-file.txt" "smoke state content"
+
+# Enable smoke test with a failing script
+export SKYNET_POST_MERGE_SMOKE="true"
+SKYNET_SCRIPTS_DIR="$TMPDIR_ROOT/scripts-override"
+mkdir -p "$SKYNET_SCRIPTS_DIR"
+cat > "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" <<'SMOKE'
+#!/usr/bin/env bash
+exit 1
+SMOKE
+chmod +x "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh"
+
+# Define a state commit hook that succeeds (creates a second commit to revert)
+_test_state_34() {
+  cd "$PROJECT_DIR"
+  echo "state-34-update" > state-34.txt
+  git add state-34.txt
+  git commit -m "chore: state update for test 34" --no-verify >/dev/null 2>&1
+  return 0
+}
+_MERGE_STATE_COMMIT_FN="_test_state_34"
+
+_merge_rc=0
+do_merge_to_main "$BRANCH_34" "$WORKTREE_DIR" "$LOG" "false" >>"$LOG" 2>&1 || _merge_rc=$?
+set +e
+
+assert_eq "$_merge_rc" "7" "smoke-state: returned 7 (smoke test failed)"
+
+# Both the merge file and state file should be reverted
+cd "$PROJECT_DIR"
+if [ ! -f "smoke-state-file.txt" ]; then
+  pass "smoke-state: merge file correctly reverted"
+else
+  fail "smoke-state: merge file should be reverted"
+fi
+if [ ! -f "state-34.txt" ]; then
+  pass "smoke-state: state file correctly reverted (dual revert)"
+else
+  fail "smoke-state: state file should be reverted"
+fi
+
+LAST_MSG=$(git log -1 --format=%s 2>/dev/null)
+assert_contains "$LAST_MSG" "smoke test failed" "smoke-state: revert reason mentions smoke test"
+
+# Verify _MERGE_STATE_COMMITTED was true (hook succeeded before smoke test)
+# It will have been set to true by the hook, but we can verify indirectly
+# by checking the revert commit undid two commits
+REVERT_DIFF=$(git diff HEAD~1..HEAD --stat 2>/dev/null | tail -1)
+assert_not_empty "$REVERT_DIFF" "smoke-state: revert commit has changes"
+
+# Reset
+export SKYNET_POST_MERGE_SMOKE="false"
+SKYNET_SCRIPTS_DIR="$REPO_ROOT/scripts"
+_MERGE_STATE_COMMIT_FN=""
+
+# ============================================================
+# TEST 35: Rebase recovery — rebase fails with conflicts
+# ============================================================
+
+echo ""
+_tlog "=== Test 35: Rebase recovery failure — rebase has conflicts ==="
+
+_reset_test_state
+
+# Create a true conflict scenario where both merge AND rebase fail:
+# Main and branch both modify the SAME lines of the SAME file.
+BRANCH_35="dev/test-rebase-conflict"
+
+cd "$PROJECT_DIR"
+# Create base file on main
+echo "line 1 original" > rebase-conflict.txt
+echo "line 2 original" >> rebase-conflict.txt
+git add rebase-conflict.txt
+git commit -m "base: add rebase-conflict.txt" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Modify it on main (different content on same lines)
+echo "line 1 main-version" > rebase-conflict.txt
+echo "line 2 main-version" >> rebase-conflict.txt
+git add rebase-conflict.txt
+git commit -m "main: modify rebase-conflict.txt" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Create branch from before main's modification, modify same file differently
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-test"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_35" HEAD~1 >/dev/null 2>&1
+cd "$WORKTREE_DIR"
+git config user.email "test@merge.test"
+git config user.name "Merge Test"
+echo "line 1 branch-version" > rebase-conflict.txt
+echo "line 2 branch-version" >> rebase-conflict.txt
+git add rebase-conflict.txt
+git commit -m "branch: modify rebase-conflict.txt" --no-verify >/dev/null 2>&1
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_35" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "1" "rebase-conflict: returns 1 (unresolvable conflict)"
+
+# Should be back on main
+CURRENT_BRANCH=$(cd "$PROJECT_DIR" && git rev-parse --abbrev-ref HEAD 2>/dev/null)
+assert_eq "$CURRENT_BRANCH" "main" "rebase-conflict: returned to main after failure"
+
+# Log should mention rebase attempt
+REBASE_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$REBASE_LOG" "rebase" "rebase-conflict: log mentions rebase attempt"
+
+# ============================================================
+# TEST 36: Typecheck revert push warning (push fails after revert)
+# ============================================================
+
+echo ""
+_tlog "=== Test 36: Typecheck revert push failure — warning logged ==="
+
+_reset_test_state
+
+BRANCH_36="dev/test-tc-revert-push-fail"
+_create_feature_branch "$BRANCH_36" "tc-rpf-file.txt" "tc revert push fail content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="false"
+
+# Make git_push_with_retry fail for the revert push
+_saved_git_push_fn36=$(declare -f git_push_with_retry)
+git_push_with_retry() { return 1; }
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_36" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+
+# Still returns 2 (typecheck failed) — the push warning doesn't change the RC
+assert_eq "$_merge_rc" "2" "tc-rpf: returns 2 despite revert push failure"
+
+# Log should mention the push failure warning
+TC_RPF_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$TC_RPF_LOG" "push of revert commit failed" "tc-rpf: warning logged about revert push failure"
+
+# Restore
+eval "$_saved_git_push_fn36"
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
+# ============================================================
+# TEST 37: Smoke test revert — TTL insufficient before push
+# ============================================================
+
+echo ""
+_tlog "=== Test 37: Smoke test revert — TTL insufficient before push ==="
+
+_reset_test_state
+
+BRANCH_37="dev/test-smoke-ttl"
+_create_feature_branch "$BRANCH_37" "smoke-ttl-file.txt" "smoke ttl content"
+
+# Enable smoke test with a failing script
+export SKYNET_POST_MERGE_SMOKE="true"
+SKYNET_SCRIPTS_DIR="$TMPDIR_ROOT/scripts-override"
+mkdir -p "$SKYNET_SCRIPTS_DIR"
+cat > "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" <<'SMOKE'
+#!/usr/bin/env bash
+exit 1
+SMOKE
+chmod +x "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh"
+
+# Override _check_merge_lock_ttl to always fail.
+# With SKYNET_POST_MERGE_TYPECHECK=false, the first call to _check_merge_lock_ttl
+# in the smoke test failure path is at line 417 (TTL check before smoke revert push).
+_saved_check_ttl_fn37=$(declare -f _check_merge_lock_ttl)
+_check_merge_lock_ttl() {
+  return 1
+}
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_37" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+
+# Returns 3 because TTL check before smoke revert push fails
+assert_eq "$_merge_rc" "3" "smoke-ttl: returns 3 when TTL insufficient for smoke revert push"
+
+SMOKE_TTL_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$SMOKE_TTL_LOG" "Insufficient TTL" "smoke-ttl: log mentions TTL insufficient"
+
+# Restore
+eval "$_saved_check_ttl_fn37"
+export SKYNET_POST_MERGE_SMOKE="false"
+SKYNET_SCRIPTS_DIR="$REPO_ROOT/scripts"
+
+# ============================================================
+# TEST 38: Hard reset recovery — fetch failure
+# ============================================================
+
+echo ""
+_tlog "=== Test 38: Hard reset recovery — fetch failure logged ==="
+
+_reset_test_state
+
+BRANCH_38="dev/test-fetch-fail"
+_create_feature_branch "$BRANCH_38" "fetch-fail-file.txt" "fetch fail content"
+
+# Make _merge_push_with_ttl_guard fail (initial push)
+_saved_merge_push_fn38=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() { return 1; }
+
+# Make git_push_with_retry fail (revert push)
+_saved_git_push_fn38=$(declare -f git_push_with_retry)
+git_push_with_retry() { return 1; }
+
+# Break the remote so fetch also fails during hard reset recovery
+cd "$PROJECT_DIR"
+_orig_remote_38=$(git remote get-url origin 2>/dev/null)
+# We need a remote that push/pull fail on but also fetch fails
+# Override fetch by breaking the URL after the merge push guard check
+_saved_emit_event_38=$(declare -f emit_event)
+_fetch_broken=false
+emit_event() {
+  # After emit_event is called (during double push failure), break the remote
+  if [ "$1" = "push_diverged" ]; then
+    git remote set-url origin "/nonexistent/remote-38.git" 2>/dev/null
+    _fetch_broken=true
+  fi
+}
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_38" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "fetch-fail: returns 3 (critical failure)"
+
+FETCH_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$FETCH_LOG" "git fetch failed" "fetch-fail: log mentions fetch failure during recovery"
+
+# Restore everything
+if [ "$_fetch_broken" = "true" ]; then
+  git remote set-url origin "$_orig_remote_38" 2>/dev/null
+fi
+eval "$_saved_merge_push_fn38"
+eval "$_saved_git_push_fn38"
+eval "$_saved_emit_event_38"
+
+# ============================================================
+# TEST 39: Adaptive push timeout for large diffs
+# ============================================================
+
+echo ""
+_tlog "=== Test 39: Adaptive push timeout for large diffs ==="
+
+_reset_test_state
+
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=900
+SKYNET_GIT_PUSH_TIMEOUT=120
+cd "$PROJECT_DIR"
+
+# Simulate a large cached diff by overriding git diff --stat --cached output
+_saved_git=$(which git)
+_push_timeout_used=""
+
+# Override run_with_timeout to capture the timeout value
+run_with_timeout() {
+  _push_timeout_used="$1"
+  # Simulate successful push
+  return 0
+}
+
+# Create a large staged diff (>5000 lines)
+cd "$PROJECT_DIR"
+# Generate a file with >5000 lines and stage it
+_big_file="$PROJECT_DIR/big-file.txt"
+awk 'BEGIN{for(i=1;i<=5100;i++) print "line " i}' > "$_big_file"
+git add "$_big_file"
+
+: > "$LOG"
+_merge_push_with_ttl_guard 1
+
+# The timeout should be doubled (120*2=240) for large diffs
+if [ -n "$_push_timeout_used" ] && [ "$_push_timeout_used" -gt 120 ]; then
+  pass "adaptive-timeout: push timeout extended for large diff (${_push_timeout_used}s)"
+else
+  fail "adaptive-timeout: expected extended timeout, got ${_push_timeout_used:-empty}s"
+fi
+
+# Clean up
+git reset HEAD "$_big_file" 2>/dev/null || true
+rm -f "$_big_file"
+# Restore run_with_timeout
+run_with_timeout() { shift; "$@"; }
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 40: Lock elapsed >500s warning before push
+# ============================================================
+
+echo ""
+_tlog "=== Test 40: Lock elapsed >500s warning before push ==="
+
+_reset_test_state
+
+BRANCH_40="dev/test-lock-warn"
+_create_feature_branch "$BRANCH_40" "lock-warn-file.txt" "lock warning content"
+
+# Create a MERGE_LOCK/pid file with a very old mtime to trigger the >500s warning
+# We need to override MERGE_LOCK to point to our controlled dir
+_saved_merge_lock="$MERGE_LOCK"
+MERGE_LOCK="$TMPDIR_ROOT/test-merge-lock-40"
+mkdir -p "$MERGE_LOCK"
+echo "$$" > "$MERGE_LOCK/pid"
+# Set the pid file mtime to 600 seconds ago
+if [ "$(uname -s)" = "Darwin" ]; then
+  # macOS touch with -t timestamp
+  _old_time=$(date -v-600S +%Y%m%d%H%M.%S)
+  touch -t "$_old_time" "$MERGE_LOCK/pid"
+else
+  touch -d "600 seconds ago" "$MERGE_LOCK/pid"
+fi
+
+# Override acquire_merge_lock and release_merge_lock for this test
+acquire_merge_lock() { return 0; }
+release_merge_lock() { rm -rf "$MERGE_LOCK" 2>/dev/null || true; }
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_40" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "lock-warn: merge succeeded"
+
+LOCK_WARN_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$LOCK_WARN_LOG" "WARNING: Merge lock held for" "lock-warn: >500s warning logged"
+
+# Restore
+MERGE_LOCK="$_saved_merge_lock"
+# Restore real lock functions
+source "$REPO_ROOT/scripts/_lock_backend.sh"
+source "$REPO_ROOT/scripts/_locks.sh"
+
+# ============================================================
+# TEST 41: ERR trap — unexpected format skipped with warning
+# ============================================================
+
+echo ""
+_tlog "=== Test 41: ERR trap — unexpected format produces warning ==="
+
+# The code at lines 317-323 handles ERR trap restore. When the saved trap
+# has an unexpected format (not starting with "trap -- " or "trap -"),
+# it logs a warning and skips the restore.
+# This is hard to trigger naturally since bash always produces "trap -- ..." format.
+# We verify the code path exists and that the case statement handles it.
+
+MERGE_SRC=$(cat "$REPO_ROOT/scripts/_merge.sh")
+assert_contains "$MERGE_SRC" "Unexpected ERR trap format" "err-unexpected: warning message present in source"
+assert_contains "$MERGE_SRC" "skipping restore" "err-unexpected: skip restore message present"
+
+# ============================================================
+# TEST 42: Rebase recovery — checkout failure path
+# ============================================================
+
+echo ""
+_tlog "=== Test 42: Rebase recovery — checkout failure path ==="
+
+_reset_test_state
+
+BRANCH_42="dev/test-checkout-fail"
+
+# Create a conflict scenario
+cd "$PROJECT_DIR"
+echo "main content 42" > checkout-fail.txt
+git add checkout-fail.txt
+git commit -m "main: add checkout-fail.txt" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-test"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_42" HEAD~1 >/dev/null 2>&1
+cd "$WORKTREE_DIR"
+git config user.email "test@merge.test"
+git config user.name "Merge Test"
+echo "branch content 42" > checkout-fail.txt
+git add checkout-fail.txt
+git commit -m "branch: modify checkout-fail.txt" --no-verify >/dev/null 2>&1
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Override run_with_timeout to make git checkout fail during rebase recovery
+_rwt_call_count_42=0
+_saved_rwt_42=$(declare -f run_with_timeout 2>/dev/null || true)
+run_with_timeout() {
+  _rwt_call_count_42=$((_rwt_call_count_42 + 1))
+  shift  # skip timeout arg
+  # Let merge --abort succeed (call 1), then fail checkout (call 2)
+  if [ "$_rwt_call_count_42" -eq 2 ] && echo "$*" | grep -q "checkout"; then
+    return 1
+  fi
+  "$@"
+}
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_42" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "1" "checkout-fail: returns 1 (conflict, checkout for rebase failed)"
+
+CHECKOUT_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$CHECKOUT_LOG" "Failed to checkout" "checkout-fail: log mentions checkout failure"
+
+# Restore
+if [ -n "$_saved_rwt_42" ]; then
+  eval "$_saved_rwt_42"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+
+# Clean up
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
+git merge --abort 2>/dev/null || true
+cleanup_worktree "$BRANCH_42" 2>/dev/null || true
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
