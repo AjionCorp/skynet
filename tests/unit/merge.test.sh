@@ -2312,6 +2312,258 @@ assert_contains "$LAST_MSG" "push failed" "push-state-revert: revert mentions pu
 eval "$_saved_merge_push_fn48"
 _MERGE_STATE_COMMIT_FN=""
 
+# ============================================================
+# TEST 49: Smoke test failure + revert failure = RC 3
+# ============================================================
+# When smoke test fails AND _do_revert also fails, do_merge_to_main
+# should return RC 3 (critical failure). Tests lines 412-414.
+
+echo ""
+_tlog "=== Test 49: Smoke test failure + revert failure = RC 3 ==="
+
+_reset_test_state
+
+BRANCH_49="dev/test-smoke-revert-fail"
+_create_feature_branch "$BRANCH_49" "smoke-rf-file.txt" "smoke revert fail content"
+
+# Enable smoke test with a failing script
+export SKYNET_POST_MERGE_SMOKE="true"
+SKYNET_SCRIPTS_DIR="$TMPDIR_ROOT/scripts-override"
+mkdir -p "$SKYNET_SCRIPTS_DIR"
+cat > "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" <<'SMOKE'
+#!/usr/bin/env bash
+exit 1
+SMOKE
+chmod +x "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh"
+
+# Override _do_revert to fail (simulates git revert failure)
+_saved_do_revert_49=$(declare -f _do_revert)
+_do_revert() { return 1; }
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_49" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "smoke-revert-fail: returns 3 when smoke fails and revert fails"
+
+# Verify merge lock released
+if lock_backend_check "merge" 2>/dev/null; then
+  fail "smoke-revert-fail: merge lock should be released"
+else
+  pass "smoke-revert-fail: merge lock released after critical failure"
+fi
+
+# Restore
+eval "$_saved_do_revert_49"
+export SKYNET_POST_MERGE_SMOKE="false"
+SKYNET_SCRIPTS_DIR="$REPO_ROOT/scripts"
+
+# ============================================================
+# TEST 50: Push failure + revert failure (revert itself) = RC 3
+# ============================================================
+# When _merge_push_with_ttl_guard fails AND _do_revert also fails,
+# do_merge_to_main should return RC 3. Tests lines 468-471.
+
+echo ""
+_tlog "=== Test 50: Push failure + revert failure = RC 3 ==="
+
+_reset_test_state
+
+BRANCH_50="dev/test-push-revert-fail"
+_create_feature_branch "$BRANCH_50" "push-rf-file.txt" "push revert fail content"
+
+# Make _merge_push_with_ttl_guard fail (initial push)
+_saved_merge_push_fn50=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() { return 1; }
+
+# Override _do_revert to fail
+_saved_do_revert_50=$(declare -f _do_revert)
+_do_revert() { return 1; }
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_50" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "push-revert-fail: returns 3 when push fails and revert fails"
+
+# Verify merge lock released
+if lock_backend_check "merge" 2>/dev/null; then
+  fail "push-revert-fail: merge lock should be released"
+else
+  pass "push-revert-fail: merge lock released after critical failure"
+fi
+
+# Restore
+eval "$_saved_do_revert_50"
+eval "$_saved_merge_push_fn50"
+
+# ============================================================
+# TEST 51: Canary detects changes in scripts/lock-backends/
+# ============================================================
+# The canary diff pattern includes 'scripts/lock-backends/*.sh'.
+# Tests 19 and 45 cover scripts/*.sh and scripts/agents/*.sh.
+
+echo ""
+_tlog "=== Test 51: Canary detects lock-backends subdirectory changes ==="
+
+_reset_test_state
+
+BRANCH_51="dev/test-canary-lockbackend"
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-test"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_51" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+cd "$WORKTREE_DIR"
+git config user.email "test@merge.test"
+git config user.name "Merge Test"
+mkdir -p scripts/lock-backends
+echo "#!/usr/bin/env bash" > scripts/lock-backends/test-backend.sh
+echo "echo backend" >> scripts/lock-backends/test-backend.sh
+git add scripts/lock-backends/test-backend.sh
+git commit -m "feat: add scripts/lock-backends/test-backend.sh" >/dev/null 2>&1
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+export SKYNET_CANARY_ENABLED="true"
+rm -f "${DEV_DIR}/canary-pending"
+
+_merge_rc=0
+run_merge "$BRANCH_51" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "canary-lockbackend: merge succeeded"
+
+if [ -f "${DEV_DIR}/canary-pending" ]; then
+  pass "canary-lockbackend: canary-pending created for scripts/lock-backends/ change"
+  CANARY_CONTENT=$(cat "${DEV_DIR}/canary-pending" 2>/dev/null)
+  assert_contains "$CANARY_CONTENT" "lock-backends/test-backend.sh" "canary-lockbackend: canary lists lock-backend script"
+else
+  fail "canary-lockbackend: canary-pending should be created for scripts/lock-backends/ change"
+fi
+
+# Reset
+export SKYNET_CANARY_ENABLED="false"
+rm -f "${DEV_DIR}/canary-pending"
+
+# ============================================================
+# TEST 52: Canary detects changes in scripts/notify/
+# ============================================================
+# The canary diff pattern includes 'scripts/notify/*.sh'.
+
+echo ""
+_tlog "=== Test 52: Canary detects notify subdirectory changes ==="
+
+_reset_test_state
+
+BRANCH_52="dev/test-canary-notify"
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-test"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_52" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+cd "$WORKTREE_DIR"
+git config user.email "test@merge.test"
+git config user.name "Merge Test"
+mkdir -p scripts/notify
+echo "#!/usr/bin/env bash" > scripts/notify/test-notify.sh
+echo "echo notify" >> scripts/notify/test-notify.sh
+git add scripts/notify/test-notify.sh
+git commit -m "feat: add scripts/notify/test-notify.sh" >/dev/null 2>&1
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+export SKYNET_CANARY_ENABLED="true"
+rm -f "${DEV_DIR}/canary-pending"
+
+_merge_rc=0
+run_merge "$BRANCH_52" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "canary-notify: merge succeeded"
+
+if [ -f "${DEV_DIR}/canary-pending" ]; then
+  pass "canary-notify: canary-pending created for scripts/notify/ change"
+  CANARY_CONTENT=$(cat "${DEV_DIR}/canary-pending" 2>/dev/null)
+  assert_contains "$CANARY_CONTENT" "notify/test-notify.sh" "canary-notify: canary lists notify script"
+else
+  fail "canary-notify: canary-pending should be created for scripts/notify/ change"
+fi
+
+# Reset
+export SKYNET_CANARY_ENABLED="false"
+rm -f "${DEV_DIR}/canary-pending"
+
+# ============================================================
+# TEST 53: State commit hook — non-existent function skipped
+# ============================================================
+# When _MERGE_STATE_COMMIT_FN is set to a function name that doesn't
+# exist, the declare -f check at line 399 should prevent calling it.
+
+echo ""
+_tlog "=== Test 53: State commit hook — non-existent function silently skipped ==="
+
+_reset_test_state
+
+BRANCH_53="dev/test-hook-nonexist"
+_create_feature_branch "$BRANCH_53" "hook-noexist-file.txt" "hook nonexist content"
+
+# Set _MERGE_STATE_COMMIT_FN to a function that doesn't exist
+_MERGE_STATE_COMMIT_FN="_nonexistent_function_abc123"
+
+_merge_rc=0
+do_merge_to_main "$BRANCH_53" "$WORKTREE_DIR" "$LOG" "false" >>"$LOG" 2>&1 || _merge_rc=$?
+set +e
+
+assert_eq "$_merge_rc" "0" "hook-nonexist: merge succeeds with non-existent hook function"
+assert_eq "$_MERGE_STATE_COMMITTED" "false" "hook-nonexist: _MERGE_STATE_COMMITTED stays false"
+
+# File should still be merged
+cd "$PROJECT_DIR"
+if [ -f "hook-noexist-file.txt" ]; then
+  pass "hook-nonexist: file present on main"
+else
+  fail "hook-nonexist: file should be on main"
+fi
+
+_MERGE_STATE_COMMIT_FN=""
+
+# ============================================================
+# TEST 54: Install skipped when pnpm-lock.yaml missing
+# ============================================================
+# The deps install check at line 342 requires BOTH pnpm-lock.yaml
+# and node_modules/.modules.yaml to exist. When the lock file is
+# missing, install should be skipped entirely.
+
+echo ""
+_tlog "=== Test 54: Install skipped when lock file missing ==="
+
+_reset_test_state
+
+BRANCH_54="dev/test-no-lockfile"
+_create_feature_branch "$BRANCH_54" "no-lockfile-file.txt" "no lockfile content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true"
+
+cd "$PROJECT_DIR"
+# Ensure no pnpm-lock.yaml exists
+rm -f pnpm-lock.yaml
+mkdir -p node_modules
+echo "modules" > node_modules/.modules.yaml
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_54" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "no-lockfile: merge succeeded"
+
+NO_LF_LOG=$(cat "$LOG" 2>/dev/null)
+if echo "$NO_LF_LOG" | grep -qF "Lock file newer than node_modules"; then
+  fail "no-lockfile: should NOT attempt install when lock file is missing"
+else
+  pass "no-lockfile: install correctly skipped when pnpm-lock.yaml is missing"
+fi
+
+# Reset
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

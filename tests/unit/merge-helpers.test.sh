@@ -749,6 +749,174 @@ unset -f git
 # Push to keep remote in sync
 command git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
 
+# ============================================================
+# TEST 18: _do_revert — commit failure after successful revert
+# ============================================================
+# When git revert succeeds but git commit fails, _do_revert should
+# return 1 with a CRITICAL log. Tests lines 219-221 of _merge.sh.
+
+echo ""
+_tlog "=== Test 18: _do_revert — git commit failure after successful revert ==="
+
+_reset_test_state
+
+cd "$PROJECT_DIR"
+echo "revert-commit-fail-content" > revert-commit-fail.txt
+command git add revert-commit-fail.txt
+command git commit -m "feat: add revert-commit-fail.txt" --no-verify >/dev/null 2>&1
+
+# Override git to make commit fail only for the revert commit
+git() {
+  if echo "$*" | command grep -q "commit.*auto-revert"; then
+    return 1
+  fi
+  command git "$@"
+}
+
+: > "$LOG"
+_revert_rc=0
+_do_revert "false" "test commit failure" "$LOG" || _revert_rc=$?
+assert_eq "$_revert_rc" "1" "revert-commit-fail: returns 1 when commit after revert fails"
+
+COMMIT_FAIL_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$COMMIT_FAIL_LOG" "CRITICAL: git commit for revert failed" "revert-commit-fail: CRITICAL commit failure logged"
+
+# Restore git and clean up dirty working tree
+unset -f git
+command git reset --hard HEAD 2>/dev/null || true
+command git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
+
+# ============================================================
+# TEST 19: _merge_push_with_ttl_guard — adaptive timeout cap 300s
+# ============================================================
+# When SKYNET_GIT_PUSH_TIMEOUT * 2 exceeds 300 for large diffs,
+# the timeout should be capped at 300s. Tests line 134.
+
+echo ""
+_tlog "=== Test 19: _merge_push_with_ttl_guard — adaptive timeout capped at 300s ==="
+
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=9999
+SKYNET_GIT_PUSH_TIMEOUT=200  # 200*2=400 exceeds 300 cap
+
+_push_timeout_captured=""
+_saved_rwt_19=$(declare -f run_with_timeout 2>/dev/null || true)
+run_with_timeout() {
+  _push_timeout_captured="$1"
+  return 0
+}
+
+# Create a large staged diff (>5000 lines)
+cd "$PROJECT_DIR"
+_big_file_19="$PROJECT_DIR/big-file-19.txt"
+awk 'BEGIN{for(i=1;i<=5200;i++) print "line " i}' > "$_big_file_19"
+command git add "$_big_file_19"
+
+: > "$LOG"
+_merge_push_with_ttl_guard 1
+
+assert_eq "$_push_timeout_captured" "300" "adaptive-cap: push timeout capped at 300s (200*2=400 > 300)"
+
+ADAPT_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$ADAPT_LOG" "Large diff detected" "adaptive-cap: log mentions large diff"
+
+# Clean up
+command git reset HEAD "$_big_file_19" 2>/dev/null || true
+rm -f "$_big_file_19"
+if [ -n "$_saved_rwt_19" ]; then
+  eval "$_saved_rwt_19"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 20: _compute_dynamic_merge_ttl — log message content
+# ============================================================
+# When dynamic TTL is computed, the log message should include
+# the computed TTL, last typecheck duration, and base TTL.
+
+echo ""
+_tlog "=== Test 20: _compute_dynamic_merge_ttl — log message includes details ==="
+
+echo "400" > "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+: > "$LOG"
+_compute_dynamic_merge_ttl
+
+TTL_LOG=$(cat "$LOG")
+assert_contains "$TTL_LOG" "Dynamic merge TTL" "ttl-log: log starts with 'Dynamic merge TTL'"
+assert_contains "$TTL_LOG" "1100s" "ttl-log: log mentions computed TTL (1100s)"
+assert_contains "$TTL_LOG" "last typecheck 400s" "ttl-log: log mentions last typecheck duration"
+assert_contains "$TTL_LOG" "base TTL 900s" "ttl-log: log mentions base TTL"
+
+# Clean up
+rm -f "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 21: _check_merge_lock_ttl — error log message details
+# ============================================================
+# When TTL is insufficient, the error message should include
+# remaining time, needed time, lock age, and TTL.
+
+echo ""
+_tlog "=== Test 21: _check_merge_lock_ttl — error message includes details ==="
+
+_MERGE_LOCK_ACQUIRED_AT=0
+SKYNET_MERGE_LOCK_TTL=$(( SECONDS + 50 ))  # remaining=50, need 180
+
+: > "$LOG"
+_check_merge_lock_ttl 180 || true
+
+TTL_ERR_LOG=$(cat "$LOG")
+assert_contains "$TTL_ERR_LOG" "ERROR: Merge lock TTL insufficient" "ttl-err-log: ERROR message logged"
+assert_contains "$TTL_ERR_LOG" "remaining" "ttl-err-log: mentions remaining time"
+assert_contains "$TTL_ERR_LOG" "need 180s" "ttl-err-log: mentions needed time"
+
+# Reset
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 22: extend_merge_lock failure doesn't break merge
+# ============================================================
+# extend_merge_lock is called with `2>/dev/null || true` at lines
+# 339 and 433. A failing extend_merge_lock should not affect the
+# merge outcome.
+
+echo ""
+_tlog "=== Test 22: extend_merge_lock failure handled gracefully ==="
+
+_reset_test_state
+
+BRANCH_22h="dev/test-extend-fail"
+_create_feature_branch "$BRANCH_22h" "extend-fail-file.txt" "extend fail content"
+
+# Override extend_merge_lock to always fail
+_saved_extend_fn22=$(declare -f extend_merge_lock)
+extend_merge_lock() { return 1; }
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true"
+
+_merge_rc=0
+run_merge "$BRANCH_22h" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "extend-fail: merge succeeds despite extend_merge_lock failure"
+
+cd "$PROJECT_DIR"
+if [ -f "extend-fail-file.txt" ]; then
+  pass "extend-fail: file present on main"
+else
+  fail "extend-fail: file should be on main"
+fi
+
+# Restore
+eval "$_saved_extend_fn22"
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
