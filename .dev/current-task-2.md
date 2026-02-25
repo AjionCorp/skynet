@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures
+## [TEST] [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status
 **Status:** completed
-**Started:** 2026-02-24 21:30
+**Started:** 2026-02-24 21:38
 **Completed:** 2026-02-24
-**Branch:** dev/harden-worktree-lifecycle-to-prevent-wor
+**Branch:** dev/add-multi-mission-cli-integration-tests-
 **Worker:** 2
 
 ### Changes
