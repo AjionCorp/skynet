@@ -1169,6 +1169,424 @@ run_merge "$BRANCH_24" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
 assert_eq "$_merge_rc" "0" "state-reset: merge succeeded"
 assert_eq "$_MERGE_STATE_COMMITTED" "false" "state-reset: _MERGE_STATE_COMMITTED reset to false"
 
+# ============================================================
+# TEST 25: _merge_push_with_ttl_guard() — direct unit tests
+# ============================================================
+
+echo ""
+_tlog "=== Test 25: _merge_push_with_ttl_guard() — TTL-guarded push ==="
+
+# 25a: TTL expired before first push attempt → returns 1 without pushing
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=5  # Only 5s TTL — less than the 120s minimum required
+
+_push_called=false
+_saved_run_with_timeout=$(declare -f run_with_timeout 2>/dev/null || true)
+run_with_timeout() { _push_called=true; return 0; }
+
+_ptg_rc=0
+_merge_push_with_ttl_guard 3 || _ptg_rc=$?
+assert_eq "$_ptg_rc" "1" "push-ttl: returns 1 when TTL insufficient"
+if [ "$_push_called" = "false" ]; then
+  pass "push-ttl: git push was NOT called (TTL guard prevented it)"
+else
+  fail "push-ttl: git push should not be called when TTL is insufficient"
+fi
+
+# Restore run_with_timeout
+if [ -n "$_saved_run_with_timeout" ]; then
+  eval "$_saved_run_with_timeout"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+SKYNET_MERGE_LOCK_TTL=900
+
+# 25b: Push succeeds on first attempt → returns 0
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=900
+SKYNET_GIT_PUSH_TIMEOUT=120
+LOG="$TMPDIR_ROOT/test-merge.log"
+cd "$PROJECT_DIR"
+
+# Override run_with_timeout to simulate a successful push
+_push_count=0
+run_with_timeout() { _push_count=$((_push_count + 1)); return 0; }
+
+_ptg_rc=0
+_merge_push_with_ttl_guard 3 || _ptg_rc=$?
+assert_eq "$_ptg_rc" "0" "push-ttl-ok: returns 0 on successful push"
+assert_eq "$_push_count" "1" "push-ttl-ok: push called exactly once"
+
+# Restore
+if [ -n "$_saved_run_with_timeout" ]; then
+  eval "$_saved_run_with_timeout"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+
+# 25c: Push fails then succeeds on retry → returns 0
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=900
+_push_attempt_ctr=0
+run_with_timeout() {
+  _push_attempt_ctr=$((_push_attempt_ctr + 1))
+  if [ "$_push_attempt_ctr" -lt 2 ]; then return 1; fi
+  return 0
+}
+
+_ptg_rc=0
+_merge_push_with_ttl_guard 3 || _ptg_rc=$?
+assert_eq "$_ptg_rc" "0" "push-ttl-retry: returns 0 after retry succeeds"
+if [ "$_push_attempt_ctr" -ge 2 ]; then
+  pass "push-ttl-retry: push retried ($_push_attempt_ctr attempts)"
+else
+  fail "push-ttl-retry: expected at least 2 attempts, got $_push_attempt_ctr"
+fi
+
+# 25d: Push fails all attempts → returns 1
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=900
+run_with_timeout() { return 1; }
+
+_ptg_rc=0
+_merge_push_with_ttl_guard 2 || _ptg_rc=$?
+assert_eq "$_ptg_rc" "1" "push-ttl-exhaust: returns 1 after all attempts exhausted"
+
+# Restore run_with_timeout
+if [ -n "$_saved_run_with_timeout" ]; then
+  eval "$_saved_run_with_timeout"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 26: Command injection defense — all disallowed patterns
+# ============================================================
+
+echo ""
+_tlog "=== Test 26: Command injection — pipe, subshell, backtick, path traversal ==="
+
+# All these patterns should be blocked by the case statement in _merge.sh
+
+# 26a: Pipe character in typecheck cmd
+_reset_test_state
+BRANCH_26a="dev/test-cmd-pipe"
+_create_feature_branch "$BRANCH_26a" "cmd-pipe-file.txt" "pipe test content"
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true | cat /etc/passwd"
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_26a" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "2" "cmd-inject-pipe: pipe in typecheck cmd triggers failure"
+CMD_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$CMD_LOG" "disallowed characters" "cmd-inject-pipe: log mentions disallowed"
+
+# 26b: Subshell $() in typecheck cmd
+_reset_test_state
+BRANCH_26b="dev/test-cmd-subshell"
+_create_feature_branch "$BRANCH_26b" "cmd-subsh-file.txt" "subshell test content"
+export SKYNET_TYPECHECK_CMD='$(echo injected)'
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_26b" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "2" "cmd-inject-subshell: subshell in typecheck cmd triggers failure"
+
+# 26c: Backtick in typecheck cmd
+_reset_test_state
+BRANCH_26c="dev/test-cmd-backtick"
+_create_feature_branch "$BRANCH_26c" "cmd-bt-file.txt" "backtick test content"
+export SKYNET_TYPECHECK_CMD='`echo injected`'
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_26c" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "2" "cmd-inject-backtick: backtick in typecheck cmd triggers failure"
+
+# 26d: Path traversal (..) in typecheck cmd
+_reset_test_state
+BRANCH_26d="dev/test-cmd-traversal"
+_create_feature_branch "$BRANCH_26d" "cmd-trav-file.txt" "traversal test content"
+export SKYNET_TYPECHECK_CMD="../../bin/something"
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_26d" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "2" "cmd-inject-traversal: path traversal in typecheck cmd triggers failure"
+
+# Reset
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
+# ============================================================
+# TEST 27: Install command injection defense
+# ============================================================
+
+echo ""
+_tlog "=== Test 27: Install command injection defense ==="
+
+_reset_test_state
+
+BRANCH_27="dev/test-install-inject"
+_create_feature_branch "$BRANCH_27" "install-inject-file.txt" "install inject content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true"
+# Set a malicious install command
+export SKYNET_INSTALL_CMD="pnpm install; rm -rf /"
+
+# Create fake lock file and node_modules so the install path is triggered
+cd "$PROJECT_DIR"
+echo "lockfile" > pnpm-lock.yaml
+git add pnpm-lock.yaml
+git commit -m "add lock file" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+mkdir -p node_modules
+# Make .modules.yaml older than pnpm-lock.yaml
+echo "modules" > node_modules/.modules.yaml
+touch -t 200001010000 node_modules/.modules.yaml
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_27" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+
+# Merge should succeed (install was blocked but typecheck passes)
+assert_eq "$_merge_rc" "0" "install-inject: merge succeeds (malicious install blocked, typecheck passes)"
+
+# Check that the log mentions disallowed characters for the install command
+INSTALL_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$INSTALL_LOG" "disallowed characters" "install-inject: install cmd with semicolon blocked"
+
+# Reset
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+export SKYNET_INSTALL_CMD="true"
+
+# ============================================================
+# TEST 28: Canary NOT triggered for non-script changes
+# ============================================================
+
+echo ""
+_tlog "=== Test 28: Canary — non-script changes do NOT trigger canary ==="
+
+_reset_test_state
+
+BRANCH_28="dev/test-canary-noop"
+_create_feature_branch "$BRANCH_28" "canary-noop-file.txt" "no canary content"
+
+export SKYNET_CANARY_ENABLED="true"
+rm -f "${DEV_DIR}/canary-pending"
+
+_merge_rc=0
+run_merge "$BRANCH_28" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "canary-noop: merge succeeded"
+
+if [ ! -f "${DEV_DIR}/canary-pending" ]; then
+  pass "canary-noop: canary-pending NOT created for non-script change"
+else
+  fail "canary-noop: canary-pending should not exist for non-script change"
+fi
+
+# Reset
+export SKYNET_CANARY_ENABLED="false"
+
+# ============================================================
+# TEST 29: RC 3 — TTL insufficient before push (OPS-P1-4 path)
+# ============================================================
+
+echo ""
+_tlog "=== Test 29: RC 3 — TTL insufficient before push ==="
+
+_reset_test_state
+
+BRANCH_29="dev/test-ttl-before-push"
+_create_feature_branch "$BRANCH_29" "ttl-push-file.txt" "ttl push content"
+
+# Typecheck disabled so we reach the push TTL check
+export SKYNET_POST_MERGE_TYPECHECK="false"
+# Override _compute_dynamic_merge_ttl to keep our short TTL
+_saved_compute_fn29=$(declare -f _compute_dynamic_merge_ttl)
+_compute_dynamic_merge_ttl() { :; }
+
+# Set TTL to just 10s — by the time merge completes and we reach the push,
+# the lock_age will exceed SKYNET_MERGE_LOCK_TTL - 180
+SKYNET_MERGE_LOCK_TTL=10
+
+_merge_rc=0
+run_merge "$BRANCH_29" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "ttl-push: returns 3 when TTL insufficient before push"
+
+# Verify lock was released
+if lock_backend_check "merge" 2>/dev/null; then
+  fail "ttl-push: merge lock should be released"
+else
+  pass "ttl-push: merge lock released after TTL failure"
+fi
+
+# Restore
+eval "$_saved_compute_fn29"
+SKYNET_MERGE_LOCK_TTL=900
+
+# Clean up branch
+cd "$PROJECT_DIR"
+git merge --abort 2>/dev/null || true
+cleanup_worktree "$BRANCH_29" 2>/dev/null || true
+
+# ============================================================
+# TEST 30: RC 3 — Double push failure (push + revert-push fail)
+# ============================================================
+
+echo ""
+_tlog "=== Test 30: RC 3 — Double push failure triggers hard reset ==="
+
+_reset_test_state
+
+BRANCH_30="dev/test-double-push-fail"
+_create_feature_branch "$BRANCH_30" "double-push-file.txt" "double push content"
+
+# Make _merge_push_with_ttl_guard fail (initial push)
+_saved_merge_push_fn30=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() { return 1; }
+
+# Also make git_push_with_retry fail (revert push)
+_saved_git_push_fn30=$(declare -f git_push_with_retry)
+git_push_with_retry() { return 1; }
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_30" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "double-push-fail: returns 3 (critical failure)"
+
+# Verify the log mentions the hard reset recovery
+DPUSH_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$DPUSH_LOG" "revert push also failed" "double-push-fail: log mentions revert push failure"
+
+# Verify lock was released
+if lock_backend_check "merge" 2>/dev/null; then
+  fail "double-push-fail: merge lock should be released"
+else
+  pass "double-push-fail: merge lock released after double failure"
+fi
+
+# Restore functions
+eval "$_saved_merge_push_fn30"
+eval "$_saved_git_push_fn30"
+
+# ============================================================
+# TEST 31: Post-merge smoke test passing
+# ============================================================
+
+echo ""
+_tlog "=== Test 31: Smoke test passing — merge succeeds ==="
+
+_reset_test_state
+
+BRANCH_31="dev/test-smoke-pass"
+_create_feature_branch "$BRANCH_31" "smoke-pass-file.txt" "smoke pass content"
+
+# Enable smoke test with a passing script
+export SKYNET_POST_MERGE_SMOKE="true"
+SKYNET_SCRIPTS_DIR="$TMPDIR_ROOT/scripts-override"
+mkdir -p "$SKYNET_SCRIPTS_DIR"
+cat > "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh" <<'SMOKE'
+#!/usr/bin/env bash
+exit 0
+SMOKE
+chmod +x "$SKYNET_SCRIPTS_DIR/post-merge-smoke.sh"
+
+_merge_rc=0
+run_merge "$BRANCH_31" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "smoke-pass: merge succeeded with passing smoke test"
+
+# File should be on main (not reverted)
+cd "$PROJECT_DIR"
+if [ -f "smoke-pass-file.txt" ]; then
+  pass "smoke-pass: file present on main"
+else
+  fail "smoke-pass: file should be on main"
+fi
+
+# Reset
+export SKYNET_POST_MERGE_SMOKE="false"
+SKYNET_SCRIPTS_DIR="$REPO_ROOT/scripts"
+
+# ============================================================
+# TEST 32: Deps auto-install when lock file newer than node_modules
+# ============================================================
+
+echo ""
+_tlog "=== Test 32: Deps auto-install triggered when lock file newer ==="
+
+_reset_test_state
+
+BRANCH_32="dev/test-deps-install"
+_create_feature_branch "$BRANCH_32" "deps-install-file.txt" "deps install content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true"
+
+# Track whether install runs
+_install_ran=false
+export SKYNET_INSTALL_CMD="true"
+
+cd "$PROJECT_DIR"
+# Set up lock file and node_modules with lock file newer
+echo "lockfile" > pnpm-lock.yaml
+git add pnpm-lock.yaml
+git commit -m "add lock file for deps test" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+mkdir -p node_modules
+echo "modules" > node_modules/.modules.yaml
+# Make node_modules/.modules.yaml older
+touch -t 200001010000 node_modules/.modules.yaml
+: > "$LOG"
+
+_merge_rc=0
+run_merge "$BRANCH_32" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "deps-install: merge succeeded"
+
+DEPS_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$DEPS_LOG" "Lock file newer than node_modules" "deps-install: log mentions deps install trigger"
+
+# Reset
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+export SKYNET_INSTALL_CMD="true"
+
+# ============================================================
+# TEST 33: ERR trap save/restore across merge
+# ============================================================
+
+echo ""
+_tlog "=== Test 33: ERR trap preserved across merge ==="
+
+_reset_test_state
+
+BRANCH_33="dev/test-err-trap"
+_create_feature_branch "$BRANCH_33" "err-trap-file.txt" "err trap content"
+
+# Set a custom ERR trap before calling merge
+_err_trap_fired=false
+trap '_err_trap_fired=true' ERR
+
+_merge_rc=0
+run_merge "$BRANCH_33" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "err-trap: merge succeeded"
+
+# Verify ERR trap is restored (trap -p ERR should show something)
+ERR_TRAP=$(trap -p ERR 2>/dev/null || echo "")
+if [ -n "$ERR_TRAP" ]; then
+  pass "err-trap: ERR trap restored after merge"
+else
+  fail "err-trap: ERR trap should be restored after merge"
+fi
+
+# Clean up the ERR trap
+trap - ERR
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
