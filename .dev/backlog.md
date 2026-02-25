@@ -3,7 +3,7 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FEAT] Project driver — Each mission should have its project driver
+- [ ] [FEAT] Project driver — Each mission should have its project driver
 - [ ] [TEST] Add unit tests for `_events.sh` event emission and file formatting — create `tests/unit/events.test.sh` covering `emit_event()` field escaping, event file rotation, timestamp formatting, and idempotence when the events file is missing or empty. Source only `_config.sh` and `_events.sh` in an isolated temp directory. Mission: Criterion #2 quality gates and Criterion #4 trustworthy event pipeline.
 - [ ] [TEST] Add unit tests for `_merge.sh` shared merge-to-main logic — create `tests/unit/merge.test.sh` covering `merge_to_main` success path, merge-conflict detection and abort, rebase retry semantics, lock acquisition/release around merge, and post-merge cleanup. Use a local bare repo as remote to test actual git operations. Mission: Criterion #2 quality gates and Criterion #3 reliable merge lifecycle.
 - [>] [TEST] Validate echo agent end-to-end lifecycle from claim through merge — create `tests/integration/echo-agent-lifecycle.test.sh` that sets `SKYNET_AGENT=echo`, runs a single dev-worker cycle against a fixture backlog task, and asserts the full lifecycle: claim → branch → echo commit → quality gates → merge → completed.md entry. Use an isolated git repo. Mission: Criterion #6 multi-agent compatibility and Criterion #2 quality gates.

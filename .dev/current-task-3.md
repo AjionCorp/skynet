@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection
+## [TEST] Add unit tests for `_events.sh` event emission and file formatting
 **Status:** completed
-**Started:** 2026-02-24 21:40
-**Completed:** 2026-02-24
-**Branch:** dev/add-standalone-unit-tests-for-worktreesh
+**Started:** 2026-02-25 15:17
+**Completed:** 2026-02-25
+**Branch:** dev/add-unit-tests-for-eventssh-event-emissi
 **Worker:** 3
 
 ### Changes
