@@ -443,15 +443,24 @@ describe("createTasksHandlers", () => {
   // is module-level state and exhausting the limit pollutes later tests.
   // -----------------------------------------------------------------------
   describe("POST rate limiting", () => {
-    beforeEach(() => {
+    beforeEach(async () => {
+      // Use the real checkRateLimit implementation for rate-limit tests
+      const { checkRateLimit: realCheckRateLimit, _resetRateLimits } = await vi.importActual<typeof import("../lib/rate-limiter")>("../lib/rate-limiter");
+      const { checkRateLimit } = await import("../lib/rate-limiter");
+      vi.mocked(checkRateLimit).mockImplementation(realCheckRateLimit);
+      _resetRateLimits();
+
       // Advance time past the 60s rate-limit window so any timestamps
       // accumulated by earlier tests are pruned on the next POST call.
       vi.useFakeTimers();
       vi.setSystemTime(Date.now() + 120_000);
     });
 
-    afterEach(() => {
+    afterEach(async () => {
       vi.useRealTimers();
+      // Restore mock to default (allow all) for subsequent tests
+      const { checkRateLimit } = await import("../lib/rate-limiter");
+      vi.mocked(checkRateLimit).mockImplementation(() => true);
     });
 
     it("allows requests within rate limit window", async () => {
