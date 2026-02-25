@@ -2,29 +2,30 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-25 | [TEST] Add unit tests for `_events.sh` event emission and file formatting | merged to main | 5m | success |
 | 2026-02-25 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
-| 2026-02-25 | [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | 4m | success |
-| 2026-02-25 | [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | 3m | success |
-| 2026-02-25 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |
+| 2026-02-25 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | 4m | success |
+| 2026-02-25 | [INFRA] [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | 3m | success |
+| 2026-02-25 | [TEST] [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |
 | 2026-02-25 | [TEST] Validate echo agent end-to-end lifecycle from claim through merge | merged to main | 10m | success |
 | 2026-02-25 | [FEAT] Project driver | merged to main | 8m | success |
-| 2026-02-25 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | 0m | success |
-| 2026-02-25 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
-| 2026-02-25 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
+| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | 0m | success |
+| 2026-02-25 | [FIX] [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
+| 2026-02-25 | [DATA] [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
 | 2026-02-25 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | 0m | success |
 | 2026-02-25 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
-| 2026-02-25 | [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |
-| 2026-02-25 | [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | merged to main | 1m | success |
-| 2026-02-24 | [INFRA] Add task-fixer structured diagnostics for fix rate improvement | merged to main | 6m | success |
-| 2026-02-24 | [FIX] Extract duplicated mission evaluation logic from CLI status to shared module | merged to main | 13m | success |
-| 2026-02-24 | [FIX] Deduplicate repeated entries in completed.md | merged to main | 9m | success |
-| 2026-02-24 | [TEST] Add Linux cron setup-agents regression test | merged to main | 4m | success |
-| 2026-02-24 | [INFRA] Prune stale local dev/* branches from resolved failed tasks | merged to main | 5m | success |
-| 2026-02-24 | [INFRA] Archive resolved failed-task rows to bound state file size | merged to main | 4m | success |
-| 2026-02-24 | [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
+| 2026-02-25 | [DATA] [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |
+| 2026-02-25 | [TEST] [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | merged to main | 1m | success |
+| 2026-02-24 | [INFRA] [INFRA] Add task-fixer structured diagnostics for fix rate improvement | merged to main | 6m | success |
+| 2026-02-24 | [FIX] [FIX] Extract duplicated mission evaluation logic from CLI status to shared module | merged to main | 13m | success |
+| 2026-02-24 | [FIX] [FIX] Deduplicate repeated entries in completed.md | merged to main | 9m | success |
+| 2026-02-24 | [TEST] [TEST] Add Linux cron setup-agents regression test | merged to main | 4m | success |
+| 2026-02-24 | [INFRA] [INFRA] Prune stale local dev/* branches from resolved failed tasks | merged to main | 5m | success |
+| 2026-02-24 | [INFRA] [INFRA] Archive resolved failed-task rows to bound state file size | merged to main | 4m | success |
+| 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | 0m | success |
 | 2026-02-24 | [FEAT] Add dark/light theme toggle to AdminLayout | merged to main | 6m | success |
-| 2026-02-24 | [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
-| 2026-02-24 | [FEAT] Add task search and tag filter to Tasks page | merged to main | 2m | success |
+| 2026-02-24 | [FEAT] [FEAT] Add task detail drawer to Tasks page | merged to main | 7m | success |
+| 2026-02-24 | [FEAT] [FEAT] Add task search and tag filter to Tasks page | merged to main | 2m | success |
 | 2026-02-20 | [DATA] Emit canonical `failed_root_snapshot` and blockers-sync parity check after reconciliation | merged to main | 2m | fixed (attempt 1) |
 | 2026-02-20 | [DATA] Emit canonical `failed_root_snapshot` parity payload after each reconciliation cycle | merged to main | 1m | success |
 | 2026-02-20 | [DATA] Emit canonical failed-root snapshot and blockers parity telemetry per reconciliation cycle | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Use mkdir-based atomic lock for watchdog PID singleton enforcement | merged to main | 6m | success |
 | 2026-02-20 | [FIX] Validate git repository during `skynet init` | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add CI job dependency chain to save GitHub Actions minutes | merged to main | 0m | success |
-| 2026-02-20 | [INFRA] Add Playwright E2E tests for events, logs, settings, and workers admin pages | merged to main | 2m | success |
