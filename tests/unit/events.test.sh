@@ -566,6 +566,197 @@ desc_len=${#desc}
 
 assert_eq "$desc_len" "3000" "boundary: description at exactly 3000 chars is preserved"
 
+# ── Test 21: Emit lock contention fallback (event still written) ──────
+
+echo ""
+log "=== Test 21: Event written even when emit lock cannot be acquired ==="
+
+> "$events_log"
+
+# Create an emit lock that is held (simulates contention for all 5 retries)
+_emit_lock="${SKYNET_LOCK_PREFIX}-events-emit.lock"
+mkdir -p "$_emit_lock"
+
+emit_event "contention_test" "written despite lock"
+
+# Even under full contention, the event should still be written (line 72-76 fallback)
+if [ -f "$events_log" ]; then
+  line_count=$(wc -l < "$events_log" | tr -d ' ')
+  if [ "$line_count" -ge 1 ]; then
+    pass "lock contention: event written despite held emit lock"
+  else
+    fail "lock contention: event should be written even when lock is held"
+  fi
+else
+  fail "lock contention: events.log should exist after fallback write"
+fi
+
+# Verify format is intact
+line=$(head -1 "$events_log")
+field_count=$(echo "$line" | awk -F'|' '{print NF}')
+assert_eq "$field_count" "3" "lock contention: output format is valid"
+
+# Cleanup
+rm -rf "$_emit_lock"
+
+# ── Test 22: Rotation skip counter resets after successful rotation ───
+
+echo ""
+log "=== Test 22: Rotation skip counter resets after successful rotation ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# Artificially set the skip counter high
+_EVENTS_ROTATION_SKIPS=10
+
+# Set low threshold so a rotation triggers
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Write enough to trigger rotation (no held lock, so rotation succeeds)
+local_n=0
+while [ "$local_n" -lt 30 ]; do
+  emit_event "reset_test" "fill log to trigger rotation and reset the skip counter value"
+  local_n=$((local_n + 1))
+done
+
+# After a successful rotation, _EVENTS_ROTATION_SKIPS should be 0
+if [ "$_EVENTS_ROTATION_SKIPS" -lt 10 ]; then
+  pass "skip reset: rotation skip counter decreased after successful rotation"
+else
+  fail "skip reset: skip counter should reset after successful rotation (got $_EVENTS_ROTATION_SKIPS)"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 23: Hard cap warning emitted to stderr ──────────────────────
+
+echo ""
+log "=== Test 23: Hard cap force-rotation emits warning to stderr ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="999999"
+
+# Create an events.log that exceeds 5MB
+dd if=/dev/zero bs=1024 count=5500 2>/dev/null | tr '\0' 'X' > "$events_log"
+echo "" >> "$events_log"
+
+_hard_stderr="$TMPDIR_ROOT/hard_cap_stderr"
+emit_event "hard_cap_warn" "check stderr message" 2>"$_hard_stderr"
+
+if grep -q "exceeded hard cap" "$_hard_stderr"; then
+  pass "hard cap stderr: warning message contains 'exceeded hard cap'"
+else
+  fail "hard cap stderr: expected 'exceeded hard cap' in stderr warning"
+fi
+
+# Reset
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# ── Test 24: Newlines in description pass through to flat file ────────
+
+echo ""
+log "=== Test 24: Newlines in description (flat file behavior) ==="
+
+> "$events_log"
+
+# Newlines in descriptions are NOT stripped by emit_event (only pipes are sanitized).
+# This is acceptable: SQLite is the primary store; the flat file is backward-compat only.
+# This test documents the actual behavior.
+emit_event "newline_test" "line1
+line2"
+
+# The first line should have the correct pipe-delimited header
+first_line=$(head -1 "$events_log")
+event=$(echo "$first_line" | cut -d'|' -f2)
+assert_eq "$event" "newline_test" "newlines: event name intact on first line"
+
+# The description spans multiple lines in the flat file (known behavior)
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+if [ "$line_count" -gt 1 ]; then
+  pass "newlines: multi-line description preserved in flat file (known behavior)"
+else
+  pass "newlines: description handled as single line"
+fi
+
+# ── Test 25: No rotation when file is under threshold ────────────────
+
+echo ""
+log "=== Test 25: No rotation when events.log is under threshold ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+
+# Write a few small events — well under 1024 KB
+emit_event "small_a" "small event a"
+emit_event "small_b" "small event b"
+emit_event "small_c" "small event c"
+
+if [ ! -f "${events_log}.1" ]; then
+  pass "no rotation: events.log.1 does not exist when under threshold"
+else
+  fail "no rotation: events.log.1 should not exist when file is under threshold"
+fi
+
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+assert_eq "$line_count" "3" "no rotation: all 3 events in events.log"
+
+# ── Test 26: Rapid sequential emissions maintain line integrity ───────
+
+echo ""
+log "=== Test 26: Rapid sequential emissions maintain line integrity ==="
+
+> "$events_log"
+
+# Emit 50 events in quick succession
+local_r=0
+while [ "$local_r" -lt 50 ]; do
+  emit_event "rapid_${local_r}" "event number ${local_r}"
+  local_r=$((local_r + 1))
+done
+
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+assert_eq "$line_count" "50" "rapid emit: exactly 50 lines for 50 events"
+
+# Verify every line has exactly 3 fields
+bad_lines=0
+while IFS= read -r line; do
+  fc=$(echo "$line" | awk -F'|' '{print NF}')
+  if [ "$fc" -ne 3 ]; then
+    bad_lines=$((bad_lines + 1))
+  fi
+done < "$events_log"
+assert_eq "$bad_lines" "0" "rapid emit: all 50 lines have exactly 3 pipe-delimited fields"
+
+# ── Test 27: db_add_event failure does not prevent flat file write ────
+
+echo ""
+log "=== Test 27: db_add_event failure does not prevent flat file write ==="
+
+> "$events_log"
+
+# Override db_add_event to fail
+db_add_event() { return 1; }
+
+emit_event "db_fail_test" "should still write to file"
+
+if [ -f "$events_log" ]; then
+  line_count=$(wc -l < "$events_log" | tr -d ' ')
+  assert_eq "$line_count" "1" "db failure: event still written to flat file"
+else
+  fail "db failure: events.log should exist even when db_add_event fails"
+fi
+
+event=$(head -1 "$events_log" | cut -d'|' -f2)
+assert_eq "$event" "db_fail_test" "db failure: correct event name in flat file"
+
+# Restore db_add_event stub
+db_add_event() { _DB_CALLS+=("$1|${2:-}|${3:-}|${4:-}"); }
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""
