@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-25 | [TEST] [TEST] Add handler unit tests for mission-raw and pipeline-stream | merged to main | 13m | success |
 | 2026-02-25 | [TEST] Add unit tests for `_events.sh` event emission and file formatting | merged to main | 5m | success |
 | 2026-02-25 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
 | 2026-02-25 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | 4m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Use configurable `SKYNET_AUTH_NOTIFY_INTERVAL` in auth-check.sh instead of hardcoded value | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Use mkdir-based atomic lock for watchdog PID singleton enforcement | merged to main | 6m | success |
 | 2026-02-20 | [FIX] Validate git repository during `skynet init` | merged to main | 0m | success |
-| 2026-02-20 | [INFRA] Add CI job dependency chain to save GitHub Actions minutes | merged to main | 0m | success |
