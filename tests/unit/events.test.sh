@@ -757,6 +757,159 @@ assert_eq "$event" "db_fail_test" "db failure: correct event name in flat file"
 # Restore db_add_event stub
 db_add_event() { _DB_CALLS+=("$1|${2:-}|${3:-}|${4:-}"); }
 
+# ── Test 28: UTF-8 multi-byte truncation preserves character boundaries ─
+
+echo ""
+log "=== Test 28: UTF-8 multi-byte truncation at 3000 characters ==="
+
+> "$events_log"
+
+# Build a description of 2998 ASCII chars + 2 multi-byte chars (total 3000 chars, >3000 bytes)
+# Each emoji is 1 character but 4 bytes in UTF-8
+utf8_prefix=$(printf 'X%.0s' $(seq 1 2998))
+utf8_desc="${utf8_prefix}🔥🔥"  # 2998 + 2 = 3000 characters
+emit_event "utf8_test" "$utf8_desc"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+desc_len=${#desc}
+
+assert_eq "$desc_len" "3000" "utf8 truncation: 3000-char description with multi-byte preserved"
+
+# Now test truncation: 2999 ASCII + 2 emoji = 3001 chars → should truncate to 3000
+> "$events_log"
+utf8_over="${utf8_prefix}X🔥🔥"  # 2999 + 2 = 3001 characters
+emit_event "utf8_trunc" "$utf8_over"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+desc_len=${#desc}
+
+assert_eq "$desc_len" "3000" "utf8 truncation: 3001-char description truncated to 3000"
+
+# Verify the truncated string doesn't end mid-codepoint (no invalid bytes)
+if printf '%s' "$desc" | iconv -f UTF-8 -t UTF-8 >/dev/null 2>&1; then
+  pass "utf8 truncation: no mid-codepoint split after truncation"
+else
+  fail "utf8 truncation: truncation produced invalid UTF-8"
+fi
+
+# ── Test 29: WORKER_ID takes priority over FIXER_ID ──────────────────
+
+echo ""
+log "=== Test 29: WORKER_ID takes priority when both IDs are set ==="
+
+_DB_CALLS=()
+export WORKER_ID="5"
+export FIXER_ID="9"
+
+emit_event "priority_test" "both IDs set"
+
+last_call="${_DB_CALLS[${#_DB_CALLS[@]}-1]}"
+worker_field=$(echo "$last_call" | cut -d'|' -f3)
+assert_eq "$worker_field" "5" "priority: WORKER_ID (5) used over FIXER_ID (9)"
+
+unset WORKER_ID FIXER_ID
+
+# ── Test 30: Epoch timestamps are non-decreasing ─────────────────────
+
+echo ""
+log "=== Test 30: Epoch timestamps are non-decreasing across events ==="
+
+> "$events_log"
+
+emit_event "epoch_a" "first"
+emit_event "epoch_b" "second"
+emit_event "epoch_c" "third"
+
+epoch_1=$(sed -n '1p' "$events_log" | cut -d'|' -f1)
+epoch_2=$(sed -n '2p' "$events_log" | cut -d'|' -f1)
+epoch_3=$(sed -n '3p' "$events_log" | cut -d'|' -f1)
+
+if [ "$epoch_2" -ge "$epoch_1" ] && [ "$epoch_3" -ge "$epoch_2" ]; then
+  pass "monotonicity: epochs are non-decreasing ($epoch_1 <= $epoch_2 <= $epoch_3)"
+else
+  fail "monotonicity: epochs should be non-decreasing ($epoch_1, $epoch_2, $epoch_3)"
+fi
+
+# ── Test 31: All-pipes description becomes all-dashes ────────────────
+
+echo ""
+log "=== Test 31: Description of only pipe characters ==="
+
+> "$events_log"
+
+emit_event "pipes_only" "|||"
+line=$(head -1 "$events_log")
+desc=$(echo "$line" | cut -d'|' -f3)
+field_count=$(echo "$line" | awk -F'|' '{print NF}')
+
+assert_eq "$desc" "---" "all-pipes: description '|||' becomes '---'"
+assert_eq "$field_count" "3" "all-pipes: line still has exactly 3 fields"
+
+# ── Test 32: Concurrent multi-process emissions ──────────────────────
+
+echo ""
+log "=== Test 32: Concurrent emissions from multiple subshells ==="
+
+> "$events_log"
+
+# Spawn 10 background subshells each emitting 5 events
+_conc_pids=""
+for _conc_i in $(seq 1 10); do
+  (
+    export DEV_DIR="$DEV_DIR"
+    export SKYNET_LOCK_PREFIX="$SKYNET_LOCK_PREFIX"
+    export SKYNET_MAX_EVENTS_LOG_KB="999999"
+    source "$REPO_ROOT/scripts/_events.sh"
+    db_add_event() { :; }  # no-op in subshell
+    for _conc_j in $(seq 1 5); do
+      emit_event "conc_${_conc_i}_${_conc_j}" "from proc $_conc_i"
+    done
+  ) &
+  _conc_pids="$_conc_pids $!"
+done
+
+# Wait for all background processes
+for _pid in $_conc_pids; do
+  wait "$_pid" 2>/dev/null || true
+done
+
+line_count=$(wc -l < "$events_log" | tr -d ' ')
+assert_eq "$line_count" "50" "concurrent: all 50 events from 10 processes written"
+
+# Verify every line has exactly 3 fields (no interleaving corruption)
+bad_lines=0
+while IFS= read -r line; do
+  fc=$(echo "$line" | awk -F'|' '{print NF}')
+  if [ "$fc" -ne 3 ]; then
+    bad_lines=$((bad_lines + 1))
+  fi
+done < "$events_log"
+assert_eq "$bad_lines" "0" "concurrent: all 50 lines have valid 3-field format"
+
+# ── Test 33: Skip counter increments on rotation path ────────────────
+
+echo ""
+log "=== Test 33: Skip counter behavior through successful rotation ==="
+
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
+# Start fresh
+_EVENTS_ROTATION_SKIPS=0
+export SKYNET_MAX_EVENTS_LOG_KB="1"
+
+# Write enough to trigger rotation (which will succeed — no held lock)
+dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
+emit_event "skip_precise" "trigger rotation"
+
+# After the successful rotation path: line 104 sets to 0, then line 135
+# increments unconditionally. So the expected value is 1.
+assert_eq "$_EVENTS_ROTATION_SKIPS" "1" "skip counter: value is 1 after successful rotation (reset + unconditional increment)"
+
+# Reset
+_EVENTS_ROTATION_SKIPS=0
+export SKYNET_MAX_EVENTS_LOG_KB="1024"
+rm -f "${events_log}" "${events_log}.1" "${events_log}.2" "${events_log}.2.gz" 2>/dev/null
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""
