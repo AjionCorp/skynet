@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-02-25 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | 4m | success |
 | 2026-02-25 | [INFRA] [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | 3m | success |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |
 | 2026-02-25 | [TEST] Validate echo agent end-to-end lifecycle from claim through merge | merged to main | 10m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [INFRA] Add CI job dependency chain to save GitHub Actions minutes | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add Playwright E2E tests for events, logs, settings, and workers admin pages | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Add SSE auto-reconnection with backoff to PipelineDashboard | 'reconnecting' | 0m | 'disconnected') displayed as a small colored indicator (green/yellow/red dot) next to the page title, (d) handle `document.visibilitychange` — close SSE when tab is hidden, reopen when visible to save server resources. Keep the existing polling fallback intact for browsers that don't support SSE. Criterion #4 (reliable real-time dashboard visibility) |
-| 2026-02-20 | [INFRA] Add `permissions: contents: read` to CI workflow and npm metadata to published packages | merged to main | 1m | success |

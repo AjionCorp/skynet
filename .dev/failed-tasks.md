@@ -24,9 +24,9 @@
 | 2026-02-24 | [TEST] [TEST] Add unit tests for _config.sh shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | claude exit code 1 | 0 | failed |
 | 2026-02-24 | [TEST] [TEST] Add integration test for watchdog crash recovery end-to-end | dev/add-integration-test-for-watchdog-crash- | claude exit code 1 | 0 | failed |
 | 2026-02-24 | [INFRA] [INFRA] Add pipeline idle detection and completion signaling to watchdog | dev/add-pipeline-idle-detection-and-completi | claude exit code 1 | 0 | failed |
-| 2026-02-24 | [TEST] [TEST] Add handler unit tests for mission-raw and pipeline-stream | dev/add-handler-unit-tests-for-mission-raw-a | typecheck failed | 0 | failed |
 | 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | failed |
-| 2026-02-24 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | dev/add-prompt-size-guardrail-before-llm-age | merge conflict | 0 | fixing-1 |
+| 2026-02-24 | [TEST] [TEST] Add handler unit tests for mission-raw and pipeline-stream | dev/add-handler-unit-tests-for-mission-raw-a | typecheck failed | 0 | fixing-2 |
+| 2026-02-24 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | merge conflict | 1 | fixed |
 | 2026-02-24 | [INFRA] [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | worktree missing before gates | 1 | fixed |
 | 2026-02-24 | [TEST] [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | typecheck failed | 1 | fixed |
 | 2026-02-24 | [FIX] [FIX] Separate rate_limits write path from read-only DB access | merged to main | worktree missing before gates | 1 | fixed |
