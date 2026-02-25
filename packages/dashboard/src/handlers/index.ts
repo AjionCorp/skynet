@@ -14,3 +14,4 @@ export { createConfigHandler, MUTABLE_KEYS, SENSITIVE_KEYS } from "./config";
 export { createEventsHandler } from "./events";
 export { createMetricsHandler } from "./metrics";
 export { createPipelineHealthTrendHandler } from "./pipeline-health-trend";
+export { createTaskVelocityHandler } from "./task-velocity";

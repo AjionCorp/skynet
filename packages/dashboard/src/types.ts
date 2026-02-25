@@ -262,6 +262,14 @@ export interface SelfCorrectionStats {
   selfCorrected: number;
 }
 
+// ===== Task Velocity Types =====
+
+export interface VelocityDataPoint {
+  date: string;
+  count: number;
+  avgDurationMins: number | null;
+}
+
 // ===== Event Types =====
 
 export interface EventEntry {

@@ -21,6 +21,7 @@ export type { SettingsDashboardProps } from "./SettingsDashboard";
 export { ActivityFeed } from "./ActivityFeed";
 export { EventsDashboard } from "./EventsDashboard";
 export { HealthSparkline } from "./HealthSparkline";
+export { TaskVelocityChart } from "./TaskVelocityChart";
 export type { EventsDashboardProps } from "./EventsDashboard";
 export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
