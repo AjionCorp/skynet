@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status
+## [TEST] Add unit tests for `_merge.sh` shared merge-to-main logic
 **Status:** completed
-**Started:** 2026-02-24 21:38
-**Completed:** 2026-02-24
-**Branch:** dev/add-multi-mission-cli-integration-tests-
+**Started:** 2026-02-25 15:19
+**Completed:** 2026-02-25
+**Branch:** dev/add-unit-tests-for-mergesh-shared-merge-
 **Worker:** 2
 
 ### Changes

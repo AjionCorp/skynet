@@ -28,9 +28,9 @@
 | 2026-02-24 | [INFRA] [INFRA] Add prompt size guardrail before LLM agent invocation | dev/add-prompt-size-guardrail-before-llm-age | merge conflict | 0 | failed |
 | 2026-02-24 | [INFRA] [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | dev/sync-backlogmd-claimed-markers-with-db-s | worktree missing before gates | 0 | failed |
 | 2026-02-24 | [TEST] [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | typecheck failed | 0 | failed |
-| 2026-02-24 | [FIX] [FIX] Separate rate_limits write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | worktree missing before gates | 0 | failed |
 | 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | failed |
 | 2026-02-24 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | dev/complete-echo-agent-dry-run-lifecycle-in | typecheck failed | 0 | fixing-1 |
+| 2026-02-24 | [FIX] [FIX] Separate rate_limits write path from read-only DB access | merged to main | worktree missing before gates | 1 | fixed |
 | 2026-02-24 | [DATA] [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | merge conflict | 1 | fixed |
 | 2026-02-24 | [FEAT] [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |
 | 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | worktree missing before gates | 1 | fixed |
