@@ -6,7 +6,7 @@ import type { SkynetConfig, CodexAuthStatus } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
-import { getSkynetDB } from "../lib/db";
+import { getSkynetReadonlyDB } from "../lib/db";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
@@ -205,9 +205,9 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // --- Try SQLite as primary data source ---
       let usingSqlite = false;
-      let db: ReturnType<typeof getSkynetDB> | null = null;
+      let db: ReturnType<typeof getSkynetReadonlyDB> | null = null;
       try {
-        db = getSkynetDB(devDir);
+        db = getSkynetReadonlyDB(devDir);
         // Verify the DB is initialized (tables exist) with a cheap query
         db.countPending();
         usingSqlite = true;

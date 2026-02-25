@@ -19,6 +19,13 @@ vi.mock("../lib/db", () => ({
     addTask: vi.fn(),
     exportBacklog: vi.fn(() => { throw new Error("SQLite export not available"); }),
   })),
+  getSkynetReadonlyDB: vi.fn(() => ({
+    countPending: vi.fn(() => { throw new Error("SQLite not available"); }),
+    getBacklogItems: vi.fn(() => { throw new Error("SQLite not available"); }),
+  })),
+}));
+vi.mock("../lib/rate-limiter", () => ({
+  checkRateLimit: vi.fn(() => true),
 }));
 
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";

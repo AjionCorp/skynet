@@ -1,7 +1,7 @@
 import { spawnSync } from "child_process";
 import { appendFileSync } from "fs";
 import type { SkynetConfig, EventEntry } from "../types";
-import { getSkynetDB } from "../lib/db";
+import { getSkynetReadonlyDB } from "../lib/db";
 
 /**
  * OPS-P2-4: Log unexpected handler errors to a persistent file for debugging.
@@ -27,7 +27,7 @@ export function createEventsHandler(config: SkynetConfig) {
     try {
       // Prefer SQLite, fallback to file
       try {
-        const db = getSkynetDB(config.devDir);
+        const db = getSkynetReadonlyDB(config.devDir);
         db.countPending(); // verify DB is initialized
         const entries = db.getRecentEvents(100);
         return Response.json({ data: entries, error: null });
