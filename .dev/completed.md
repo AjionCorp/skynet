@@ -2,8 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
-| 2026-02-25 | [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | merged to main | 5m | success |
-| 2026-02-25 | [INFRA] Add per-mission backlog isolation in project-driver task generation | merged to main | 7m | success |
+| 2026-02-25 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
 | 2026-02-25 | [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | merged to main | 1m | success |
 | 2026-02-24 | [INFRA] Add task-fixer structured diagnostics for fix rate improvement | merged to main | 6m | success |
@@ -202,3 +201,4 @@
 | 2026-02-20 | [INFRA] Add agent execution timeout to prevent zombie agent processes | merged to main | 6m | success |
 | 2026-02-20 | [INFRA] Add agent-auth preflight gate before watchdog dispatch to avoid dead cycles when credentials expire | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Add automatic merge retry with rebase in dev-worker.sh | merged to main | 1m | success |
+| 2026-02-20 | [INFRA] Add backlog checked-history rotation guardrail to keep project-driver context bounded | merged to main | 2m | success |

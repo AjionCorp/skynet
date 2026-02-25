@@ -2,6 +2,12 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-02-25 | [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | failed |
+| 2026-02-25 | [TEST] Add handler unit tests for mission-raw and pipeline-stream endpoints | dev/add-handler-unit-tests-for-mission-raw-a | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [INFRA] Add pipeline idle detection and automatic restart signaling to watchdog | dev/add-pipeline-idle-detection-and-automati | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [INFRA] Supersede completed-root `status=failed` rows during watchdog reconciliation | dev/supersede-completed-root-statusfailed-ro | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [INFRA] Add per-mission backlog isolation in project-driver task generation | dev/add-per-mission-backlog-isolation-in-pro | claude exit code 1 | 0 | failed |
+| 2026-02-25 | [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | dev/add-multi-mission-cli-integration-tests- | typecheck failed post-merge | 0 | failed |
 | 2026-02-25 | [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | failed |
 | 2026-02-25 | [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | failed |
 | 2026-02-25 | [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | failed |
@@ -26,9 +32,9 @@
 | 2026-02-24 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | dev/complete-echo-agent-dry-run-lifecycle-in | typecheck failed | 0 | failed |
 | 2026-02-24 | [DATA] Refresh blockers.md Active section to match current resolved state | dev/refresh-blockersmd-active-section-to-mat | merge conflict | 0 | failed |
 | 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | failed |
-| 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | dev/add-keyboard-shortcuts-to-dashboard | worktree missing before gates | 0 | failed |
-| 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | failed |
+| 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | fixing-2 |
 | 2026-02-24 | [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |
+| 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | worktree missing before gates | 1 | fixed |
 | 2026-02-20 | [TEST] Add EventsDashboard component tests | merged to main | merge conflict | 1 | fixed |
 | 2026-02-20 | [FIX] Fix codex.sh to pipe prompt via stdin instead of CLI argument | fix/fix-codexsh-to-pipe-prompt-via-stdin-ins | typecheck failed after fix attempt 3 | 3 | fixed |
 | 2026-02-20 | [FIX] Add missing `SKYNET_WATCHDOG_INTERVAL` and `SKYNET_ONE_SHOT` to config template | dev/add-missing-skynetwatchdoginterval-and-s | typecheck failed (fix attempt 1 failed) (fix attempt 2 failed) (fix attempt 3 failed) | 3 | fixed |
@@ -153,6 +159,7 @@
 | 2026-02-19 | [FEAT] Add `skynet pause` and `skynet resume` CLI commands for pipeline flow control | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [FIX] Fix SKYNET_MAX_WORKERS default mismatch between config template and watchdog | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [TEST] Add events handler unit tests and ActivityFeed component tests | merged to main | merge conflict | 1 | fixed |
+| 2026-02-25 | [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | dev/surface-failed-row-reconciliation-counte | claude exit code 1 | 0 | superseded |
 | 2026-02-25 | [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | merge conflict | 0 | superseded |
 | 2026-02-20 | [FEAT] Add `echo` agent plugin for pipeline dry-run testing | dev/add-echo-agent-plugin-for-pipeline-dry-r | typecheck failed | 0 | superseded |
 | 2026-02-20 | [FIX] Fix duplicate Activity icon for events page in admin navigation | dev/fix-duplicate-activity-icon-for-events-p | typecheck failed | 0 | superseded |
