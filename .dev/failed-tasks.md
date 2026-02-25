@@ -32,9 +32,9 @@
 | 2026-02-24 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | dev/complete-echo-agent-dry-run-lifecycle-in | typecheck failed | 0 | failed |
 | 2026-02-24 | [DATA] Refresh blockers.md Active section to match current resolved state | dev/refresh-blockersmd-active-section-to-mat | merge conflict | 0 | failed |
 | 2026-02-24 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | dev/add-pipeline-health-trend-sparkline-to-p | merge conflict | 0 | failed |
-| 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | dev/add-task-completion-velocity-chart-to-pi | critical merge failure | 0 | fixing-2 |
 | 2026-02-24 | [FEAT] Add worker efficiency cards to Pipeline dashboard | merged to main | typecheck failed after fix attempt 1 | 2 | fixed |
 | 2026-02-24 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | worktree missing before gates | 1 | fixed |
+| 2026-02-24 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | critical merge failure | 1 | fixed |
 | 2026-02-20 | [TEST] Add EventsDashboard component tests | merged to main | merge conflict | 1 | fixed |
 | 2026-02-20 | [FIX] Fix codex.sh to pipe prompt via stdin instead of CLI argument | fix/fix-codexsh-to-pipe-prompt-via-stdin-ins | typecheck failed after fix attempt 3 | 3 | fixed |
 | 2026-02-20 | [FIX] Add missing `SKYNET_WATCHDOG_INTERVAL` and `SKYNET_ONE_SHOT` to config template | dev/add-missing-skynetwatchdoginterval-and-s | typecheck failed (fix attempt 1 failed) (fix attempt 2 failed) (fix attempt 3 failed) | 3 | fixed |
