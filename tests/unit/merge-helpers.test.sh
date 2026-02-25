@@ -579,6 +579,176 @@ assert_contains "$LAST_MSG" "auto-revert" "revert-smoke-reason: commit message c
 # Push to keep remote in sync
 git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
 
+# ============================================================
+# TEST 13: _compute_dynamic_merge_ttl — non-numeric with trailing newline
+# ============================================================
+# Edge case: file contains whitespace or partial numeric content
+
+echo ""
+_tlog "=== Test 13: _compute_dynamic_merge_ttl — whitespace in duration file ==="
+
+printf "  450  \n" > "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+_compute_dynamic_merge_ttl
+# "  450  " should be treated as non-numeric by case pattern and stay at default
+assert_eq "$SKYNET_MERGE_LOCK_TTL" "900" "ttl-whitespace: whitespace-padded value treated as non-numeric (stays at default)"
+
+# Clean up
+rm -f "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 14: _compute_dynamic_merge_ttl — cap ceiling (exactly 1800)
+# ============================================================
+# When computed = 751*2+300 = 1802 > 1800, should cap at 1800.
+
+echo ""
+_tlog "=== Test 14: _compute_dynamic_merge_ttl — cap at exactly 1800 ==="
+
+echo "751" > "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+_compute_dynamic_merge_ttl
+assert_eq "$SKYNET_MERGE_LOCK_TTL" "1800" "ttl-cap-exact: duration=751 → computed 1802 capped to 1800"
+
+# Clean up
+rm -f "${DEV_DIR}/typecheck-duration"
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 15: _check_merge_lock_ttl — default minimum (no arg)
+# ============================================================
+# When called without arguments, default minimum is 180.
+
+echo ""
+_tlog "=== Test 15: _check_merge_lock_ttl — default minimum (no arg) ==="
+
+# Set up: acquired at current SECONDS, TTL = SECONDS + 200 → remaining=200
+_MERGE_LOCK_ACQUIRED_AT=0
+SKYNET_MERGE_LOCK_TTL=$(( SECONDS + 200 ))
+
+_ttl_rc=0
+_check_merge_lock_ttl || _ttl_rc=$?
+assert_eq "$_ttl_rc" "0" "ttl-default-min: remaining=200 ≥ default 180 → returns 0"
+
+# Now test with remaining=170 < default 180
+SKYNET_MERGE_LOCK_TTL=$(( SECONDS + 170 ))
+_ttl_rc=0
+_check_merge_lock_ttl || _ttl_rc=$?
+assert_eq "$_ttl_rc" "1" "ttl-default-min: remaining=170 < default 180 → returns 1"
+
+# Reset
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 16: _merge_push_with_ttl_guard — total elapsed time cap (180s)
+# ============================================================
+# The push guard caps total elapsed time across all retries at 180s.
+# Simulate this by overriding date +%s to return a future timestamp.
+
+echo ""
+_tlog "=== Test 16: _merge_push_with_ttl_guard — total elapsed time cap ==="
+
+_MERGE_LOCK_ACQUIRED_AT=$SECONDS
+SKYNET_MERGE_LOCK_TTL=9999  # Very large TTL so TTL checks pass
+SKYNET_GIT_PUSH_TIMEOUT=120
+LOG="$TMPDIR_ROOT/test-merge-helpers.log"
+
+# Override date to simulate time passing beyond 180s after first push attempt.
+# We use a file-based counter because $(date +%s) runs in a subshell,
+# so shell variable increments don't persist to the parent.
+_date_counter_file="$TMPDIR_ROOT/date-counter"
+echo "0" > "$_date_counter_file"
+_date_initial=$(command date +%s)
+date() {
+  if [ "$1" = "+%s" ]; then
+    local _cnt
+    _cnt=$(cat "$_date_counter_file" 2>/dev/null || echo "0")
+    _cnt=$((_cnt + 1))
+    echo "$_cnt" > "$_date_counter_file"
+    # First call returns initial time, subsequent calls return 200s later
+    if [ "$_cnt" -le 1 ]; then
+      echo "$_date_initial"
+    else
+      echo $(( _date_initial + 200 ))
+    fi
+  else
+    command date "$@"
+  fi
+}
+
+# Override run_with_timeout to always fail (simulating push failure)
+_saved_rwt_16=$(declare -f run_with_timeout 2>/dev/null || true)
+run_with_timeout() { return 1; }
+
+: > "$LOG"
+_ptg_rc=0
+_merge_push_with_ttl_guard 5 || _ptg_rc=$?
+assert_eq "$_ptg_rc" "1" "push-time-cap: returns 1 when total time exceeds 180s"
+
+PUSH_CAP_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$PUSH_CAP_LOG" "total time exceeded 180s" "push-time-cap: log mentions 180s cap exceeded"
+
+# Restore
+unset -f date
+rm -f "$_date_counter_file"
+if [ -n "$_saved_rwt_16" ]; then
+  eval "$_saved_rwt_16"
+else
+  run_with_timeout() { shift; "$@"; }
+fi
+_MERGE_LOCK_ACQUIRED_AT=-1
+SKYNET_MERGE_LOCK_TTL=900
+
+# ============================================================
+# TEST 17: _do_revert — git revert failure cleans up with reset
+# ============================================================
+# When git revert fails, _do_revert runs git reset --hard HEAD
+# to clean up partial revert state. Tests the SH-P3-1 path.
+
+echo ""
+_tlog "=== Test 17: _do_revert — revert failure cleanup ==="
+
+_reset_test_state
+
+cd "$PROJECT_DIR"
+# Create a commit that we'll try to revert
+echo "revert-fail-content" > revert-fail-test.txt
+git add revert-fail-test.txt
+git commit -m "feat: add revert-fail-test.txt" --no-verify >/dev/null 2>&1
+
+# Override git to make revert fail
+_real_git_17=$(which git)
+git() {
+  if echo "$*" | grep -q "revert.*--no-commit"; then
+    return 1
+  fi
+  command git "$@"
+}
+
+: > "$LOG"
+_revert_rc=0
+_do_revert "false" "test revert failure" "$LOG" || _revert_rc=$?
+assert_eq "$_revert_rc" "1" "revert-fail: _do_revert returns 1 on git revert failure"
+
+REVERT_FAIL_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$REVERT_FAIL_LOG" "CRITICAL: git revert failed" "revert-fail: CRITICAL message logged"
+
+# Verify working tree is clean (reset --hard should have cleaned up)
+# Use -uno to ignore untracked files (like .dev/ which is always present)
+cd "$PROJECT_DIR"
+DIRTY_FILES=$(command git status --porcelain -uno 2>/dev/null)
+if [ -z "$DIRTY_FILES" ]; then
+  pass "revert-fail: working tree clean after revert failure (reset --hard cleanup)"
+else
+  fail "revert-fail: working tree should be clean after reset --hard ($DIRTY_FILES)"
+fi
+
+# Restore
+unset -f git
+# Push to keep remote in sync
+command git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

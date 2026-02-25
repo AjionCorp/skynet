@@ -2014,6 +2014,304 @@ git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
 git merge --abort 2>/dev/null || true
 cleanup_worktree "$BRANCH_42" 2>/dev/null || true
 
+# ============================================================
+# TEST 43: TTL insufficient before typecheck revert push
+# ============================================================
+# Distinct from test 21 (TTL before typecheck START) and test 37
+# (TTL before smoke revert push). This tests the TTL check at
+# line 380 — after typecheck fails and revert succeeds, but before
+# pushing the revert commit.
+
+echo ""
+_tlog "=== Test 43: TTL insufficient before typecheck revert push ==="
+
+_reset_test_state
+
+BRANCH_43="dev/test-tc-revert-ttl"
+_create_feature_branch "$BRANCH_43" "tc-revert-ttl-file.txt" "tc revert ttl content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="false"
+
+# Override _check_merge_lock_ttl to fail only on the SECOND call.
+# First call is at line 334 (before typecheck — should pass).
+# Second call is at line 380 (before typecheck revert push — should fail).
+_ttl_check_count_43=0
+_saved_check_ttl_fn43=$(declare -f _check_merge_lock_ttl)
+_check_merge_lock_ttl() {
+  _ttl_check_count_43=$((_ttl_check_count_43 + 1))
+  if [ "$_ttl_check_count_43" -ge 2 ]; then
+    return 1  # Insufficient TTL for revert push
+  fi
+  return 0  # First call passes (before typecheck)
+}
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_43" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+
+# Returns 3 because TTL check before typecheck revert push fails
+assert_eq "$_merge_rc" "3" "tc-revert-ttl: returns 3 when TTL insufficient before revert push"
+
+TC_RTTL_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$TC_RTTL_LOG" "Insufficient TTL" "tc-revert-ttl: log mentions TTL insufficient"
+
+# Restore
+eval "$_saved_check_ttl_fn43"
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
+# ============================================================
+# TEST 44: Lock contention — PID of holder is logged
+# ============================================================
+
+echo ""
+_tlog "=== Test 44: Lock contention reports holder PID ==="
+
+_reset_test_state
+
+BRANCH_44="dev/test-lock-pid"
+_create_feature_branch "$BRANCH_44" "lock-pid-file.txt" "lock pid content"
+
+# Manually acquire the lock and write a fake PID
+acquire_merge_lock
+echo "99999" > "$MERGE_LOCK/pid"
+
+# Override acquire_merge_lock to always fail (lock already held)
+_saved_aml_44=$(declare -f acquire_merge_lock)
+acquire_merge_lock() { return 1; }
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_44" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "4" "lock-pid: returns 4 (lock contention)"
+
+LOCK_PID_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$LOCK_PID_LOG" "99999" "lock-pid: log contains holder PID"
+
+# Restore and clean up
+eval "$_saved_aml_44"
+release_merge_lock 2>/dev/null || true
+cd "$PROJECT_DIR"
+cleanup_worktree "$BRANCH_44" 2>/dev/null || true
+
+# ============================================================
+# TEST 45: Canary detects changes in scripts/agents/ subdirectory
+# ============================================================
+
+echo ""
+_tlog "=== Test 45: Canary detects nested script subdirectory changes ==="
+
+_reset_test_state
+
+BRANCH_45="dev/test-canary-agents"
+
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+# Create the branch with a change in scripts/agents/
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-test"
+cleanup_worktree 2>/dev/null || true
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_45" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+cd "$WORKTREE_DIR"
+git config user.email "test@merge.test"
+git config user.name "Merge Test"
+mkdir -p scripts/agents
+echo "#!/usr/bin/env bash" > scripts/agents/test-agent.sh
+echo "echo agent" >> scripts/agents/test-agent.sh
+git add scripts/agents/test-agent.sh
+git commit -m "feat: add scripts/agents/test-agent.sh" >/dev/null 2>&1
+cd "$PROJECT_DIR"
+git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+export SKYNET_CANARY_ENABLED="true"
+rm -f "${DEV_DIR}/canary-pending"
+
+_merge_rc=0
+run_merge "$BRANCH_45" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "canary-agents: merge succeeded"
+
+if [ -f "${DEV_DIR}/canary-pending" ]; then
+  pass "canary-agents: canary-pending created for scripts/agents/ change"
+  CANARY_CONTENT=$(cat "${DEV_DIR}/canary-pending" 2>/dev/null)
+  assert_contains "$CANARY_CONTENT" "agents/test-agent.sh" "canary-agents: canary lists agent script"
+else
+  fail "canary-agents: canary-pending should be created for scripts/agents/ change"
+fi
+
+# Reset
+export SKYNET_CANARY_ENABLED="false"
+rm -f "${DEV_DIR}/canary-pending"
+
+# ============================================================
+# TEST 46: Hard reset recovery — git reset --hard failure
+# ============================================================
+# Tests lines 495-497: when both push and revert-push fail, AND
+# fetch succeeds but git reset --hard fails.
+
+echo ""
+_tlog "=== Test 46: Hard reset recovery — reset failure ==="
+
+_reset_test_state
+
+BRANCH_46="dev/test-reset-fail"
+_create_feature_branch "$BRANCH_46" "reset-fail-file.txt" "reset fail content"
+
+# Make _merge_push_with_ttl_guard fail (initial push)
+_saved_merge_push_fn46=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() { return 1; }
+
+# Make git_push_with_retry fail (revert push)
+_saved_git_push_fn46=$(declare -f git_push_with_retry)
+git_push_with_retry() { return 1; }
+
+# Override emit_event to inject a broken reset after the push_diverged event.
+# We can't easily make `git reset --hard` fail on a real repo, so we
+# override run_with_timeout instead to fail specifically for reset --hard.
+_saved_emit_event_46=$(declare -f emit_event)
+_reset_rigged=false
+emit_event() {
+  if [ "$1" = "push_diverged" ]; then
+    _reset_rigged=true
+  fi
+}
+
+# Override git to make reset --hard fail after the emit_event fires
+_saved_git_path_46=$(which git)
+_real_git="$_saved_git_path_46"
+# We can't easily override git itself, but we can break the remote
+# so fetch works (from cache) but reset to a non-existent ref fails.
+# Instead, let's take a simpler approach: delete origin/main ref after emit_event.
+
+# Actually, the simplest approach: after emit_event fires, make the
+# PROJECT_DIR read-only briefly so reset fails. But that's fragile.
+# Instead, let's just verify the log message from the code path via
+# a specially crafted scenario.
+
+# Simpler: override git globally to fail on "reset --hard"
+_git_call_count_46=0
+git() {
+  _git_call_count_46=$((_git_call_count_46 + 1))
+  if [ "$_reset_rigged" = "true" ] && echo "$*" | grep -q "reset --hard"; then
+    return 1
+  fi
+  command git "$@"
+}
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_46" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "3" "reset-fail: returns 3 (critical failure)"
+
+RESET_LOG=$(cat "$LOG" 2>/dev/null)
+assert_contains "$RESET_LOG" "git reset --hard failed" "reset-fail: log mentions reset failure"
+
+# Restore everything
+unset -f git
+eval "$_saved_merge_push_fn46"
+eval "$_saved_git_push_fn46"
+eval "$_saved_emit_event_46"
+
+# ============================================================
+# TEST 47: Deps install NOT triggered when node_modules is newer
+# ============================================================
+
+echo ""
+_tlog "=== Test 47: Deps install skipped when node_modules is newer ==="
+
+_reset_test_state
+
+BRANCH_47="dev/test-deps-no-install"
+_create_feature_branch "$BRANCH_47" "deps-no-install-file.txt" "deps no install content"
+
+export SKYNET_POST_MERGE_TYPECHECK="true"
+export SKYNET_TYPECHECK_CMD="true"
+
+cd "$PROJECT_DIR"
+# Set up lock file and node_modules with node_modules NEWER
+echo "lockfile" > pnpm-lock.yaml
+git add pnpm-lock.yaml
+git commit -m "add lock file for no-install test" --no-verify >/dev/null 2>&1
+git push origin "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+mkdir -p node_modules
+echo "modules" > node_modules/.modules.yaml
+# Make lock file OLDER than node_modules
+touch -t 200001010000 pnpm-lock.yaml
+
+: > "$LOG"
+_merge_rc=0
+run_merge "$BRANCH_47" "$WORKTREE_DIR" "$LOG" "false" || _merge_rc=$?
+assert_eq "$_merge_rc" "0" "deps-no-install: merge succeeded"
+
+DEPS_NI_LOG=$(cat "$LOG" 2>/dev/null)
+if echo "$DEPS_NI_LOG" | grep -qF "Lock file newer than node_modules"; then
+  fail "deps-no-install: should NOT mention deps install when node_modules is newer"
+else
+  pass "deps-no-install: deps install correctly skipped when node_modules is newer"
+fi
+
+# Reset
+export SKYNET_POST_MERGE_TYPECHECK="false"
+export SKYNET_TYPECHECK_CMD="true"
+
+# ============================================================
+# TEST 48: Push failure with state commit — dual revert
+# ============================================================
+# When _MERGE_STATE_COMMIT_FN succeeds (creating a state commit)
+# AND then push fails, the revert must handle two commits
+# (merge + state commit). This is the push-failure equivalent
+# of test 34 (smoke failure with state commit).
+
+echo ""
+_tlog "=== Test 48: Push failure with state commit — dual revert ==="
+
+_reset_test_state
+
+BRANCH_48="dev/test-push-state-revert"
+_create_feature_branch "$BRANCH_48" "push-state-file.txt" "push state content"
+
+# Define a state commit hook that succeeds
+_test_state_48() {
+  cd "$PROJECT_DIR"
+  echo "state-48-data" > state-48.txt
+  git add state-48.txt
+  git commit -m "chore: state update for test 48" --no-verify >/dev/null 2>&1
+  return 0
+}
+_MERGE_STATE_COMMIT_FN="_test_state_48"
+
+# Make _merge_push_with_ttl_guard fail (initial push)
+_saved_merge_push_fn48=$(declare -f _merge_push_with_ttl_guard)
+_merge_push_with_ttl_guard() { return 1; }
+
+: > "$LOG"
+_merge_rc=0
+do_merge_to_main "$BRANCH_48" "$WORKTREE_DIR" "$LOG" "false" >>"$LOG" 2>&1 || _merge_rc=$?
+set +e
+
+assert_eq "$_merge_rc" "6" "push-state-revert: returns 6 (push failure)"
+
+# Both files should be reverted
+cd "$PROJECT_DIR"
+if [ ! -f "push-state-file.txt" ]; then
+  pass "push-state-revert: merge file correctly reverted"
+else
+  fail "push-state-revert: merge file should be reverted"
+fi
+if [ ! -f "state-48.txt" ]; then
+  pass "push-state-revert: state file correctly reverted (dual revert)"
+else
+  fail "push-state-revert: state file should be reverted"
+fi
+
+# Verify revert commit mentions push failure
+LAST_MSG=$(git log -1 --format=%s 2>/dev/null)
+assert_contains "$LAST_MSG" "push failed" "push-state-revert: revert mentions push failure"
+
+# Restore
+eval "$_saved_merge_push_fn48"
+_MERGE_STATE_COMMIT_FN=""
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
