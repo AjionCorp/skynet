@@ -92,6 +92,10 @@
 
 - **2026-02-24**: 21 stale `pending` entries in `failed-tasks.md` for tasks already completed via fresh implementations. **Fixed** — all 21 entries superseded. Watchdog auto-supersede with fuzzy title normalization prevents recurrence. See completed tasks: "Supersede 21 stale pending entries in failed-tasks.md", "Improve watchdog auto-supersede to catch stale failed-tasks with title variations".
 
+- **2026-02-24 21:38**: Claude Code authentication expired, pausing all pipeline jobs. **Fixed** — auth restored, pipeline resumed and actively completing tasks as of 2026-02-25.
+
+- **2026-02-25**: Three previously-active retry tasks resolved: (1) keyboard shortcuts merged in `7bf54be`, (2) velocity chart merged in `6f9f633`, (3) sparkline task superseded. No remaining active retries from 2026-02-24 batch.
+
 
 ## Active
 
@@ -99,7 +103,6 @@ _No active blockers._
 
 ## Mission Status
 
-All 6 mission success criteria evaluate as **MET** (as of 2026-02-24). 200 tasks in completed.md (933 pipeline commits on main), 99% self-correction rate (264 of 267 failures resolved), 3 active retries (sparkline merge-conflict, keyboard shortcuts worktree-missing, velocity chart merge-failure — pending task-fixer). Pipeline is in polish/portability phase.
+All 6 mission success criteria evaluate as **MET** (as of 2026-02-25). 204+ tasks in completed.md (955 pipeline commits on main), 99% self-correction rate. Previously noted active retries (sparkline, keyboard shortcuts, velocity chart) are all resolved — keyboard shortcuts merged in `7bf54be`, velocity chart merged in `6f9f633`, sparkline superseded. Pipeline is in polish/portability phase.
 
-**Current focus**: (1) State hygiene — deduplicate completed.md entries, archive resolved failed-task rows. (2) Code quality — extract duplicated mission evaluation to shared module, separate rate-limit write path. (3) Test coverage — handler unit tests for mission-raw and pipeline-stream (last 2 untested handlers), shell regression tests for dev-worker.sh and task-fixer.sh. (4) Extensibility — complete echo agent dry-run lifecycle, pipeline idle detection/signaling.
-- **2026-02-24 21:38**: Claude Code authentication expired. Run `claude` and `/login` to restore. All pipeline jobs are paused.
+**Current focus**: (1) Test coverage — handler unit tests, shell regression tests, end-to-end lifecycle validation. (2) Code quality — extract duplicated mission evaluation to shared module. (3) Extensibility — echo agent dry-run lifecycle, pipeline idle detection/signaling. (4) State hygiene — reconcile failed-task rows, deduplicate completed.md entries.
