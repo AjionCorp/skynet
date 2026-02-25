@@ -104,4 +104,44 @@ describe("createMissionRawHandler", () => {
     expect(body.data).toBeNull();
     expect(body.error).toBe("Failed to read mission.md");
   });
+
+  it("factory returns independent handler per config", async () => {
+    mockReadDevFile.mockReturnValue("content-a");
+    const handlerA = createMissionRawHandler(makeConfig({ devDir: "/a/.dev" }));
+    mockReadDevFile.mockReturnValue("content-b");
+    const handlerB = createMissionRawHandler(makeConfig({ devDir: "/b/.dev" }));
+
+    await handlerA();
+    await handlerB();
+
+    expect(mockReadDevFile).toHaveBeenCalledWith("/a/.dev", "mission.md");
+    expect(mockReadDevFile).toHaveBeenCalledWith("/b/.dev", "mission.md");
+  });
+
+  it("returns application/json content type", async () => {
+    const handler = createMissionRawHandler(makeConfig());
+    const res = await handler();
+    expect(res.headers.get("Content-Type")).toContain("application/json");
+  });
+
+  it("preserves multiline markdown with special characters", async () => {
+    const content = "# Title\n\n> Quote with `backticks` & <html>\n\n- bullet\n  - nested\n\n```bash\necho 'hello'\n```\n";
+    mockReadDevFile.mockReturnValue(content);
+    const handler = createMissionRawHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.raw).toBe(content);
+  });
+
+  it("returns generic error in development when non-Error is thrown", async () => {
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = "development";
+    mockReadDevFile.mockImplementation(() => { throw 42; });
+    const handler = createMissionRawHandler(makeConfig());
+    const res = await handler();
+    const body = await res.json();
+    expect(res.status).toBe(500);
+    expect(body.error).toBe("Failed to read mission.md");
+    process.env.NODE_ENV = origEnv;
+  });
 });

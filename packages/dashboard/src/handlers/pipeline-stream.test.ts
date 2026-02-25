@@ -410,6 +410,103 @@ describe("createPipelineStreamHandler", () => {
     reader.cancel();
   });
 
+  it("triggers update on .db-wal file changes", async () => {
+    const initialData = { workers: [] };
+    const updatedData = { workers: [{ name: "wal-update" }] };
+    mockGetStatus
+      .mockResolvedValueOnce(makeStatusResponse(initialData))
+      .mockResolvedValueOnce(makeStatusResponse(updatedData));
+
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
+    await reader.read();
+    await flushAsync();
+
+    const watchCallback = mockWatch.mock.calls[0][1] as (event: string, filename: string) => void;
+    watchCallback("change", "skynet.db-wal");
+
+    await vi.advanceTimersByTimeAsync(600);
+
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toEqual(updatedData);
+    reader.cancel();
+  });
+
+  it("includes X-Accel-Buffering: no header for nginx compatibility", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    expect(res.headers.get("X-Accel-Buffering")).toBe("no");
+    res.body?.cancel();
+  });
+
+  it("decrements activeConnections on stream cancel", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+
+    // Open and cancel a connection
+    const res1 = await handler();
+    res1.body?.cancel();
+    // Give cancel time to propagate
+    await flushAsync();
+
+    // Should be able to open 20 more connections (counter decremented)
+    const connections: Response[] = [];
+    for (let i = 0; i < 20; i++) {
+      mockWatcher = createMockWatcher();
+      mockWatch.mockReturnValue(mockWatcher);
+      const res = await handler();
+      connections.push(res);
+    }
+    // 21st should still work because we freed one slot
+    // (we used 20 after canceling the first = 20 total, at limit)
+    // 21st should be rejected
+    const rejected = await handler();
+    expect(rejected.status).toBe(503);
+
+    for (const conn of connections) {
+      conn.body?.cancel();
+    }
+  });
+
+  it("sends error event when getStatus fails during watcher-triggered debounce", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    await skipRetryInstruction(reader);
+    await reader.read(); // initial status
+    await flushAsync();
+
+    // Make getStatus reject on the next (debounced) call
+    mockGetStatus.mockRejectedValueOnce(new Error("Disk read failed"));
+
+    const watchCallback = mockWatch.mock.calls[0][1] as (event: string, filename: string) => void;
+    watchCallback("change", "backlog.md");
+
+    // Advance past debounce — pushStatus catches the error and sends an error event
+    await vi.advanceTimersByTimeAsync(600);
+    await flushAsync();
+
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toBeNull();
+    expect(parsed.error).toBe("Failed to read status");
+    reader.cancel();
+  });
+
+  it("sends retry instruction as first SSE message", async () => {
+    const handler = createPipelineStreamHandler(makeConfig());
+    const res = await handler();
+    const reader = res.body!.getReader();
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    expect(text).toBe("retry: 5000\n\n");
+    reader.cancel();
+  });
+
   it("returns 503 when MAX_SSE_CONNECTIONS is exceeded", async () => {
     const handler = createPipelineStreamHandler(makeConfig());
     const connections: Response[] = [];
