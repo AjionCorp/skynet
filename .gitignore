@@ -34,9 +34,9 @@ playwright-report/
 .dev/pipeline-paused
 .dev/fixer-cooldown
 .dev/worktrees/
-.dev/skynet.db
-.dev/skynet.db-shm
-.dev/skynet.db-wal
+.dev/skynet.db*
+.dev/pipeline.db
+.dev/.notify-warn-shown
 .dev/md-backup/
 .dev/missions/
 .dev/*.md
