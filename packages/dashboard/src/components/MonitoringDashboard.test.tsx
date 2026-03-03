@@ -46,12 +46,15 @@ const MOCK_STATUS: MonitoringStatus = {
     authFailFlag: false,
     lastFailEpoch: null,
     codex: { status: "ok", expiresInMs: 3600000, hasRefreshToken: true, source: "file" },
+    gemini: { status: "ok", source: "api_key" },
   },
   backlogLocked: false,
   git: { branch: "main", commitsAhead: 0, dirtyFiles: 0, lastCommit: "abc123" },
   postCommitGate: { lastResult: "pass", lastCommit: "abc123", lastTime: "2024-01-01" },
   missionProgress: [],
   pipelinePaused: false,
+  watchdogRunning: false,
+  projectDriverRunning: false,
   timestamp: "2024-01-01T00:00:00Z",
 };
 

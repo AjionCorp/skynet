@@ -19,3 +19,5 @@ export { createMissionsHandler } from "./missions";
 export { createMissionDetailHandler } from "./mission-detail";
 export { createMissionAssignmentsHandler } from "./mission-assignments";
 export { createMissionCreatorHandler } from "./mission-creator";
+export { createProjectDriverStatusHandler } from "./project-driver-status";
+export { createTaskVelocityHandler } from "./task-velocity";

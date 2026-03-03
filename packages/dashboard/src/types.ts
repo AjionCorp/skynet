@@ -128,6 +128,8 @@ export interface PipelineStatus {
   postCommitGate: PostCommitGate;
   missionProgress: MissionProgress[];
   pipelinePaused: boolean;
+  watchdogRunning: boolean;
+  projectDriverRunning: boolean;
   timestamp: string;
 }
 
@@ -152,6 +154,12 @@ export interface AuthStatus {
   authFailFlag: boolean;
   lastFailEpoch: number | null;
   codex: CodexAuthStatus;
+  gemini: GeminiAuthStatus;
+}
+
+export interface GeminiAuthStatus {
+  status: "ok" | "missing";
+  source: "api_key" | "cli_oauth" | "adc" | "missing";
 }
 
 export interface CodexAuthStatus {
@@ -260,6 +268,7 @@ export interface MissionSummary {
   name: string;
   isActive: boolean;
   assignedWorkers: string[];
+  completionPercentage: number;
 }
 
 export interface MissionConfig {
@@ -294,6 +303,36 @@ export interface SelfCorrectionStats {
   superseded: number;
   pending: number;
   selfCorrected: number;
+}
+
+// ===== Project Driver Types =====
+
+export interface ProjectDriverTelemetry {
+  pendingBacklog: number;
+  claimedBacklog: number;
+  pendingRetries: number;
+  fixRate: number;
+  duplicateSkipped: number;
+  maxNewTasks: number;
+  driver_low_fix_rate_mode: boolean;
+  ts: string;
+}
+
+export interface ProjectDriverStatus {
+  running: boolean;
+  pid: number | null;
+  ageMs: number | null;
+  lastLog: string | null;
+  lastLogTime: string | null;
+  telemetry: ProjectDriverTelemetry | null;
+}
+
+// ===== Task Velocity Types =====
+
+export interface VelocityDataPoint {
+  date: string;
+  count: number;
+  avgDurationMins: number | null;
 }
 
 // ===== Event Types =====
