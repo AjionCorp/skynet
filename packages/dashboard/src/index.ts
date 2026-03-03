@@ -33,6 +33,7 @@ export type {
   ProjectDriverTelemetry,
   ProjectDriverStatus,
   VelocityDataPoint,
+  LlmConfig,
   MissionSummary,
   MissionConfig,
   MissionCreatorSuggestion,

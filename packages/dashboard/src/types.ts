@@ -261,6 +261,13 @@ export interface MissionProgress {
   evidence: string;
 }
 
+// ===== LLM Configuration Types =====
+
+export interface LlmConfig {
+  provider: "claude" | "codex" | "gemini" | "auto";
+  model?: string;
+}
+
 // ===== Multi-Mission Types =====
 
 export interface MissionSummary {
@@ -269,11 +276,13 @@ export interface MissionSummary {
   isActive: boolean;
   assignedWorkers: string[];
   completionPercentage: number;
+  llmConfig?: LlmConfig;
 }
 
 export interface MissionConfig {
   activeMission: string;
   assignments: Record<string, string | null>;
+  llmConfigs?: Record<string, LlmConfig>;
 }
 
 // ===== Mission Creator Types =====
