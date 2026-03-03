@@ -61,6 +61,7 @@ export function createMissionDetailHandler(config: SkynetConfig) {
           raw,
           isActive: missionConfig.activeMission === slug,
           assignedWorkers,
+          llmConfig: missionConfig.llmConfigs?.[slug],
         },
         error: null,
       });
@@ -131,13 +132,17 @@ export function createMissionDetailHandler(config: SkynetConfig) {
 
       unlinkSync(filePath);
 
-      // Clear any worker assignments for this mission
+      // Clear any worker assignments and LLM config for this mission
       let changed = false;
       for (const [worker, assigned] of Object.entries(missionConfig.assignments)) {
         if (assigned === slug) {
           missionConfig.assignments[worker] = null;
           changed = true;
         }
+      }
+      if (missionConfig.llmConfigs?.[slug]) {
+        delete missionConfig.llmConfigs[slug];
+        changed = true;
       }
       if (changed) writeConfig(configPath, missionConfig);
 

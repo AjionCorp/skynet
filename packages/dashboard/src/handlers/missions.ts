@@ -106,6 +106,7 @@ export function createMissionsHandler(config: SkynetConfig) {
           isActive: missionConfig.activeMission === slug,
           assignedWorkers,
           completionPercentage,
+          llmConfig: missionConfig.llmConfigs?.[slug],
         };
       });
 
@@ -126,6 +127,7 @@ export function createMissionsHandler(config: SkynetConfig) {
       const { data: body, error: parseError } = await parseBody<{
         name?: string;
         content?: string;
+        llmConfig?: { provider: string; model?: string };
       }>(request);
       if (parseError || !body) {
         return Response.json(
@@ -159,6 +161,18 @@ export function createMissionsHandler(config: SkynetConfig) {
           : `# ${name.trim()}\n\n## Purpose\n\n## Goals\n- [ ] \n\n## Success Criteria\n- [ ] \n\n## Current Focus\n`;
 
       writeFileSync(filePath, missionContent, "utf-8");
+
+      // Persist LLM config if provided
+      if (body.llmConfig && typeof body.llmConfig.provider === "string") {
+        const configPath = resolve(missionsDir, "_config.json");
+        const missionConfig = readConfig(configPath);
+        if (!missionConfig.llmConfigs) missionConfig.llmConfigs = {};
+        missionConfig.llmConfigs[slug] = {
+          provider: body.llmConfig.provider as "claude" | "codex" | "gemini" | "auto",
+          ...(body.llmConfig.model ? { model: body.llmConfig.model } : {}),
+        };
+        writeConfig(configPath, missionConfig);
+      }
 
       return Response.json({ data: { slug, name: name.trim() }, error: null }, { status: 201 });
     } catch (err) {

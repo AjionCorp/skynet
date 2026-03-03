@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import type { SkynetConfig, MissionConfig } from "../types";
+import type { SkynetConfig, MissionConfig, LlmConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 
 function readConfig(configPath: string): MissionConfig {
@@ -43,6 +43,7 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
       const { data: body, error: parseError } = await parseBody<{
         activeMission?: string;
         assignments?: Record<string, string | null>;
+        llmConfigs?: Record<string, LlmConfig>;
       }>(request);
       if (parseError || !body) {
         return Response.json(
@@ -83,6 +84,21 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
             }
           }
           missionConfig.assignments[worker] = slug;
+        }
+      }
+
+      // Update per-mission LLM configs
+      if (body.llmConfigs && typeof body.llmConfigs === "object") {
+        if (!missionConfig.llmConfigs) missionConfig.llmConfigs = {};
+        for (const [slug, llmCfg] of Object.entries(body.llmConfigs)) {
+          const missionFile = resolve(missionsDir, `${slug}.md`);
+          if (!existsSync(missionFile)) {
+            return Response.json(
+              { data: null, error: `Mission '${slug}' not found for llmConfig` },
+              { status: 404 },
+            );
+          }
+          missionConfig.llmConfigs[slug] = llmCfg;
         }
       }
 
