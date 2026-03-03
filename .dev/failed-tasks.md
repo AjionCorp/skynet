@@ -3,8 +3,8 @@
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | dev/add-end-to-end-llm-config-smoke-test-for | merge conflict | 0 | fixing-2 |
-| 2026-03-03 | [FIX] Prune completed.md to last 50 entries | dev/prune-completedmd-to-last-50-entries | merge conflict after fix attempt 1 | 1 | fixing-1 |
 | 2026-03-03 | [DATA] Update mission.md to declare LLM Provider Selection mission complete | dev/update-missionmd-to-declare-llm-provider | merge conflict after fix attempt 3 | 3 | blocked |
+| 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | merge conflict after fix attempt 1 | 2 | fixed |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | typecheck failed post-merge | 1 | fixed |
 | 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | merge conflict | 1 | fixed |
 | 2026-02-25 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | merged to main | merge conflict | 1 | fixed |
