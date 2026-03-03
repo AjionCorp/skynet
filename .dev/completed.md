@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for post-merge-smoke.sh validation checks | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add unit tests for process-locks.ts and rate-limiter.ts library utilities | merged to main | 2m | success |
 | 2026-03-03 | [FEAT] improve events | merged to main | 8m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for health-check.sh operational checks | merged to main | 14m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | 8m | success |
 | 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | 6m | success |
 | 2026-03-03 | [FEAT] Add LLM model selector and badge to MissionDashboard | merged to main | 3m | success |
-| 2026-03-03 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | 0m | success |

@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-03-03 | [FIX] Commit orphaned _merge.sh stale-index recovery and supersede 2 blocked failed rows | dev/commit-orphaned-mergesh-stale-index-reco | merge conflict | 0 | fixing-1 |
 | 2026-03-03 | [INFRA] Add stale unmerged .dev/ index recovery to _merge.sh merge pipeline | dev/add-stale-unmerged-dev-index-recovery-to | merge conflict after fix attempt 3 | 3 | blocked |
 | 2026-03-03 | [DATA] Update mission.md to declare LLM Provider Selection mission complete | dev/update-missionmd-to-declare-llm-provider | merge conflict after fix attempt 3 | 3 | blocked |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | merge conflict | 1 | fixed |
