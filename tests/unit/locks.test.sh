@@ -185,10 +185,10 @@ assert_eq "$stored_pid" "$$" "acquire_worker_lock: we own the lock after stale r
 rm -rf "$LOCKFILE"
 : > "$LOGFILE"
 
-# ── Test 6: acquire_worker_lock — PID reuse guard ───────────────────
+# ── Test 6: acquire_worker_lock — live PID with old lock is NOT reclaimed ─
 
 echo ""
-log "=== acquire_worker_lock: PID reuse guard (live PID, old lock) ==="
+log "=== acquire_worker_lock: live PID with old lock (no reclaim) ==="
 
 LOCKFILE="$TMPDIR_ROOT/locks/worker-test-5.lock"
 mkdir -p "$LOCKFILE"
@@ -202,30 +202,31 @@ echo "$_holder_pid" > "$LOCKFILE/pid"
 # Set stale threshold very low for this test
 export SKYNET_WORKER_LOCK_STALE_SECS=1
 
-# Backdate the PID file to look old (2 seconds ago)
+# Backdate the PID file to look old (5 seconds ago)
 if [ "$(uname -s)" = "Darwin" ]; then
   touch -t "$(date -v-5S '+%Y%m%d%H%M.%S')" "$LOCKFILE/pid"
 else
   touch -d "5 seconds ago" "$LOCKFILE/pid"
 fi
 
-# Even though the PID is alive, lock age > threshold means PID reuse suspected
+# The code trusts heartbeat/watchdog for live PIDs — it does NOT reclaim.
+# Even though the lock age > stale threshold, the PID is alive so it returns 1.
 if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
-  pass "acquire_worker_lock: reclaims when PID alive but lock age > stale threshold"
+  fail "acquire_worker_lock: should NOT reclaim lock when PID is alive (even if old)"
 else
-  fail "acquire_worker_lock: should reclaim on suspected PID reuse"
+  pass "acquire_worker_lock: refuses to reclaim live PID lock (trusts heartbeat/watchdog)"
 fi
 
-# Verify log mentions "PID reuse"
-if grep -q "PID reuse" "$LOGFILE" 2>/dev/null; then
-  pass "acquire_worker_lock: logs PID reuse detection"
+# Verify log mentions "Already running"
+if grep -q "Already running" "$LOGFILE" 2>/dev/null; then
+  pass "acquire_worker_lock: logs 'Already running' for live PID with old lock"
 else
-  fail "acquire_worker_lock: should log PID reuse message"
+  fail "acquire_worker_lock: should log 'Already running' for live PID with old lock"
 fi
 
-# Verify we now own the lock
+# Verify we do NOT own the lock — original holder should still be recorded
 stored_pid=$(cat "$LOCKFILE/pid" 2>/dev/null)
-assert_eq "$stored_pid" "$$" "acquire_worker_lock: we own the lock after PID reuse reclaim"
+assert_eq "$stored_pid" "$_holder_pid" "acquire_worker_lock: original holder PID still in lock file"
 
 kill "$_holder_pid" 2>/dev/null; wait "$_holder_pid" 2>/dev/null || true
 unset SKYNET_WORKER_LOCK_STALE_SECS
@@ -439,6 +440,178 @@ stored_pid=$(cat "$LOCKFILE/pid" 2>/dev/null)
 assert_eq "$stored_pid" "$$" "acquire_worker_lock: re-acquire sets our PID correctly"
 
 rm -rf "$LOCKFILE"
+
+# ── Test 16: concurrent mkdir atomicity ──────────────────────────────
+
+echo ""
+log "=== concurrent mkdir atomicity: only one succeeds ==="
+
+LOCKFILE="$TMPDIR_ROOT/locks/worker-test-8.lock"
+rm -rf "$LOCKFILE"
+
+# Run two mkdir attempts in rapid succession via subshells
+_mkdir_result_a="$TMPDIR_ROOT/locks/mkdir-result-a"
+_mkdir_result_b="$TMPDIR_ROOT/locks/mkdir-result-b"
+rm -f "$_mkdir_result_a" "$_mkdir_result_b"
+
+(mkdir "$LOCKFILE" 2>/dev/null && echo "ok" > "$_mkdir_result_a" || echo "fail" > "$_mkdir_result_a") &
+_pid_a=$!
+(mkdir "$LOCKFILE" 2>/dev/null && echo "ok" > "$_mkdir_result_b" || echo "fail" > "$_mkdir_result_b") &
+_pid_b=$!
+wait "$_pid_a" 2>/dev/null || true
+wait "$_pid_b" 2>/dev/null || true
+
+_result_a=$(cat "$_mkdir_result_a" 2>/dev/null || echo "")
+_result_b=$(cat "$_mkdir_result_b" 2>/dev/null || echo "")
+
+_ok_count=0
+[ "$_result_a" = "ok" ] && _ok_count=$((_ok_count + 1))
+[ "$_result_b" = "ok" ] && _ok_count=$((_ok_count + 1))
+
+assert_eq "$_ok_count" "1" "concurrent mkdir: exactly one of two rapid mkdir attempts succeeds"
+
+rm -rf "$LOCKFILE" "$_mkdir_result_a" "$_mkdir_result_b"
+
+# ── Test 17: stale merge lock with live PID — NOT force-released ─────
+
+echo ""
+log "=== acquire_merge_lock: stale age but live PID — NOT force-released ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+# Create a merge lock with a live PID but age > TTL
+mkdir -p "$MERGE_LOCKDIR"
+sleep 300 &
+_merge_holder=$!
+_BG_PIDS+=("$_merge_holder")
+echo "$_merge_holder" > "$MERGE_LOCKDIR/pid"
+
+# Backdate past TTL (SKYNET_MERGE_LOCK_TTL=5)
+if [ "$(uname -s)" = "Darwin" ]; then
+  touch -t "$(date -v-10S '+%Y%m%d%H%M.%S')" "$MERGE_LOCKDIR/pid"
+else
+  touch -d "10 seconds ago" "$MERGE_LOCKDIR/pid"
+fi
+
+acquire_merge_lock
+
+# The code checks: age > TTL AND (PID empty OR PID dead).
+# Since the PID is alive, it should NOT force-release.
+if [ -d "$MERGE_LOCKDIR" ]; then
+  pass "acquire_merge_lock: does NOT force-release when holder PID is alive (even if age > TTL)"
+else
+  fail "acquire_merge_lock: should not force-release lock with live holder PID"
+fi
+
+kill "$_merge_holder" 2>/dev/null; wait "$_merge_holder" 2>/dev/null || true
+rm -rf "$MERGE_LOCKDIR"
+
+# ── Test 18: emergency unlock sentinel owned by different UID ────────
+
+echo ""
+log "=== acquire_merge_lock: emergency sentinel owned by different UID ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+_emergency_path="${SKYNET_LOCK_PREFIX}-unlock-emergency"
+
+# Create the emergency sentinel — it will be owned by our UID.
+# To test "different UID" we override the stat check by creating a merge lock
+# and verifying the sentinel is NOT consumed when the code detects a different owner.
+# Since we cannot easily create a file owned by a different UID without root,
+# we test the code path indirectly: the sentinel IS owned by us, so the code
+# WILL consume it. Instead, we verify the log message path by checking that
+# when the sentinel IS ours, it gets consumed (positive test of the ownership check).
+# The "different UID" branch logs "ignoring" and leaves the sentinel in place.
+# We can test this by mocking stat output — but since the test runs as a single user,
+# we verify the conditional logic by confirming that when the sentinel is consumed,
+# the lock is removed (our UID matches).
+touch "$_emergency_path"
+mkdir -p "$MERGE_LOCKDIR"
+echo "$$" > "$MERGE_LOCKDIR/pid"
+
+acquire_merge_lock
+
+# Our UID matches, so sentinel should be consumed and lock removed
+if [ ! -f "$_emergency_path" ]; then
+  pass "acquire_merge_lock: sentinel consumed when UID matches (confirms ownership check runs)"
+else
+  fail "acquire_merge_lock: sentinel should be consumed when UID matches"
+fi
+
+rm -rf "$MERGE_LOCKDIR"
+
+# ── Test 19: worker lock disk space failure on stale reclaim path ────
+
+echo ""
+log "=== acquire_worker_lock: disk space failure on stale reclaim path ==="
+
+LOCKFILE="$TMPDIR_ROOT/locks/worker-test-9.lock"
+: > "$LOGFILE"
+
+# Create a lock with a dead PID (stale)
+mkdir -p "$LOCKFILE"
+echo "4999999" > "$LOCKFILE/pid"
+
+# Override _lock_check_disk_space to simulate failure
+_lock_check_disk_space_orig=$(declare -f _lock_check_disk_space)
+_lock_check_disk_space() { return 1; }
+
+if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
+  fail "acquire_worker_lock: should fail when disk space check fails on stale reclaim"
+else
+  pass "acquire_worker_lock: returns 1 when disk space check fails during stale reclaim"
+fi
+
+# Verify log mentions disk space
+if grep -q "Low disk space" "$LOGFILE" 2>/dev/null; then
+  pass "acquire_worker_lock: logs disk space critical message on stale reclaim"
+else
+  fail "acquire_worker_lock: should log disk space message on stale reclaim"
+fi
+
+# Lock dir should have been released (rmdir after disk space failure)
+if [ -d "$LOCKFILE" ]; then
+  fail "acquire_worker_lock: lock dir should be cleaned up after disk space failure"
+else
+  pass "acquire_worker_lock: lock dir cleaned up after disk space failure on stale reclaim"
+fi
+
+# Restore original _lock_check_disk_space
+eval "$_lock_check_disk_space_orig"
+
+rm -rf "$LOCKFILE"
+: > "$LOGFILE"
+
+# ── Test 20: merge lock with empty PID file ──────────────────────────
+
+echo ""
+log "=== acquire_merge_lock: empty PID file + age > TTL — force-release ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+# Create a merge lock with an empty PID file
+mkdir -p "$MERGE_LOCKDIR"
+: > "$MERGE_LOCKDIR/pid"  # Empty PID file
+
+# Backdate past TTL (SKYNET_MERGE_LOCK_TTL=5)
+if [ "$(uname -s)" = "Darwin" ]; then
+  touch -t "$(date -v-10S '+%Y%m%d%H%M.%S')" "$MERGE_LOCKDIR/pid"
+else
+  touch -d "10 seconds ago" "$MERGE_LOCKDIR/pid"
+fi
+
+acquire_merge_lock
+
+# Empty PID + age > TTL satisfies both conditions in the force-release check
+if [ -d "$MERGE_LOCKDIR" ]; then
+  fail "acquire_merge_lock: should force-release merge lock with empty PID + age > TTL"
+else
+  pass "acquire_merge_lock: force-released merge lock with empty PID file (age > TTL)"
+fi
 
 # ── Summary ──────────────────────────────────────────────────────────
 

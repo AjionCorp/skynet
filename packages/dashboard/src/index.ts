@@ -29,6 +29,14 @@ export type {
   SelfCorrectionStats,
   EventEntry,
   CodexAuthStatus,
+  GeminiAuthStatus,
+  ProjectDriverTelemetry,
+  ProjectDriverStatus,
+  VelocityDataPoint,
+  MissionSummary,
+  MissionConfig,
+  MissionCreatorSuggestion,
+  MissionCreatorResult,
 } from "./types";
 
 // Config helpers
@@ -65,6 +73,13 @@ export {
   createEventsHandler,
   createMetricsHandler,
   createPipelineHealthTrendHandler,
+  createPipelineControlHandler,
+  createMissionsHandler,
+  createMissionDetailHandler,
+  createMissionAssignmentsHandler,
+  createMissionCreatorHandler,
+  createProjectDriverStatusHandler,
+  createTaskVelocityHandler,
 } from "./handlers";
 
 // Dashboard UI components
