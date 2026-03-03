@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation
+## [FIX] Pre-select default LLM provider "auto" for missions without explicit config
 **Status:** completed
-**Started:** 2026-03-03 15:33
+**Started:** 2026-03-03 15:53
 **Completed:** 2026-03-03
-**Branch:** dev/add-getmissionllmconfig-shell-helper-and
+**Branch:** dev/pre-select-default-llm-provider-auto-for
 **Worker:** 4
 
 ### Changes
