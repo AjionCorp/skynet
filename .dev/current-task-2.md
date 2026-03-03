@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Add missing SKYNET_CLAUDE_MODEL and SKYNET_CODEX_MODEL to CLI config KNOWN_VARS
+## [TEST] Add unit tests for project-driver-status handler
 **Status:** completed
-**Started:** 2026-03-03 17:36
+**Started:** 2026-03-03 17:49
 **Completed:** 2026-03-03
-**Branch:** dev/add-missing-skynetclaudemodel-and-skynet
+**Branch:** dev/add-unit-tests-for-project-driver-status
 **Worker:** 2
 
 ### Changes

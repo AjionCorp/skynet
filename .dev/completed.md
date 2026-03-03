@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for project-driver-status handler | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add unit tests for pipeline-health-trend and task-velocity handlers | merged to main | 2m | success |
 | 2026-03-03 | [FEAT] mission status | merged to main | 6m | success |
 | 2026-03-03 | [TEST] Add unit tests for pipeline-control handler | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
 | 2026-03-03 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
-| 2026-02-25 | [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |

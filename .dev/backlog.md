@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add unit tests for project-driver-status handler — Create `packages/dashboard/src/handlers/project-driver-status.test.ts`. Follow the `vi.mock('fs', ...)` pattern from existing handler tests. Test: (a) GET returns driver telemetry when `.dev/project-driver-telemetry.json` exists, (b) GET returns safe fallback when telemetry file is missing, (c) response shape matches `ProjectDriverStatus` type. DO NOT import from barrel `index.ts` — import directly from `project-driver-status.ts`. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
