@@ -39,9 +39,9 @@
 | 2026-02-24 | [TEST] Add integration test for watchdog crash recovery end-to-end | dev/add-integration-test-for-watchdog-crash- | typecheck failed after fix attempt 1 (fix attempt 2 failed) | 2 | failed |
 | 2026-02-24 | [INFRA] Add pipeline idle detection and completion signaling to watchdog | dev/add-pipeline-idle-detection-and-completi | all agents hit usage limits (no attempt recorded) | 1 | failed |
 | 2026-02-24 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | dev/add-handler-unit-tests-for-mission-raw-a | typecheck failed | 0 | fixing-1 |
-| 2026-02-24 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | typecheck failed | 0 | fixing-3 |
 | 2026-02-24 | [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | merge conflict | 1 | fixed |
 | 2026-02-24 | [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | worktree missing before gates | 1 | fixed |
+| 2026-02-24 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | typecheck failed | 1 | fixed |
 | 2026-02-24 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | worktree missing before gates | 1 | fixed |
 | 2026-02-24 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | typecheck failed | 1 | fixed |
 | 2026-02-24 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | merge conflict | 1 | fixed |
