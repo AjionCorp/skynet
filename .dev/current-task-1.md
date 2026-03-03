@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for post-merge-smoke.sh validation checks
+## [TEST] Add unit tests for ErrorBoundary and LoadingSkeleton admin components
 **Status:** completed
-**Started:** 2026-03-03 18:39
+**Started:** 2026-03-03 18:43
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-post-merge-smok
+**Branch:** dev/add-unit-tests-for-errorboundary-and-loa
 **Worker:** 1
 
 ### Changes
