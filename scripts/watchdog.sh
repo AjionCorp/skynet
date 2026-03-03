@@ -1959,7 +1959,12 @@ elif $agent_auth_ok && ! $pipeline_paused; then
   fi
 
   # Rule 3: Kick off project-driver if needed (rate-limited)
-  if ! $driver_running; then
+  # Skip if mission is already complete — no point generating tasks for a finished mission
+  _mc_slug_safe=$(echo "${_active_mission_slug:-global}" | sed 's/[^a-zA-Z0-9]/_/g')
+  _mc_sentinel="$DEV_DIR/mission-complete-${_mc_slug_safe}"
+  if [ -f "$_mc_sentinel" ] && ! $driver_running; then
+    log "Project-driver skipped — mission complete (sentinel: $_mc_sentinel)"
+  elif ! $driver_running; then
     should_kick=false
     last_kick_file="${SKYNET_LOCK_PREFIX}-project-driver-${_active_mission_slug:-global}-last-kick"
     if [ "$backlog_count" -lt "${SKYNET_DRIVER_BACKLOG_THRESHOLD:-5}" ]; then
@@ -2276,15 +2281,32 @@ else
   (umask 077; echo 300 > "$_adaptive_file")
   # --- Pipeline idle detection ---
   # All queues empty and no workers running — pipeline is fully idle.
+  # Distinguish mission-complete idle from regular idle for clearer messaging.
+  _idle_mc_slug_safe=$(echo "${_active_mission_slug:-global}" | sed 's/[^a-zA-Z0-9]/_/g')
+  _idle_mc_sentinel="$DEV_DIR/mission-complete-${_idle_mc_slug_safe}"
+  _idle_is_mission_complete=false
+  [ -f "$_idle_mc_sentinel" ] && _idle_is_mission_complete=true
+
   # Write sentinel (once) and emit event + throttled notification.
   if [ ! -f "$_idle_sentinel" ]; then
-    log "Pipeline idle — no pending tasks, no failed tasks, no workers running"
-    echo "{\"idleSince\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"epoch\": $(date +%s), \"project\": \"${SKYNET_PROJECT_NAME:-unknown}\"}" > "$_idle_sentinel"
-    emit_event "pipeline_idle" "Pipeline fully idle: backlog=0, failed=0, workers=0, fixers=0"
-    tg "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline is idle — no pending or failed tasks, all workers stopped."
+    if $_idle_is_mission_complete; then
+      log "Pipeline idle — mission complete, no remaining work"
+      echo "{\"idleSince\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"epoch\": $(date +%s), \"project\": \"${SKYNET_PROJECT_NAME:-unknown}\", \"reason\": \"mission_complete\"}" > "$_idle_sentinel"
+      emit_event "pipeline_idle" "Pipeline idle: mission complete, all success criteria met"
+      tg "🏆 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline idle — mission complete! All success criteria met, no remaining work."
+    else
+      log "Pipeline idle — no pending tasks, no failed tasks, no workers running"
+      echo "{\"idleSince\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"epoch\": $(date +%s), \"project\": \"${SKYNET_PROJECT_NAME:-unknown}\"}" > "$_idle_sentinel"
+      emit_event "pipeline_idle" "Pipeline fully idle: backlog=0, failed=0, workers=0, fixers=0"
+      tg "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline is idle — no pending or failed tasks, all workers stopped."
+    fi
   else
     # Already idle — send periodic reminder (throttled to once per hour)
-    tg_throttled "$_idle_notify_flag" 3600 "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline still idle — no work available."
+    if $_idle_is_mission_complete; then
+      tg_throttled "$_idle_notify_flag" 3600 "🏆 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline still idle — mission complete."
+    else
+      tg_throttled "$_idle_notify_flag" 3600 "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline still idle — no work available."
+    fi
   fi
 fi
 

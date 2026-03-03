@@ -97,6 +97,20 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
   exit 0
 fi
 
+# --- Mission-complete idle mode ---
+# If the mission is already complete (sentinel exists), skip the expensive agent
+# cycle. The project-driver's job is to generate tasks toward the mission — once
+# all success criteria are met and the sentinel is written, there's no point
+# running the LLM to generate more work. The watchdog also gates dispatch on
+# this sentinel, but we check here too as defense-in-depth.
+_mission_id_safe_early=$(echo "${_mission_hash:-$(_get_active_mission_slug 2>/dev/null)}" | sed 's/[^a-zA-Z0-9]/_/g')
+[ -z "$_mission_id_safe_early" ] && _mission_id_safe_early="global"
+_mc_sentinel_early="$DEV_DIR/mission-complete-${_mission_id_safe_early}"
+if [ -f "$_mc_sentinel_early" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission already complete — idle mode (sentinel: $_mc_sentinel_early). Exiting." >> "$LOG"
+  exit 0
+fi
+
 # --- Claude Code auth pre-check (with alerting) ---
 # Idempotent source — auth-check.sh has re-source guard
 source "$SCRIPTS_DIR/auth-check.sh"
