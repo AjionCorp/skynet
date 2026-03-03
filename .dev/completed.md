@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for check-server-errors.sh error detection | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add component tests for HealthSparkline, TaskVelocityChart, and ProjectDriverDashboard | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for post-merge-smoke.sh validation checks | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FIX] Pre-select default LLM provider "auto" for missions without explicit config | merged to main | 3m | success |
 | 2026-03-03 | [INFRA] Thread mission LLM config into task-fixer agent invocation | merged to main | 3m | success |
 | 2026-03-03 | [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation | merged to main | 2m | success |
-| 2026-03-03 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | 8m | success |
