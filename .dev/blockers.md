@@ -106,9 +106,13 @@
 
 ## Active
 
-- **2026-03-03**: blocked_by title mismatch bug — backlog tasks stored blocked_by references WITHOUT backticks but completed task titles stored WITH backticks. DB exact-match resolution in `_db_claim_next_task_inner` failed to resolve dependencies. **Partially mitigated** — manually cleared blocked_by for affected tasks. Backlog task exists to fix the root cause via backtick-stripping normalization in _db.sh.
+- **2026-03-03**: No active blockers. Pipeline is in post-mission cleanup mode. Next mission definition needed from operator.
 
-- **2026-03-03**: Stale failed-task entries (11 LLM-related superseded rows) remain in `failed-tasks.md`. Watchdog reconciliation should auto-supersede them. Branch cleanup task in backlog.
+## Resolved (Recent)
+
+- **2026-03-03**: blocked_by title mismatch bug — backlog tasks stored blocked_by references WITHOUT backticks but completed task titles stored WITH backticks. **Fixed** — backtick-stripping normalization merged to _db.sh in `_db_claim_next_task_inner`.
+
+- **2026-03-03**: Stale failed-task entries (11 LLM-related superseded rows) in `failed-tasks.md`. **In progress** — branch cleanup task claimed, bulk archive task in backlog.
 
 ## MISSION ACHIEVED: LLM Provider Selection in Mission Admin
 
