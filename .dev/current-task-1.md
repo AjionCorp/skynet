@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Clean up stale dev/* branches from failed LLM task attempts
+## [TEST] Add shell unit test for _get_mission_llm_config helper
 **Status:** completed
-**Started:** 2026-03-03 16:12
+**Started:** 2026-03-03 16:15
 **Completed:** 2026-03-03
-**Branch:** dev/clean-up-stale-dev-branches-from-failed-
+**Branch:** dev/add-shell-unit-test-for-getmissionllmcon
 **Worker:** 1
 
 ### Changes
