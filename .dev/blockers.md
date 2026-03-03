@@ -92,17 +92,31 @@
 
 - **2026-02-24**: 21 stale `pending` entries in `failed-tasks.md` for tasks already completed via fresh implementations. **Fixed** — all 21 entries superseded. Watchdog auto-supersede with fuzzy title normalization prevents recurrence. See completed tasks: "Supersede 21 stale pending entries in failed-tasks.md", "Improve watchdog auto-supersede to catch stale failed-tasks with title variations".
 
-- **2026-02-24 21:38**: Claude Code authentication expired, pausing all pipeline jobs. **Fixed** — auth restored, pipeline resumed and actively completing tasks as of 2026-02-25.
 
 - **2026-02-25**: Three previously-active retry tasks resolved: (1) keyboard shortcuts merged in `7bf54be`, (2) velocity chart merged in `6f9f633`, (3) sparkline task superseded. No remaining active retries from 2026-02-24 batch.
 
 
 ## Active
 
-_No active blockers._
+- **2026-03-03**: **CORRECTION** — Previous blockers entry incorrectly claimed shell work (`_get_mission_llm_config` helper, worker threading) had landed on main. Verified via `git merge-base --is-ancestor`: ALL LLM commits (shell AND TypeScript) exist only on orphaned feature branches, NONE on main. The auto-revert commit `8f53a65` only affected `tests/unit/config.test.sh`, not the LLM feature code. Starting completely fresh with 8 backlog tasks.
+
+- **2026-03-03**: 8 failed tasks in `failed-tasks.md` from previous LLM attempts (merge conflicts + typecheck failures). These are on dead branches. Fresh canonical tasks in the backlog will supersede them once completed.
+
+- **2026-03-03**: Key lessons from prior failures to embed in task descriptions: (1) types.ts changes must be additive optional fields only, (2) do NOT touch barrel exports (`handlers/index.ts`, `components/index.ts`), (3) use `(config as any).llmConfigs` cast pattern for backward-compatible JSON reads, (4) always `git pull origin main` before committing dependent tasks.
 
 ## Mission Status
 
-All 6 mission success criteria evaluate as **MET** (as of 2026-02-25). 204+ tasks in completed.md (955 pipeline commits on main), 99% self-correction rate. Previously noted active retries (sparkline, keyboard shortcuts, velocity chart) are all resolved — keyboard shortcuts merged in `7bf54be`, velocity chart merged in `6f9f633`, sparkline superseded. Pipeline is in polish/portability phase.
+**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 0/5 goals, 0/6 success criteria met.
 
-**Current focus**: (1) Test coverage — handler unit tests, shell regression tests, end-to-end lifecycle validation. (2) Code quality — extract duplicated mission evaluation to shared module. (3) Extensibility — echo agent dry-run lifecycle, pipeline idle detection/signaling. (4) State hygiene — reconcile failed-task rows, deduplicate completed.md entries.
+**Completed work on main**: NONE. All previous LLM work is on orphaned feature branches only.
+
+**Fresh backlog** (6 tasks, in dependency order):
+1. `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` — unblocks all TS
+2. `SKYNET_CLAUDE_MODEL` env var support in `claude.sh` + `_config.sh` export — independent shell task
+3. Handler persistence + retrieval: `missions.ts` and `mission-detail.ts` accept/return `llmConfig` — depends on #1
+4. Shell helper `_get_mission_llm_config()` + worker/fixer threading — independent shell task, depends on #2
+5. UI selector dropdown in `MissionDashboard.tsx` create form + detail panel — depends on #3
+6. UI model badge on mission cards and detail header — depends on #3
+
+**Critical path**: Tasks 1+2 can run in parallel (independent). Task 3 waits for #1. Task 4 waits for #2. Tasks 5+6 wait for #3.
+**Parallelism**: With 4 workers, tasks 1+2 can be claimed simultaneously. Once #1 merges, #3 can start. Once #3 merges, #5+6 can run in parallel.
