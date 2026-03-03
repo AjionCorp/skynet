@@ -1213,6 +1213,41 @@ if [ "${_db_superseded:-0}" -gt 0 ] 2>/dev/null; then
   log "SQLite auto-superseded $_db_superseded failed task(s)"
 fi
 
+# --- Auto-supersede failed tasks whose branches are already merged to main ---
+# Catches edge cases where a branch was merged but the DB wasn't updated
+# (e.g., worker crash during completion phase, manual merge).
+# Runs after DB-level supersede so normalized_root matches are handled first.
+_auto_supersede_merged_branches() {
+  # Get branches already merged into main (fast git check)
+  local merged
+  merged=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null \
+    | sed 's/^[* ]*//' | sed 's/^ *//;s/ *$//' || true)
+  [ -z "$merged" ] && { echo 0; return; }
+
+  # Get failed/fixing tasks with branches from DB (small set)
+  local failed_rows
+  failed_rows=$(_db_sep "SELECT id, branch FROM tasks WHERE (status='failed' OR status LIKE 'fixing-%') AND branch != '' AND branch NOT LIKE 'merged%';" 2>/dev/null || true)
+  [ -z "$failed_rows" ] && { echo 0; return; }
+
+  local count=0
+  while IFS="$_DB_SEP" read -r _tid _tbranch; do
+    [ -z "$_tid" ] || [ -z "$_tbranch" ] && continue
+    # Check if this task's branch is in the merged list
+    if echo "$merged" | grep -qxF "$_tbranch"; then
+      db_supersede_task "$_tid" 2>/dev/null || true
+      log "Auto-superseded task $_tid — branch $_tbranch already merged to main"
+      count=$((count + 1))
+    fi
+  done <<< "$failed_rows"
+
+  echo "$count"
+}
+
+_merged_superseded=$(_auto_supersede_merged_branches 2>/dev/null || echo 0)
+if [ "${_merged_superseded:-0}" -gt 0 ] 2>/dev/null; then
+  log "Merged-branch auto-superseded $_merged_superseded stale failed task(s)"
+fi
+
 # --- Archive old completed tasks to prevent unbounded state file growth ---
 # If completed.md has >100 entries, move entries older than 7 days to
 # completed-archive.md, keeping only the most recent 100 in the active file.

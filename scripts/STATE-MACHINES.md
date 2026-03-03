@@ -269,8 +269,9 @@ File: `scripts/watchdog.sh` — runs every `WATCHDOG_INTERVAL` (180s).
            ▼
   ┌─ Data Maintenance ────────────────────────────────────┐
   │ 11. Auto-supersede redundant failures  (L:573-639)    │
-  │ 12. Archive old completions            (L:644-709)    │
-  │ 13. Delete stale branches              (L:714-798)    │
+  │ 11b. Auto-supersede merged branches    (L:640-680)    │
+  │ 12. Archive old completions            (L:700-765)    │
+  │ 13. Delete stale branches              (L:770-855)    │
   └───────────────────────────────────────────────────────┘
            │
            ▼
