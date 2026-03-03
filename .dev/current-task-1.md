@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for ErrorBoundary and LoadingSkeleton admin components
+## [TEST] Add shell unit tests for start-dev.sh server lifecycle management
 **Status:** completed
-**Started:** 2026-03-03 18:43
+**Started:** 2026-03-03 18:50
 **Completed:** 2026-03-03
-**Branch:** dev/add-unit-tests-for-errorboundary-and-loa
+**Branch:** dev/add-shell-unit-tests-for-start-devsh-ser
 **Worker:** 1
 
 ### Changes
