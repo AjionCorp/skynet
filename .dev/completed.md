@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for missions.ts handler | merged to main | 7m | success |
 | 2026-03-03 | [FEAT] are we tracking our mission | merged to main | 7m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-assignments.ts handler | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-detail.ts handler | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add integration test for watchdog crash recovery end-to-end | merged to main | 6m | success |
 | 2026-03-03 | [INFRA] Add pipeline idle detection and completion signaling to watchdog | merged to main | 0m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | merged to main | 13m | success |
-| 2026-03-03 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |

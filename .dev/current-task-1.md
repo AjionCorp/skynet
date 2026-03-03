@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for _worktree.sh setup, cleanup, and stale detection
+## [TEST] Add unit tests for missions.ts handler
 **Status:** completed
-**Started:** 2026-03-03 17:59
+**Started:** 2026-03-03 18:10
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-worktreesh-setu
+**Branch:** dev/add-unit-tests-for-missionsts-handler
 **Worker:** 1
 
 ### Changes
