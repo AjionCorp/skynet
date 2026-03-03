@@ -5,7 +5,7 @@
 #        _get_active_mission_slug, _get_worker_mission_slug, _resolve_active_mission,
 #        _validate_config_numerics (clamping), validate_backlog,
 #        _find_config, _validate_config, to_upper, file_size, run_with_timeout,
-#        git_pull_with_retry, git_push_with_retry
+#        git_pull_with_retry, git_push_with_retry, _get_mission_llm_config
 #
 # Usage: bash tests/unit/config.test.sh
 
@@ -722,6 +722,125 @@ if [ "$_gps_rc" -ne 0 ]; then
 else
   fail "git_push_with_retry: fails on bad remote (rc=$_gps_rc)"
 fi
+
+# ── _get_mission_llm_config ────────────────────────────────────────
+
+echo ""
+log "=== _get_mission_llm_config ==="
+
+# Test 63: returns provider and model for a valid llmConfigs entry
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature": {
+      "provider": "claude",
+      "model": "claude-opus-4-6"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "claude" "_get_mission_llm_config: returns provider"
+assert_eq "$_llm_model" "claude-opus-4-6" "_get_mission_llm_config: returns model"
+
+# Test 65: returns empty lines when slug has no llmConfigs entry
+_llm_info=$(_get_mission_llm_config "unknown-slug")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "" "_get_mission_llm_config: empty provider for unknown slug"
+assert_eq "$_llm_model" "" "_get_mission_llm_config: empty model for unknown slug"
+
+# Test 67: returns empty lines when config file is missing
+mv "$MISSION_CONFIG" "${MISSION_CONFIG}.bak"
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "" "_get_mission_llm_config: empty provider when config missing"
+assert_eq "$_llm_model" "" "_get_mission_llm_config: empty model when config missing"
+mv "${MISSION_CONFIG}.bak" "$MISSION_CONFIG"
+
+# Test 69: returns empty output when slug is empty
+_llm_info=$(_get_mission_llm_config "")
+assert_eq "$_llm_info" "" "_get_mission_llm_config: empty output for empty slug"
+
+# Test 70: does not confuse assignment entries (string values) with llmConfig entries
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {
+    "w1": "alpha-feature"
+  },
+  "llmConfigs": {}
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "w1")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "" "_get_mission_llm_config: ignores assignment entries (provider)"
+assert_eq "$_llm_model" "" "_get_mission_llm_config: ignores assignment entries (model)"
+
+# Test 72: handles config with only provider (no model key)
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature": {
+      "provider": "gemini"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "gemini" "_get_mission_llm_config: returns provider when model absent"
+assert_eq "$_llm_model" "" "_get_mission_llm_config: empty model when model key absent"
+
+# Test 74: handles config with only model (no provider key)
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature": {
+      "model": "gpt-4o"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "" "_get_mission_llm_config: empty provider when provider key absent"
+assert_eq "$_llm_model" "gpt-4o" "_get_mission_llm_config: returns model when provider absent"
+
+# Test 76: picks the correct slug from multiple llmConfigs entries
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature": {
+      "provider": "claude",
+      "model": "claude-sonnet-4-6"
+    },
+    "beta-bugfix": {
+      "provider": "codex",
+      "model": "codex-mini"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "beta-bugfix")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "codex" "_get_mission_llm_config: correct provider from multiple entries"
+assert_eq "$_llm_model" "codex-mini" "_get_mission_llm_config: correct model from multiple entries"
 
 # ── Summary ─────────────────────────────────────────────────────────
 
