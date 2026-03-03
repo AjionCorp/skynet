@@ -3,8 +3,7 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [ ] [FEAT] improve events — Lets make sure that the events can be expended and we can learn what was changed and implemented, so workers can leave more information that is uxefull
-- [>] [TEST] Add shell unit tests for health-check.sh operational checks — Create `tests/unit/health-check.test.sh`. Test that typecheck command is invoked, error reporting format matches `log()` convention, and script exits gracefully when skynet.config.sh is absent or dev server is not running. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/health-check.test.sh`.
+- [>] [FEAT] improve events — Lets make sure that the events can be expended and we can learn what was changed and implemented, so workers can leave more information that is uxefull
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.

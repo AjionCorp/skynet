@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for health-check.sh operational checks | merged to main | 14m | success |
 | 2026-03-03 | [FEAT] issue on parse | merged to main | 5m | success |
 | 2026-03-03 | [FEAT] mission criteria | merged to main | 6m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for clean-logs.sh log rotation | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | 0m | success |
 | 2026-03-03 | [TEST] Add unit tests for _merge.sh shared merge-to-main logic | merged to main | 8m | success |
 | 2026-03-03 | [DATA] Persist and return per-mission LLM config in mission handlers | merged to main | 0m | success |
-| 2026-03-03 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | merged to main | 0m | success |
