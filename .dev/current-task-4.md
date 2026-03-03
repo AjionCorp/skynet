@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add mission-complete idle mode to project-driver
+## [FEAT] worker logs when merged - detailed information
 **Status:** completed
-**Started:** 2026-03-03 16:15
+**Started:** 2026-03-03 17:02
 **Completed:** 2026-03-03
-**Branch:** dev/add-mission-complete-idle-mode-to-projec
+**Branch:** dev/worker-logs-when-merged---detailed-infor
 **Worker:** 4
 
 ### Changes
