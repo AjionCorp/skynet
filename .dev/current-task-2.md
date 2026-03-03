@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] are we tracking our mission
+## [TEST] Add shell unit tests for _lock_backend.sh lock backend abstraction
 **Status:** completed
-**Started:** 2026-03-03 18:10
+**Started:** 2026-03-03 18:13
 **Completed:** 2026-03-03
-**Branch:** dev/are-we-tracking-our-mission
+**Branch:** dev/add-shell-unit-tests-for-lockbackendsh-l
 **Worker:** 2
 
 ### Changes
