@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler unit tests for LLM config persistence round-trip
+## [FIX] Normalize blocked_by title references to strip backticks before DB resolution
 **Status:** completed
-**Started:** 2026-03-03 15:54
+**Started:** 2026-03-03 15:59
 **Completed:** 2026-03-03
-**Branch:** dev/add-handler-unit-tests-for-llm-config-pe
+**Branch:** dev/normalize-blockedby-title-references-to-
 **Worker:** 2
 
 ### Changes

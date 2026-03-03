@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [FIX] Normalize blocked_by title references to strip backticks before DB resolution | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add MissionDashboard LLM selector component tests | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add shell regression test for _get_mission_llm_config helper | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for LLM config persistence round-trip | merged to main | 3m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Stabilize Codex large-prompt path with deterministic exit-code preservation | merged to main | 3m | success |
 | 2026-02-20 | [FIX] Supersede 21 stale `pending` entries in `failed-tasks.md` for already-completed tasks | merged to main | 2m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Throttle net-new task generation when retry queue is overloaded | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Truncate completed.md to last 30 entries in project-driver.sh prompt context | merged to main | 1m | success |
