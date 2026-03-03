@@ -113,6 +113,8 @@ export SKYNET_CLAUDE_BIN="${SKYNET_CLAUDE_BIN:-claude}"
 # not from command-line arguments. Tokens are NOT visible in /proc/PID/cmdline.
 export SKYNET_CLAUDE_FLAGS="${SKYNET_CLAUDE_FLAGS:---print --dangerously-skip-permissions}"
 export SKYNET_CLAUDE_MODEL="${SKYNET_CLAUDE_MODEL:-}"
+export SKYNET_CODEX_BIN="${SKYNET_CODEX_BIN:-codex}"
+export SKYNET_CODEX_FLAGS="${SKYNET_CODEX_FLAGS:---full-auto}"
 export SKYNET_CODEX_MODEL="${SKYNET_CODEX_MODEL:-}"
 export SKYNET_CODEX_SUBCOMMAND="${SKYNET_CODEX_SUBCOMMAND:-exec}"
 export SKYNET_CODEX_AUTH_FILE="${SKYNET_CODEX_AUTH_FILE:-$HOME/.codex/auth.json}"

@@ -13,10 +13,6 @@
 #   "echo"                — dry-run (no LLM, creates placeholder commit)
 #   "/path/to/plugin.sh"  — use a custom agent plugin
 
-# Codex CLI defaults (override in skynet.config.sh)
-export SKYNET_CODEX_BIN="${SKYNET_CODEX_BIN:-codex}"
-export SKYNET_CODEX_FLAGS="${SKYNET_CODEX_FLAGS:---full-auto}"
-
 # Agent timeout (default: 45 minutes, 0 = disabled)
 export SKYNET_AGENT_TIMEOUT_MINUTES="${SKYNET_AGENT_TIMEOUT_MINUTES:-45}"
 
