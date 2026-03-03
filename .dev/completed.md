@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for _agent.sh agent dispatch | merged to main | 6m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _lock_backend.sh lock backend abstraction | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _compat.sh compatibility helpers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for missions.ts handler | merged to main | 7m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add `SKYNET_CLAUDE_MODEL` env var and `--model` flag to Claude agent plugin | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | merged to main | 0m | success |
-| 2026-03-03 | [TEST] Add integration test for watchdog crash recovery end-to-end | merged to main | 6m | success |

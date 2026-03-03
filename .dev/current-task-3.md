@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for mission-detail.ts handler
+## [TEST] Add shell unit tests for _agent.sh agent dispatch
 **Status:** completed
-**Started:** 2026-03-03 18:06
+**Started:** 2026-03-03 18:13
 **Completed:** 2026-03-03
-**Branch:** dev/add-unit-tests-for-mission-detailts-hand
+**Branch:** dev/add-shell-unit-tests-for-agentsh-agent-d
 **Worker:** 3
 
 ### Changes
