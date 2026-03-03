@@ -167,6 +167,11 @@ _merge_push_with_ttl_guard() {
 
 # OPS-P1-2: Release merge lock with duration logging
 _release_merge_lock_with_duration() {
+  # Restore any stashed .dev/ files before releasing the lock
+  if [ "${_dev_stashed:-false}" = "true" ]; then
+    git stash pop --quiet 2>/dev/null || true
+    _dev_stashed=false
+  fi
   local duration
   if [ "$_MERGE_LOCK_ACQUIRED_AT" -ge 0 ] 2>/dev/null; then
     duration=$(( SECONDS - _MERGE_LOCK_ACQUIRED_AT ))
@@ -258,6 +263,13 @@ do_merge_to_main() {
     cleanup_worktree
   fi
   cd "$PROJECT_DIR"
+
+  # --- Stash dirty .dev/ files that would block pull/merge ---
+  local _dev_stashed=false
+  if ! git diff --quiet -- .dev/ 2>/dev/null; then
+    log "Stashing dirty .dev/ files before pull/merge..."
+    git stash push --quiet -m "auto-stash .dev/ for merge" -- .dev/ 2>>"$log_file" && _dev_stashed=true || true
+  fi
 
   # --- Pull latest main ---
   if ! git_pull_with_retry; then

@@ -679,7 +679,7 @@ db_unclaim_task() {
   [ "$_cur_status" != "ERROR" ] && _validate_status_transition "$task_id" "$_cur_status" "pending" "db_unclaim_task"
   _sql_exec "
     UPDATE tasks SET status='pending', worker_id=NULL, claimed_at=NULL, updated_at=datetime('now')
-    WHERE id=$task_id AND status='claimed';
+    WHERE id=$task_id AND status IN ('claimed','pending');
   "
 }
 
@@ -715,7 +715,7 @@ _db_complete_task_inner() {
     UPDATE tasks SET status='completed', branch='$branch_esc',
       duration='$duration_esc', duration_secs=$duration_secs, notes='$notes_esc',
       completed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id AND status='claimed';
+    WHERE id=$task_id AND status NOT IN ('superseded','done');
   "
 }
 db_complete_task() { _db_retry _db_complete_task_inner "$@"; }
@@ -731,7 +731,7 @@ _db_fail_task_inner() {
   _sql_exec "
     UPDATE tasks SET status='failed', branch='$branch_esc', error='$error_esc',
       failed_at=datetime('now'), updated_at=datetime('now')
-    WHERE id=$task_id AND (status='claimed' OR status LIKE 'fixing-%' OR status='completed');
+    WHERE id=$task_id AND status NOT IN ('superseded','done','fixed');
   "
 }
 db_fail_task() { _db_retry _db_fail_task_inner "$@"; }
