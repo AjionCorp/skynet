@@ -29,6 +29,7 @@ import type { PipelineStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { ActivityFeed } from "./ActivityFeed";
 import { HealthSparkline } from "./HealthSparkline";
+import { TaskVelocityChart } from "./TaskVelocityChart";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -368,6 +369,9 @@ export function PipelineDashboard() {
           </p>
         </div>
       </div>
+
+      {/* Task Completion Velocity */}
+      <TaskVelocityChart />
 
       {/* Error banner */}
       {error && (
