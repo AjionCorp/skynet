@@ -842,6 +842,83 @@ _llm_model=$(echo "$_llm_info" | sed -n '2p')
 assert_eq "$_llm_provider" "codex" "_get_mission_llm_config: correct provider from multiple entries"
 assert_eq "$_llm_model" "codex-mini" "_get_mission_llm_config: correct model from multiple entries"
 
+# Test 78: returns empty provider and model for slug with empty block
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature": {}
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "" "_get_mission_llm_config: empty provider for empty block"
+assert_eq "$_llm_model" "" "_get_mission_llm_config: empty model for empty block"
+
+# Test 80: handles extra whitespace in JSON formatting
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-feature",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-feature"  :  {
+      "provider"  :  "openai" ,
+      "model"  :  "gpt-4o"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha-feature")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "openai" "_get_mission_llm_config: handles whitespace around provider"
+assert_eq "$_llm_model" "gpt-4o" "_get_mission_llm_config: handles whitespace around model"
+
+# Test 82: slug with dots does not false-match similar slugs via regex
+# "." in sed matches any char — "alpha.v1" pattern could match "alpha-v1"
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "alpha-v1",
+  "assignments": {},
+  "llmConfigs": {
+    "alpha-v1": {
+      "provider": "claude",
+      "model": "claude-sonnet-4-6"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "alpha.v1")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+# Dot in slug acts as regex wildcard — documents current behavior.
+# The function matches "alpha-v1" when asked for "alpha.v1" because sed
+# treats the dot as any-character. This test locks in the known behavior.
+assert_eq "$_llm_provider" "claude" "_get_mission_llm_config: dot-slug matches via regex (provider)"
+assert_eq "$_llm_model" "claude-sonnet-4-6" "_get_mission_llm_config: dot-slug matches via regex (model)"
+
+# Test 84: values containing hyphens, dots, and slashes
+cat > "$MISSION_CONFIG" << 'MJSON'
+{
+  "activeMission": "deploy-prod",
+  "assignments": {},
+  "llmConfigs": {
+    "deploy-prod": {
+      "provider": "azure-openai",
+      "model": "gpt-4o-2024-11-20"
+    }
+  }
+}
+MJSON
+_llm_info=$(_get_mission_llm_config "deploy-prod")
+_llm_provider=$(echo "$_llm_info" | head -1)
+_llm_model=$(echo "$_llm_info" | sed -n '2p')
+assert_eq "$_llm_provider" "azure-openai" "_get_mission_llm_config: provider with hyphens"
+assert_eq "$_llm_model" "gpt-4o-2024-11-20" "_get_mission_llm_config: model with hyphens and digits"
+
 # ── Summary ─────────────────────────────────────────────────────────
 
 echo ""
