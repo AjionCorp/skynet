@@ -7,18 +7,22 @@
 #   3. Slug generation and placeholder file content
 #   4. SKYNET_ECHO_FAIL failure simulation
 #   5. SKYNET_ECHO_DELAY work simulation
-#   6. Git precondition validation
-#   7. Full lifecycle: seed → claim → worktree → echo agent → gates → merge → verify
-#   8. Task-fixer retry after echo agent failure
-#   9. Sequential multi-task lifecycle with state export
-#  10. Lifecycle phase log output validation
-#  11. Gate failure after echo agent success
-#  12. Merge with diverged main (rebase recovery)
-#  13. Post-merge typecheck failure (auto-revert flow)
-#  14. Pre-lock rebase + fast-forward merge path
-#  15. Worktree and branch cleanup verification
-#  16. Task unclaim → re-claim lifecycle
-#  17. Database consistency after full test suite
+#   6. SKYNET_ECHO_TIMEOUT timeout simulation (exit 124)
+#   7. SKYNET_ECHO_LIMIT usage-limit simulation
+#   8. SKYNET_ECHO_EXIT custom exit code simulation
+#   9. SKYNET_ECHO_CHECK_FAIL agent_check failure
+#  10. Git precondition validation
+#  11. Full lifecycle: seed → claim → worktree → echo agent → gates → merge → verify
+#  12. Task-fixer retry after echo agent failure
+#  13. Sequential multi-task lifecycle with state export
+#  14. Lifecycle phase log output validation
+#  15. Gate failure after echo agent success
+#  16. Merge with diverged main (rebase recovery)
+#  17. Post-merge typecheck failure (auto-revert flow)
+#  18. Pre-lock rebase + fast-forward merge path
+#  19. Worktree and branch cleanup verification
+#  20. Task unclaim → re-claim lifecycle
+#  21. Database consistency after full test suite
 #
 # Requirements: git, sqlite3, bash
 # Usage: bash tests/integration/echo-agent-lifecycle.test.sh
@@ -507,11 +511,137 @@ assert_file_exists "$WORKTREE_DIR/echo-agent-delayed-task-test.md" "echo-delay: 
 cleanup_worktree "$BRANCH_T5"
 
 # ============================================================
-# TEST 6: Git precondition validation
+# TEST 6: SKYNET_ECHO_TIMEOUT timeout simulation (exit 124)
 # ============================================================
 
 echo ""
-_tlog "=== Test 6: Git precondition validation ==="
+_tlog "=== Test 6: SKYNET_ECHO_TIMEOUT timeout simulation ==="
+
+_reset_test_state
+
+BRANCH_T6="dev/echo-timeout-sim"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t6"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_T6" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+TIMEOUT_LOG="$TMPDIR_ROOT/echo-timeout.log"
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  SKYNET_ECHO_TIMEOUT=1 agent_run "Timeout test task" "$TIMEOUT_LOG"
+) && _rc=0 || _rc=$?
+
+assert_eq "$_rc" "124" "echo-timeout: returns exit code 124"
+
+TIMEOUT_LOG_CONTENT=$(cat "$TIMEOUT_LOG" 2>/dev/null || echo "")
+assert_contains "$TIMEOUT_LOG_CONTENT" "TIMEOUT" "echo-timeout: log records TIMEOUT"
+assert_contains "$TIMEOUT_LOG_CONTENT" "ABORTED" "echo-timeout: log records ABORTED"
+
+# No placeholder file should be created on timeout
+TIMEOUT_FILES=$(cd "$WORKTREE_DIR" && ls echo-agent-*.md 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$TIMEOUT_FILES" "0" "echo-timeout: no placeholder file created"
+
+# No commit should be made on timeout
+TIMEOUT_COMMITS=$(cd "$WORKTREE_DIR" && git log --oneline "$SKYNET_MAIN_BRANCH"..HEAD 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$TIMEOUT_COMMITS" "0" "echo-timeout: no commits on timeout"
+
+cleanup_worktree "$BRANCH_T6"
+
+# ============================================================
+# TEST 7: SKYNET_ECHO_LIMIT usage-limit simulation
+# ============================================================
+
+echo ""
+_tlog "=== Test 7: SKYNET_ECHO_LIMIT usage-limit simulation ==="
+
+_reset_test_state
+
+BRANCH_T7L="dev/echo-limit-sim"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t7l"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_T7L" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+LIMIT_LOG="$TMPDIR_ROOT/echo-limit.log"
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  SKYNET_ECHO_LIMIT=1 agent_run "Limit test task" "$LIMIT_LOG"
+) && _rc=0 || _rc=$?
+
+assert_gt "$_rc" "0" "echo-limit: returns non-zero"
+
+LIMIT_LOG_CONTENT=$(cat "$LIMIT_LOG" 2>/dev/null || echo "")
+assert_contains "$LIMIT_LOG_CONTENT" "USAGE LIMIT" "echo-limit: log records USAGE LIMIT"
+assert_contains "$LIMIT_LOG_CONTENT" "ABORTED" "echo-limit: log records ABORTED"
+assert_contains "$LIMIT_LOG_CONTENT" "hit your usage limit" "echo-limit: writes usage_limit_hit pattern"
+
+# No placeholder file should be created on limit
+LIMIT_FILES=$(cd "$WORKTREE_DIR" && ls echo-agent-*.md 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$LIMIT_FILES" "0" "echo-limit: no placeholder file created"
+
+cleanup_worktree "$BRANCH_T7L"
+
+# ============================================================
+# TEST 8: SKYNET_ECHO_EXIT custom exit code simulation
+# ============================================================
+
+echo ""
+_tlog "=== Test 8: SKYNET_ECHO_EXIT custom exit code simulation ==="
+
+_reset_test_state
+
+BRANCH_T8E="dev/echo-exit-sim"
+WORKTREE_DIR="$SKYNET_WORKTREE_BASE/w-t8e"
+cleanup_worktree 2>/dev/null || true
+cd "$PROJECT_DIR"
+git worktree add "$WORKTREE_DIR" -b "$BRANCH_T8E" "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1
+
+EXIT_LOG="$TMPDIR_ROOT/echo-exit.log"
+(
+  cd "$WORKTREE_DIR"
+  git config user.email "test@echo-lifecycle.test"
+  git config user.name "Echo Lifecycle Test"
+  SKYNET_ECHO_EXIT=42 agent_run "Custom exit test" "$EXIT_LOG"
+) && _rc=0 || _rc=$?
+
+assert_eq "$_rc" "42" "echo-exit: returns custom exit code 42"
+
+EXIT_LOG_CONTENT=$(cat "$EXIT_LOG" 2>/dev/null || echo "")
+assert_contains "$EXIT_LOG_CONTENT" "CUSTOM EXIT" "echo-exit: log records CUSTOM EXIT"
+assert_contains "$EXIT_LOG_CONTENT" "SKYNET_ECHO_EXIT=42" "echo-exit: log records exit code value"
+
+# No placeholder file should be created
+EXIT_FILES=$(cd "$WORKTREE_DIR" && ls echo-agent-*.md 2>/dev/null | wc -l | tr -d ' ')
+assert_eq "$EXIT_FILES" "0" "echo-exit: no placeholder file created"
+
+cleanup_worktree "$BRANCH_T8E"
+
+# ============================================================
+# TEST 9: SKYNET_ECHO_CHECK_FAIL agent_check failure
+# ============================================================
+
+echo ""
+_tlog "=== Test 9: SKYNET_ECHO_CHECK_FAIL agent_check failure ==="
+
+# agent_check should return 1 when SKYNET_ECHO_CHECK_FAIL=1
+SKYNET_ECHO_CHECK_FAIL=1 agent_check && _rc=0 || _rc=$?
+assert_gt "$_rc" "0" "echo-check-fail: agent_check returns non-zero"
+
+# Without the flag, agent_check should succeed
+unset SKYNET_ECHO_CHECK_FAIL
+agent_check && _rc=0 || _rc=$?
+assert_eq "$_rc" "0" "echo-check-fail: agent_check succeeds without flag"
+
+# ============================================================
+# TEST 10: Git precondition validation
+# ============================================================
+
+echo ""
+_tlog "=== Test 10: Git precondition validation ==="
 
 # Run agent outside a git repo — should fail
 NON_GIT_DIR="$TMPDIR_ROOT/not-a-repo"
@@ -529,11 +659,11 @@ PRECOND_CONTENT=$(cat "$PRECOND_LOG" 2>/dev/null || echo "")
 assert_contains "$PRECOND_CONTENT" "not inside a git work tree" "precondition: log explains failure"
 
 # ============================================================
-# TEST 7: Full lifecycle — claim → worktree → echo agent → gates → merge
+# TEST 11: Full lifecycle — claim → worktree → echo agent → gates → merge
 # ============================================================
 
 echo ""
-_tlog "=== Test 7: Full lifecycle — claim → worktree → echo agent → gates → merge ==="
+_tlog "=== Test 11: Full lifecycle — claim → worktree → echo agent → gates → merge ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -653,11 +783,11 @@ WSTAT=$(db_get_worker_status 1)
 assert_contains "$WSTAT" "idle" "lifecycle: worker set to idle after completion"
 
 # ============================================================
-# TEST 8: Agent failure → DB failed state → fixer retry
+# TEST 12: Agent failure → DB failed state → fixer retry
 # ============================================================
 
 echo ""
-_tlog "=== Test 8: Agent failure → DB failed state → fixer retry ==="
+_tlog "=== Test 12: Agent failure → DB failed state → fixer retry ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -733,11 +863,11 @@ cd "$PROJECT_DIR"
 git checkout "$SKYNET_MAIN_BRANCH" >/dev/null 2>&1 || true
 
 # ============================================================
-# TEST 9: Sequential multi-task lifecycle with state export
+# TEST 13: Sequential multi-task lifecycle with state export
 # ============================================================
 
 echo ""
-_tlog "=== Test 9: Sequential multi-task lifecycle with state export ==="
+_tlog "=== Test 13: Sequential multi-task lifecycle with state export ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -813,11 +943,11 @@ REMAINING=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status IN ('pen
 assert_eq "$REMAINING" "0" "multi: no pending/claimed tasks remain"
 
 # ============================================================
-# TEST 10: Echo agent log output lifecycle phases
+# TEST 14: Echo agent log output lifecycle phases
 # ============================================================
 
 echo ""
-_tlog "=== Test 10: Echo agent log output lifecycle phases ==="
+_tlog "=== Test 14: Echo agent log output lifecycle phases ==="
 
 _reset_test_state
 
@@ -853,11 +983,11 @@ assert_contains "$PHASE_CONTENT" "DRY-RUN LIFECYCLE COMPLETE" "phases: lifecycle
 cleanup_worktree "$BRANCH_T10"
 
 # ============================================================
-# TEST 11: Gate failure after echo agent success
+# TEST 15: Gate failure after echo agent success
 # ============================================================
 
 echo ""
-_tlog "=== Test 11: Gate failure after echo agent success ==="
+_tlog "=== Test 15: Gate failure after echo agent success ==="
 
 _reset_test_state
 
@@ -911,11 +1041,11 @@ assert_contains "$ERROR" "gate 1 failed" "gate-fail: error message records gate 
 export SKYNET_GATE_1="true"
 
 # ============================================================
-# TEST 12: Merge with diverged main (rebase recovery)
+# TEST 16: Merge with diverged main (rebase recovery)
 # ============================================================
 
 echo ""
-_tlog "=== Test 12: Merge with diverged main (rebase recovery) ==="
+_tlog "=== Test 16: Merge with diverged main (rebase recovery) ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -968,11 +1098,11 @@ assert_file_exists "$PROJECT_DIR/echo-agent-feature-on-stale-branch.md" "diverge
 db_complete_task "$CLAIM12_ID" "$BRANCH_12" "1m" 60 "success" 2>/dev/null || true
 
 # ============================================================
-# TEST 13: Post-merge typecheck failure (auto-revert)
+# TEST 17: Post-merge typecheck failure (auto-revert)
 # ============================================================
 
 echo ""
-_tlog "=== Test 13: Post-merge typecheck failure (auto-revert) ==="
+_tlog "=== Test 17: Post-merge typecheck failure (auto-revert) ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -1028,11 +1158,11 @@ export SKYNET_POST_MERGE_TYPECHECK="false"
 export SKYNET_TYPECHECK_CMD="true"
 
 # ============================================================
-# TEST 14: Pre-lock rebase + fast-forward merge
+# TEST 18: Pre-lock rebase + fast-forward merge
 # ============================================================
 
 echo ""
-_tlog "=== Test 14: Pre-lock rebase + fast-forward merge ==="
+_tlog "=== Test 18: Pre-lock rebase + fast-forward merge ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -1081,11 +1211,11 @@ assert_file_exists "$PROJECT_DIR/echo-agent-fast-forward-feature.md" \
 db_complete_task "$CLAIM14_ID" "$BRANCH_14" "1m" 60 "success" 2>/dev/null || true
 
 # ============================================================
-# TEST 15: Worktree and branch cleanup verification
+# TEST 19: Worktree and branch cleanup verification
 # ============================================================
 
 echo ""
-_tlog "=== Test 15: Worktree and branch cleanup verification ==="
+_tlog "=== Test 19: Worktree and branch cleanup verification ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -1150,11 +1280,11 @@ assert_eq "$PRUNE_COUNT" "0" "cleanup: no prunable worktrees remain"
 db_complete_task "$CLAIM15_ID" "$BRANCH_15" "1m" 60 "success" 2>/dev/null || true
 
 # ============================================================
-# TEST 16: Task unclaim → re-claim lifecycle
+# TEST 20: Task unclaim → re-claim lifecycle
 # ============================================================
 
 echo ""
-_tlog "=== Test 16: Task unclaim → re-claim lifecycle ==="
+_tlog "=== Test 20: Task unclaim → re-claim lifecycle ==="
 
 _reset_test_state
 sqlite3 "$DB_PATH" "DELETE FROM tasks;"
@@ -1218,22 +1348,22 @@ STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T16_ID;")
 assert_eq "$STATUS" "completed" "unclaim: re-claimed task completed successfully"
 
 # ============================================================
-# TEST 17: Database consistency after full test suite
+# TEST 21: Database consistency after full test suite
 # ============================================================
 
 echo ""
-_tlog "=== Test 17: Database consistency after full test suite ==="
+_tlog "=== Test 21: Database consistency after full test suite ==="
 
 TOTAL_COMPLETED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='completed';")
 TOTAL_FAILED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='failed';")
 TOTAL_PENDING=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='pending';")
 TOTAL_CLAIMED=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM tasks WHERE status='claimed';")
 
-# Accumulated completed: Test 12 (1) + Test 14 (1) + Test 15 (1) + Test 16 (1) = 4
-# (Tests 9, 11 run before and each clears DB; tests 12-16 each clear DB too)
-# Last DB clear was Test 16 → 1 completed
+# Accumulated completed: Test 16 (1) + Test 18 (1) + Test 19 (1) + Test 20 (1) = 4
+# (Tests 13, 15 run before and each clears DB; tests 16-20 each clear DB too)
+# Last DB clear was Test 20 → 1 completed
 # Actually each test does sqlite3 "$DB_PATH" "DELETE FROM tasks;" so only last batch counts.
-# Test 16 clears, adds 1, completes 1 → 1 completed, 0 failed
+# Test 20 clears, adds 1, completes 1 → 1 completed, 0 failed
 assert_eq "$TOTAL_COMPLETED" "1" "db-consistency: completed tasks from last test batch"
 
 # Everything should be resolved
