@@ -212,7 +212,7 @@ export class SkynetDB {
       else if (status === "claimed") claimedCount++;
 
       const blockedBy = r.blocked_by
-        ? r.blocked_by.split(",").map((s) => s.trim()).filter(Boolean)
+        ? r.blocked_by.split(",").map((s) => s.trim().replace(/`/g, "")).filter(Boolean)
         : [];
       const blocked =
         blockedBy.length > 0 &&

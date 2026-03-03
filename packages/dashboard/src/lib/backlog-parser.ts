@@ -15,7 +15,7 @@ export function extractTitle(text: string): string {
 export function parseBlockedBy(text: string): string[] {
   const match = text.match(/\s*\|\s*blockedBy:\s*(.+)$/i);
   if (!match) return [];
-  return match[1].split(",").map((s) => s.trim()).filter(Boolean);
+  return match[1].split(",").map((s) => s.trim().replace(/`/g, "")).filter(Boolean);
 }
 
 export interface ParsedBacklogItem {
@@ -65,7 +65,7 @@ export function parseBacklog(content: string): ParsedBacklogItem[] {
     if (blockedByMatch) {
       blockedBy = blockedByMatch[1]
         .split(",")
-        .map((s) => s.trim())
+        .map((s) => s.trim().replace(/`/g, ""))
         .filter(Boolean);
     }
 

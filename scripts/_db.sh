@@ -556,7 +556,7 @@ _db_claim_next_task_inner() {
       WHERE dep IS NOT NULL AND dep != ''
         AND NOT EXISTS (
           SELECT 1 FROM tasks t
-          WHERE t.title = dep_split.dep
+          WHERE t.title = REPLACE(dep_split.dep, '\`', '')
             AND t.status IN ('completed', 'done', 'fixed', 'superseded')
         )
     ),
@@ -608,7 +608,7 @@ _db_claim_next_task_for_mission_inner() {
       WHERE dep IS NOT NULL AND dep != ''
         AND NOT EXISTS (
           SELECT 1 FROM tasks t
-          WHERE t.title = dep_split.dep
+          WHERE t.title = REPLACE(dep_split.dep, '\`', '')
             AND t.status IN ('completed', 'done', 'fixed', 'superseded')
         )
     ),
@@ -658,7 +658,7 @@ db_explain_claim() {
       WHERE dep IS NOT NULL AND dep != ''
         AND NOT EXISTS (
           SELECT 1 FROM tasks t
-          WHERE t.title = dep_split.dep
+          WHERE t.title = REPLACE(dep_split.dep, '\`', '')
             AND t.status IN ('completed', 'done', 'fixed', 'superseded')
         )
     ),
