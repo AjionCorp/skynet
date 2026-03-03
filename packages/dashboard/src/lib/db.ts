@@ -116,25 +116,25 @@ interface FixerStatRow {
 // overhead with no practical benefit since the schema is deterministic.
 
 /**
- * SkynetDB opens the database in read-write mode because the `rate_limits` table
- * requires write access for POST rate-limit tracking. All other dashboard queries
- * are read-only. If rate limiting is moved to a separate mechanism (e.g., in-memory
- * or Redis), this class should be refactored to accept a `readonly?: boolean` option
- * and open with `{ readonly: true }` for read-only consumers.
+ * SkynetDB wraps better-sqlite3 for dashboard queries.
  *
- * TODO: Separate rate_limits writes from read-only query path to allow readonly DB access.
+ * Rate limiting is handled by the in-memory sliding-window limiter in
+ * `rate-limiter.ts`, so read-only consumers can open the database with
+ * `{ readonly: true }` to avoid write contention.
  */
 export class SkynetDB {
   private db: Database;
   private hasMissionHash: boolean;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, opts?: { readonly?: boolean }) {
     const Database = loadDriver();
-    this.db = new Database(dbPath);
+    this.db = new Database(dbPath, opts?.readonly ? { readonly: true } : undefined);
     // Set busy_timeout first so that the journal_mode = WAL pragma does not
     // fail with SQLITE_BUSY if another process holds the database lock.
     this.db.pragma("busy_timeout = 15000");
-    this.db.pragma("journal_mode = WAL");
+    if (!opts?.readonly) {
+      this.db.pragma("journal_mode = WAL");
+    }
     this.db.pragma("foreign_keys = ON");
     // OPS-P2-8: Verify SQLite version supports CTEs (requires >= 3.8.3)
     // Parse into numeric components — string comparison is lexicographic and
@@ -698,62 +698,6 @@ export class SkynetDB {
       .all() as FixerStatRow[];
   }
 
-  // ── Rate Limiting ────────────────────────────────────────────────────
-
-  /** Ensure the rate_limits table exists (idempotent, runs once per instance). */
-  private _rateLimitsTableCreated = false;
-  private ensureRateLimitsTable(): void {
-    if (this._rateLimitsTableCreated) return;
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS rate_limits (
-        key TEXT PRIMARY KEY,
-        count INTEGER DEFAULT 0,
-        window_start INTEGER DEFAULT 0
-      );
-    `);
-    this._rateLimitsTableCreated = true;
-  }
-
-  /**
-   * Check whether a rate limit key has exceeded the allowed count within the window.
-   * Returns true if the request is allowed, false if rate-limited.
-   * On success, increments the counter atomically.
-   *
-   * Wrapped in a transaction to prevent TOCTOU races: without it, two concurrent
-   * requests could both read under the limit and both increment past it.
-   */
-  checkRateLimit(key: string, maxCount: number, windowMs: number): boolean {
-    this.ensureRateLimitsTable();
-
-    return this.db.transaction(() => {
-      const nowMs = Date.now();
-      const windowStartThreshold = nowMs - windowMs;
-
-      const row = this.db
-        .prepare("SELECT count, window_start FROM rate_limits WHERE key = ?")
-        .get(key) as { count: number; window_start: number } | undefined;
-
-      if (!row || row.window_start <= windowStartThreshold) {
-        // No record or window expired — reset the window
-        this.db
-          .prepare(
-            "INSERT OR REPLACE INTO rate_limits (key, count, window_start) VALUES (?, 1, ?)"
-          )
-          .run(key, nowMs);
-        return true;
-      }
-
-      if (row.count >= maxCount) {
-        return false;
-      }
-
-      // Increment within the current window
-      this.db
-        .prepare("UPDATE rate_limits SET count = count + 1 WHERE key = ?")
-        .run(key);
-      return true;
-    })();
-  }
 }
 
 // WARNING: Node.js fork() would inherit this file descriptor. If you add
@@ -772,8 +716,15 @@ let _instance: SkynetDB | null = null;
 let _instanceIno: bigint | number | null = null;
 let _instancePath: string | null = null;
 
-export function getSkynetDB(devDir: string): SkynetDB {
+export function getSkynetDB(devDir: string, opts?: { readonly?: boolean }): SkynetDB {
   const dbPath = `${devDir}/skynet.db`;
+
+  // Readonly callers get a fresh (non-cached) connection so they never
+  // interfere with the read-write singleton used by write handlers.
+  if (opts?.readonly) {
+    return new SkynetDB(dbPath, { readonly: true });
+  }
+
   // SINGLETON LIMITATION: This factory caches a single SkynetDB instance keyed
   // by dbPath. If multiple devDirs are used in the same process (e.g., a future
   // multi-project dashboard), only the first-opened connection is cached — calls
