@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp
+## [TEST] Add unit tests for mission-tracking.ts handler
 **Status:** completed
-**Started:** 2026-03-03 18:42
+**Started:** 2026-03-03 18:46
 **Completed:** 2026-03-03
-**Branch:** dev/add-component-tests-for-missionsidebar-a
+**Branch:** dev/add-unit-tests-for-mission-trackingts-ha
 **Worker:** 2
 
 ### Changes

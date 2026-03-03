@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for mission-tracking.ts handler | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for ErrorBoundary and LoadingSkeleton admin components | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for check-server-errors.sh error detection | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add shell regression test for _get_mission_llm_config helper | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for LLM config persistence round-trip | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Pre-select default LLM provider "auto" for missions without explicit config | merged to main | 3m | success |
-| 2026-03-03 | [INFRA] Thread mission LLM config into task-fixer agent invocation | merged to main | 3m | success |
