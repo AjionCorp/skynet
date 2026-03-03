@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add `SKYNET_CLAUDE_MODEL` env var and `--model` flag to Claude agent plugin | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | merged to main | 0m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unify stale-threshold config usage across CLI + dashboard + watchdog math | merged to main | 4m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Update config.ts KNOWN_VARS dictionary with missing config variable descriptions | merged to main | 0m | success |
 | 2026-02-20 | [FIX] Use `sed_inplace` wrapper in task-fixer.sh instead of raw `sed -i.bak` | fixing-${FIXER_ID} | 0m | / |
-| 2026-02-20 | [FIX] Use configurable `SKYNET_AUTH_NOTIFY_INTERVAL` in auth-check.sh instead of hardcoded value | merged to main | 1m | success |
