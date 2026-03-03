@@ -2,9 +2,8 @@ import { readFileSync, existsSync, statSync, readdirSync } from "fs";
 import { resolve, join } from "path";
 import { loadConfig } from "../utils/loadConfig.js";
 import { isProcessRunning } from "../utils/isProcessRunning.js";
-import { readFile } from "../utils/readFile.js";
 import { isSqliteReady, sqliteRows, sqlInt } from "../utils/sqliteQuery.js";
-import { decodeJwtExp, calculateHealthScore } from "@ajioncorp/skynet";
+import { decodeJwtExp, calculateHealthScore, parseMissionProgress } from "@ajioncorp/skynet";
 
 interface StatusOptions {
   dir?: string;
@@ -389,122 +388,66 @@ export async function statusCommand(options: StatusOptions) {
   print(`  Self-correction rate: ${scrRate}% (${scrFixed} fixed + ${scrSuperseded} routed around)`);
 
   // --- Mission Progress ---
-  // TODO(tech-debt): This mission evaluation logic is duplicated from
-  // packages/dashboard/src/lib/mission.ts. Changes to criteria IDs (1-6),
-  // thresholds, or status labels MUST be kept in sync manually.
-  // To de-duplicate: export evaluateMissionCriteria(ctx: MissionEvaluationContext)
-  // from @ajioncorp/skynet, then build a thin CLI adapter that constructs the
-  // MissionEvaluationContext from filesystem reads (devDir, projectDir).
-  // The dashboard version expects MissionEvaluationContext (pre-computed counts),
-  // while the CLI version reads directly from the filesystem and computes its
-  // own inputs — hence the duplication.
-  const missionRaw = readFile(join(devDir, "mission.md"));
-  const missionProgress: { id: number; criterion: string; status: string; evidence: string }[] = [];
-  if (missionRaw) {
-    const scMatch = missionRaw.match(/## Success Criteria\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
-    if (scMatch) {
-      const criteriaLines = scMatch[1]
-        .split("\n")
-        .filter((l) => /^\d+\.\s/.test(l.trim()));
+  // Uses shared parseMissionProgress from @ajioncorp/skynet to ensure
+  // consistent evaluation across dashboard and CLI surfaces.
 
-      if (criteriaLines.length > 0) {
-        // Gather evaluation inputs
-        const watchdogLog = readFile(join(devDir, "scripts/watchdog.log"));
-        const zombieRefs = (watchdogLog.match(/zombie/gi) || []).length;
-        const deadlockRefs = (watchdogLog.match(/deadlock/gi) || []).length;
-
-        const handlersDir = join(projectDir, "packages/dashboard/src/handlers");
-        let handlerCount = 0;
-        try {
-          if (existsSync(handlersDir)) {
-            handlerCount = readdirSync(handlersDir).filter(
-              (f) => f.endsWith(".ts") && !f.includes(".test.") && f !== "index.ts"
-            ).length;
-          }
-        } catch {
-          /* ignore */
-        }
-
-        const agentsDir = join(projectDir, "scripts/agents");
-        let agentPlugins: string[] = [];
-        try {
-          if (existsSync(agentsDir)) {
-            agentPlugins = readdirSync(agentsDir).filter((f) => f.endsWith(".sh"));
-          }
-        } catch {
-          /* ignore */
-        }
-
-        let metCount = 0;
-        let partialCount = 0;
-        const summaryLines: string[] = [];
-
-        for (const line of criteriaLines) {
-          const numMatch = line.trim().match(/^(\d+)\.\s+(.+)/);
-          if (!numMatch) continue;
-          const id = Number(numMatch[1]);
-          const criterion = numMatch[2];
-
-          let status: "met" | "partial" | "not-met" = "not-met";
-          let evidence = "";
-
-          switch (id) {
-            case 1:
-              if (handlerCount >= 5) { status = "met"; evidence = `${handlerCount} handlers`; }
-              else { status = "partial"; evidence = `${handlerCount} handlers`; }
-              break;
-            case 2:
-              if (scrResolved === 0) { status = "partial"; evidence = "No failures resolved yet"; }
-              else {
-                const pct = Math.round((scrSelfCorrected / scrResolved) * 100);
-                if (pct >= 95) { status = "met"; evidence = `${pct}% self-correction (${scrSelfCorrected}/${scrResolved})`; }
-                else if (pct >= 50) { status = "partial"; evidence = `${pct}% self-correction`; }
-                else { status = "not-met"; evidence = `${pct}% self-correction`; }
-              }
-              break;
-            case 3: {
-              const issues = zombieRefs + deadlockRefs;
-              if (issues === 0) { status = "met"; evidence = "No issues in watchdog"; }
-              else if (issues <= 3) { status = "partial"; evidence = `${issues} issue(s)`; }
-              else { status = "not-met"; evidence = `${issues} issues`; }
-              break;
-            }
-            case 4:
-              if (handlerCount >= 8) { status = "met"; evidence = `${handlerCount} handlers`; }
-              else if (handlerCount >= 5) { status = "partial"; evidence = `${handlerCount} handlers`; }
-              else { status = "not-met"; evidence = `${handlerCount} handlers`; }
-              break;
-            case 5:
-              if (completedCount >= 10) { status = "met"; evidence = `${completedCount} tasks`; }
-              else if (completedCount >= 3) { status = "partial"; evidence = `${completedCount} tasks`; }
-              else { status = "not-met"; evidence = `${completedCount} tasks`; }
-              break;
-            case 6:
-              if (agentPlugins.length >= 2) { status = "met"; evidence = `${agentPlugins.length} agents`; }
-              else if (agentPlugins.length === 1) { status = "partial"; evidence = `1 agent`; }
-              else { status = "not-met"; evidence = "No agents"; }
-              break;
-          }
-
-          missionProgress.push({ id, criterion, status, evidence });
-
-          if (status === "met") metCount++;
-          else if (status === "partial") partialCount++;
-
-          const icon = status === "met" ? "[MET]" : status === "partial" ? "[PARTIAL]" : "[NOT MET]";
-          // Truncate criterion for display
-          const maxLen = 50;
-          const shortCriterion = criterion.length > maxLen
-            ? criterion.substring(0, maxLen) + "..."
-            : criterion;
-          summaryLines.push(`    ${id}. ${icon} ${shortCriterion} (${evidence})`);
-        }
-
-        print(`\n  Mission Progress: ${metCount}/${criteriaLines.length} met, ${partialCount} partial`);
-        for (const sl of summaryLines) {
-          print(sl);
+  // Resolve active mission slug from multi-mission config
+  let activeMissionSlug: string | null = null;
+  try {
+    const missionConfigPath = join(devDir, "missions", "_config.json");
+    if (existsSync(missionConfigPath)) {
+      const mc = JSON.parse(readFileSync(missionConfigPath, "utf-8")) as { activeMission?: string };
+      if (mc.activeMission) {
+        const missionPath = join(devDir, "missions", `${mc.activeMission}.md`);
+        if (existsSync(missionPath)) {
+          activeMissionSlug = mc.activeMission;
         }
       }
+    }
+  } catch { /* ignore — fall through to legacy mission.md */ }
+
+  // Count handler files for mission evaluation context
+  const handlersDir = join(projectDir, "packages/dashboard/src/handlers");
+  let handlerCount = 0;
+  try {
+    if (existsSync(handlersDir)) {
+      handlerCount = readdirSync(handlersDir).filter(
+        (f) => f.endsWith(".ts") && !f.includes(".test.") && f !== "index.ts"
+      ).length;
+    }
+  } catch { /* ignore */ }
+
+  // Build failed task lines for self-correction evaluation
+  const failedLines: { status: string }[] = [];
+  if (usingSqlite) {
+    try {
+      const failedRows = sqliteRows(devDir, "SELECT status FROM tasks WHERE status IN ('failed','fixed','blocked','superseded');");
+      for (const row of failedRows) {
+        failedLines.push({ status: String(row[0] || "") });
+      }
+    } catch { /* ignore */ }
+  }
+
+  const missionProgress = parseMissionProgress({
+    devDir,
+    completedCount,
+    failedLines,
+    handlerCount,
+    missionSlug: activeMissionSlug,
+  });
+
+  if (missionProgress.length > 0) {
+    const metCount = missionProgress.filter((mp) => mp.status === "met").length;
+    const partialCount = missionProgress.filter((mp) => mp.status === "partial").length;
+    print(`\n  Mission Progress: ${metCount}/${missionProgress.length} met, ${partialCount} partial`);
+
+    for (const mp of missionProgress) {
+      const icon = mp.status === "met" ? "[MET]" : mp.status === "partial" ? "[PARTIAL]" : "[NOT MET]";
+      const maxLen = 50;
+      const shortCriterion = mp.criterion.length > maxLen
+        ? mp.criterion.substring(0, maxLen) + "..."
+        : mp.criterion;
+      print(`    ${mp.id}. ${icon} ${shortCriterion} (${mp.evidence})`);
     }
   }
 
@@ -535,6 +478,7 @@ export async function statusCommand(options: StatusOptions) {
       mergeLock,
       healthScore,
       selfCorrectionRate: scrRate,
+      activeMission: activeMissionSlug,
       missionProgress,
       lastActivity: lastActivity ? lastActivity.toISOString() : null,
     };

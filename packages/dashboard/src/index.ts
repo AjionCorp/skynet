@@ -53,6 +53,8 @@ export { decodeJwtExp } from "./lib/jwt";
 export { STALE_THRESHOLD_SECONDS } from "./lib/constants";
 export { calculateHealthScore } from "./lib/health";
 export type { HealthScoreParams } from "./lib/health";
+export { parseMissionProgress, parseMissionCriteria, evaluateCriterion } from "./lib/mission";
+export type { MissionEvaluationContext } from "./lib/mission";
 
 // Handler factories
 export {

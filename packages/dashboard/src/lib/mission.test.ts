@@ -42,9 +42,9 @@ describe("parseMissionCriteria", () => {
 
     const result = parseMissionCriteria(content);
     expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({ id: 1, criterion: "First criterion" });
-    expect(result[1]).toEqual({ id: 2, criterion: "Second criterion" });
-    expect(result[2]).toEqual({ id: 3, criterion: "Third criterion" });
+    expect(result[0]).toEqual({ id: 1, criterion: "First criterion", completed: false });
+    expect(result[1]).toEqual({ id: 2, criterion: "Second criterion", completed: false });
+    expect(result[2]).toEqual({ id: 3, criterion: "Third criterion", completed: false });
   });
 
   it("returns empty array when no Success Criteria section exists", () => {
@@ -67,8 +67,8 @@ describe("parseMissionCriteria", () => {
 
     const result = parseMissionCriteria(content);
     expect(result).toHaveLength(2);
-    expect(result[0]).toEqual({ id: 1, criterion: "Real criterion" });
-    expect(result[1]).toEqual({ id: 2, criterion: "Another criterion" });
+    expect(result[0]).toEqual({ id: 1, criterion: "Real criterion", completed: false });
+    expect(result[1]).toEqual({ id: 2, criterion: "Another criterion", completed: false });
   });
 
   it("handles Success Criteria at end of file (no trailing section)", () => {
@@ -79,7 +79,7 @@ describe("parseMissionCriteria", () => {
 
     const result = parseMissionCriteria(content);
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ id: 1, criterion: "Only criterion" });
+    expect(result[0]).toEqual({ id: 1, criterion: "Only criterion", completed: false });
   });
 });
 
