@@ -1399,6 +1399,12 @@ _cleanup_merged_dev_branches() {
         emit_event "merged_branch_cleaned" "Cleaned merged $branch"
         deleted=$((deleted + 1))
       fi
+      # Also delete remote branch if it still exists
+      if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+        git -C "$PROJECT_DIR" push origin --delete "$branch" 2>/dev/null && {
+          log "Deleted merged remote branch: $branch"
+        }
+      fi
     fi
   done <<< "$merged_branches"
 
@@ -1496,6 +1502,106 @@ if [ -n "$_db_cleanup_branches" ]; then
 fi
 # Also run file-based cleanup for backward compat
 _cleanup_stale_branches
+
+# --- Cleanup orphaned dev/* branches from failed/abandoned task attempts ---
+# Catches branches missed by the above cleanups: failed tasks that were never
+# retried, branches from crashed workers with no DB record, and stale remote
+# branches with no local counterpart. Only deletes branches older than
+# SKYNET_ORPHAN_BRANCH_AGE_DAYS (default 3) that have no active worktree
+# and no active task in the database.
+_cleanup_orphaned_dev_branches() {
+  local age_days="${SKYNET_ORPHAN_BRANCH_AGE_DAYS:-3}"
+  local cutoff_epoch deleted=0
+  cutoff_epoch=$(( $(date +%s) - age_days * 86400 ))
+
+  local current_branch
+  current_branch=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  # Branches checked out in active worktrees — never delete these
+  local worktree_branches
+  worktree_branches=$(git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null \
+    | grep '^branch ' | sed 's|^branch refs/heads/||' || true)
+
+  # Branches with active tasks (pending, claimed, fixing-*) — never delete these
+  local active_branches
+  active_branches=$(db_get_active_task_branches 2>/dev/null || true)
+
+  # --- Clean orphaned LOCAL dev/* branches ---
+  local all_dev_branches
+  all_dev_branches=$(git -C "$PROJECT_DIR" branch 2>/dev/null \
+    | grep 'dev/' | sed 's/^[* ]*//' || true)
+
+  if [ -n "$all_dev_branches" ]; then
+    while IFS= read -r branch; do
+      branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+      [ -z "$branch" ] && continue
+      [ "$branch" = "$current_branch" ] && continue
+
+      # Skip if branch is in an active worktree
+      echo "$worktree_branches" | grep -qxF "$branch" && continue
+
+      # Skip if branch has an active task
+      echo "$active_branches" | grep -qxF "$branch" && continue
+
+      # Only delete if last commit is older than cutoff
+      local branch_epoch
+      branch_epoch=$(git -C "$PROJECT_DIR" log -1 --format=%ct "$branch" 2>/dev/null || echo "")
+      [ -z "$branch_epoch" ] && continue
+      [ "$branch_epoch" -ge "$cutoff_epoch" ] 2>/dev/null && continue
+
+      if git -C "$PROJECT_DIR" branch -D "$branch" 2>/dev/null; then
+        log "Deleted orphaned dev branch: $branch (no active task, older than ${age_days}d)"
+        emit_event "orphan_branch_cleaned" "Cleaned orphaned $branch"
+        deleted=$((deleted + 1))
+      fi
+      # Also delete remote if it exists
+      if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch" 2>/dev/null; then
+        git -C "$PROJECT_DIR" push origin --delete "$branch" 2>/dev/null && {
+          log "Deleted orphaned remote branch: $branch"
+        }
+      fi
+    done <<< "$all_dev_branches"
+  fi
+
+  # --- Clean stale REMOTE-ONLY dev/* branches (no local counterpart) ---
+  local remote_branches
+  remote_branches=$(git -C "$PROJECT_DIR" branch -r 2>/dev/null \
+    | grep 'origin/dev/' | sed 's|^ *origin/||' || true)
+
+  if [ -n "$remote_branches" ]; then
+    while IFS= read -r branch; do
+      branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+      [ -z "$branch" ] && continue
+
+      # Skip if a local branch exists (already handled above)
+      git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/heads/$branch" 2>/dev/null && continue
+
+      # Skip if branch has an active task
+      echo "$active_branches" | grep -qxF "$branch" && continue
+
+      # Only delete if last commit is older than cutoff
+      local branch_epoch
+      branch_epoch=$(git -C "$PROJECT_DIR" log -1 --format=%ct "origin/$branch" 2>/dev/null || echo "")
+      [ -z "$branch_epoch" ] && continue
+      [ "$branch_epoch" -ge "$cutoff_epoch" ] 2>/dev/null && continue
+
+      git -C "$PROJECT_DIR" push origin --delete "$branch" 2>/dev/null && {
+        log "Deleted stale remote-only dev branch: $branch (older than ${age_days}d)"
+        emit_event "orphan_branch_cleaned" "Cleaned remote-only $branch"
+        deleted=$((deleted + 1))
+      }
+    done <<< "$remote_branches"
+  fi
+
+  if [ "$deleted" -gt 0 ]; then
+    git -C "$PROJECT_DIR" worktree prune 2>/dev/null || true
+    log "Orphaned branch cleanup: deleted $deleted branch(es)"
+    tg "🧹 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Cleaned up $deleted orphaned dev branch(es)" 2>/dev/null || true
+  fi
+}
+
+# --- Run orphaned branch cleanup ---
+_cleanup_orphaned_dev_branches
 
 # Refresh worker running state after potential kills
 dev_workers_running=0

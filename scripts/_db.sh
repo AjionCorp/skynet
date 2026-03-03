@@ -1171,6 +1171,12 @@ db_get_cleanup_branches() {
   _db "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded','blocked') AND branch != '' AND branch NOT LIKE 'merged%';"
 }
 
+# Get branches for tasks being actively worked on (pending, claimed, or being fixed).
+# Used by orphaned branch cleanup to avoid deleting branches still in use.
+db_get_active_task_branches() {
+  _db "SELECT DISTINCT branch FROM tasks WHERE branch != '' AND (status IN ('pending','claimed') OR status LIKE 'fixing-%');"
+}
+
 # Check if a task title already exists (for dedup)
 # OPS-P2-8: Check both title and normalized_root for deduplication
 db_task_exists() {
