@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Thread mission LLM config into task-fixer agent invocation
+## [TEST] Add handler unit tests for LLM config persistence round-trip
 **Status:** completed
-**Started:** 2026-03-03 15:53
+**Started:** 2026-03-03 15:56
 **Completed:** 2026-03-03
-**Branch:** dev/thread-mission-llm-config-into-task-fixe
+**Branch:** dev/add-handler-unit-tests-for-llm-config-pe
 **Worker:** 1
 
 ### Changes
