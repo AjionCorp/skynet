@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for pipeline-control handler | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Remove duplicate prompt CLI argument from gemini.sh agent_run | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for mission LLM config persistence round-trip | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Add missing SKYNET_CLAUDE_MODEL and SKYNET_CODEX_MODEL to CLI config KNOWN_VARS | merged to main | 1m | success |
@@ -51,4 +52,3 @@
 | 2026-02-25 | [DATA] [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | merged to main | 2m | success |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | merged to main | 1m | success |
 | 2026-02-24 | [INFRA] Add task-fixer structured diagnostics for fix rate improvement | merged to main | 6m | success |
-| 2026-02-24 | [FIX] Extract duplicated mission evaluation logic from CLI status to shared module | merged to main | 13m | success |
