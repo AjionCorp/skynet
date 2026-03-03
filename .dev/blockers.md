@@ -106,30 +106,42 @@
 
 ## Active
 
-- **2026-03-03**: 28 failed-task entries remain in `failed-tasks.md` (11 LLM-related, 17 from prior missions), plus 4 in `fixing-*` state. The 11 LLM entries use outdated approaches and will likely fail on retry — watchdog reconciliation should auto-supersede them once the remaining 3 LLM tasks succeed and merge.
+- **2026-03-03**: Phantom completion detected for `_get_mission_llm_config` shell helper — task 906 was marked completed in DB and completed.md, but NO implementation commit exists on main (grep confirms function absent from all scripts). Root cause: implementation commit was lost during merge while status update committed. Fix: task 906 marked failed, new task 907 created as pending replacement. Workers should claim 907 to implement the shell helper.
 
-## Milestone: LLM Failure Cycle Broken
+- **2026-03-03**: blocked_by title mismatch bug — backlog tasks stored blocked_by references WITHOUT backticks (e.g., `[FEAT] Add LlmConfig type...`) but completed task titles stored WITH backticks (e.g., `[FEAT] Add \`LlmConfig\` type...`). DB exact-match resolution in `_db_claim_next_task_inner` failed to resolve dependencies. Fix: manually cleared blocked_by for affected tasks (903, 904). This is a latent pipeline bug — the addTask and backlog sync paths should normalize titles to prevent future mismatches.
 
-**2026-03-03**: After 11+ consecutive LLM Provider Selection task failures (typecheck errors, merge conflicts, claude exit codes), the ultra-precise 5-task decomposition strategy succeeded. The first two foundation tasks merged to main on the first attempt — `LlmConfig` type in `types.ts` and `SKYNET_CLAUDE_MODEL` + `--model` flag in `claude.sh`/`_config.sh`. Key factors: exact file-scope constraints, additive-only type changes, mandatory `git pull origin main`, and embedded anti-pattern guardrails in every task description. This validates the decomposition approach for future complex multi-file features.
+- **2026-03-03**: Failed-task entries (11 LLM-related, 17 from prior missions) remain in `failed-tasks.md`, plus 3 in `fixing-*` state. Most LLM entries use outdated approaches — watchdog reconciliation should auto-supersede them as remaining LLM tasks succeed.
+
+## Milestone: LLM Pipeline Running Clean
+
+**2026-03-03**: After 12+ consecutive LLM failures, the ultra-precise 5-task decomposition broke the cycle. 4 of 5 tasks completed or in-progress within a single pipeline session:
+- Tasks 1–3 (type → env var → handlers) merged to main successfully on first attempt
+- Task 4 (shell helper) was a phantom completion — reimplemented as task 907
+- Task 5 (UI selector) claimed by Worker 1, actively in progress
+Key enablers: exact file-scope constraints, additive-only optional fields, mandatory `git pull origin main`, embedded "DO NOT touch" guardrails, and project-driver DB-level blocked_by resolution fixes mid-session.
 
 ## Mission Status
 
-**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 2/5 tasks merged, 1/5 goals partially met, 2/6 success criteria met.
+**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 3/5 tasks merged, 3/5 goals partially met, 3/6 success criteria met.
 
 **Completed work on main**:
-- `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` (task 1)
-- `SKYNET_CLAUDE_MODEL` env var in `_config.sh` + `--model` flag in `agents/claude.sh` (task 2)
+- `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` (task 1, commit d143fb3)
+- `SKYNET_CLAUDE_MODEL` env var in `_config.sh` + `--model` flag in `agents/claude.sh` (task 2, commit e895eb9)
+- Handler persistence: `missions.ts`, `mission-detail.ts`, `mission-assignments.ts` accept/persist/return `llmConfig` (task 3, commit 76a237c)
 
-**Remaining backlog** (3 tasks):
-3. Handler persistence + retrieval: `missions.ts` and `mission-detail.ts` accept/return `llmConfig` — claimed [>]
-4. Shell helper `_get_mission_llm_config()` + worker threading — pending
-5. UI selector dropdown + model badge in `MissionDashboard.tsx` — pending, blocked by #3
+**In progress**:
+5. UI selector dropdown + model badge in `MissionDashboard.tsx` — Worker 1 actively coding
+
+**Remaining backlog** (1 task):
+4. Shell helper `_get_mission_llm_config()` + worker threading — task 907 pending (regen after phantom completion)
 
 **Progress by goal**:
-- Goal 1 (UI selector): pending — needs tasks 3+5
-- Goal 2 (persist per-mission config): in progress — task 3 claimed
-- Goal 3 (pass config to worker pipeline): partially met — env var + `--model` flag wired, per-mission threading needs task 4
-- Goal 4 (support Claude model tiers): type definitions ready, UI pending
-- Goal 5 (display on dashboard): pending — needs task 5
+- Goal 1 (UI selector): Worker 1 actively implementing
+- Goal 2 (persist per-mission config): DONE — handlers accept, store, and return llmConfig
+- Goal 3 (pass config to worker pipeline): env var + `--model` flag wired; per-mission threading needs task 907
+- Goal 4 (support Claude model tiers): type definitions ready, UI in progress
+- Goal 5 (display on dashboard): Worker 1 actively implementing
 
-**Success criteria met**: (3) workers use selected LLM via `SKYNET_CLAUDE_MODEL`, (6) `pnpm typecheck` passes clean.
+**Success criteria met**: (2) model saved and persisted, (3) workers use selected LLM via `SKYNET_CLAUDE_MODEL`, (6) `pnpm typecheck` passes clean.
+**Success criteria in progress**: (1) admin dropdown — Worker 1 coding, (5) mission detail shows LLM — Worker 1 coding.
+**Success criteria pending**: (4) default model pre-selected — needs task 907 + UI confirmation.

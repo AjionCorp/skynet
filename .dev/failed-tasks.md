@@ -27,7 +27,7 @@
 | 2026-02-25 | [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | failed |
 | 2026-02-25 | [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | merge conflict | 0 | failed |
 | 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | failed |
+| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | fixing-2 |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | typecheck failed post-merge | 0 | fixing-1 |
 | 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 0 | fixing-3 |
 | 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | merge conflict | 1 | fixed |
