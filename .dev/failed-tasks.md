@@ -33,10 +33,10 @@
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | typecheck failed post-merge | 0 | failed |
 | 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | dev/refresh-devblockersmd-active-status-from | merge conflict | 0 | failed |
 | 2026-02-25 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | dev/auto-supersede-stale-statusfailed-rows-w | merge conflict | 0 | failed |
-| 2026-02-25 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | failed |
-| 2026-02-24 | [TEST] Add unit tests for _merge.sh shared merge-to-main logic | dev/add-unit-tests-for-mergesh-shared-merge- | claude exit code 1 | 0 | failed |
-| 2026-02-24 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | all agents hit usage limits (no attempt recorded) | 2 | fixing-1 |
-| 2026-02-24 | [TEST] Add integration test for watchdog crash recovery end-to-end | dev/add-integration-test-for-watchdog-crash- | typecheck failed after fix attempt 1 (fix attempt 2 failed) | 2 | fixing-2 |
+| 2026-02-25 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | fixing-2 |
+| 2026-02-24 | [TEST] Add unit tests for _merge.sh shared merge-to-main logic | dev/add-unit-tests-for-mergesh-shared-merge- | claude exit code 1 | 0 | fixing-3 |
+| 2026-02-24 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | merged to main | all agents hit usage limits (no attempt recorded) | 3 | fixed |
+| 2026-02-24 | [TEST] Add integration test for watchdog crash recovery end-to-end | merged to main | typecheck failed after fix attempt 1 (fix attempt 2 failed) | 3 | fixed |
 | 2026-02-24 | [INFRA] Add pipeline idle detection and completion signaling to watchdog | merged to main | all agents hit usage limits (no attempt recorded) | 2 | fixed |
 | 2026-02-24 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | merged to main | typecheck failed | 1 | fixed |
 | 2026-02-24 | [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | merge conflict | 1 | fixed |

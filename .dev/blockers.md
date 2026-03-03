@@ -104,9 +104,9 @@
 
 ## Active
 
-- **2026-03-03**: 12 prior LLM failed tasks superseded. Fresh canonical backlog of 5 tasks generated with strict dependency ordering and detailed anti-failure rules. Tasks 1+2 are independent (types.ts + shell --model flag), Task 3 depends on #1 (handler persistence), Task 4 depends on #2 (shell helper + worker threading), Task 5 depends on #3 (UI selector + badge). Key guardrails embedded: additive-only type changes, no barrel export touches, cast pattern for backward-compat reads, git pull before commit.
+- **2026-03-03**: All prior LLM task attempts (12+ entries) failed with typecheck errors or merge conflicts. Root causes: (1) workers edited files outside their scope, (2) non-additive type changes, (3) barrel export collisions, (4) dynamic Tailwind classes, (5) missing `git pull origin main`. New backlog of 5 ultra-precise tasks generated with exact file lists, explicit "DO NOT touch" constraints, and step-by-step instructions per task. Old failed entries in `failed-tasks.md` are obsolete and should be superseded by watchdog once new tasks succeed.
 
-- **2026-03-03**: Key lessons from prior failures embedded in every task description: (1) types.ts changes must be additive optional fields only, (2) do NOT touch barrel exports (`handlers/index.ts`, `components/index.ts`), (3) use `(config as any).llmConfigs` cast pattern for backward-compatible JSON reads, (4) always `git pull origin main` before committing dependent tasks, (5) use static Tailwind classes only (no dynamic template literals).
+- **2026-03-03**: 36 stale failed-task entries remain in `failed-tasks.md` (12 LLM-related, 24 from prior missions). Task-fixer may attempt retries on the 12 LLM entries — these will likely fail again since they have outdated approaches. Once the new 5-task sequence succeeds, watchdog reconciliation should supersede these old entries automatically.
 
 ## Mission Status
 
@@ -118,8 +118,16 @@
 1. `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` — unblocks all TS
 2. `SKYNET_CLAUDE_MODEL` env var support in `claude.sh` + `_config.sh` export — independent shell task
 3. Handler persistence + retrieval: `missions.ts` and `mission-detail.ts` accept/return `llmConfig` — depends on #1
-4. Shell helper `_get_mission_llm_config()` + worker/fixer threading — depends on #2
+4. Shell helper `_get_mission_llm_config()` + worker threading — depends on #2
 5. UI selector dropdown + model badge in `MissionDashboard.tsx` — depends on #3
 
 **Critical path**: Tasks 1+2 can run in parallel (independent). Task 3 waits for #1. Task 4 waits for #2. Task 5 waits for #3.
 **Parallelism**: With 4 workers, tasks 1+2 can be claimed simultaneously. Once #1 merges, #3 can start. Once #2 merges, #4 can start. Once #3 merges, #5 can start.
+
+**Key anti-failure guardrails in every task**:
+- Exact file list (edit ONLY these files)
+- "DO NOT touch" barrel exports, unrelated files
+- Optional-only type additions (never break existing consumers)
+- Static Tailwind classes only
+- `git pull origin main` before every commit
+- `pnpm typecheck` as mandatory verification step

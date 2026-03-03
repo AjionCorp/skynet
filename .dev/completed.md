@@ -2,6 +2,8 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | merged to main | 0m | success |
+| 2026-03-03 | [TEST] Add integration test for watchdog crash recovery end-to-end | merged to main | 6m | success |
 | 2026-03-03 | [INFRA] Add pipeline idle detection and completion signaling to watchdog | merged to main | 0m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | merged to main | 13m | success |
 | 2026-03-03 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |
@@ -200,5 +202,3 @@
 | 2026-02-20 | [FIX] Use configurable `SKYNET_AUTH_NOTIFY_INTERVAL` in auth-check.sh instead of hardcoded value | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Use mkdir-based atomic lock for watchdog PID singleton enforcement | merged to main | 6m | success |
 | 2026-02-20 | [FIX] Validate git repository during `skynet init` | merged to main | 0m | success |
-| 2026-02-20 | [INFRA] Add CI job dependency chain to save GitHub Actions minutes | merged to main | 0m | success |
-| 2026-02-20 | [INFRA] Add Playwright E2E tests for events, logs, settings, and workers admin pages | merged to main | 2m | success |
