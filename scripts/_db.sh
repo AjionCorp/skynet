@@ -1277,7 +1277,7 @@ db_export_completed() {
        WHERE status IN ('completed','fixed')
        GROUP BY tag, title
        ORDER BY MAX(completed_at) DESC
-       LIMIT 200;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
+       LIMIT 50;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _dur _notes; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
       # Strip leading [TAG] from title if already present (legacy data)
