@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add `SKYNET_CLAUDE_MODEL` env var and `--model` flag to Claude agent plugin | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add unit tests for _config.sh shared infrastructure helpers | merged to main | 0m | success |
 | 2026-03-03 | [TEST] Add integration test for watchdog crash recovery end-to-end | merged to main | 6m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Update config.ts KNOWN_VARS dictionary with missing config variable descriptions | merged to main | 0m | success |
 | 2026-02-20 | [FIX] Use `sed_inplace` wrapper in task-fixer.sh instead of raw `sed -i.bak` | fixing-${FIXER_ID} | 0m | / |
 | 2026-02-20 | [FIX] Use configurable `SKYNET_AUTH_NOTIFY_INTERVAL` in auth-check.sh instead of hardcoded value | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Use mkdir-based atomic lock for watchdog PID singleton enforcement | merged to main | 6m | success |

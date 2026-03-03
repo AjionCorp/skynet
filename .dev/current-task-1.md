@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for `_merge.sh` shared merge-to-main logic
+## [FEAT] [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts
 **Status:** completed
-**Started:** 2026-02-25 15:30
-**Completed:** 2026-02-25
-**Branch:** dev/add-unit-tests-for-mergesh-shared-merge-
+**Started:** 2026-03-03 15:29
+**Completed:** 2026-03-03
+**Branch:** dev/add-llmconfig-type-and-extend-missioncon
 **Worker:** 1
 
 ### Changes
