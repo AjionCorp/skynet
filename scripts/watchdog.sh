@@ -2106,6 +2106,8 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
     db_prune_old_events 7
     # Prune fixer_stats older than 90 days to prevent unbounded table growth
     db_prune_old_fixer_stats 90
+    # Archive resolved failed tasks (fixed/superseded/blocked) older than 7 days
+    db_archive_resolved_failures 7
 
     # OPS-P0-2: Periodic disk space check
     _db_check_disk_space || log "WARNING: Disk space below threshold — DB writes may fail"

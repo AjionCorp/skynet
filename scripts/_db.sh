@@ -1391,6 +1391,15 @@ db_prune_old_events() {
   [ "${deleted:-0}" -gt 0 ] && log "Pruned $deleted events older than ${days} days" 2>/dev/null || true
 }
 
+# Archive (delete) resolved failed tasks older than N days (default 7).
+# Resolved = fixed, superseded, or blocked. Returns silently on no-op.
+db_archive_resolved_failures() {
+  local days="${1:-7}"
+  local deleted
+  deleted=$(_db "DELETE FROM tasks WHERE status IN ('fixed','superseded','blocked') AND updated_at < datetime('now', '-$days days'); SELECT changes();")
+  [ "${deleted:-0}" -gt 0 ] && log "Archived $deleted resolved failed tasks older than ${days} days" 2>/dev/null || true
+}
+
 # --- WAL Checkpoint Strategy ---
 # SQLite WAL (Write-Ahead Logging) accumulates changes in a separate WAL file.
 # Two checkpoint modes are used:

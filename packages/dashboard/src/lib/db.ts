@@ -615,6 +615,18 @@ export class SkynetDB {
       .all() as { branch: string; status: string; title: string }[];
   }
 
+  /** Archive (delete) resolved failed tasks older than N days. Returns count deleted. */
+  archiveResolvedFailures(days = 7): number {
+    const result = this.db
+      .prepare(
+        `DELETE FROM tasks
+         WHERE status IN ('fixed','superseded','blocked')
+           AND updated_at < datetime('now', '-' || ? || ' days')`
+      )
+      .run(days);
+    return result.changes;
+  }
+
   // ── Export ─────────────────────────────────────────────────────────
 
   /** Export all tasks (for CLI export / backup). */
