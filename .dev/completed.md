@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
 | 2026-03-03 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
 | 2026-03-03 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [INFRA] Add `pnpm install --frozen-lockfile` to worker flow before typecheck | merged to main | 1m | success |
 | 2026-02-20 | [INFRA] Add `timeout-minutes` to all CI workflow jobs to prevent runaway builds | merged to main | 0m | success |
 | 2026-02-20 | [INFRA] Add a dedicated failed-task mutex for all writers | merged to main | 2m | success |
-| 2026-02-20 | [INFRA] Add a watchdog guard to auto-supersede stale `pending` rows already completed by canonical root | merged to main | 2m | success |
