@@ -13,9 +13,17 @@
 # Configuration:
 #   SKYNET_ECHO_FAIL=1        — simulate agent failure (exit 1)
 #   SKYNET_ECHO_DELAY=N       — sleep N seconds to simulate work time
+#   SKYNET_ECHO_TIMEOUT=1     — simulate agent timeout (exit 124)
+#   SKYNET_ECHO_LIMIT=1       — simulate usage-limit hit (writes pattern for
+#                                usage_limit_hit() detection, exit 1)
+#   SKYNET_ECHO_EXIT=N        — exit with specific code N (for testing arbitrary
+#                                error paths like 2, 3, etc.)
+#   SKYNET_ECHO_CHECK_FAIL=1  — make agent_check return 1 (agent unavailable)
 
 agent_check() {
-  # Always available — no external dependencies
+  if [ "${SKYNET_ECHO_CHECK_FAIL:-0}" = "1" ]; then
+    return 1
+  fi
   return 0
 }
 
@@ -49,11 +57,34 @@ agent_run() {
   branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
   _echo_log "phase=validate OK branch=$branch"
 
-  # --- Phase 3: Simulate failure (for pipeline testing) ---
+  # --- Phase 3: Simulate failure modes ---
+  # 3a: Simulate timeout (exit 124) — tests pipeline timeout handling path
+  if [ "${SKYNET_ECHO_TIMEOUT:-0}" = "1" ]; then
+    _echo_log "phase=simulate TIMEOUT (SKYNET_ECHO_TIMEOUT=1, exit 124)"
+    _echo_log "=== DRY-RUN LIFECYCLE ABORTED ==="
+    return 124
+  fi
+
+  # 3b: Simulate usage-limit hit — writes a pattern that usage_limit_hit() detects
+  if [ "${SKYNET_ECHO_LIMIT:-0}" = "1" ]; then
+    _echo_log "phase=simulate USAGE LIMIT (SKYNET_ECHO_LIMIT=1)"
+    echo "Error: You have hit your usage limit. Your limit resets at 3:00 pm." >> "$log_file"
+    _echo_log "=== DRY-RUN LIFECYCLE ABORTED ==="
+    return 1
+  fi
+
+  # 3c: Simulate generic failure (exit 1)
   if [ "${SKYNET_ECHO_FAIL:-0}" = "1" ]; then
     _echo_log "phase=simulate FAILURE (SKYNET_ECHO_FAIL=1)"
     _echo_log "=== DRY-RUN LIFECYCLE ABORTED ==="
     return 1
+  fi
+
+  # 3d: Simulate custom exit code
+  if [ -n "${SKYNET_ECHO_EXIT:-}" ]; then
+    _echo_log "phase=simulate CUSTOM EXIT (SKYNET_ECHO_EXIT=$SKYNET_ECHO_EXIT)"
+    _echo_log "=== DRY-RUN LIFECYCLE ABORTED ==="
+    return "$SKYNET_ECHO_EXIT"
   fi
 
   # --- Phase 4: Simulate work ---
