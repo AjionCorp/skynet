@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [DATA] Persist and return per-mission LLM config in mission handlers | merged to main | 0m | success |
 | 2026-03-03 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | merged to main | 0m | success |
 | 2026-03-03 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unify stale-threshold and health-score math across CLI/dashboard/watchdog | merged to main | 4m | fixed (attempt 3) |
 | 2026-02-20 | [FIX] Unify stale-threshold and health-score parity across CLI/dashboard/watchdog | merged to main | 3m | success |
 | 2026-02-20 | [FIX] Unify stale-threshold config usage across CLI + dashboard + watchdog math | merged to main | 4m | fixed (attempt 1) |
-| 2026-02-20 | [FIX] Update config.ts KNOWN_VARS dictionary with missing config variable descriptions | merged to main | 0m | success |
