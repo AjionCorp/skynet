@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [FIX] Supersede moot blocked "Update mission.md" row in failed-tasks.md | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Remove stale .dev/ database artifacts from failed SQLite migration | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] worker logs when merged - detailed information | merged to main | 15m | success |
 | 2026-03-03 | [INFRA] Add mission-complete idle mode to project-driver | merged to main | 4m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Replace `[[` with `case` in watchdog.sh for bash 3.2 style consistency | merged to main | 0m | continue`. While `[[` technically works in bash 3.2, the project's shell rules state bash 3.2 compatibility and the rest of the codebase uses `[ ... ]` exclusively. This is the only `[[` usage in the pipeline scripts (except `_compat.sh` for platform detection). Fix: replace with a `case` statement: `case "$branch" in dev/*) ;; *) continue ;; esac`. Run `bash -n scripts/watchdog.sh` and `pnpm typecheck` to verify. Criterion #1 (portability — consistent bash 3.2 style across all scripts) |
 | 2026-02-20 | [FIX] Restore config template parity for one-shot/watchdog vars from canonical repro | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Restore config template parity for watchdog and one-shot knobs | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Restore config template parity for watchdog/one-shot knobs | merged to main | 1m | success |

@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Bulk-archive resolved failed-task rows older than 7 days
+## [FIX] Supersede moot blocked "Update mission.md" row in failed-tasks.md
 **Status:** completed
-**Started:** 2026-03-03 16:13
+**Started:** 2026-03-03 17:28
 **Completed:** 2026-03-03
-**Branch:** dev/bulk-archive-resolved-failed-task-rows-o
+**Branch:** dev/supersede-moot-blocked-update-missionmd-
 **Worker:** 2
 
 ### Changes
