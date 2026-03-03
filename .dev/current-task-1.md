@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts
+## [DATA] [DATA] Persist and return per-mission LLM config in mission handlers
 **Status:** completed
-**Started:** 2026-03-03 15:29
+**Started:** 2026-03-03 15:36
 **Completed:** 2026-03-03
-**Branch:** dev/add-llmconfig-type-and-extend-missioncon
+**Branch:** dev/persist-and-return-per-mission-llm-confi
 **Worker:** 1
 
 ### Changes

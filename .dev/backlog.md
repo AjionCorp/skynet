@@ -3,7 +3,7 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Persist and return per-mission LLM config in mission handlers — Edit ONLY missions.ts, mission-detail.ts, config.ts. Import LlmConfig from types. POST/PUT accept optional llmConfig, store in _config.json. GET returns llmConfig per mission. Add SKYNET_CLAUDE_MODEL and SKYNET_CLAUDE_FLAGS to MUTABLE_KEYS. DO NOT touch handlers/index.ts. Run pnpm typecheck. git pull origin main before commit.
+- [ ] [DATA] Persist and return per-mission LLM config in mission handlers — Edit ONLY missions.ts, mission-detail.ts, config.ts. Import LlmConfig from types. POST/PUT accept optional llmConfig, store in _config.json. GET returns llmConfig per mission. Add SKYNET_CLAUDE_MODEL and SKYNET_CLAUDE_FLAGS to MUTABLE_KEYS. DO NOT touch handlers/index.ts. Run pnpm typecheck. git pull origin main before commit.
 - [ ] [FEAT] Add LLM model selector and badge to MissionDashboard — Edit ONLY MissionDashboard.tsx. Add LLM_MODELS const with Opus/Sonnet/Haiku options. Add select dropdown in mission detail that PUTs llmConfig on change. Show model badge on mission cards using static Tailwind classes only. Import LlmConfig from types. DO NOT touch barrel exports. Run pnpm typecheck. git pull origin main before commit. | blockedBy: [DATA] Persist and return per-mission LLM config in mission handlers
 
 # Recent checked history (last 30)
