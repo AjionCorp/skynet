@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | 6m | success |
 | 2026-03-03 | [FEAT] Add LLM model selector and badge to MissionDashboard | merged to main | 3m | success |
 | 2026-03-03 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | 0m | success |
 | 2026-03-03 | [TEST] Add unit tests for _merge.sh shared merge-to-main logic | merged to main | 8m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unblock config template parity root for one-shot/watchdog vars | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Unblock dashboard backlog-parser DRY extraction root | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Unblock pipeline-logs buffer line-count optimization root with response-shape parity | merged to main | 3m | success |

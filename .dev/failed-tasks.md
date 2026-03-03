@@ -29,7 +29,6 @@
 | 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | failed |
 | 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | fixing-2 |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | dev/add-unit-tests-for-configsh-shared-infra | typecheck failed post-merge | 0 | fixing-1 |
-| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 0 | fixing-3 |
 | 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | merge conflict | 1 | fixed |
 | 2026-02-25 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | merged to main | merge conflict | 1 | fixed |
 | 2026-02-25 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | merged to main | typecheck failed | 1 | fixed |
@@ -172,6 +171,7 @@
 | 2026-02-19 | [FEAT] Add `skynet pause` and `skynet resume` CLI commands for pipeline flow control | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [FIX] Fix SKYNET_MAX_WORKERS default mismatch between config template and watchdog | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [TEST] Add events handler unit tests and ActivityFeed component tests | merged to main | merge conflict | 1 | fixed |
+| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 1 | fixed |
 | 2026-02-26 | [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | dev/auto-supersede-stale-statusfailed-rows-w | claude exit code 125 | 0 | superseded |
 | 2026-02-25 | [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | superseded |
 | 2026-02-25 | [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | dev/surface-failed-row-reconciliation-counte | claude exit code 1 | 0 | superseded |
