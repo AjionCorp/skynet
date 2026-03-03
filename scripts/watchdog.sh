@@ -2109,12 +2109,40 @@ fi
 # Adaptive interval file in /tmp uses umask 077 to prevent other users on shared
 # hosts from manipulating the watchdog sleep interval (local DoS vector).
 _adaptive_file="/tmp/skynet-${SKYNET_PROJECT_NAME}-watchdog-interval"
+_idle_sentinel="$DEV_DIR/pipeline-idle"
+_idle_notify_flag="/tmp/skynet-${SKYNET_PROJECT_NAME}-idle-notify"
 if [ "${backlog_count:-0}" -gt 0 ] || [ "${failed_pending:-0}" -gt 0 ]; then
   (umask 077; echo 30 > "$_adaptive_file")
+  # Work available — clear idle sentinel if it exists
+  if [ -f "$_idle_sentinel" ]; then
+    rm -f "$_idle_sentinel"
+    rm -f "$_idle_notify_flag"
+    log "Pipeline resumed — idle sentinel cleared"
+    emit_event "pipeline_resumed" "Pipeline has new work (backlog: ${backlog_count:-0}, failed: ${failed_pending:-0})"
+  fi
 elif [ "${dev_workers_running:-0}" -gt 0 ] || [ "${fixers_running:-0}" -gt 0 ]; then
   (umask 077; echo "$WATCHDOG_INTERVAL" > "$_adaptive_file")
+  # Workers still running — clear idle sentinel if it exists
+  if [ -f "$_idle_sentinel" ]; then
+    rm -f "$_idle_sentinel"
+    rm -f "$_idle_notify_flag"
+    log "Pipeline resumed — workers active, idle sentinel cleared"
+    emit_event "pipeline_resumed" "Pipeline workers active (dev: ${dev_workers_running:-0}, fixers: ${fixers_running:-0})"
+  fi
 else
   (umask 077; echo 300 > "$_adaptive_file")
+  # --- Pipeline idle detection ---
+  # All queues empty and no workers running — pipeline is fully idle.
+  # Write sentinel (once) and emit event + throttled notification.
+  if [ ! -f "$_idle_sentinel" ]; then
+    log "Pipeline idle — no pending tasks, no failed tasks, no workers running"
+    echo "{\"idleSince\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"epoch\": $(date +%s), \"project\": \"${SKYNET_PROJECT_NAME:-unknown}\"}" > "$_idle_sentinel"
+    emit_event "pipeline_idle" "Pipeline fully idle: backlog=0, failed=0, workers=0, fixers=0"
+    tg "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline is idle — no pending or failed tasks, all workers stopped."
+  else
+    # Already idle — send periodic reminder (throttled to once per hour)
+    tg_throttled "$_idle_notify_flag" 3600 "💤 *$SKYNET_PROJECT_NAME_UPPER*: Pipeline still idle — no work available."
+  fi
 fi
 
 ) || {
