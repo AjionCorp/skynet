@@ -136,7 +136,7 @@ describe("createMissionsHandler — LLM config persistence", () => {
       expect("model" in written!.llmConfigs!["auto-mission"]).toBe(false);
     });
 
-    it("does not write llmConfigs when not provided", async () => {
+    it("defaults to auto provider when llmConfig not provided", async () => {
       mockExistsSync.mockImplementation(((path: string) => {
         if (String(path).endsWith("plain-mission.md")) return false;
         return true;
@@ -153,11 +153,11 @@ describe("createMissionsHandler — LLM config persistence", () => {
 
       expect(res.status).toBe(201);
 
-      // writeFileSync should only be called for the .md file, not _config.json
-      const configWrites = mockWriteFileSync.mock.calls.filter((call) =>
-        String(call[0]).endsWith("_config.json"),
-      );
-      expect(configWrites).toHaveLength(0);
+      // Handler defaults to { provider: "auto" } when no llmConfig provided
+      const written = getWrittenConfig();
+      expect(written!.llmConfigs!["plain-mission"]).toEqual({
+        provider: "auto",
+      });
     });
 
     it("preserves existing llmConfigs when adding a new one", async () => {
@@ -220,10 +220,11 @@ describe("createMissionsHandler — LLM config persistence", () => {
         provider: "claude",
         model: "claude-opus-4-6",
       });
-      expect(main.llmConfig).toBeUndefined();
+      // main has no explicit config → defaults to { provider: "auto" }
+      expect(main.llmConfig).toEqual({ provider: "auto" });
     });
 
-    it("returns undefined llmConfig when none configured", async () => {
+    it("returns default auto provider when none configured", async () => {
       mockReaddirSync.mockReturnValue(["main.md"] as unknown as ReturnType<typeof readdirSync>);
 
       mockConfigFile({ activeMission: "main", assignments: {} });
@@ -233,7 +234,7 @@ describe("createMissionsHandler — LLM config persistence", () => {
       const body = await res.json();
 
       const main = body.data.missions[0];
-      expect(main.llmConfig).toBeUndefined();
+      expect(main.llmConfig).toEqual({ provider: "auto" });
     });
   });
 });
@@ -439,7 +440,7 @@ describe("createMissionDetailHandler — LLM config persistence", () => {
       });
     });
 
-    it("returns undefined llmConfig when not configured for this mission", async () => {
+    it("returns default auto provider when not configured for this mission", async () => {
       mockConfigFile({
         activeMission: "main",
         assignments: {},
@@ -455,7 +456,7 @@ describe("createMissionDetailHandler — LLM config persistence", () => {
       const body = await res.json();
 
       expect(res.status).toBe(200);
-      expect(body.data.llmConfig).toBeUndefined();
+      expect(body.data.llmConfig).toEqual({ provider: "auto" });
     });
   });
 
