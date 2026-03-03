@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for _agent.sh agent dispatch
+## [TEST] Add unit tests for process-locks.ts and rate-limiter.ts library utilities
 **Status:** completed
-**Started:** 2026-03-03 18:13
+**Started:** 2026-03-03 18:37
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-agentsh-agent-d
+**Branch:** dev/add-unit-tests-for-process-locksts-and-r
 **Worker:** 3
 
 ### Changes
