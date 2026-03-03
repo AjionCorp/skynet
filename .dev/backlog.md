@@ -4,7 +4,6 @@
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
 - [>] [TEST] Add shell unit tests for clean-logs.sh log rotation — Create `tests/unit/clean-logs.test.sh`. Create temp log fixtures with known `[YYYY-MM-DD HH:MM:SS]` timestamps spanning before/after 24h cutoff. Verify lines within window are retained, older lines are trimmed, empty or missing log files are handled gracefully, and no-op when all lines are recent. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/clean-logs.test.sh`.
-- [>] [TEST] Add agent plugin unit tests for claude.sh and codex.sh — Create `tests/unit/agent-plugins.test.sh`. Test `scripts/agents/claude.sh` passes `--model` flag when `SKYNET_CLAUDE_MODEL` is set and omits it when unset. Test `scripts/agents/codex.sh` pipes prompt via stdin. Source each plugin, verify `agent_check` and `agent_run` function signatures match the `_agent.sh` plugin interface. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/agent-plugins.test.sh`.
 - [>] [TEST] Add shell unit tests for health-check.sh operational checks — Create `tests/unit/health-check.test.sh`. Test that typecheck command is invoked, error reporting format matches `log()` convention, and script exits gracefully when skynet.config.sh is absent or dev server is not running. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/health-check.test.sh`.
 
 # Recent checked history (last 30)

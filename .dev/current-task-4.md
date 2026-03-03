@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for _compat.sh compatibility helpers
+## [TEST] Add agent plugin unit tests for claude.sh and codex.sh
 **Status:** completed
-**Started:** 2026-03-03 18:11
+**Started:** 2026-03-03 18:15
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-compatsh-compat
+**Branch:** dev/add-agent-plugin-unit-tests-for-claudesh
 **Worker:** 4
 
 ### Changes
