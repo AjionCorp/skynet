@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Remove stale .dev/ database artifacts from failed SQLite migration
+## [INFRA] Archive resolved failed-tasks.md rows older than 7 days to reduce context size
 **Status:** completed
-**Started:** 2026-03-03 17:27
+**Started:** 2026-03-03 17:32
 **Completed:** 2026-03-03
-**Branch:** dev/remove-stale-dev-database-artifacts-from
+**Branch:** dev/archive-resolved-failed-tasksmd-rows-old
 **Worker:** 3
 
 ### Changes

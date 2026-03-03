@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Archive resolved failed-tasks.md rows older than 7 days to reduce context size | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | 0m | success |
 | 2026-03-03 | [INFRA] Add --model flag passthrough to agents/codex.sh for LLM provider parity | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Remove ghost `SKYNET_START_DEV_CMD` from config.ts KNOWN_VARS | merged to main | 0m | success |
 | 2026-02-20 | [FIX] Remove shell-eval injection path from `skynet config set` | merged to main | 1m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Remove shell-execution path from `skynet config set` | merged to main | 2m | success |
-| 2026-02-20 | [FIX] Replace `&>/dev/null` bashism with portable `>/dev/null 2>&1` in 8 script locations | merged to main | 1m | success |
