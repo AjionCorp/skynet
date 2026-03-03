@@ -1365,6 +1365,10 @@ _archive_old_completions() {
 # --- Run archival before branch cleanup ---
 _archive_old_completions
 
+# --- Refresh remote tracking refs before branch cleanup ---
+# Ensures git branch -r sees up-to-date remote state (prunes deleted refs).
+git -C "$PROJECT_DIR" fetch --prune origin 2>/dev/null || true
+
 # --- Cleanup merged dev/* branches older than 7 days ---
 # Periodically removes dev/* branches that have been fully merged into the main
 # branch and are older than 7 days. Uses `git branch -d` (not -D) for safety —
@@ -1502,6 +1506,78 @@ if [ -n "$_db_cleanup_branches" ]; then
 fi
 # Also run file-based cleanup for backward compat
 _cleanup_stale_branches
+
+# --- Delete stale remote dev/* branches from resolved failed tasks ---
+# Enumerates remote dev/* branches and cross-references against failed-tasks.md
+# (and SQLite) for resolved statuses (fixed/superseded). Deletes matching remote
+# branches that are no longer needed. Does NOT delete branches for pending,
+# blocked, or fixing-* tasks.
+_cleanup_resolved_remote_branches() {
+  local current_branch
+  current_branch=$(git -C "$PROJECT_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  # Branches checked out in active worktrees — never delete these
+  local worktree_branches
+  worktree_branches=$(git -C "$PROJECT_DIR" worktree list --porcelain 2>/dev/null \
+    | grep '^branch ' | sed 's|^branch refs/heads/||' || true)
+
+  # Build set of resolved branches from SQLite (fixed/superseded only)
+  local resolved_branches=""
+  resolved_branches=$(db_get_resolved_branches 2>/dev/null || true)
+
+  # Supplement with file-based lookup from failed-tasks.md
+  if [ -f "$FAILED" ]; then
+    local _file_resolved=""
+    _file_resolved=$(tail -n +3 "$FAILED" | awk -F'|' '{
+      gsub(/^ +| +$/, "", $4); gsub(/^ +| +$/, "", $7);
+      if ($7 == "fixed" || $7 == "superseded") print $4
+    }' | grep '^dev/' || true)
+    if [ -n "$_file_resolved" ]; then
+      if [ -n "$resolved_branches" ]; then
+        resolved_branches=$(printf '%s\n%s' "$resolved_branches" "$_file_resolved" | sort -u)
+      else
+        resolved_branches=$(echo "$_file_resolved" | sort -u)
+      fi
+    fi
+  fi
+
+  [ -z "$resolved_branches" ] && return 0
+
+  # Enumerate actual remote dev/* branches
+  local remote_dev_branches
+  remote_dev_branches=$(git -C "$PROJECT_DIR" branch -r --list 'origin/dev/*' 2>/dev/null \
+    | sed 's|^ *origin/||' || true)
+  [ -z "$remote_dev_branches" ] && return 0
+
+  local deleted=0
+  while IFS= read -r branch; do
+    branch=$(echo "$branch" | sed 's/^ *//;s/ *$//')
+    [ -z "$branch" ] && continue
+
+    # Never delete the current branch
+    [ "$branch" = "$current_branch" ] && continue
+
+    # Never delete branches in active worktrees
+    echo "$worktree_branches" | grep -qxF "$branch" && continue
+
+    # Only delete if branch is in the resolved set
+    echo "$resolved_branches" | grep -qxF "$branch" || continue
+
+    git -C "$PROJECT_DIR" push origin --delete "$branch" 2>/dev/null && {
+      log "Deleted resolved remote branch: $branch"
+      emit_event "resolved_branch_cleaned" "Cleaned resolved remote $branch"
+      deleted=$((deleted + 1))
+    }
+  done <<< "$remote_dev_branches"
+
+  if [ "$deleted" -gt 0 ]; then
+    log "Resolved remote branch cleanup: deleted $deleted branch(es)"
+    tg "🧹 *$SKYNET_PROJECT_NAME_UPPER WATCHDOG*: Cleaned up $deleted resolved remote dev branch(es)" 2>/dev/null || true
+  fi
+}
+
+# --- Run resolved remote branch cleanup ---
+_cleanup_resolved_remote_branches
 
 # --- Cleanup orphaned dev/* branches from failed/abandoned task attempts ---
 # Catches branches missed by the above cleanups: failed tasks that were never

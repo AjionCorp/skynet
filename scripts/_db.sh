@@ -1171,6 +1171,12 @@ db_get_cleanup_branches() {
   _db "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded','blocked') AND branch != '' AND branch NOT LIKE 'merged%';"
 }
 
+# Get branches for resolved failed tasks (fixed/superseded only, NOT blocked).
+# Used by remote branch cleanup to delete stale remote dev/* branches.
+db_get_resolved_branches() {
+  _db "SELECT DISTINCT branch FROM tasks WHERE status IN ('fixed','superseded') AND branch != '' AND branch NOT LIKE 'merged%';"
+}
+
 # Get branches for tasks being actively worked on (pending, claimed, or being fixed).
 # Used by orphaned branch cleanup to avoid deleting branches still in use.
 db_get_active_task_branches() {
