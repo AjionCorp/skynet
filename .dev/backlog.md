@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add handler unit tests for mission LLM config persistence round-trip — Create `packages/admin/src/app/api/admin/missions/missions.test.ts`. Test that: (a) POST to create a mission with `llmConfigs: { "test-slug": { provider: "claude", model: "opus" } }` persists to `_config.json`, (b) GET missions list returns llmConfig in each MissionSummary, (c) PUT to update a mission llmConfig preserves other fields. Use `vi.stubGlobal` pattern per existing test conventions. DO NOT import from barrel index.ts — import directly from handler files. Run pnpm typecheck.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
