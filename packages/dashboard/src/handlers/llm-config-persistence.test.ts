@@ -625,4 +625,262 @@ describe("LLM config round-trip", () => {
       model: "gemini-2.5-pro",
     });
   });
+
+  it("full lifecycle: create → detail GET → update → list GET → delete → verify cleanup", async () => {
+    // Phase 1: Create mission with explicit llmConfig
+    mockExistsSync.mockImplementation(((path: string) => {
+      if (String(path).endsWith("lifecycle.md")) return false;
+      return true;
+    }) as typeof existsSync);
+
+    mockConfigFile({ activeMission: "main", assignments: {} });
+
+    const missionsHandler = createMissionsHandler(makeConfig());
+    const createRes = await missionsHandler.POST(
+      makeRequest("http://localhost/api/missions", "POST", {
+        name: "Lifecycle",
+        llmConfig: { provider: "codex", model: "codex-mini-latest" },
+      }),
+    );
+    expect(createRes.status).toBe(201);
+
+    const afterCreate = getWrittenConfig();
+    expect(afterCreate!.llmConfigs!["lifecycle"]).toEqual({
+      provider: "codex",
+      model: "codex-mini-latest",
+    });
+
+    // Phase 2: Read back via mission-detail GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterCreate!);
+
+    const detailHandler = createMissionDetailHandler(makeConfig());
+    const detailRes = await detailHandler.GET(
+      new Request("http://localhost/api/admin/missions/lifecycle"),
+    );
+    const detailBody = await detailRes.json();
+
+    expect(detailRes.status).toBe(200);
+    expect(detailBody.data.llmConfig).toEqual({
+      provider: "codex",
+      model: "codex-mini-latest",
+    });
+
+    // Phase 3: Update via assignments PUT
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterCreate!);
+
+    const assignmentsHandler = createMissionAssignmentsHandler(makeConfig());
+    const updateRes = await assignmentsHandler.PUT(
+      makeRequest("http://localhost/api/mission-assignments", "PUT", {
+        llmConfigs: {
+          lifecycle: { provider: "claude", model: "claude-opus-4-6" },
+        },
+      }),
+    );
+    expect(updateRes.status).toBe(200);
+
+    const afterUpdate = getWrittenConfig();
+
+    // Phase 4: Verify via missions list GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockReaddirSync.mockReturnValue(["main.md", "lifecycle.md"] as unknown as ReturnType<typeof readdirSync>);
+    mockConfigFile(afterUpdate!);
+
+    const listRes = await missionsHandler.GET();
+    const listBody = await listRes.json();
+    const lifecycle = listBody.data.missions.find((m: { slug: string }) => m.slug === "lifecycle");
+
+    expect(lifecycle.llmConfig).toEqual({
+      provider: "claude",
+      model: "claude-opus-4-6",
+    });
+
+    // Phase 5: Delete mission → verify llmConfig cleaned up
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterUpdate!);
+
+    const deleteRes = await detailHandler.DELETE(
+      new Request("http://localhost/api/admin/missions/lifecycle", {
+        method: "DELETE",
+      }),
+    );
+    expect(deleteRes.status).toBe(200);
+
+    const afterDelete = getWrittenConfig();
+    expect(afterDelete!.llmConfigs!["lifecycle"]).toBeUndefined();
+    // main should still be untouched
+    expect(afterDelete!.activeMission).toBe("main");
+  });
+
+  it("multi-mission configs are isolated across create and update", async () => {
+    // Create two missions with different configs
+    const baseConfig: MissionConfig = { activeMission: "main", assignments: {} };
+
+    // Create mission A
+    mockExistsSync.mockImplementation(((path: string) => {
+      if (String(path).endsWith("alpha.md")) return false;
+      return true;
+    }) as typeof existsSync);
+    mockConfigFile(baseConfig);
+
+    const missionsHandler = createMissionsHandler(makeConfig());
+    const resA = await missionsHandler.POST(
+      makeRequest("http://localhost/api/missions", "POST", {
+        name: "Alpha",
+        llmConfig: { provider: "claude", model: "claude-opus-4-6" },
+      }),
+    );
+    expect(resA.status).toBe(201);
+    const afterA = getWrittenConfig();
+
+    // Create mission B (starting from state after A was created)
+    vi.clearAllMocks();
+    mockExistsSync.mockImplementation(((path: string) => {
+      if (String(path).endsWith("beta.md")) return false;
+      return true;
+    }) as typeof existsSync);
+    mockConfigFile(afterA!);
+
+    const resB = await missionsHandler.POST(
+      makeRequest("http://localhost/api/missions", "POST", {
+        name: "Beta",
+        llmConfig: { provider: "gemini", model: "gemini-2.5-pro" },
+      }),
+    );
+    expect(resB.status).toBe(201);
+    const afterB = getWrittenConfig();
+
+    // Both configs should coexist
+    expect(afterB!.llmConfigs!["alpha"]).toEqual({
+      provider: "claude",
+      model: "claude-opus-4-6",
+    });
+    expect(afterB!.llmConfigs!["beta"]).toEqual({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+    });
+
+    // Update only alpha → beta should be unchanged
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterB!);
+
+    const assignmentsHandler = createMissionAssignmentsHandler(makeConfig());
+    const updateRes = await assignmentsHandler.PUT(
+      makeRequest("http://localhost/api/mission-assignments", "PUT", {
+        llmConfigs: {
+          alpha: { provider: "auto" },
+        },
+      }),
+    );
+    expect(updateRes.status).toBe(200);
+
+    const afterUpdate = getWrittenConfig();
+    expect(afterUpdate!.llmConfigs!["alpha"]).toEqual({ provider: "auto" });
+    expect(afterUpdate!.llmConfigs!["beta"]).toEqual({
+      provider: "gemini",
+      model: "gemini-2.5-pro",
+    });
+  });
+
+  it("provider downgrade: explicit config → auto round-trips correctly", async () => {
+    // Start with explicit config
+    const initial: MissionConfig = {
+      activeMission: "main",
+      assignments: {},
+      llmConfigs: {
+        main: { provider: "claude", model: "claude-opus-4-6" },
+      },
+    };
+
+    mockConfigFile(initial);
+
+    // Downgrade to auto via assignments PUT
+    const assignmentsHandler = createMissionAssignmentsHandler(makeConfig());
+    const downgradeRes = await assignmentsHandler.PUT(
+      makeRequest("http://localhost/api/mission-assignments", "PUT", {
+        llmConfigs: {
+          main: { provider: "auto" },
+        },
+      }),
+    );
+    expect(downgradeRes.status).toBe(200);
+
+    const afterDowngrade = getWrittenConfig();
+    expect(afterDowngrade!.llmConfigs!["main"]).toEqual({ provider: "auto" });
+    // model should not be carried over from previous config
+    expect(afterDowngrade!.llmConfigs!["main"].model).toBeUndefined();
+
+    // Verify via detail GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterDowngrade!);
+
+    const detailHandler = createMissionDetailHandler(makeConfig());
+    const detailRes = await detailHandler.GET(
+      new Request("http://localhost/api/admin/missions/main"),
+    );
+    const body = await detailRes.json();
+
+    expect(body.data.llmConfig).toEqual({ provider: "auto" });
+  });
+
+  it("default auto config from POST is readable through all GET paths", async () => {
+    // Create mission without explicit llmConfig → should default to auto
+    mockExistsSync.mockImplementation(((path: string) => {
+      if (String(path).endsWith("no-config.md")) return false;
+      return true;
+    }) as typeof existsSync);
+
+    mockConfigFile({ activeMission: "main", assignments: {} });
+
+    const missionsHandler = createMissionsHandler(makeConfig());
+    const createRes = await missionsHandler.POST(
+      makeRequest("http://localhost/api/missions", "POST", {
+        name: "No Config",
+      }),
+    );
+    expect(createRes.status).toBe(201);
+
+    const afterCreate = getWrittenConfig();
+    expect(afterCreate!.llmConfigs!["no-config"]).toEqual({ provider: "auto" });
+
+    // Read via detail GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterCreate!);
+
+    const detailHandler = createMissionDetailHandler(makeConfig());
+    const detailRes = await detailHandler.GET(
+      new Request("http://localhost/api/admin/missions/no-config"),
+    );
+    const detailBody = await detailRes.json();
+    expect(detailBody.data.llmConfig).toEqual({ provider: "auto" });
+
+    // Read via assignments GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockConfigFile(afterCreate!);
+
+    const assignmentsHandler = createMissionAssignmentsHandler(makeConfig());
+    const assignRes = await assignmentsHandler.GET();
+    const assignBody = await assignRes.json();
+    expect(assignBody.data.llmConfigs!["no-config"]).toEqual({ provider: "auto" });
+
+    // Read via missions list GET
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(true);
+    mockReaddirSync.mockReturnValue(["main.md", "no-config.md"] as unknown as ReturnType<typeof readdirSync>);
+    mockConfigFile(afterCreate!);
+
+    const listRes = await missionsHandler.GET();
+    const listBody = await listRes.json();
+    const mission = listBody.data.missions.find((m: { slug: string }) => m.slug === "no-config");
+    expect(mission.llmConfig).toEqual({ provider: "auto" });
+  });
 });
