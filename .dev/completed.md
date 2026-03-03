@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add handler unit tests for LLM config persistence round-trip | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Pre-select default LLM provider "auto" for missions without explicit config | merged to main | 3m | success |
 | 2026-03-03 | [INFRA] Thread mission LLM config into task-fixer agent invocation | merged to main | 3m | success |
 | 2026-03-03 | [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Truncate completed.md to last 30 entries in project-driver.sh prompt context | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Unblock CLI shared helper DRY root for `readFile`/`isProcessRunning` | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Unblock Codex large-prompt reliability root (canonical) | merged to main | 3m | success |
-| 2026-02-20 | [FIX] Unblock Codex large-prompt reliability root with stdin-first invariants | merged to main | 2m | success |
