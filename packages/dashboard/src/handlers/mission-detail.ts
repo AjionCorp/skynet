@@ -61,7 +61,7 @@ export function createMissionDetailHandler(config: SkynetConfig) {
           raw,
           isActive: missionConfig.activeMission === slug,
           assignedWorkers,
-          llmConfig: missionConfig.llmConfigs?.[slug],
+          llmConfig: missionConfig.llmConfigs?.[slug] ?? { provider: "auto" as const },
         },
         error: null,
       });

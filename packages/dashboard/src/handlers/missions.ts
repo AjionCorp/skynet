@@ -106,7 +106,7 @@ export function createMissionsHandler(config: SkynetConfig) {
           isActive: missionConfig.activeMission === slug,
           assignedWorkers,
           completionPercentage,
-          llmConfig: missionConfig.llmConfigs?.[slug],
+          llmConfig: missionConfig.llmConfigs?.[slug] ?? { provider: "auto" as const },
         };
       });
 
@@ -162,15 +162,19 @@ export function createMissionsHandler(config: SkynetConfig) {
 
       writeFileSync(filePath, missionContent, "utf-8");
 
-      // Persist LLM config if provided
-      if (body.llmConfig && typeof body.llmConfig.provider === "string") {
+      // Persist LLM config — default to "auto" if not provided
+      {
         const configPath = resolve(missionsDir, "_config.json");
         const missionConfig = readConfig(configPath);
         if (!missionConfig.llmConfigs) missionConfig.llmConfigs = {};
-        missionConfig.llmConfigs[slug] = {
-          provider: body.llmConfig.provider as "claude" | "codex" | "gemini" | "auto",
-          ...(body.llmConfig.model ? { model: body.llmConfig.model } : {}),
-        };
+        if (body.llmConfig && typeof body.llmConfig.provider === "string") {
+          missionConfig.llmConfigs[slug] = {
+            provider: body.llmConfig.provider as "claude" | "codex" | "gemini" | "auto",
+            ...(body.llmConfig.model ? { model: body.llmConfig.model } : {}),
+          };
+        } else {
+          missionConfig.llmConfigs[slug] = { provider: "auto" };
+        }
         writeConfig(configPath, missionConfig);
       }
 
