@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
 | 2026-03-03 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
 | 2026-03-03 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] Add pipeline health trend sparkline to Pipeline dashboard | merged to main | 6m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [INFRA] Add a dedicated failed-task mutex for all writers | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Add a watchdog guard to auto-supersede stale `pending` rows already completed by canonical root | merged to main | 2m | success |
 | 2026-02-20 | [INFRA] Add agent execution timeout to prevent zombie agent processes | merged to main | 6m | success |
-| 2026-02-20 | [INFRA] Add agent-auth preflight gate before watchdog dispatch to avoid dead cycles when credentials expire | merged to main | 2m | success |
