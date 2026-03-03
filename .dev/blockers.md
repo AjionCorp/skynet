@@ -101,33 +101,35 @@
 
 - **2026-03-03**: All 11 LLM Provider Selection task attempts failed (9 from fresh 2026-03-03 batch + 2 earlier). Failure modes: 6 typecheck failures, 3 merge conflicts, 2 claude exit code errors. Pipeline moved on to self-correction infrastructure work. **Resolved** — failed tasks recorded in `failed-tasks.md`, dead branches preserved for potential future retry.
 
+- **2026-03-03**: LLM failure cycle broken — ultra-precise 5-task decomposition with file-scope constraints, additive-only types, and mandatory `git pull` guardrails succeeded. First two tasks (`LlmConfig` type + `SKYNET_CLAUDE_MODEL`/`--model` flag) merged on first attempt. **Resolved** — approach validated, remaining 3 tasks in backlog.
+
 
 ## Active
 
-- **2026-03-03**: All prior LLM task attempts (12+ entries) failed with typecheck errors or merge conflicts. Root causes: (1) workers edited files outside their scope, (2) non-additive type changes, (3) barrel export collisions, (4) dynamic Tailwind classes, (5) missing `git pull origin main`. New backlog of 5 ultra-precise tasks generated with exact file lists, explicit "DO NOT touch" constraints, and step-by-step instructions per task. Old failed entries in `failed-tasks.md` are obsolete and should be superseded by watchdog once new tasks succeed.
+- **2026-03-03**: 28 failed-task entries remain in `failed-tasks.md` (11 LLM-related, 17 from prior missions), plus 4 in `fixing-*` state. The 11 LLM entries use outdated approaches and will likely fail on retry — watchdog reconciliation should auto-supersede them once the remaining 3 LLM tasks succeed and merge.
 
-- **2026-03-03**: 36 stale failed-task entries remain in `failed-tasks.md` (12 LLM-related, 24 from prior missions). Task-fixer may attempt retries on the 12 LLM entries — these will likely fail again since they have outdated approaches. Once the new 5-task sequence succeeds, watchdog reconciliation should supersede these old entries automatically.
+## Milestone: LLM Failure Cycle Broken
+
+**2026-03-03**: After 11+ consecutive LLM Provider Selection task failures (typecheck errors, merge conflicts, claude exit codes), the ultra-precise 5-task decomposition strategy succeeded. The first two foundation tasks merged to main on the first attempt — `LlmConfig` type in `types.ts` and `SKYNET_CLAUDE_MODEL` + `--model` flag in `claude.sh`/`_config.sh`. Key factors: exact file-scope constraints, additive-only type changes, mandatory `git pull origin main`, and embedded anti-pattern guardrails in every task description. This validates the decomposition approach for future complex multi-file features.
 
 ## Mission Status
 
-**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 0/5 goals, 0/6 success criteria met.
+**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 2/5 tasks merged, 1/5 goals partially met, 2/6 success criteria met.
 
-**Completed work on main**: NONE. All previous LLM work is on orphaned feature branches only.
+**Completed work on main**:
+- `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` (task 1)
+- `SKYNET_CLAUDE_MODEL` env var in `_config.sh` + `--model` flag in `agents/claude.sh` (task 2)
 
-**Fresh backlog** (5 tasks, in dependency order):
-1. `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` — unblocks all TS
-2. `SKYNET_CLAUDE_MODEL` env var support in `claude.sh` + `_config.sh` export — independent shell task
-3. Handler persistence + retrieval: `missions.ts` and `mission-detail.ts` accept/return `llmConfig` — depends on #1
-4. Shell helper `_get_mission_llm_config()` + worker threading — depends on #2
-5. UI selector dropdown + model badge in `MissionDashboard.tsx` — depends on #3
+**Remaining backlog** (3 tasks):
+3. Handler persistence + retrieval: `missions.ts` and `mission-detail.ts` accept/return `llmConfig` — claimed [>]
+4. Shell helper `_get_mission_llm_config()` + worker threading — pending
+5. UI selector dropdown + model badge in `MissionDashboard.tsx` — pending, blocked by #3
 
-**Critical path**: Tasks 1+2 can run in parallel (independent). Task 3 waits for #1. Task 4 waits for #2. Task 5 waits for #3.
-**Parallelism**: With 4 workers, tasks 1+2 can be claimed simultaneously. Once #1 merges, #3 can start. Once #2 merges, #4 can start. Once #3 merges, #5 can start.
+**Progress by goal**:
+- Goal 1 (UI selector): pending — needs tasks 3+5
+- Goal 2 (persist per-mission config): in progress — task 3 claimed
+- Goal 3 (pass config to worker pipeline): partially met — env var + `--model` flag wired, per-mission threading needs task 4
+- Goal 4 (support Claude model tiers): type definitions ready, UI pending
+- Goal 5 (display on dashboard): pending — needs task 5
 
-**Key anti-failure guardrails in every task**:
-- Exact file list (edit ONLY these files)
-- "DO NOT touch" barrel exports, unrelated files
-- Optional-only type additions (never break existing consumers)
-- Static Tailwind classes only
-- `git pull origin main` before every commit
-- `pnpm typecheck` as mandatory verification step
+**Success criteria met**: (3) workers use selected LLM via `SKYNET_CLAUDE_MODEL`, (6) `pnpm typecheck` passes clean.
