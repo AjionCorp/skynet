@@ -198,9 +198,18 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
     return _cachedHandlerCount;
   }
 
-  return async function GET(): Promise<Response> {
+  return async function GET(request?: Request): Promise<Response> {
     try {
       const warnings: string[] = [];
+
+      // Extract optional mission slug from query params
+      let requestedMission: string | null = null;
+      if (request) {
+        try {
+          const url = new URL(request.url);
+          requestedMission = url.searchParams.get("slug");
+        } catch { /* ignore */ }
+      }
 
       // Worker statuses
       const workers = workerDefs.map((w) => {
@@ -450,11 +459,66 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         codexAuth = readCodexAuthStatus((p, enc) => readFileSync(p, enc), codexAuthFile);
       }
 
+      // Gemini auth status
+      let geminiAuth: { status: "ok" | "missing"; source: "api_key" | "cli_oauth" | "adc" | "missing" } = {
+        status: "missing",
+        source: "missing",
+      };
+      if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) {
+        geminiAuth = { status: "ok", source: "api_key" };
+      } else {
+        const home = process.env.HOME || "";
+        const cliAuthPath = resolve(home, ".gemini/oauth_creds.json");
+        const adcPath = resolve(home, ".config/gcloud/application_default_credentials.json");
+        
+        if (home && existsSync(cliAuthPath)) {
+          geminiAuth = { status: "ok", source: "cli_oauth" };
+        } else if (home && existsSync(adcPath)) {
+          geminiAuth = { status: "ok", source: "adc" };
+        }
+      }
+
       // Backlog mutex
       const backlogLockPath = `${lockPrefix}-backlog.lock`;
       const backlogLocked = existsSync(backlogLockPath);
 
-      // Git status — run in project root (parent of devDir)
+            // Watchdog status
+            const watchdogLockDir = `${lockPrefix}-watchdog.lock`;
+            const watchdogPidPath = resolve(watchdogLockDir, "pid");
+            let watchdogRunning = false;
+            if (existsSync(watchdogPidPath)) {
+              try {
+                const pid = readFileSync(watchdogPidPath, "utf-8").trim();
+                if (pid) {
+                  // Check if PID is alive (non-destructive signal 0)
+                  const killResult = spawnSync("kill", ["-0", pid]);
+                  watchdogRunning = killResult.status === 0;
+                }
+              } catch { /* ignore */ }
+            }
+      
+            // Project-driver status
+            let projectDriverRunning = false;
+            try {
+              const scriptsDir = resolve(devDir, "scripts");
+              // We look for any project-driver lock file
+              const pdLocks = readdirSync(devDir).filter(f => f.startsWith(`${lockPrefix}-project-driver-`) && f.endsWith(".lock"));
+              for (const lockDir of pdLocks) {
+                const pidPath = resolve(devDir, lockDir, "pid");
+                if (existsSync(pidPath)) {
+                  const pid = readFileSync(pidPath, "utf-8").trim();
+                  if (pid) {
+                    const killResult = spawnSync("kill", ["-0", pid]);
+                    if (killResult.status === 0) {
+                      projectDriverRunning = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch { /* ignore */ }
+      
+            // Git status — run in project root (parent of devDir)
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.
       // The total cost (~40ms for 4 calls) is acceptable for the status endpoint's ~1s polling
       // interval. Combining them into fewer calls trades readability for ~15ms savings.
@@ -579,6 +643,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         completedCount: completedTotal,
         failedLines: failed,
         handlerCount,
+        missionSlug: requestedMission || activeMission,
       });
 
       pushHealthTrend(healthScore);
@@ -610,6 +675,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             authFailFlag,
             lastFailEpoch,
             codex: codexAuth,
+            gemini: geminiAuth,
           },
           backlogLocked,
           git: {
@@ -625,6 +691,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           },
           missionProgress,
           pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
+          watchdogRunning,
+          projectDriverRunning,
           warnings,
           timestamp: new Date().toISOString(),
         },

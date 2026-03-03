@@ -23,6 +23,7 @@ SKYNET_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 _find_config() {
   local candidates=(
     "${SKYNET_DEV_DIR:-}/skynet.config.sh"
+    "$SKYNET_SCRIPTS_DIR/../.dev/skynet.config.sh"
     "$SKYNET_SCRIPTS_DIR/../skynet.config.sh"
     "$PWD/.dev/skynet.config.sh"
   )
@@ -113,7 +114,7 @@ export SKYNET_CODEX_AUTH_FAIL_FLAG="${SKYNET_CODEX_AUTH_FAIL_FLAG:-${_skynet_tok
 export SKYNET_CODEX_REFRESH_BUFFER_SECS="${SKYNET_CODEX_REFRESH_BUFFER_SECS:-900}"
 export SKYNET_CODEX_OAUTH_ISSUER="${SKYNET_CODEX_OAUTH_ISSUER:-}"
 export SKYNET_GEMINI_BIN="${SKYNET_GEMINI_BIN:-gemini}"
-export SKYNET_GEMINI_FLAGS="${SKYNET_GEMINI_FLAGS:--p}"
+export SKYNET_GEMINI_FLAGS="${SKYNET_GEMINI_FLAGS:--y}"
 export SKYNET_GEMINI_MODEL="${SKYNET_GEMINI_MODEL:-}"
 export SKYNET_GEMINI_AUTH_FAIL_FLAG="${SKYNET_GEMINI_AUTH_FAIL_FLAG:-${_skynet_token_dir}/gemini-auth-failed-${SKYNET_PROJECT_NAME}}"
 export SKYNET_GEMINI_NOTIFY_INTERVAL="${SKYNET_GEMINI_NOTIFY_INTERVAL:-3600}"

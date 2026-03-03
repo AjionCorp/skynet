@@ -188,11 +188,6 @@ export function PipelineDashboard() {
     return () => clearInterval(interval);
   }, [logViewer, fetchLogs]);
 
-  // Auto-scroll log viewer
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logLines]);
-
   async function triggerScript(script: string) {
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));

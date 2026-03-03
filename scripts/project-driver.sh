@@ -31,8 +31,9 @@ BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 cd "$PROJECT_DIR"
 
-# Per-script log — writes to project-driver-<mission>.log (not shared _log)
-log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
+# Per-script log — writes to project-driver-<mission>.log
+# NOTE: Caller redirects stdout/stderr to $LOG, so we just echo here.
+log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
 # --- Task normalization for deduplication ---
 # Strip checkbox, strip tag prefix, lowercase, collapse whitespace, first 60 chars
@@ -466,151 +467,79 @@ if run_agent "$PROMPT" "$LOG"; then
   tg "📋 *$SKYNET_PROJECT_NAME_UPPER BACKLOG* updated: $new_remaining tasks queued (was $remaining)"
 else
   exit_code=$?
-  log "Project driver exited with code $exit_code."
-  tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Project driver failed (exit $exit_code)"
+  if [ "$exit_code" -eq 125 ]; then
+    log "Project driver exited with code 125 (all agents hit usage limits) — auto-pausing pipeline."
+    tg "⏸ *$SKYNET_PROJECT_NAME_UPPER PROJECT-DRIVER*: All agents hit usage limits — auto-pausing pipeline"
+    emit_event "pipeline_paused" "Usage limits exhausted (project-driver)"
+    touch "$DEV_DIR/pipeline-paused"
+  else
+    log "Project driver exited with code $exit_code."
+    tg "⚠️ *$SKYNET_PROJECT_NAME_UPPER*: Project driver failed (exit $exit_code)"
+  fi
 fi
 
 # --- Mission completion detection ---
-# Check if all 6 success criteria are met and no pending tasks remain.
+# Check if all success criteria in the mission file are met and no pending tasks remain.
 # Uses a sentinel file to prevent repeated notifications.
-MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete"
+_mission_id_safe=$(echo "${_mission_hash:-global}" | sed 's/[^a-zA-Z0-9]/_/g')
+MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete-${_mission_id_safe}"
 
 if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
   # Re-read pending count (may have changed after run_agent)
-  mc_pending=$(db_count_pending 2>/dev/null || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+  if [ -n "$_mission_hash" ]; then
+    mc_pending=$(db_count_pending_for_mission "$_mission_hash" 2>/dev/null | grep -oE '[0-9]+' | head -1 || echo 0)
+  else
+    mc_pending=$(db_count_pending 2>/dev/null | grep -oE '[0-9]+' | head -1 || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
+  fi
+  # SH-P3-2: Ensure mc_pending is a single clean integer
   mc_pending=${mc_pending:-0}
-  case "$mc_pending" in ''|*[!0-9]*) mc_pending=0 ;; esac
 
   if [ "$mc_pending" -eq 0 ]; then
     log "Zero pending tasks — evaluating mission success criteria."
 
-    mc_all_met=true
+    # Parse Success Criteria from the mission file
+    # We look for '- [ ]' or '- [x]' lines under '## Success Criteria'
+    # The sed command pulls lines from Success Criteria header until the next header or EOF
+    _mc_raw_criteria=$(sed -n '/^## Success Criteria/,/^## /p' "$_mission_file" | grep '^[-*]\s*\[[ xX]\]' || true)
+    
+    if [ -n "$_mc_raw_criteria" ]; then
+      mc_total_criteria=$(echo "$_mc_raw_criteria" | wc -l | grep -oE '[0-9]+' | head -1 || echo 0)
+      mc_met_criteria=$(echo "$_mc_raw_criteria" | grep -ci '\[x\]' | grep -oE '[0-9]+' | head -1 || echo 0)
+      
+      log "Mission criteria check: $mc_met_criteria/$mc_total_criteria met."
 
-    # Criterion 1: Completed tasks > 50
-    mc_completed=$(db_count_by_status "completed" 2>/dev/null || echo "")
-    case "$mc_completed" in ''|*[!0-9]*)
-      mc_completed=$(grep -c '^|' "$COMPLETED" 2>/dev/null || true)
-      mc_completed=${mc_completed:-0}
-      case "$mc_completed" in ''|*[!0-9]*) mc_completed=0 ;; esac
-      mc_completed=$((mc_completed > 1 ? mc_completed - 1 : 0))
-      ;;
-    esac
-    if [ "$mc_completed" -gt 50 ]; then
-      log "  Criterion 1 (completed tasks >50): MET ($mc_completed)"
+      if [ "$mc_met_criteria" -ge "$mc_total_criteria" ] && [ "$mc_total_criteria" -gt 0 ]; then
+        log "MISSION COMPLETE: All criteria met."
+
+        _mission_name=$(grep '^# ' "$_mission_file" | head -1 | sed 's/^# //' || echo "${_mission_hash:-global}")
+
+        # Emit structured event
+        emit_event "mission_complete" "Mission '$_mission_name' ($([ -z "$_mission_hash" ] && echo "global" || echo "$_mission_hash")) completed. All $mc_total_criteria criteria met."
+
+        # Notify all configured channels
+        tg "🎉🏆 *$SKYNET_PROJECT_NAME_UPPER MISSION COMPLETE!*
+Mission: *$_mission_name*
+All $mc_total_criteria success criteria have been achieved. The pipeline has fulfilled this mission's objectives!"
+
+        # Write celebration entry to blockers.md
+        {
+          echo ""
+          echo "## 🎉 Mission Complete: $_mission_name — $(date '+%Y-%m-%d %H:%M')"
+          echo ""
+          echo "All success criteria for mission '$_mission_name' have been met."
+          echo ""
+          echo "$_mc_raw_criteria"
+          echo ""
+        } >> "$BLOCKERS"
+
+        # Set sentinel to prevent repeated notifications
+        echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"mission\": \"$_mission_name\", \"slug\": \"${_mission_hash:-global}\", \"criteriaCount\": $mc_total_criteria}" > "$MISSION_COMPLETE_SENTINEL"
+        log "Mission-complete sentinel written to $MISSION_COMPLETE_SENTINEL"
+      else
+        log "Mission not yet complete — $((mc_total_criteria - mc_met_criteria)) criteria remaining."
+      fi
     else
-      log "  Criterion 1 (completed tasks >50): NOT MET ($mc_completed)"
-      mc_all_met=false
-    fi
-
-    # Criterion 2: Self-correction rate > 95%
-    mc_fixed=$(db_count_by_status "fixed" 2>/dev/null || grep -c '| fixed |' "$FAILED" 2>/dev/null || echo 0)
-    mc_fixed=${mc_fixed:-0}
-    case "$mc_fixed" in ''|*[!0-9]*) mc_fixed=0 ;; esac
-    mc_blocked=$(db_count_by_status "blocked" 2>/dev/null || grep -c '| blocked |' "$FAILED" 2>/dev/null || echo 0)
-    mc_blocked=${mc_blocked:-0}
-    case "$mc_blocked" in ''|*[!0-9]*) mc_blocked=0 ;; esac
-    mc_superseded=$(db_count_by_status "superseded" 2>/dev/null || grep -c '| superseded |' "$FAILED" 2>/dev/null || echo 0)
-    mc_superseded=${mc_superseded:-0}
-    case "$mc_superseded" in ''|*[!0-9]*) mc_superseded=0 ;; esac
-    mc_total_attempted=$((mc_fixed + mc_blocked + mc_superseded))
-    if [ "$mc_total_attempted" -gt 0 ]; then
-      mc_fix_rate=$((mc_fixed * 100 / mc_total_attempted))
-    else
-      mc_fix_rate=0
-    fi
-    if [ "$mc_fix_rate" -gt 95 ]; then
-      log "  Criterion 2 (self-correction >95%): MET (${mc_fix_rate}%)"
-    else
-      log "  Criterion 2 (self-correction >95%): NOT MET (${mc_fix_rate}%)"
-      mc_all_met=false
-    fi
-
-    # Criterion 3: No zombie/deadlock evidence in watchdog logs
-    mc_watchdog_log="$SCRIPTS_DIR/watchdog.log"
-    mc_zombie_refs=0
-    mc_deadlock_refs=0
-    if [ -f "$mc_watchdog_log" ]; then
-      mc_zombie_refs=$(grep -ci 'zombie' "$mc_watchdog_log" 2>/dev/null || true)
-      mc_zombie_refs=${mc_zombie_refs:-0}
-      case "$mc_zombie_refs" in ''|*[!0-9]*) mc_zombie_refs=0 ;; esac
-      mc_deadlock_refs=$(grep -ci 'deadlock' "$mc_watchdog_log" 2>/dev/null || true)
-      mc_deadlock_refs=${mc_deadlock_refs:-0}
-      case "$mc_deadlock_refs" in ''|*[!0-9]*) mc_deadlock_refs=0 ;; esac
-    fi
-    mc_issue_refs=$((mc_zombie_refs + mc_deadlock_refs))
-    if [ "$mc_issue_refs" -eq 0 ]; then
-      log "  Criterion 3 (no zombie/deadlock): MET (0 references)"
-    else
-      log "  Criterion 3 (no zombie/deadlock): NOT MET ($mc_issue_refs references)"
-      mc_all_met=false
-    fi
-
-    # Criterion 4: Dashboard handler count >= 10
-    mc_handlers_dir="$PROJECT_DIR/packages/dashboard/src/handlers"
-    mc_handler_count=0
-    if [ -d "$mc_handlers_dir" ]; then
-      mc_handler_count=$(find "$mc_handlers_dir" -maxdepth 1 -name '*.ts' \
-        ! -name '*.test.*' ! -name 'index.ts' 2>/dev/null | wc -l | tr -d ' ')
-    fi
-    if [ "$mc_handler_count" -ge 10 ]; then
-      log "  Criterion 4 (handler count >=10): MET ($mc_handler_count)"
-    else
-      log "  Criterion 4 (handler count >=10): NOT MET ($mc_handler_count)"
-      mc_all_met=false
-    fi
-
-    # Criterion 5: Mission tracking exists (mission.md with Success Criteria section)
-    if [ -f "$MISSION" ] && grep -q '## Success Criteria' "$MISSION" 2>/dev/null; then
-      log "  Criterion 5 (mission tracking exists): MET"
-    else
-      log "  Criterion 5 (mission tracking exists): NOT MET"
-      mc_all_met=false
-    fi
-
-    # Criterion 6: Agent plugins exist (>= 2 .sh files in scripts/agents/)
-    mc_agents_dir="$SKYNET_SCRIPTS_DIR/agents"
-    mc_agent_count=0
-    if [ -d "$mc_agents_dir" ]; then
-      mc_agent_count=$(find "$mc_agents_dir" -maxdepth 1 -name '*.sh' 2>/dev/null | wc -l | tr -d ' ')
-    fi
-    if [ "$mc_agent_count" -ge 2 ]; then
-      log "  Criterion 6 (agent plugins exist): MET ($mc_agent_count plugins)"
-    else
-      log "  Criterion 6 (agent plugins exist): NOT MET ($mc_agent_count plugins)"
-      mc_all_met=false
-    fi
-
-    # If ALL criteria met: celebrate!
-    if $mc_all_met; then
-      log "ALL 6 MISSION SUCCESS CRITERIA MET — mission complete!"
-
-      # Emit structured event
-      emit_event "mission_complete" "All 6 success criteria met. Completed: $mc_completed, Fix rate: ${mc_fix_rate}%, Handlers: $mc_handler_count, Agents: $mc_agent_count"
-
-      # Notify all configured channels
-      tg "🎉🏆 *$SKYNET_PROJECT_NAME_UPPER MISSION COMPLETE!* All 6 success criteria met. Completed: $mc_completed tasks, Self-correction: ${mc_fix_rate}%, Handlers: $mc_handler_count, Agent plugins: $mc_agent_count. The pipeline has achieved its mission!"
-
-      # Write celebration entry to blockers.md
-      {
-        echo ""
-        echo "## 🎉 Mission Complete — $(date '+%Y-%m-%d %H:%M')"
-        echo ""
-        echo "All 6 mission success criteria have been met:"
-        echo "1. Completed tasks: $mc_completed (>50)"
-        echo "2. Self-correction rate: ${mc_fix_rate}% (>95%)"
-        echo "3. Zombie/deadlock references: $mc_issue_refs (0)"
-        echo "4. Dashboard handlers: $mc_handler_count (>=10)"
-        echo "5. Mission tracking: present in mission.md"
-        echo "6. Agent plugins: $mc_agent_count (>=2)"
-        echo ""
-        echo "The Skynet pipeline has achieved autonomous self-improving development."
-      } >> "$BLOCKERS"
-
-      # Set sentinel to prevent repeated notifications
-      echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"completedTasks\": $mc_completed, \"fixRate\": $mc_fix_rate, \"handlerCount\": $mc_handler_count, \"agentPlugins\": $mc_agent_count}" > "$MISSION_COMPLETE_SENTINEL"
-      log "Mission-complete sentinel written to $MISSION_COMPLETE_SENTINEL"
-    else
-      log "Mission not yet complete — some criteria not met."
+      log "No success criteria found in mission file. Skipping completion detection."
     fi
   fi
 fi

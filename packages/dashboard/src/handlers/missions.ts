@@ -74,7 +74,7 @@ export function createMissionsHandler(config: SkynetConfig) {
         (f) => f.endsWith(".md") && !f.startsWith("_")
       );
 
-      const missions: MissionSummary[] = files.map((f) => {
+      const missions: (MissionSummary & { completionPercentage: number })[] = files.map((f) => {
         const slug = f.replace(/\.md$/, "");
         const raw = readFileSync(resolve(missionsDir, f), "utf-8");
         const name = parseName(raw, slug);
@@ -82,11 +82,30 @@ export function createMissionsHandler(config: SkynetConfig) {
           .filter(([, s]) => s === slug)
           .map(([w]) => w);
 
+        // Calculate completion percentage
+        const match = raw.match(/^## Success Criteria\s*$([\s\S]+?)(?=\n## |$)/im);
+        let completionPercentage = 0;
+        if (match) {
+          const lines = match[1].split("\n");
+          let total = 0;
+          let done = 0;
+          for (const line of lines) {
+            const trimmed = line.trim();
+            const checkboxMatch = trimmed.match(/^-\s*\[([ xX])\]/);
+            if (checkboxMatch) {
+              total++;
+              if (checkboxMatch[1].toLowerCase() === "x") done++;
+            }
+          }
+          if (total > 0) completionPercentage = Math.round((done / total) * 100);
+        }
+
         return {
           slug,
           name,
           isActive: missionConfig.activeMission === slug,
           assignedWorkers,
+          completionPercentage,
         };
       });
 

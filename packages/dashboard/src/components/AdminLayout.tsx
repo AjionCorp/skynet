@@ -2,6 +2,7 @@
 
 import type { ReactNode, ComponentType } from "react";
 import { RefreshCw, ArrowLeft } from "lucide-react";
+import { MissionSidebar } from "./MissionSidebar";
 
 export interface AdminLayoutPage {
   href: string;
@@ -109,7 +110,14 @@ export function AdminLayout({
         </nav>
       )}
 
-      <main className="mx-auto max-w-7xl p-8">{children}</main>
+      <div className="flex flex-1 overflow-hidden">
+        <MissionSidebar />
+        <main className="flex-1 overflow-y-auto p-8">
+          <div className="mx-auto max-w-7xl">
+            {children}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

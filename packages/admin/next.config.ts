@@ -11,6 +11,7 @@ import type { NextConfig } from "next";
 // but not production — it exposes the dashboard on all network interfaces.
 const nextConfig: NextConfig = {
   transpilePackages: ["@ajioncorp/skynet"],
+  serverExternalPackages: ["better-sqlite3"],
 };
 
 export default nextConfig;

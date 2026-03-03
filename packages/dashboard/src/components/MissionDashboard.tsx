@@ -129,7 +129,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const slugParam = `?slug=${encodeURIComponent(selectedSlug)}`;
       const [statusRes, pipelineRes] = await Promise.all([
         fetch(`${apiPrefix}/mission/status${slugParam}`),
-        fetch(`${apiPrefix}/pipeline/status`),
+        fetch(`${apiPrefix}/pipeline/status${slugParam}`),
       ]);
       const statusJson = await statusRes.json();
       const pipelineJson = await pipelineRes.json();

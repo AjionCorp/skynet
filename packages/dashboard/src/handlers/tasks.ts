@@ -46,13 +46,23 @@ export function createTasksHandlers(config: SkynetConfig) {
   const backlogPath = `${devDir}/backlog.md`;
   const backlogLockPath = `${lockPrefix}-backlog.lock`;
 
-  async function GET(): Promise<Response> {
+  async function GET(request?: Request): Promise<Response> {
     try {
+      // Extract optional mission slug from query params
+      let requestedMission: string | null = null;
+      if (request) {
+        try {
+          const url = new URL(request.url);
+          requestedMission = url.searchParams.get("slug");
+        } catch { /* ignore */ }
+      }
+
       // Prefer SQLite, fallback to file
       try {
         const db = getSkynetDB(devDir);
         db.countPending(); // verify DB is initialized
-        const missionHash = getActiveMissionSlug(devDir);
+        const activeMission = getActiveMissionSlug(devDir);
+        const missionHash = requestedMission || activeMission;
         const backlog = db.getBacklogItems(missionHash ?? "");
         const items = backlog.items.filter((i) => i.status !== "done");
         return Response.json({
@@ -94,6 +104,13 @@ export function createTasksHandlers(config: SkynetConfig) {
   }
 
   async function POST(request: Request): Promise<Response> {
+    // Extract optional mission slug from query params
+    let requestedMission: string | null = null;
+    try {
+      const url = new URL(request.url);
+      requestedMission = url.searchParams.get("slug");
+    } catch { /* ignore */ }
+
     // Rate limiting: prefer SQLite-backed (cross-process), fall back to in-memory.
     // In-memory fallback records the timestamp AFTER successful task creation
     // (see _postTimestamps.push below) to avoid consuming a slot on validation failure.
@@ -235,7 +252,8 @@ export function createTasksHandlers(config: SkynetConfig) {
 
         // Write to SQLite first (authoritative source)
         const db = getSkynetDB(devDir);
-        const missionHash = getActiveMissionSlug(devDir);
+        const activeMission = getActiveMissionSlug(devDir);
+        const missionHash = requestedMission || activeMission;
         db.addTask(
           title.trim(),
           tag,

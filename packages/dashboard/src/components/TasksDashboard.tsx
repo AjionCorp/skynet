@@ -10,8 +10,9 @@ import {
   Lock,
   Plus,
   RefreshCw,
+  Target,
 } from "lucide-react";
-import type { TaskBacklogData } from "../types";
+import type { TaskBacklogData, MissionSummary } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
 const DEFAULT_TAG_COLORS: Record<string, string> = {
@@ -36,6 +37,10 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST", "NMI"];
   const mergedTagColors = { ...DEFAULT_TAG_COLORS, ...tagColors };
 
+  // Mission state
+  const [missions, setMissions] = useState<MissionSummary[]>([]);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+
   const [backlog, setBacklog] = useState<TaskBacklogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,10 +53,24 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  const fetchMissions = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiPrefix}/missions`);
+      const json = await res.json();
+      if (json.data) {
+        setMissions(json.data.missions);
+        if (!selectedSlug && json.data.config.activeMission) {
+          setSelectedSlug(json.data.config.activeMission);
+        }
+      }
+    } catch { /* ignore */ }
+  }, [apiPrefix, selectedSlug]);
+
   const fetchBacklog = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${apiPrefix}/tasks`);
+      const slugParam = selectedSlug ? `?slug=${encodeURIComponent(selectedSlug)}` : "";
+      const res = await fetch(`${apiPrefix}/tasks${slugParam}`);
       const json = await res.json();
       if (json.error) {
         setError(json.error);
@@ -64,10 +83,16 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
     } finally {
       setLoading(false);
     }
-  }, [apiPrefix]);
+  }, [apiPrefix, selectedSlug]);
+
+  useEffect(() => {
+    fetchMissions();
+  }, [fetchMissions]);
 
   useEffect(() => {
     fetchBacklog();
+    const interval = setInterval(fetchBacklog, 10000);
+    return () => clearInterval(interval);
   }, [fetchBacklog]);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -78,7 +103,8 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
     setSubmitResult(null);
 
     try {
-      const res = await fetch(`${apiPrefix}/tasks`, {
+      const slugParam = selectedSlug ? `?slug=${encodeURIComponent(selectedSlug)}` : "";
+      const res = await fetch(`${apiPrefix}/tasks${slugParam}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tag: selectedTag, title: title.trim(), description: description.trim() || undefined, blockedBy: blockedByInput.trim() || undefined, position }),
@@ -87,7 +113,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        setSubmitResult({ ok: true, message: `Task added at ${json.data.position} of backlog` });
+        setSubmitResult({ ok: true, message: `Task added to mission '${selectedSlug}'` });
         setTitle("");
         setDescription("");
         setBlockedByInput("");
@@ -102,6 +128,27 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
 
   return (
     <div className="space-y-6">
+      {/* Mission selector */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-zinc-500 mr-2">
+          <Target className="h-3.5 w-3.5" />
+          Scope:
+        </span>
+        {missions.map((m) => (
+          <button
+            key={m.slug}
+            onClick={() => setSelectedSlug(m.slug)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              selectedSlug === m.slug
+                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+                : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+            }`}
+          >
+            {m.name}
+          </button>
+        ))}
+      </div>
+
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4">
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4">

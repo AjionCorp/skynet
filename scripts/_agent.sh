@@ -158,6 +158,14 @@ _load_plugin_as() {
   unset -f agent_check agent_run 2>/dev/null || true
 }
 
+# Detect usage/credits limits from the agent log tail.
+# Shared by dev-worker and task-fixer.
+usage_limit_hit() {
+  local log_file="$1"
+  [ -f "$log_file" ] || return 1
+  tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits|quota|exhausted your capacity"
+}
+
 # --- Set up run_agent() based on SKYNET_AGENT_PLUGIN ---
 
 _plugin_resolved="$(_resolve_plugin_path "$SKYNET_AGENT_PLUGIN")"
@@ -169,7 +177,11 @@ if [ "$_plugin_resolved" = "auto" ]; then
   _load_plugin_as "_gemini" "$SKYNET_SCRIPTS_DIR/agents/gemini.sh"
 
   # Public API: run_agent "prompt" "log_file"
-  # Returns the exit code of whichever agent ran.
+  # Returns:
+  #   0   - success
+  #   124 - timeout
+  #   125 - usage limit hit (all available agents exhausted)
+  #   other - general failure
   # Log agent usage to metrics file (auto-mode only)
   _log_agent_metric() {
     local agent_name="$1"
@@ -186,6 +198,9 @@ if [ "$_plugin_resolved" = "auto" ]; then
   run_agent() {
     local prompt="$1"
     local log_file="${2:-/dev/null}"
+    local _claude_limit=false
+    local _codex_limit=false
+    local _gemini_limit=false
 
     # Try Claude first
     if _claude_agent_check; then
@@ -195,28 +210,73 @@ if [ "$_plugin_resolved" = "auto" ]; then
         _log_agent_metric "claude"
         return 0
       fi
-      # Claude failed — try Codex as fallback
+      if usage_limit_hit "$log_file"; then
+        _claude_limit=true
+      fi
+      
+      # Claude failed or limited — try Codex as fallback
       if _codex_agent_check; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code) — falling back to Codex CLI" >> "$log_file"
         tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed — switching to Codex" 2>/dev/null || true
+        # Mark log so usage_limit_hit only checks NEW lines
+        echo "--- CODEX START ---" >> "$log_file"
         _codex_agent_run "$prompt" "$log_file"
         local codex_rc=$?
         if [ "$codex_rc" -eq 0 ]; then
           _log_agent_metric "codex" "claude"
+          return 0
         fi
+        if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then
+          _codex_limit=true
+        fi
+
+        # Codex failed or limited — try Gemini
+        if _gemini_agent_check; then
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude + Codex limited/failed — falling back to Gemini CLI" >> "$log_file"
+          tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude/Codex down — switching to Gemini" 2>/dev/null || true
+          echo "--- GEMINI START ---" >> "$log_file"
+          _gemini_agent_run "$prompt" "$log_file"
+          local gemini_rc=$?
+          if [ "$gemini_rc" -eq 0 ]; then
+            _log_agent_metric "gemini" "claude+codex"
+            return 0
+          fi
+          if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then
+            _gemini_limit=true
+          fi
+          
+          # Final result: only return 125 if everything that ran hit a limit
+          if { [ "$_claude_limit" = "true" ] || ! _claude_agent_check; } && \
+             { [ "$_codex_limit" = "true" ] || ! _codex_agent_check; } && \
+             { [ "$_gemini_limit" = "true" ] || ! _gemini_agent_check; }; then
+            return 125
+          fi
+          return $gemini_rc
+        fi
+        
+        if [ "$_claude_limit" = "true" ] && [ "$_codex_limit" = "true" ]; then return 125; fi
         return $codex_rc
       fi
-      # Codex unavailable — try Gemini
+
+      # Codex unavailable — try Gemini immediately after Claude
       if _gemini_agent_check; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Claude failed (exit $exit_code), Codex unavailable — falling back to Gemini CLI" >> "$log_file"
         tg "🔄 *$SKYNET_PROJECT_NAME_UPPER*: Claude failed, Codex down — switching to Gemini" 2>/dev/null || true
+        echo "--- GEMINI START ---" >> "$log_file"
         _gemini_agent_run "$prompt" "$log_file"
         local gemini_rc=$?
         if [ "$gemini_rc" -eq 0 ]; then
           _log_agent_metric "gemini" "claude"
+          return 0
         fi
+        if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then
+          _gemini_limit=true
+        fi
+        if [ "$_claude_limit" = "true" ] && [ "$_gemini_limit" = "true" ]; then return 125; fi
         return $gemini_rc
       fi
+
+      if [ "$_claude_limit" = "true" ]; then return 125; fi
       return $exit_code
     fi
 
@@ -228,7 +288,30 @@ if [ "$_plugin_resolved" = "auto" ]; then
       local codex_rc=$?
       if [ "$codex_rc" -eq 0 ]; then
         _log_agent_metric "codex" "claude"
+        return 0
       fi
+      if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then
+        _codex_limit=true
+      fi
+
+      # Codex limited/failed — try Gemini
+      if _gemini_agent_check; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Codex failed/limited — falling back to Gemini CLI" >> "$log_file"
+        echo "--- GEMINI START ---" >> "$log_file"
+        _gemini_agent_run "$prompt" "$log_file"
+        local gemini_rc=$?
+        if [ "$gemini_rc" -eq 0 ]; then
+          _log_agent_metric "gemini" "claude+codex"
+          return 0
+        fi
+        if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then
+          _gemini_limit=true
+        fi
+        if [ "$_codex_limit" = "true" ] && [ "$_gemini_limit" = "true" ]; then return 125; fi
+        return $gemini_rc
+      fi
+
+      if [ "$_codex_limit" = "true" ]; then return 125; fi
       return $codex_rc
     fi
 
@@ -240,7 +323,9 @@ if [ "$_plugin_resolved" = "auto" ]; then
       local gemini_rc=$?
       if [ "$gemini_rc" -eq 0 ]; then
         _log_agent_metric "gemini" "claude+codex"
+        return 0
       fi
+      if tail -n 50 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"; then return 125; fi
       return $gemini_rc
     fi
 

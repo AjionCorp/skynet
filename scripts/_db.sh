@@ -70,12 +70,16 @@ _db_now_ms() {
 
 # --- sqlite3 with automatic busy_timeout (no output pollution) ---
 # .timeout is a dot-command that sets busy_timeout without producing output.
+_db_no_out() {
+  _db "$@" >&2
+}
+
 _db() {
   if [ "${SKYNET_DB_DEBUG:-false}" = "true" ]; then
     local _start _end _elapsed _preview
     _start=$(_db_now_ms)
     local _out
-    _out=$(printf '.timeout 15000\n%s\n' "$1" | sqlite3 "$DB_PATH")
+    _out=$(sqlite3 -cmd ".timeout 15000" "$DB_PATH" "$1")
     local _rc=$?
     _end=$(_db_now_ms)
     if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
@@ -91,14 +95,15 @@ _db() {
     [ -n "$_out" ] && printf '%s\n' "$_out"
     return $_rc
   fi
-  printf '.timeout 15000\n%s\n' "$1" | sqlite3 "$DB_PATH"
+  sqlite3 -cmd ".timeout 15000" "$DB_PATH" "$1"
 }
+
 _db_sep() {
   if [ "${SKYNET_DB_DEBUG:-false}" = "true" ]; then
     local _start _end _elapsed _preview
     _start=$(_db_now_ms)
     local _out
-    _out=$(printf '.timeout 15000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH")
+    _out=$(sqlite3 -separator "$_DB_SEP" -cmd ".timeout 15000" "$DB_PATH" "$1")
     local _rc=$?
     _end=$(_db_now_ms)
     if [ "$_start" -gt 0 ] && [ "$_end" -gt 0 ] 2>/dev/null; then
@@ -114,16 +119,17 @@ _db_sep() {
     [ -n "$_out" ] && printf '%s\n' "$_out"
     return $_rc
   fi
-  printf '.timeout 15000\n%s\n' "$1" | sqlite3 -separator "$_DB_SEP" "$DB_PATH"
+  sqlite3 -separator "$_DB_SEP" -cmd ".timeout 15000" "$DB_PATH" "$1"
 }
 
 # --- Error-checked sqlite3 wrapper for mutations ---
 # Usage: _sql_exec "SQL statement"
 # Logs to stderr and returns 1 on failure.
 _sql_exec() {
-  local _sql_out _sql_rc _sql_errfile
+  local _sql_out="" _sql_rc _sql_errfile
   _sql_errfile=$(mktemp /tmp/skynet-sql-err-XXXXXX)
   _db_register_tmp "$_sql_errfile"
+  # Capture stdout into variable, send stderr to file for error checking
   _sql_out=$(_db "$1" 2>"$_sql_errfile")
   _sql_rc=$?
   local _sql_err=""
@@ -134,28 +140,28 @@ _sql_exec() {
     log "SQL FAILED (rc=$_sql_rc): $(echo "$1" | head -1)"
     return 1
   fi
+  # Echo clean output back to stdout for callers that capture it
   [ -n "$_sql_out" ] && echo "$_sql_out"
 }
 
 # Error-checked sqlite3 wrapper that returns pipe-delimited rows.
 _sql_query() {
-  local _sql_out _sql_rc _sql_errfile
+  local _sql_out="" _sql_rc _sql_errfile
   _sql_errfile=$(mktemp /tmp/skynet-sql-query-err-XXXXXX)
   _db_register_tmp "$_sql_errfile"
+  # Capture stdout into variable, send stderr to file for error checking
   _sql_out=$(_db_sep "$1" 2>"$_sql_errfile")
   _sql_rc=$?
   local _sql_err=""
   [ -f "$_sql_errfile" ] && _sql_err=$(cat "$_sql_errfile" 2>/dev/null)
   rm -f "$_sql_errfile"
   if [ $_sql_rc -ne 0 ]; then
-    # NOTE: ${var:0:N} counts bytes, not characters, for multibyte locales.
-    # This is acceptable for SQL error messages (primarily ASCII).
-    local _sql_ctx="${1:0:500}"
-    log "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" 2>/dev/null || echo "ERROR: sqlite3 query failed (rc=$_sql_rc): $_sql_err [SQL: $_sql_ctx]" >&2
+    [ -n "$_sql_err" ] && log "SQL QUERY ERROR: $_sql_err"
+    log "SQL QUERY FAILED (rc=$_sql_rc): $(echo "$1" | head -1)"
     return 1
   fi
+  # Echo clean output back to stdout for callers that capture it
   [ -n "$_sql_out" ] && echo "$_sql_out"
-  return 0
 }
 
 # ============================================================
@@ -389,16 +395,16 @@ SCHEMA
   fi
 
   # Schema migrations — add columns that may not exist in older databases
-  _db "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
-  _db "ALTER TABLE tasks ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
-  _db "ALTER TABLE events ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
-  _db "ALTER TABLE tasks ADD COLUMN mission_hash TEXT DEFAULT '';" 2>/dev/null || true
-  _db "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
+  _db_no_out "ALTER TABLE workers ADD COLUMN progress_epoch INTEGER;" 2>/dev/null || true
+  _db_no_out "ALTER TABLE tasks ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
+  _db_no_out "ALTER TABLE events ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
+  _db_no_out "ALTER TABLE tasks ADD COLUMN mission_hash TEXT DEFAULT '';" 2>/dev/null || true
+  _db_no_out "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
   # if the WAL is already empty. Prevents unbounded WAL growth from concurrent workers.
-  _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+  _db_no_out "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
 
   # Recursive CTEs require SQLite 3.8.3+ (2014). macOS ships 3.39+, Linux CI has latest.
   local _sqlite_ver
@@ -1398,7 +1404,7 @@ db_prune_old_events() {
 # Lightweight WAL checkpoint — call every watchdog cycle to prevent WAL growth.
 # Uses PASSIVE mode (non-blocking) unlike the TRUNCATE in db_maintenance().
 db_wal_checkpoint() {
-  _db "PRAGMA wal_checkpoint(PASSIVE);" 2>/dev/null || true
+  _db_no_out "PRAGMA wal_checkpoint(PASSIVE);" 2>/dev/null || true
 }
 
 # P0-WAL: Circuit breaker — returns 0 (healthy) or 1 (degraded).
@@ -1423,7 +1429,7 @@ db_maintenance() {
   [ ! -f "$DB_PATH" ] && { log "ERROR: db_maintenance — database not found"; return 1; }
 
   # Step 1: WAL checkpoint — prevents unbounded WAL growth
-  _db "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
+  _db_no_out "PRAGMA wal_checkpoint(TRUNCATE);" 2>/dev/null || true
 
   # Step 2: integrity_check
   # OPS-P1-4: Wrap integrity_check with a 30-second timeout to prevent runaway
@@ -1442,7 +1448,7 @@ db_maintenance() {
   fi
 
   # Step 3: PRAGMA optimize (auto-analyze)
-  _db "PRAGMA optimize;" 2>/dev/null || true
+  _db_no_out "PRAGMA optimize;" 2>/dev/null || true
 
   # Step 4: VACUUM only if DB file > 10MB
   local db_size
@@ -1450,7 +1456,7 @@ db_maintenance() {
   local threshold=10485760  # 10MB
   if [ "${db_size:-0}" -gt "$threshold" ] 2>/dev/null; then
     log "db_maintenance: DB size ${db_size} > 10MB — running VACUUM"
-    _db "VACUUM;" 2>/dev/null || log "WARNING: VACUUM failed"
+    _db_no_out "VACUUM;" 2>/dev/null || log "WARNING: VACUUM failed"
   fi
 
   # Step 5: Check for circular blocked_by dependencies

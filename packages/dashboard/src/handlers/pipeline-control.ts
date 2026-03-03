@@ -50,20 +50,40 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         if (watchdogPid && isProcessAlive(watchdogPid)) {
           return Response.json({ data: { started: true, alreadyRunning: true }, error: null });
         }
+        
+        // Clean up stale lock if it exists but process is dead
+        if (existsSync(watchdogLock)) {
+          console.log(`[PipelineControl] Cleaning up stale watchdog lock: ${watchdogLock}`);
+          try {
+            const { rmSync } = require("fs") as typeof import("fs");
+            rmSync(watchdogLock, { recursive: true, force: true });
+          } catch (e) {
+            console.error(`[PipelineControl] Failed to remove stale lock: ${e}`);
+          }
+        }
+
         const scriptPath = resolve(scriptsDir, "watchdog.sh");
         if (!existsSync(scriptPath)) {
           return Response.json({ data: null, error: "watchdog.sh not found" }, { status: 404 });
         }
         const logDir = resolve(devDir, "scripts");
         const logPath = resolve(logDir, "watchdog.log");
+        console.log(`[PipelineControl] Starting watchdog: bash ${scriptPath} >> ${logPath}`);
         const logFd = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
         try {
+          // Use nohup-like behavior: detached, stdio redirected to log, ignore SIGHUP
           const child = spawn("bash", [scriptPath], {
             detached: true,
             stdio: ["ignore", logFd, logFd],
-            env: { ...process.env, SKYNET_DEV_DIR: devDir },
+            env: { 
+              ...process.env, 
+              SKYNET_DEV_DIR: devDir,
+              // Ensure we don't pass any parent-specific PIDs that might interfere
+              _SKYNET_WATCHDOG_SPAWNED: "1"
+            },
           });
           child.unref();
+          console.log(`[PipelineControl] Watchdog spawned with PID: ${child.pid}`);
         } finally {
           closeSync(logFd);
         }

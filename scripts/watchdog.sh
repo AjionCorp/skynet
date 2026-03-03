@@ -59,6 +59,16 @@ fi
 _DRAINING=false
 
 _watchdog_cleanup() {
+  # Stop admin dev server if we started it
+  _dev_pidfile="$SCRIPTS_DIR/next-dev.pid"
+  if [ -f "$_dev_pidfile" ]; then
+    _dev_pid=$(cat "$_dev_pidfile" 2>/dev/null || echo "")
+    if [ -n "$_dev_pid" ] && kill -0 "$_dev_pid" 2>/dev/null; then
+      kill "$_dev_pid" 2>/dev/null || true
+      log "Stopped admin dev server (PID $_dev_pid)"
+    fi
+    rm -f "$_dev_pidfile"
+  fi
   rm -rf "$WATCHDOG_LOCK_DIR"
 }
 
@@ -92,6 +102,25 @@ trap _watchdog_cleanup EXIT
 trap _watchdog_drain INT TERM
 
 log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
+
+# --- Initial Pause (Boot-to-Pause) ---
+# Pause on first boot only so operators can review state before workers run.
+# If already unpaused (operator resumed), don't re-pause on watchdog restart.
+if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
+  _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
+  (
+    umask 077
+    printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
+  )
+  mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
+  log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+else
+  log "Pipeline already paused (preserving existing pause state)."
+fi
+
+# --- Auto-start Admin Server ---
+log "Starting admin dev server..."
+bash "$SCRIPTS_DIR/start-dev.sh" >> "$LOG" 2>&1 || log "WARNING: Admin dev server failed to start (non-fatal)"
 
 # Cycle counter for periodic maintenance (persists across subshell iterations)
 # Stored in $DEV_DIR (project-private) instead of /tmp to avoid predictable path exploits.

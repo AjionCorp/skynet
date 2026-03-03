@@ -25,15 +25,22 @@ export interface MissionEvaluationContext {
   completedCount: number;
   failedLines: { status: string }[];
   handlerCount: number;
+  missionSlug?: string | null;
 }
 
 /**
- * Parse mission.md and evaluate each success criterion against the current pipeline state.
- * Returns an array of MissionProgress items with status and evidence.
+ * Parse mission markdown and evaluate each success criterion.
  */
 export function parseMissionProgress(opts: MissionEvaluationContext): MissionProgress[] {
-  const { devDir, completedCount, failedLines, handlerCount } = opts;
-  const missionRaw = readDevFile(devDir, "mission.md");
+  const { devDir, completedCount, failedLines, handlerCount, missionSlug } = opts;
+  
+  let missionRaw = "";
+  if (missionSlug) {
+    missionRaw = readDevFile(devDir, `missions/${missionSlug}.md`);
+  }
+  if (!missionRaw) {
+    missionRaw = readDevFile(devDir, "mission.md");
+  }
   if (!missionRaw) return [];
 
   const criteria = parseMissionCriteria(missionRaw);
@@ -41,25 +48,39 @@ export function parseMissionProgress(opts: MissionEvaluationContext): MissionPro
 
   const progress: MissionProgress[] = [];
 
-  for (const { id, criterion } of criteria) {
-    const evaluated = evaluateCriterion(id, criterion, {
-      devDir,
-      completedCount,
-      failedLines,
-      handlerCount,
-    });
-    progress.push({ id, criterion, ...evaluated });
+  for (const { id, criterion, completed } of criteria) {
+    // If it's one of the legacy Skynet missions (id 1-6) AND it's the main mission,
+    // use the rich evaluation logic. Otherwise, use the markdown [x] status.
+    const isLegacySkynet = id >= 1 && id <= 6 && (!missionSlug || missionSlug === "main");
+    
+    if (isLegacySkynet) {
+      const evaluated = evaluateCriterion(id, criterion, {
+        devDir,
+        completedCount,
+        failedLines,
+        handlerCount,
+      });
+      progress.push({ id, criterion, ...evaluated });
+    } else {
+      // Generic mission: status comes from the checkbox in the markdown
+      progress.push({ 
+        id, 
+        criterion, 
+        status: completed ? "met" : "not-met",
+        evidence: completed ? "Marked as completed in mission document" : "Pending in mission document"
+      });
+    }
   }
 
   return progress;
 }
 
 /**
- * Extract numbered criteria from the "## Success Criteria" section of mission.md content.
+ * Extract numbered criteria from the "## Success Criteria" section.
  */
 export function parseMissionCriteria(
   missionContent: string
-): { id: number; criterion: string }[] {
+): { id: number; criterion: string; completed: boolean }[] {
   const scMatch = missionContent.match(
     /## Success Criteria\s*\n([\s\S]*?)(?:\n## |\n*$)/i
   );
@@ -67,13 +88,24 @@ export function parseMissionCriteria(
 
   return scMatch[1]
     .split("\n")
-    .filter((l) => /^\d+\.\s/.test(l.trim()))
     .map((line) => {
-      const numMatch = line.trim().match(/^(\d+)\.\s+(.+)/);
-      if (!numMatch) return null;
-      return { id: Number(numMatch[1]), criterion: numMatch[2] };
+      const trimmed = line.trim();
+      // Match "- [x] 1. Criterion" or "1. Criterion" or "- [ ] Criterion"
+      const checkboxMatch = trimmed.match(/^-\s*\[([ xX])\]\s*(?:(\d+)\.\s+)?(.+)/);
+      if (checkboxMatch) {
+        const completed = checkboxMatch[1].toLowerCase() === "x";
+        const id = checkboxMatch[2] ? Number(checkboxMatch[2]) : 0;
+        return { id, criterion: checkboxMatch[3].trim(), completed };
+      }
+      
+      const numMatch = trimmed.match(/^(\d+)\.\s+(.+)/);
+      if (numMatch) {
+        return { id: Number(numMatch[1]), criterion: numMatch[2].trim(), completed: false };
+      }
+      return null;
     })
-    .filter((item): item is { id: number; criterion: string } => item !== null);
+    .filter((item): item is { id: number; criterion: string; completed: boolean } => item !== null)
+    .map((item, index) => ({ ...item, id: item.id || index + 1 }));
 }
 
 /**

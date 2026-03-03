@@ -592,7 +592,17 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"
     tg "⏰ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m — $task_title"
   fi
-  if [ "$exit_code" -ne 0 ]; then
+  if [ "$exit_code" -eq 125 ]; then
+    log "All agents hit usage limits (exit 125) — auto-pausing pipeline"
+    tg "⏸ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: All agents hit usage limits — auto-pausing pipeline"
+    emit_event "pipeline_paused" "Usage limits exhausted"
+    touch "$DEV_DIR/pipeline-paused"
+    cleanup_worktree "$branch_name"
+    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" "$WORKER_ID" 2>/dev/null || true; }
+    db_set_worker_idle "$WORKER_ID" "Usage limits exhausted" 2>/dev/null || true
+    _CURRENT_TASK_TITLE=""
+    break
+  elif [ "$exit_code" -ne 0 ]; then
     log "Claude Code FAILED (exit $exit_code): $task_title"
     tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} FAILED*: $task_title (claude exit $exit_code)"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title"

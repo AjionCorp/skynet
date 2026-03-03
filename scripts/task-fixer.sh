@@ -57,13 +57,6 @@ format_duration() {
   fi
 }
 
-# Detect usage/credits limits from the agent log tail.
-usage_limit_hit() {
-  local log_file="$1"
-  [ -f "$log_file" ] || return 1
-  tail -n 200 "$log_file" | grep -qiE "usage limit|usage-limit|hit your limit|purchase more credits|resets (at )?[0-9]{1,2}(:[0-9]{2})?[ ]?(am|pm)|credits"
-}
-
 # --- Worktree helpers (shared module) ---
 # Task-fixer uses non-strict install (continue on failure) and deletes stale
 # branches before creating worktrees from main.
@@ -626,13 +619,20 @@ else
     log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"
     tg "⏰ *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}*: Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m — $task_title"
   fi
-  if [ "${SKYNET_FIXER_IGNORE_USAGE_LIMIT:-false}" = "true" ] && usage_limit_hit "$LOG"; then
-    log "Usage limit detected — not counting failure toward cooldown/attempts."
+  # SH-P3-1: Exit code 125 from run_agent means ALL available agents hit usage limits.
+  # If code 125 is returned, we exit without recording an attempt or triggering cooldown.
+  # If any other error (including partial limit hits that triggered fallback), we continue.
+  if [ "$exit_code" -eq 125 ]; then
+    log "All available agents hit usage limits (exit 125) — auto-pausing pipeline."
+    tg "⏸ *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}*: All agents hit usage limits — auto-pausing pipeline"
+    emit_event "pipeline_paused" "Usage limits exhausted"
+    touch "$DEV_DIR/pipeline-paused"
     cleanup_worktree  # Keep branch for next attempt
-    [ -n "$_db_task_id" ] && { db_update_failure "$_db_task_id" "usage limit (no attempt recorded)" "$fix_attempts" "failed" || log "WARNING: db_update_failure failed — task state may be inconsistent"; }
+    # Unclaim the failure so another fixer can pick it up when unpaused
+    [ -n "$_db_task_id" ] && { db_unclaim_failure "$_db_task_id" "$FIXER_ID" 2>/dev/null || log "WARNING: db_unclaim_failure failed"; }
     _CURRENT_TASK_TITLE=""
     emit_event "fixer_usage_limit" "Fixer $FIXER_ID: $task_title"
-    emit_event "fixer_idle" "Fixer $FIXER_ID: usage limit hit"
+    emit_event "fixer_idle" "Fixer $FIXER_ID: all agents exhausted"
     log "Task-fixer finished."
     exit 0
   fi
