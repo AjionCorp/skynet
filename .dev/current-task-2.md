@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Supersede moot blocked "Update mission.md" row in failed-tasks.md
+## [INFRA] Delete stale remote dev/* branches from resolved failed tasks
 **Status:** completed
-**Started:** 2026-03-03 17:28
+**Started:** 2026-03-03 17:34
 **Completed:** 2026-03-03
-**Branch:** dev/supersede-moot-blocked-update-missionmd-
+**Branch:** dev/delete-stale-remote-dev-branches-from-re
 **Worker:** 2
 
 ### Changes

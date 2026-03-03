@@ -1,52 +1,29 @@
-# Skynet Mission
+# LLM Provider Selection in Mission Admin
 
 ## Purpose
+Enable operators to choose which LLM provider/model executes tasks for each mission, giving fine-grained control over cost, capability, and performance trade-offs directly from the mission admin page.
 
-Skynet is an autonomous AI development pipeline that leverages LLM agents via terminals to build, test, ship, and self-correct software — continuously and without human intervention until the mission is achieved.
-
-## Core Mission
-
-Build a self-improving ecosystem where AI agents:
-1. **Execute** — Claim tasks, implement code, run quality gates, merge to main
-2. **Self-correct** — Detect failures, diagnose root causes, fix them automatically
-3. **Self-improve** — Identify gaps in the pipeline itself, generate tasks to fix them, then execute those tasks
-4. **Interface** — Connect to any system (git, CI, APIs, notifications, databases) needed to achieve the goal
-5. **Persist** — Run continuously via launchd/cron, recover from crashes, never lose state
-
-## Skynet's Own Goal
-
-Skynet must improve itself into a flawless utility that any project can adopt:
-
-- `npx skynet init` → scaffolds `.dev/`, config, mission, backlog
-- `npx skynet setup-agents` → installs launchd/cron workers
-- Define a `mission.md` → the pipeline drives toward it autonomously
-- Workers implement tasks, quality gates catch failures, task-fixer retries, project-driver replenishes
-- The loop runs until the mission is achieved or the backlog is empty
-
-## Architecture Principles
-
-- **mission.md is the source of truth** — every task should trace back to advancing the mission
-- **Markdown as state** — backlog.md, completed.md, failed-tasks.md, blockers.md are the database
-- **Shell scripts as orchestration** — portable, debuggable, zero dependencies beyond bash + git
-- **LLM agents as workers** — Claude Code primary, Codex CLI fallback, extensible to any agent
-- **Dashboard as visibility** — React components + API handlers, importable into any Next.js app
-- **Config-driven** — everything parameterized via skynet.config.sh + mission.md
+## Goals
+- [x] Add an LLM provider/model selector to the mission creation and editing UI in the admin dashboard — Done (commit c4cfab9, MissionDashboard.tsx LLM Configuration Panel with provider dropdown and model input)
+- [x] Persist the selected LLM configuration per mission in the mission state files — Done (commit 76a237c, missions.ts + mission-detail.ts + mission-assignments.ts)
+- [x] Pass the selected LLM configuration through to the worker pipeline so tasks execute with the chosen model — Done (commit fb85a0d, _get_mission_llm_config in _config.sh, threaded into dev-worker.sh line 593 and task-fixer.sh line 429, SKYNET_CLAUDE_MODEL + --model flag in agents/claude.sh)
+- [x] Support at least the primary Claude model tiers (Opus, Sonnet, Haiku) as selectable options — Done (LlmConfig type in types.ts, UI dropdown with auto/claude/codex/gemini providers, model field supports opus/sonnet/haiku)
+- [x] Display the currently selected LLM on the mission dashboard for visibility — Done (commit c4cfab9, model badge on mission cards + LLM config panel in detail view)
 
 ## Success Criteria
+- [x] Admin user can select an LLM model from a dropdown when creating or editing a mission — Done (MissionDashboard.tsx LLM Configuration Panel, commit c4cfab9)
+- [x] The selected model is saved and persisted across page reloads — Done (handler persistence in missions.ts/mission-detail.ts/mission-assignments.ts, commit 76a237c)
+- [x] Workers spawned for the mission use the selected LLM model for code execution — Done (_get_mission_llm_config reads per-mission config, exports SKYNET_CLAUDE_MODEL, --model flag passed to Claude agent, commit fb85a0d)
+- [x] Default model is pre-selected when no explicit choice is made — Done (MissionDashboard.tsx uses ?? "auto" fallback at line 899 and ?? { provider: "auto" } at line 887)
+- [x] The mission detail view shows which LLM is assigned to the mission — Done (provider badge on mission cards + LLM Configuration Panel, commit c4cfab9)
+- [x] pnpm typecheck passes with all changes — Verified clean 2026-03-03
 
-Skynet is complete when:
-1. Any project can go from zero to autonomous AI development in under 5 minutes
-2. The pipeline self-corrects 95%+ of failures without human intervention
-3. Workers never lose tasks, deadlock, or produce zombie processes
-4. The dashboard provides full real-time visibility into pipeline health
-5. Mission progress is measurable — completed tasks map to mission objectives
-6. The system works with any LLM agent (Claude, Codex, future models)
+## Mission Complete
 
-## Current Focus Areas
+**Completed: 2026-03-03**
 
-1. **Reliability** — Lock handling, task claiming, crash recovery, stale detection
-2. **Self-correction loop** — task-fixer → health-check → project-driver feedback cycle
-3. **Mission-driven planning** — project-driver reads mission.md, generates tasks that advance it
-4. **Portability** — works on macOS + Linux, launchd + cron, any terminal-accessible LLM
-5. **Developer experience** — clean CLI, fast setup, clear docs, beautiful dashboard
-6. **Extensibility** — hooks, custom workers, pluggable notification channels, API integrations
+All 5 goals achieved. All 6 success criteria met and verified on main.
+
+Key commits: d143fb3 (LlmConfig type), e895eb9 (SKYNET_CLAUDE_MODEL + --model flag), 76a237c (handler persistence), fb85a0d (_get_mission_llm_config shell helper + worker threading), c4cfab9 (UI selector + badge).
+
+After 12+ consecutive LLM task failures in earlier attempts, the ultra-precise 5-task decomposition with file-scope constraints broke the cycle. Lessons: exact file-scope constraints, additive-only optional fields, mandatory git pull origin main, embedded "DO NOT touch" guardrails.

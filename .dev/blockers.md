@@ -106,13 +106,17 @@
 
 ## Active
 
-- **2026-03-03**: No active blockers. Pipeline is in post-mission cleanup mode. Next mission definition needed from operator.
+- **2026-03-03**: No active blockers. Pipeline is idle — mission complete, cleanup tasks in progress. **Awaiting new mission definition from operator.**
+
+- **2026-03-03**: Blocked `[DATA] Update mission.md to declare LLM Provider Selection mission complete` (3 attempts, merge conflict) is **moot** — mission.md was already updated with full "Mission Complete" declaration via a different code path. Row in failed-tasks.md will be superseded on next reconciliation pass or can be manually cleared.
+
+- **2026-03-03**: Shell test infrastructure lives at `tests/unit/` (18 test files), not `scripts/tests/`. Backlog test task descriptions referencing `scripts/tests/` should use `tests/unit/` instead. Not a blocker — workers have been correctly placing tests in the right directory.
 
 ## Resolved (Recent)
 
 - **2026-03-03**: blocked_by title mismatch bug — backlog tasks stored blocked_by references WITHOUT backticks but completed task titles stored WITH backticks. **Fixed** — backtick-stripping normalization merged to _db.sh in `_db_claim_next_task_inner`.
 
-- **2026-03-03**: Stale failed-task entries (11 LLM-related superseded rows) in `failed-tasks.md`. **In progress** — branch cleanup task claimed, bulk archive task in backlog.
+- **2026-03-03**: Stale failed-task entries (11 LLM-related superseded rows + 316 resolved history rows) in `failed-tasks.md`. **Fixed** — branch cleanup completed (commit 9a1f502), bulk-archive completed (commit ae2a735), resolved rows older than 7 days moved to `failed-tasks-archive.md`.
 
 ## MISSION ACHIEVED: LLM Provider Selection in Mission Admin
 
@@ -130,4 +134,4 @@ After 12+ consecutive failures across earlier attempts, the ultra-precise 5-task
 
 **Key enablers**: exact file-scope constraints, additive-only optional fields, mandatory `git pull origin main`, embedded "DO NOT touch" guardrails.
 
-**Remaining cleanup tasks** (non-blocking): backtick normalization fix in _db.sh, LLM component tests, stale branch cleanup.
+**Remaining cleanup tasks** (non-blocking): codex.sh --model passthrough, completed.md pruning, shell test infrastructure (scripts/tests/ missing), E2E LLM config smoke test. Backtick normalization, LLM component tests, and stale branch cleanup all completed.

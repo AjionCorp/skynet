@@ -1,10 +1,6 @@
 # Current Task
-## [FEAT] Make sure to use shadnc components for the admin
-**Status:** completed
+## [INFRA] Delete stale remote dev/* branches from resolved failed tasks
+**Status:** in_progress
 **Started:** 2026-03-03 17:34
-**Completed:** 2026-03-03
-**Branch:** dev/make-sure-to-use-shadnc-components-for-t
+**Branch:** dev/delete-stale-remote-dev-branches-from-re
 **Worker:** 1
-
-### Changes
--- See git log for details
