@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | 6m | success |
 | 2026-03-03 | [TEST] [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in types.ts | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add `SKYNET_CLAUDE_MODEL` env var and `--model` flag to Claude agent plugin | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unify stale-threshold and health-score parity across CLI/dashboard/watchdog | merged to main | 3m | success |
 | 2026-02-20 | [FIX] Unify stale-threshold config usage across CLI + dashboard + watchdog math | merged to main | 4m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Update config.ts KNOWN_VARS dictionary with missing config variable descriptions | merged to main | 0m | success |
-| 2026-02-20 | [FIX] Use `sed_inplace` wrapper in task-fixer.sh instead of raw `sed -i.bak` | fixing-${FIXER_ID} | 0m | / |
