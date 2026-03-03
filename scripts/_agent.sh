@@ -158,6 +158,29 @@ _load_plugin_as() {
   unset -f agent_check agent_run 2>/dev/null || true
 }
 
+# Pre-flight prompt size check. Returns 0 (ok), 1 (rejected — too large).
+# Logs a warning when prompt exceeds SKYNET_PROMPT_WARN_BYTES.
+# Returns 1 when prompt exceeds SKYNET_PROMPT_MAX_BYTES (hard limit).
+_check_prompt_size() {
+  local prompt="$1"
+  local log_file="${2:-/dev/null}"
+  local size=${#prompt}
+
+  local warn_limit="${SKYNET_PROMPT_WARN_BYTES:-150000}"
+  local max_limit="${SKYNET_PROMPT_MAX_BYTES:-300000}"
+
+  if [ "$max_limit" -gt 0 ] && [ "$size" -gt "$max_limit" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Prompt size ${size} bytes exceeds hard limit ${max_limit} bytes — aborting agent invocation" >> "$log_file"
+    return 1
+  fi
+
+  if [ "$warn_limit" -gt 0 ] && [ "$size" -gt "$warn_limit" ]; then
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] WARNING: Prompt size ${size} bytes exceeds soft limit ${warn_limit} bytes" >> "$log_file"
+  fi
+
+  return 0
+}
+
 # Detect usage/credits limits from the agent log tail.
 # Shared by dev-worker and task-fixer.
 usage_limit_hit() {
@@ -201,6 +224,11 @@ if [ "$_plugin_resolved" = "auto" ]; then
     local _claude_limit=false
     local _codex_limit=false
     local _gemini_limit=false
+
+    # Pre-flight prompt size guardrail
+    if ! _check_prompt_size "$prompt" "$log_file"; then
+      return 1
+    fi
 
     # Try Claude first
     if _claude_agent_check; then
@@ -352,6 +380,11 @@ else
   run_agent() {
     local prompt="$1"
     local log_file="${2:-/dev/null}"
+
+    # Pre-flight prompt size guardrail
+    if ! _check_prompt_size "$prompt" "$log_file"; then
+      return 1
+    fi
 
     if ! agent_check; then
       echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Agent not available (plugin: $SKYNET_AGENT_PLUGIN)" >> "$log_file"
