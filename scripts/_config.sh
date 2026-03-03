@@ -336,6 +336,27 @@ _resolve_active_mission() {
   echo "$MISSION"
 }
 
+# Read per-mission LLM config from _config.json.
+# Outputs two lines: provider (line 1) and model (line 2). Either may be empty.
+# Usage:
+#   _llm_info=$(_get_mission_llm_config "slug")
+#   _llm_provider=$(echo "$_llm_info" | head -1)
+#   _llm_model=$(echo "$_llm_info" | sed -n '2p')
+# Bash 3.2 compatible — uses sed, no jq.
+_get_mission_llm_config() {
+  local slug="$1"
+  [ -n "$slug" ] && [ -f "$MISSION_CONFIG" ] || return 0
+  # "slug": { ... } only appears in llmConfigs (assignments use string values).
+  local block provider="" model=""
+  block=$(sed -n '/"'"$slug"'"[[:space:]]*:[[:space:]]*{/,/}/p' "$MISSION_CONFIG" 2>/dev/null)
+  if [ -n "$block" ]; then
+    provider=$(echo "$block" | sed -n 's/.*"provider"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+    model=$(echo "$block" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  fi
+  echo "${provider:-}"
+  echo "${model:-}"
+}
+
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
 

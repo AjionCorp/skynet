@@ -586,7 +586,29 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     continue
   fi
 
-  (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG") && exit_code=0 || exit_code=$?
+  # Per-mission LLM config: read provider/model override for this mission
+  _mission_llm_provider=""
+  _mission_llm_model=""
+  if [ -n "${_worker_mission_slug:-}" ]; then
+    _llm_info=$(_get_mission_llm_config "$_worker_mission_slug")
+    _mission_llm_provider=$(echo "$_llm_info" | head -1)
+    _mission_llm_model=$(echo "$_llm_info" | sed -n '2p')
+    if [ -n "$_mission_llm_model" ]; then
+      log "Mission LLM override: provider=${_mission_llm_provider:-auto} model=$_mission_llm_model"
+    fi
+  fi
+
+  # Run agent in subshell; model override is scoped to this invocation
+  (
+    if [ -n "$_mission_llm_model" ]; then
+      case "${_mission_llm_provider:-}" in
+        claude) export SKYNET_CLAUDE_MODEL="$_mission_llm_model" ;;
+        codex)  export SKYNET_CODEX_MODEL="$_mission_llm_model" ;;
+        gemini) export SKYNET_GEMINI_MODEL="$_mission_llm_model" ;;
+      esac
+    fi
+    cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"
+  ) && exit_code=0 || exit_code=$?
   _stop_heartbeat
   if [ "$exit_code" -eq 124 ]; then
     log "Agent timed out after ${SKYNET_AGENT_TIMEOUT_MINUTES}m"

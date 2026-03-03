@@ -37,6 +37,9 @@ WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/fixer-${FIXER_ID}"
 
 cd "$PROJECT_DIR"
 
+# Multi-mission: read fixer's assigned mission for LLM config override
+_fixer_mission_slug=$(_get_worker_mission_slug "task-fixer-${FIXER_ID}")
+
 # task-fixer logs to file AND stdout (tee behavior)
 log() { _log "info" "F${FIXER_ID}" "$*" "$LOG"; _log "info" "F${FIXER_ID}" "$*"; }
 
@@ -418,7 +421,29 @@ if $SHUTDOWN_REQUESTED; then
 fi
 
 emit_event "fix_started" "Fixer $FIXER_ID: $task_title"
-if (cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"); then
+
+# Per-mission LLM config: read provider/model override for this fixer's mission
+_fixer_llm_provider=""
+_fixer_llm_model=""
+if [ -n "${_fixer_mission_slug:-}" ]; then
+  _llm_info=$(_get_mission_llm_config "$_fixer_mission_slug")
+  _fixer_llm_provider=$(echo "$_llm_info" | head -1)
+  _fixer_llm_model=$(echo "$_llm_info" | sed -n '2p')
+  if [ -n "$_fixer_llm_model" ]; then
+    log "Mission LLM override: provider=${_fixer_llm_provider:-auto} model=$_fixer_llm_model"
+  fi
+fi
+
+if (
+  if [ -n "$_fixer_llm_model" ]; then
+    case "${_fixer_llm_provider:-}" in
+      claude) export SKYNET_CLAUDE_MODEL="$_fixer_llm_model" ;;
+      codex)  export SKYNET_CODEX_MODEL="$_fixer_llm_model" ;;
+      gemini) export SKYNET_GEMINI_MODEL="$_fixer_llm_model" ;;
+    esac
+  fi
+  cd "$WORKTREE_DIR" && run_agent "$PROMPT" "$LOG"
+); then
   if $SHUTDOWN_REQUESTED; then
     log "Shutdown requested after fix — unclaiming and exiting cleanly"
     cleanup_worktree
