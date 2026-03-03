@@ -5,6 +5,7 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
   statSync: vi.fn(() => ({ mtime: new Date(), mtimeMs: Date.now(), isDirectory: () => false })),
   readdirSync: vi.fn(() => []),
+  realpathSync: vi.fn((p: string) => p),
 }));
 
 vi.mock("child_process", () => ({
@@ -367,10 +368,8 @@ describe("statusCommand", () => {
   });
 
   // --- (f) mission progress parsing shows all 6 criteria ---
-  // TODO(tech-debt): These mission evaluation tests duplicate the dashboard's
-  // mission.test.ts assertions. When the mission evaluation logic is unified
-  // (see TODO in status.ts), consolidate these tests to use the shared
-  // evaluateMissionCriteria function and only test the CLI-specific adapter.
+  // Uses shared parseMissionProgress from @ajioncorp/skynet.
+  // The fs mock provides readDevFile with file content via readFileSync/realpathSync.
 
   it("parses all 6 mission criteria in --json output", async () => {
     mockExistsSync.mockImplementation((p) => {
