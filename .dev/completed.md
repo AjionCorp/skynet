@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for _skills.sh skill dispatch | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _notify.sh notification helpers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for project-driver-status handler | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add unit tests for pipeline-health-trend and task-velocity handlers | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
 | 2026-03-03 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
 | 2026-03-03 | [FEAT] Add keyboard shortcuts to dashboard | merged to main | 2m | success |
-| 2026-03-03 | [FEAT] Add task completion velocity chart to Pipeline dashboard | merged to main | 0m | success |
