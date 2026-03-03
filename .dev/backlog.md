@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FEAT] mission status — check if mission status and criteria are updated and minitored
 - [>] [TEST] Add unit tests for pipeline-health-trend and task-velocity handlers — Create `packages/dashboard/src/handlers/pipeline-health-trend.test.ts` and `packages/dashboard/src/handlers/task-velocity.test.ts`. Follow the same `vi.mock('fs', ...)` pattern as existing handler tests. For health-trend: test GET returns trend data array with expected shape. For task-velocity: test GET returns velocity metrics from completed.md parsing. DO NOT import from barrel `index.ts`. Run `pnpm typecheck`.
 - [>] [TEST] Add unit tests for project-driver-status handler — Create `packages/dashboard/src/handlers/project-driver-status.test.ts`. Follow the `vi.mock('fs', ...)` pattern from existing handler tests. Test: (a) GET returns driver telemetry when `.dev/project-driver-telemetry.json` exists, (b) GET returns safe fallback when telemetry file is missing, (c) response shape matches `ProjectDriverStatus` type. DO NOT import from barrel `index.ts` — import directly from `project-driver-status.ts`. Run `pnpm typecheck`.
 

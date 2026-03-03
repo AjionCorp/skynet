@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler unit tests for mission LLM config persistence round-trip
+## [FEAT] mission status
 **Status:** completed
-**Started:** 2026-03-03 17:38
+**Started:** 2026-03-03 17:48
 **Completed:** 2026-03-03
-**Branch:** dev/add-handler-unit-tests-for-mission-llm-c
+**Branch:** dev/mission-status
 **Worker:** 1
 
 ### Changes

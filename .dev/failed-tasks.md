@@ -2,7 +2,7 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
-| 2026-03-03 | [INFRA] Add stale unmerged .dev/ index recovery to _merge.sh merge pipeline | dev/add-stale-unmerged-dev-index-recovery-to | merge conflict | 0 | failed |
+| 2026-03-03 | [INFRA] Add stale unmerged .dev/ index recovery to _merge.sh merge pipeline | dev/add-stale-unmerged-dev-index-recovery-to | merge conflict | 0 | fixing-1 |
 | 2026-03-03 | [DATA] Update mission.md to declare LLM Provider Selection mission complete | dev/update-missionmd-to-declare-llm-provider | merge conflict after fix attempt 3 | 3 | blocked |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | merge conflict | 1 | fixed |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | merge conflict after fix attempt 1 | 2 | fixed |
