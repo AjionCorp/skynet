@@ -1313,7 +1313,7 @@ _archive_old_completions() {
   # Ensure we still keep at least max_entries (don't archive too aggressively)
   local keep_count=$((total_entries - archived_count))
   if [ "$keep_count" -lt "$max_entries" ]; then
-    # Not enough old entries to archive while keeping 100 — skip
+    # Not enough old entries to archive while keeping 50 — skip
     return 0
   fi
 
