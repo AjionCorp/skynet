@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression test for _get_mission_llm_config helper
+## [TEST] Add MissionDashboard LLM selector component tests
 **Status:** completed
-**Started:** 2026-03-03 15:54
+**Started:** 2026-03-03 15:57
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-regression-test-for-getmission
+**Branch:** dev/add-missiondashboard-llm-selector-compon
 **Worker:** 3
 
 ### Changes
