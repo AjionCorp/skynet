@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add unit tests for mission-assignments.ts handler | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-detail.ts handler | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add comprehensive vitest configuration for dashboard handler tests | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for feature-validator.sh validation logic | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add handler unit tests for mission-raw and pipeline-stream | merged to main | 13m | success |
 | 2026-03-03 | [TEST] Add unit tests for _locks.sh atomic locking and merge mutex | merged to main | 0m | success |
 | 2026-03-03 | [INFRA] Add prompt size guardrail before LLM agent invocation | merged to main | 4m | success |
-| 2026-03-03 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | 0m | success |
