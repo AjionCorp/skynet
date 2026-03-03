@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Pre-select default LLM provider "auto" for missions without explicit config
+## [INFRA] Add mission-complete idle mode to project-driver
 **Status:** completed
-**Started:** 2026-03-03 15:53
+**Started:** 2026-03-03 16:15
 **Completed:** 2026-03-03
-**Branch:** dev/pre-select-default-llm-provider-auto-for
+**Branch:** dev/add-mission-complete-idle-mode-to-projec
 **Worker:** 4
 
 ### Changes
