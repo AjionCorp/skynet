@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation
+## [INFRA] Thread mission LLM config into task-fixer agent invocation
 **Status:** completed
-**Started:** 2026-03-03 15:49
+**Started:** 2026-03-03 15:53
 **Completed:** 2026-03-03
-**Branch:** dev/add-getmissionllmconfig-shell-helper-and
+**Branch:** dev/thread-mission-llm-config-into-task-fixe
 **Worker:** 1
 
 ### Changes
