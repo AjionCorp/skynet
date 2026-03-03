@@ -363,7 +363,7 @@ All configurable via env vars unless marked "hardcoded".
 | Heartbeat write interval | **60 sec** | hardcoded | Background subshell writes heartbeat | `dev-worker.sh:76` |
 | Watchdog cycle interval | **180 sec** | `WATCHDOG_INTERVAL` | Main reconciliation loop period | `watchdog.sh:1016` |
 | Completed archival | **7 days** | hardcoded | Archive completed entries older than 7 days | `watchdog.sh:649` |
-| Archival threshold | **100 entries** | hardcoded | Only archive when completed.md > 100 entries | `watchdog.sh:648` |
+| Archival threshold | **50 entries** | hardcoded | Only archive when completed.md > 50 entries | `watchdog.sh:648` |
 
 ### Why 120 seconds for orphaned claims?
 

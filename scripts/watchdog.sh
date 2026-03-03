@@ -1249,8 +1249,8 @@ if [ "${_merged_superseded:-0}" -gt 0 ] 2>/dev/null; then
 fi
 
 # --- Archive old completed tasks to prevent unbounded state file growth ---
-# If completed.md has >100 entries, move entries older than 7 days to
-# completed-archive.md, keeping only the most recent 100 in the active file.
+# If completed.md has >50 entries, move entries older than 7 days to
+# completed-archive.md, keeping only the most recent 50 in the active file.
 # NOTE: Operates on generated completed.md rather than SQLite directly.
 # This is acceptable since completed.md is regenerated at merge time.
 # NOTE: completed-archive.md is NOT auto-pruned — it grows monotonically.
@@ -1260,7 +1260,7 @@ _archive_old_completions() {
   [ -f "$COMPLETED" ] || return 0
 
   local header_lines=2
-  local max_entries=100
+  local max_entries=50
   local max_age_days=7
   local archive="$DEV_DIR/completed-archive.md"
 
@@ -1313,7 +1313,7 @@ _archive_old_completions() {
   # Ensure we still keep at least max_entries (don't archive too aggressively)
   local keep_count=$((total_entries - archived_count))
   if [ "$keep_count" -lt "$max_entries" ]; then
-    # Not enough old entries to archive while keeping 100 — skip
+    # Not enough old entries to archive while keeping 50 — skip
     return 0
   fi
 
