@@ -3,7 +3,8 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [ ] [FEAT] mission criteria — Our project driver, need to analyze the mission and update cryteria, and goals, we need to know what the progress, otherwise we can be doing tasks forever, we should at some point stop creating backlog. improve our project drivef
+- [ ] [FEAT] issue on parse — (node:78885) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities. - can we resolve this
+- [ ] [FEAT] improve events — Lets make sure that the events can be expended and we can learn what was changed and implemented, so workers can leave more information that is uxefull
 - [>] [TEST] Add shell unit tests for health-check.sh operational checks — Create `tests/unit/health-check.test.sh`. Test that typecheck command is invoked, error reporting format matches `log()` convention, and script exits gracefully when skynet.config.sh is absent or dev server is not running. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/health-check.test.sh`.
 
 # Recent checked history (last 30)
