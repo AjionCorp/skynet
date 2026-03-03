@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell unit tests for check-server-errors.sh error detection — Create `tests/unit/check-server-errors.test.sh`. Test error pattern matching in log files, log path argument handling (both default and custom paths), correct exit codes for detected vs no errors. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/check-server-errors.test.sh`.
 - [>] [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp — Create `packages/dashboard/src/components/MissionSidebar.test.tsx` and `packages/dashboard/src/components/KeyboardShortcutsHelp.test.tsx`. Test rendering, prop handling, user interaction (keyboard events for shortcuts help, mission selection for sidebar). Follow the same pattern as `MissionDashboard.test.tsx`. Run `pnpm typecheck`.
 - [>] [TEST] Add unit tests for ErrorBoundary and LoadingSkeleton admin components — Create tests for `packages/admin/src/components/ErrorBoundary.tsx` and `packages/admin/src/components/LoadingSkeleton.tsx`. Test error boundary catches render errors and displays fallback, loading skeleton renders correct structure. Follow existing admin test patterns. Run `pnpm typecheck`.
 
