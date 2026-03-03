@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler unit tests for LLM config persistence round-trip
+## [INFRA] Clean up stale dev/* branches from failed LLM task attempts
 **Status:** completed
-**Started:** 2026-03-03 15:56
+**Started:** 2026-03-03 16:03
 **Completed:** 2026-03-03
-**Branch:** dev/add-handler-unit-tests-for-llm-config-pe
+**Branch:** dev/clean-up-stale-dev-branches-from-failed-
 **Worker:** 1
 
 ### Changes
