@@ -22,8 +22,11 @@ import {
   Users,
   Wand2,
   Bot,
+  Activity,
+  TrendingUp,
+  Clock,
 } from "lucide-react";
-import type { MissionStatus, MissionProgress, MissionSummary, MissionConfig, LlmConfig } from "../types";
+import type { MissionStatus, MissionProgress, MissionSummary, MissionConfig, LlmConfig, MissionTracking } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { MissionCreator } from "./MissionCreator";
 
@@ -116,6 +119,9 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [renamingSlug, setRenamingSlug] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
+  // Mission tracking state
+  const [tracking, setTracking] = useState<MissionTracking | null>(null);
+
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
 
@@ -146,12 +152,14 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
     if (!selectedSlug) return;
     try {
       const slugParam = `?slug=${encodeURIComponent(selectedSlug)}`;
-      const [statusRes, pipelineRes] = await Promise.all([
+      const [statusRes, pipelineRes, trackingRes] = await Promise.all([
         fetch(`${apiPrefix}/mission/status${slugParam}`),
         fetch(`${apiPrefix}/pipeline/status${slugParam}`),
+        fetch(`${apiPrefix}/mission/tracking${slugParam}`),
       ]);
       const statusJson = await statusRes.json();
       const pipelineJson = await pipelineRes.json();
+      const trackingJson = await trackingRes.json();
 
       if (statusJson.error) {
         setError(statusJson.error);
@@ -165,6 +173,10 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       }
       if (pipelineJson.data != null) {
         setPipelinePaused(!!pipelineJson.data.pipelinePaused);
+      }
+
+      if (trackingJson.data) {
+        setTracking(trackingJson.data);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch mission");
@@ -593,6 +605,86 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
           </button>
         </div>
       </div>
+
+      {/* Mission Tracking Status */}
+      {selectedSlug && tracking && tracking.trackingStatus !== "no-mission" && (
+        <div className={`rounded-xl border p-5 ${
+          tracking.trackingStatus === "on-track"
+            ? "border-emerald-500/20 bg-emerald-500/5"
+            : tracking.trackingStatus === "stalled"
+              ? "border-red-500/20 bg-red-500/5"
+              : tracking.trackingStatus === "idle"
+                ? "border-amber-500/20 bg-amber-500/5"
+                : "border-zinc-800 bg-zinc-900/50"
+        }`}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Activity className={`h-5 w-5 ${
+                tracking.trackingStatus === "on-track" ? "text-emerald-400" :
+                tracking.trackingStatus === "stalled" ? "text-red-400" :
+                tracking.trackingStatus === "idle" ? "text-amber-400" :
+                "text-zinc-500"
+              }`} />
+              <div>
+                <h2 className="text-sm font-semibold text-white">Mission Tracking</h2>
+                <p className={`text-xs ${
+                  tracking.trackingStatus === "on-track" ? "text-emerald-400" :
+                  tracking.trackingStatus === "stalled" ? "text-red-400" :
+                  tracking.trackingStatus === "idle" ? "text-amber-400" :
+                  "text-zinc-500"
+                }`}>{tracking.trackingMessage}</p>
+              </div>
+            </div>
+            <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+              tracking.trackingStatus === "on-track"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400"
+                : tracking.trackingStatus === "stalled"
+                  ? "border-red-500/30 bg-red-500/10 text-red-400"
+                  : tracking.trackingStatus === "idle"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                    : "border-zinc-700 bg-zinc-800 text-zinc-400"
+            }`}>
+              {tracking.trackingStatus === "on-track" && <TrendingUp className="h-3 w-3" />}
+              {tracking.trackingStatus === "stalled" && <Clock className="h-3 w-3" />}
+              {tracking.trackingStatus === "idle" && <Pause className="h-3 w-3" />}
+              {tracking.trackingStatus === "no-workers" && <Users className="h-3 w-3" />}
+              {tracking.trackingStatus.replace("-", " ")}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Workers</p>
+              <p className="text-lg font-bold text-white">
+                {tracking.activeWorkers}<span className="text-xs font-normal text-zinc-500">/{tracking.assignedWorkers}</span>
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Backlog</p>
+              <p className="text-lg font-bold text-white">{tracking.backlogCount}</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">In Progress</p>
+              <p className="text-lg font-bold text-white">{tracking.inProgressCount}</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Completed</p>
+              <p className="text-lg font-bold text-white">{tracking.completedCount}</p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Last 24h</p>
+              <p className={`text-lg font-bold ${tracking.completedLast24h > 0 ? "text-emerald-400" : "text-zinc-500"}`}>
+                {tracking.completedLast24h}
+              </p>
+            </div>
+            <div className="rounded-lg border border-zinc-800/50 bg-zinc-900/50 px-3 py-2">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">Failed</p>
+              <p className={`text-lg font-bold ${tracking.failedPendingCount > 0 ? "text-red-400" : "text-zinc-500"}`}>
+                {tracking.failedPendingCount}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Progress overview cards */}
       {selectedSlug && mission && (

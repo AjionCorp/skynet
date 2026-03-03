@@ -353,6 +353,26 @@ export interface EventEntry {
   detail: string;
 }
 
+// ===== Mission Tracking Types =====
+
+export interface MissionTracking {
+  slug: string;
+  name: string;
+  assignedWorkers: number;
+  activeWorkers: number;
+  idleWorkers: number;
+  backlogCount: number;
+  inProgressCount: number;
+  completedCount: number;
+  completedLast24h: number;
+  failedPendingCount: number;
+  criteriaTotal: number;
+  criteriaMet: number;
+  completionPercentage: number;
+  trackingStatus: "on-track" | "stalled" | "idle" | "no-workers" | "no-mission";
+  trackingMessage: string;
+}
+
 // ===== Worker Scaling Types =====
 
 export interface WorkerScalePayload {
