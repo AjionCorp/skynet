@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Normalize blocked_by title references to strip backticks before DB resolution
+## [INFRA] Bulk-archive resolved failed-task rows older than 7 days
 **Status:** completed
-**Started:** 2026-03-03 15:59
+**Started:** 2026-03-03 16:13
 **Completed:** 2026-03-03
-**Branch:** dev/normalize-blockedby-title-references-to-
+**Branch:** dev/bulk-archive-resolved-failed-task-rows-o
 **Worker:** 2
 
 ### Changes

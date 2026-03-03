@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Bulk-archive resolved failed-task rows older than 7 days | merged to main | 4m | success |
 | 2026-03-03 | [INFRA] Clean up stale dev/* branches from failed LLM task attempts | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Normalize blocked_by title references to strip backticks before DB resolution | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add MissionDashboard LLM selector component tests | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Run canonical failed-task reconciliation and one-time cleanup sweep | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Run one-time failed-task normalization and supersede sweep | merged to main | 2m | fixed (attempt 1) |
 | 2026-02-20 | [FIX] Stabilize Codex large-prompt path with deterministic exit-code preservation | merged to main | 3m | success |
-| 2026-02-20 | [FIX] Supersede 21 stale `pending` entries in `failed-tasks.md` for already-completed tasks | merged to main | 2m | fixed (attempt 1) |
