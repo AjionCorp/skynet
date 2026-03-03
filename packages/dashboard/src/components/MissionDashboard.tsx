@@ -21,8 +21,9 @@ import {
   Star,
   Users,
   Wand2,
+  Bot,
 } from "lucide-react";
-import type { MissionStatus, MissionProgress, MissionSummary, MissionConfig } from "../types";
+import type { MissionStatus, MissionProgress, MissionSummary, MissionConfig, LlmConfig } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { MissionCreator } from "./MissionCreator";
 
@@ -57,6 +58,18 @@ const WORKER_NAMES = [
   "task-fixer-2",
   "task-fixer-3",
 ];
+
+const LLM_PROVIDERS: { value: LlmConfig["provider"]; label: string; color: string }[] = [
+  { value: "auto", label: "Auto", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
+  { value: "claude", label: "Claude", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
+  { value: "codex", label: "Codex", color: "text-green-400 bg-green-500/10 border-green-500/20" },
+  { value: "gemini", label: "Gemini", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
+];
+
+const getProviderBadge = (provider?: LlmConfig["provider"]) => {
+  const p = LLM_PROVIDERS.find((lp) => lp.value === provider) ?? LLM_PROVIDERS[0];
+  return p;
+};
 
 const statusBadge: Record<MissionProgress["status"], { label: string; classes: string }> = {
   met: { label: "Met", classes: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" },
@@ -95,6 +108,10 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [localAssignments, setLocalAssignments] = useState<Record<string, string | null>>({});
   const [assignmentsDirty, setAssignmentsDirty] = useState(false);
 
+  // LLM config state
+  const [localLlmConfigs, setLocalLlmConfigs] = useState<Record<string, LlmConfig>>({});
+  const [llmConfigDirty, setLlmConfigDirty] = useState(false);
+
   // Rename state
   const [renamingSlug, setRenamingSlug] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -112,6 +129,8 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         setMissionConfig(json.data.config);
         setLocalAssignments(json.data.config.assignments);
         setAssignmentsDirty(false);
+        setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
+        setLlmConfigDirty(false);
         // Auto-select the active mission if nothing selected
         if (!selectedSlug && json.data.config.activeMission) {
           setSelectedSlug(json.data.config.activeMission);
@@ -282,6 +301,25 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
     }
   }, [apiPrefix, localAssignments, fetchMissions]);
 
+  // Save LLM config for a mission
+  const saveLlmConfig = useCallback(async (slug: string, config: LlmConfig) => {
+    try {
+      const res = await fetch(`${apiPrefix}/missions/assignments`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ llmConfigs: { [slug]: config } }),
+      });
+      const json = await res.json();
+      if (json.error) setError(json.error);
+      else {
+        setLlmConfigDirty(false);
+        await fetchMissions();
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save LLM config");
+    }
+  }, [apiPrefix, fetchMissions]);
+
   // Rename mission — updates the # heading inside the markdown file
   const renameMission = useCallback(async (slug: string, newName: string) => {
     if (!newName.trim()) { setRenamingSlug(null); return; }
@@ -412,12 +450,23 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                 <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" />
               )}
             </div>
-            {m.assignedWorkers.length > 0 && (
-              <div className="flex items-center gap-1 text-xs text-zinc-500">
-                <Users className="h-3 w-3" />
-                {m.assignedWorkers.length} worker{m.assignedWorkers.length !== 1 ? "s" : ""}
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {m.assignedWorkers.length > 0 && (
+                <div className="flex items-center gap-1 text-xs text-zinc-500">
+                  <Users className="h-3 w-3" />
+                  {m.assignedWorkers.length}
+                </div>
+              )}
+              {(() => {
+                const badge = getProviderBadge(m.llmConfig?.provider);
+                return (
+                  <span className={`inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-[10px] font-medium ${badge.color}`}>
+                    <Bot className="h-2.5 w-2.5" />
+                    {badge.label}
+                  </span>
+                );
+              })()}
+            </div>
           </button>
         ))}
         <button
@@ -821,6 +870,67 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                 </select>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* LLM Configuration Panel */}
+      {selectedSlug && (
+        <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Bot className="h-4 w-4 text-cyan-400" />
+              <h2 className="text-lg font-semibold text-white">LLM Configuration</h2>
+            </div>
+            {llmConfigDirty && (
+              <button
+                onClick={() => saveLlmConfig(selectedSlug, localLlmConfigs[selectedSlug] ?? { provider: "auto" })}
+                className="flex items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-sm font-medium text-cyan-400 transition hover:border-cyan-500/50 hover:bg-cyan-500/20"
+              >
+                <Save className="h-3.5 w-3.5" />
+                Save LLM Config
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500">Provider</label>
+              <select
+                value={localLlmConfigs[selectedSlug]?.provider ?? "auto"}
+                onChange={(e) => {
+                  const provider = e.target.value as LlmConfig["provider"];
+                  setLocalLlmConfigs((prev) => ({
+                    ...prev,
+                    [selectedSlug]: { ...prev[selectedSlug], provider, model: undefined },
+                  }));
+                  setLlmConfigDirty(true);
+                }}
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 focus:border-cyan-500/50 focus:outline-none"
+              >
+                {LLM_PROVIDERS.map((p) => (
+                  <option key={p.value} value={p.value}>{p.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-1 flex-col gap-1.5">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500">Model (optional)</label>
+              <input
+                value={localLlmConfigs[selectedSlug]?.model ?? ""}
+                onChange={(e) => {
+                  setLocalLlmConfigs((prev) => ({
+                    ...prev,
+                    [selectedSlug]: {
+                      ...prev[selectedSlug],
+                      provider: prev[selectedSlug]?.provider ?? "auto",
+                      model: e.target.value || undefined,
+                    },
+                  }));
+                  setLlmConfigDirty(true);
+                }}
+                placeholder="e.g. claude-sonnet-4-6"
+                className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 placeholder-zinc-600 focus:border-cyan-500/50 focus:outline-none"
+              />
+            </div>
           </div>
         </div>
       )}
