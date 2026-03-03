@@ -493,11 +493,13 @@ describe("createPipelineStreamHandler", () => {
     res2.body?.cancel();
   });
 
-  it("cleans up resources when pushStatus fails during heartbeat poll", async () => {
+  it("sends error SSE event but keeps stream alive when pushStatus fails during heartbeat poll", async () => {
     const initialData = { workers: [] };
+    const recoveredData = { workers: [{ name: "recovered" }] };
     mockGetStatus
       .mockResolvedValueOnce(makeStatusResponse(initialData))
-      .mockRejectedValueOnce(new Error("poll failure"));
+      .mockRejectedValueOnce(new Error("poll failure"))
+      .mockResolvedValueOnce(makeStatusResponse(recoveredData));
 
     const handler = createPipelineStreamHandler(makeConfig());
     const res = await handler();
@@ -506,18 +508,28 @@ describe("createPipelineStreamHandler", () => {
     await reader.read(); // initial status
     await flushAsync();
 
-    // Trigger the heartbeat poll which will reject
+    // Trigger the heartbeat poll which will reject — pushStatus catches
+    // internally and sends an error SSE event, so the stream stays open.
     await vi.advanceTimersByTimeAsync(10_000);
 
-    // cleanup() closes the watcher and stops intervals, but does NOT close
-    // the stream controller — the stream stays open but idle.
-    expect(mockWatcher.close).toHaveBeenCalled();
+    // Read the error event that pushStatus sent
+    const { value: errChunk } = await reader.read();
+    const errText = new TextDecoder().decode(errChunk);
+    const errParsed = JSON.parse(errText.replace("data: ", "").trim());
+    expect(errParsed.data).toBeNull();
+    expect(errParsed.error).toBe("Failed to read status");
 
-    // Subsequent polls should not fire (interval cleared by cleanup)
-    mockGetStatus.mockResolvedValueOnce(makeStatusResponse({ workers: [{ name: "late" }] }));
+    // Stream is still alive — watcher should NOT have been closed
+    expect(mockWatcher.close).not.toHaveBeenCalled();
+
+    // Subsequent polls still fire since cleanup was not called
     await vi.advanceTimersByTimeAsync(10_000);
-    // Only 2 calls: initial + the failed poll — no third call
-    expect(mockGetStatus).toHaveBeenCalledTimes(2);
+    expect(mockGetStatus).toHaveBeenCalledTimes(3);
+
+    const { value } = await reader.read();
+    const text = new TextDecoder().decode(value);
+    const parsed = JSON.parse(text.replace("data: ", "").trim());
+    expect(parsed.data).toEqual(recoveredData);
     reader.cancel();
   });
 
