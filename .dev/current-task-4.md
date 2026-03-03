@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add component tests for HealthSparkline, TaskVelocityChart, and ProjectDriverDashboard
+## [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch
 **Status:** completed
-**Started:** 2026-03-03 18:39
+**Started:** 2026-03-03 18:54
 **Completed:** 2026-03-03
-**Branch:** dev/add-component-tests-for-healthsparkline-
+**Branch:** dev/add-shell-unit-tests-for-sync-runnersh-g
 **Worker:** 4
 
 ### Changes

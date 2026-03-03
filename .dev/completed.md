@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch | merged to main | 10m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for auth-refresh.sh token lifecycle | merged to main | 6m | success |
 | 2026-03-03 | [TEST] Add unit tests for admin skynet-config.ts configuration module | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for start-dev.sh server lifecycle management | merged to main | 7m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [INFRA] Bulk-archive resolved failed-task rows older than 7 days | merged to main | 4m | success |
 | 2026-03-03 | [INFRA] Clean up stale dev/* branches from failed LLM task attempts | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Normalize blocked_by title references to strip backticks before DB resolution | merged to main | 5m | success |
-| 2026-03-03 | [TEST] Add MissionDashboard LLM selector component tests | merged to main | 2m | success |

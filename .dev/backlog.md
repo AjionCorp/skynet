@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch — Create `tests/unit/sync-runner.test.sh`. Test guard paths: undefined `SKYNET_SYNC_ENDPOINTS` exits 0 with warning, non-array exits 0, empty array exits 0. Test lock acquisition prevents concurrent runs. Test endpoint iteration constructs correct curl URLs from `SKYNET_DEV_SERVER_URL` + endpoint path. Source `scripts/_config.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/sync-runner.test.sh`.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
