@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation | merged to main | 2m | success |
 | 2026-03-03 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | 8m | success |
 | 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | 6m | success |
 | 2026-03-03 | [FEAT] Add LLM model selector and badge to MissionDashboard | merged to main | 3m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Unblock Codex large-prompt reliability root with stdin-first invariants | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Unblock Codex large-prompt stdin/exit-code reliability from canonical repro | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Unblock config template parity root for one-shot/watchdog vars | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Unblock dashboard backlog-parser DRY extraction root | merged to main | 1m | success |

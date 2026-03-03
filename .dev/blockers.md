@@ -114,34 +114,42 @@
 
 ## Milestone: LLM Pipeline Running Clean
 
-**2026-03-03**: After 12+ consecutive LLM failures, the ultra-precise 5-task decomposition broke the cycle. 4 of 5 tasks completed or in-progress within a single pipeline session:
-- Tasks 1–3 (type → env var → handlers) merged to main successfully on first attempt
-- Task 4 (shell helper) was a phantom completion — reimplemented as task 907
-- Task 5 (UI selector) claimed by Worker 1, actively in progress
-Key enablers: exact file-scope constraints, additive-only optional fields, mandatory `git pull origin main`, embedded "DO NOT touch" guardrails, and project-driver DB-level blocked_by resolution fixes mid-session.
+**2026-03-03**: After 12+ consecutive LLM failures, the ultra-precise 5-task decomposition broke the cycle. 4 of 5 core tasks merged to main:
+- Task 1 (LlmConfig type) — commit d143fb3
+- Task 2 (SKYNET_CLAUDE_MODEL + --model flag) — commit e895eb9
+- Task 3 (handler persistence) — commit 76a237c
+- Task 5 (UI selector + badge) — commit c4cfab9
+- Task 4 (shell helper) — phantom completion detected, reimplemented as task 907, Worker 1 actively coding
+Key enablers: exact file-scope constraints, additive-only optional fields, mandatory `git pull origin main`, embedded "DO NOT touch" guardrails.
 
 ## Mission Status
 
-**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 3/5 tasks merged, 3/5 goals partially met, 3/6 success criteria met.
+**MISSION: LLM Provider Selection in Mission Admin** (started 2026-02-25). 4/5 core tasks merged, 4/5 goals met or partially met, 4/6 success criteria met.
 
 **Completed work on main**:
 - `LlmConfig` type + `MissionConfig.llmConfigs` + `MissionSummary.llmConfig` in `types.ts` (task 1, commit d143fb3)
 - `SKYNET_CLAUDE_MODEL` env var in `_config.sh` + `--model` flag in `agents/claude.sh` (task 2, commit e895eb9)
 - Handler persistence: `missions.ts`, `mission-detail.ts`, `mission-assignments.ts` accept/persist/return `llmConfig` (task 3, commit 76a237c)
+- UI selector dropdown + model badge in `MissionDashboard.tsx` (task 5, commit c4cfab9)
 
 **In progress**:
-5. UI selector dropdown + model badge in `MissionDashboard.tsx` — Worker 1 actively coding
+4. Shell helper `_get_mission_llm_config()` + worker threading — Worker 1 actively coding
 
-**Remaining backlog** (1 task):
-4. Shell helper `_get_mission_llm_config()` + worker threading — task 907 pending (regen after phantom completion)
+**Remaining backlog** (8 tasks):
+- Task-fixer LLM threading (blocked by task 4)
+- Default "auto" pre-selection (criterion #4)
+- Shell regression test, handler tests, component tests
+- blocked_by backtick normalization fix
+- Stale branch cleanup
+- Mission completion declaration
 
 **Progress by goal**:
-- Goal 1 (UI selector): Worker 1 actively implementing
+- Goal 1 (UI selector): DONE — commit c4cfab9
 - Goal 2 (persist per-mission config): DONE — handlers accept, store, and return llmConfig
-- Goal 3 (pass config to worker pipeline): env var + `--model` flag wired; per-mission threading needs task 907
-- Goal 4 (support Claude model tiers): type definitions ready, UI in progress
-- Goal 5 (display on dashboard): Worker 1 actively implementing
+- Goal 3 (pass config to worker pipeline): env var + `--model` flag wired; per-mission threading needs shell helper
+- Goal 4 (support Claude model tiers): DONE — type definitions + UI dropdown with Opus/Sonnet/Haiku support
+- Goal 5 (display on dashboard): DONE — model badge on mission cards + LLM config panel
 
-**Success criteria met**: (2) model saved and persisted, (3) workers use selected LLM via `SKYNET_CLAUDE_MODEL`, (6) `pnpm typecheck` passes clean.
-**Success criteria in progress**: (1) admin dropdown — Worker 1 coding, (5) mission detail shows LLM — Worker 1 coding.
-**Success criteria pending**: (4) default model pre-selected — needs task 907 + UI confirmation.
+**Success criteria met**: (1) admin dropdown exists, (2) model saved and persisted, (5) mission detail shows LLM, (6) `pnpm typecheck` passes clean.
+**Success criteria in progress**: (3) workers use selected LLM — needs `_get_mission_llm_config` shell helper (Worker 1 active).
+**Success criteria pending**: (4) default model pre-selected — backlog task ready.
