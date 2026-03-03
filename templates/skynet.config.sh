@@ -131,6 +131,7 @@ export SKYNET_CLAUDE_BIN="claude"                              # Path to Claude 
 # Workers run in isolated git worktrees — they cannot access files outside the project.
 # To disable (interactive mode only): SKYNET_CLAUDE_FLAGS="--print"
 export SKYNET_CLAUDE_FLAGS="--print --dangerously-skip-permissions"
+export SKYNET_CLAUDE_MODEL=""              # Optional: pin a model (default: claude's default)
 
 # ---- Agent Plugin ----
 # Which AI agent to use. Built-in: "auto", "claude", "codex"

@@ -6,7 +6,7 @@
 #   agent_run "prompt" "log" — runs the agent, returns exit code
 #
 # Expects these env vars (set by _config.sh):
-#   SKYNET_CLAUDE_BIN, SKYNET_CLAUDE_FLAGS,
+#   SKYNET_CLAUDE_BIN, SKYNET_CLAUDE_FLAGS, SKYNET_CLAUDE_MODEL,
 #   SKYNET_AUTH_TOKEN_CACHE, SKYNET_AUTH_FAIL_FLAG
 
 agent_check() {
@@ -34,9 +34,13 @@ agent_check() {
 agent_run() {
   local prompt="$1"
   local log_file="${2:-/dev/null}"
+  local model_flag=""
+  if [ -n "${SKYNET_CLAUDE_MODEL:-}" ]; then
+    model_flag="--model $SKYNET_CLAUDE_MODEL"
+  fi
   unset CLAUDECODE 2>/dev/null || true
   # Pipe prompt via stdin to avoid ARG_MAX limit (~1MB on macOS).
   # printf is a shell builtin — not subject to ARG_MAX.
   # shellcheck disable=SC2086
-  { printf '%s\n' "$prompt" || true; } | _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS >> "$log_file" 2>&1
+  { printf '%s\n' "$prompt" || true; } | _agent_exec $SKYNET_CLAUDE_BIN $SKYNET_CLAUDE_FLAGS $model_flag >> "$log_file" 2>&1
 }
