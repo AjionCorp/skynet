@@ -729,21 +729,54 @@ fi
 # markers. Regenerate backlog.md from the authoritative SQLite state so the
 # markdown view matches reality. Uses the existing atomic export (tmp+mv).
 # Only runs when there's a DB and a backlog file to update.
+#
+# Two-level check:
+#   1. Quick count comparison catches most divergences cheaply.
+#   2. Per-title verification catches cases where counts coincidentally match
+#      but different tasks are claimed (e.g., Task A unclaimed + Task B claimed
+#      in the same cycle). Without this, stale [>] markers persist silently.
 {
 if [ -f "$DB_PATH" ] && [ -f "$BACKLOG" ]; then
-  # Check if any tasks were just reconciled (orphaned claims or stale fixing).
-  # Rather than tracking separate counters across error-isolated blocks, just
-  # detect if backlog.md would change — compare the pending/claimed counts in
-  # SQLite vs the markers in the current file. This is cheaper than always
-  # regenerating and catches all reconciliation paths.
   _bl_db_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='pending';" 2>/dev/null || echo "")
   _bl_db_claimed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='claimed';" 2>/dev/null || echo "")
   _bl_md_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   _bl_md_claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+
+  _bl_needs_sync=false
+  _bl_stale_count=0
+
   if [ "${_bl_db_pending:-}" != "$_bl_md_pending" ] || [ "${_bl_db_claimed:-}" != "$_bl_md_claimed" ]; then
+    # Count mismatch — definitely need to sync
+    _bl_needs_sync=true
+    # Estimate stale markers from the count surplus in backlog vs DB
+    _bl_stale_count=$(( ${_bl_md_claimed:-0} - ${_bl_db_claimed:-0} ))
+    [ "$_bl_stale_count" -lt 0 ] && _bl_stale_count=0
+  elif [ "${_bl_md_claimed:-0}" -gt 0 ]; then
+    # Counts match but there are claimed entries — verify individual titles.
+    # Get claimed titles from DB (one per line, sorted for reproducibility).
+    _bl_db_claimed_titles=$(_db "SELECT title FROM tasks WHERE status='claimed' ORDER BY title;" 2>/dev/null || true)
+    # For each [>] line in backlog.md, check if its title is actually claimed in DB.
+    while IFS= read -r _scl_line; do
+      [ -z "$_scl_line" ] && continue
+      # Extract title: "- [>] [TAG] Title — Desc | blockedBy: x" → "Title"
+      _scl_title=$(echo "$_scl_line" | sed 's/^- \[>\] \[[^]]*\] //;s/ — .*//;s/ | blockedBy:.*//')
+      [ -z "$_scl_title" ] && continue
+      # Exact whole-line match (-xF) to avoid substring false positives
+      if ! echo "$_bl_db_claimed_titles" | grep -qxF "$_scl_title"; then
+        _bl_stale_count=$((_bl_stale_count + 1))
+      fi
+    done < <(grep '^\- \[>\]' "$BACKLOG" 2>/dev/null || true)
+    [ "$_bl_stale_count" -gt 0 ] && _bl_needs_sync=true
+  fi
+
+  if $_bl_needs_sync; then
     db_export_backlog "$BACKLOG" 2>/dev/null || log "WARNING: db_export_backlog failed during stale-claim sync"
     log "Synced backlog.md markers (DB: ${_bl_db_pending} pending/${_bl_db_claimed} claimed, was: ${_bl_md_pending} pending/${_bl_md_claimed} claimed)"
     emit_event "backlog_marker_synced" "pending=${_bl_db_pending} claimed=${_bl_db_claimed} was_pending=${_bl_md_pending} was_claimed=${_bl_md_claimed}" 2>/dev/null || true
+    if [ "$_bl_stale_count" -gt 0 ]; then
+      log "Reverted ${_bl_stale_count} stale [>] claimed markers (no matching claimed task in DB)"
+      emit_event "stale_claims_reverted" "count=${_bl_stale_count}" 2>/dev/null || true
+    fi
   fi
 fi
 } || { log "Phase: backlog marker sync failed, continuing"; true; }
