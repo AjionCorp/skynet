@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for `_events.sh` event emission and file formatting
+## [INFRA] [INFRA] Add `SKYNET_CLAUDE_MODEL` env var and `--model` flag to Claude agent plugin
 **Status:** completed
-**Started:** 2026-02-25 15:32
-**Completed:** 2026-02-25
-**Branch:** dev/add-unit-tests-for-eventssh-event-emissi
+**Started:** 2026-03-03 15:28
+**Completed:** 2026-03-03
+**Branch:** dev/add-skynetclaudemodel-env-var-and---mode
 **Worker:** 2
 
 ### Changes
