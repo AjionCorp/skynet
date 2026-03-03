@@ -33,7 +33,7 @@ export function createTaskVelocityHandler(config: SkynetConfig) {
 
       // Try SQLite first
       try {
-        const db = getSkynetDB(devDir);
+        const db = getSkynetDB(devDir, { readonly: true });
         const tasks = db.getCompletedTasks(500);
         const byDate: Record<string, DateBucket> = {};
 

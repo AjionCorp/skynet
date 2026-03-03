@@ -716,13 +716,47 @@ let _instance: SkynetDB | null = null;
 let _instanceIno: bigint | number | null = null;
 let _instancePath: string | null = null;
 
+// Separate readonly singleton — never interferes with the read-write
+// connection's WAL writer lock. Safe in SQLite WAL mode where concurrent
+// readers are fully supported alongside a single writer.
+let _roInstance: SkynetDB | null = null;
+let _roInstanceIno: bigint | number | null = null;
+let _roInstancePath: string | null = null;
+
+/** Invalidate a cached instance if its dbPath or inode changed. */
+function _validateCached(
+  inst: SkynetDB | null,
+  path: string | null,
+  ino: bigint | number | null,
+  dbPath: string,
+): { stale: boolean } {
+  if (inst && path !== dbPath) return { stale: true };
+  if (inst && path === dbPath) {
+    try {
+      const currentIno = fsStatSync(dbPath).ino;
+      if (ino !== null && currentIno !== ino) return { stale: true };
+    } catch {
+      // File missing — let the constructor handle the error
+    }
+  }
+  return { stale: false };
+}
+
 export function getSkynetDB(devDir: string, opts?: { readonly?: boolean }): SkynetDB {
   const dbPath = `${devDir}/skynet.db`;
 
-  // Readonly callers get a fresh (non-cached) connection so they never
-  // interfere with the read-write singleton used by write handlers.
   if (opts?.readonly) {
-    return new SkynetDB(dbPath, { readonly: true });
+    if (_validateCached(_roInstance, _roInstancePath, _roInstanceIno, dbPath).stale) {
+      _roInstance!.close();
+      _roInstance = null;
+      _roInstanceIno = null;
+    }
+    if (!_roInstance) {
+      _roInstance = new SkynetDB(dbPath, { readonly: true });
+      _roInstancePath = dbPath;
+      try { _roInstanceIno = fsStatSync(dbPath).ino; } catch { _roInstanceIno = null; }
+    }
+    return _roInstance;
   }
 
   // SINGLETON LIMITATION: This factory caches a single SkynetDB instance keyed
@@ -731,26 +765,10 @@ export function getSkynetDB(devDir: string, opts?: { readonly?: boolean }): Skyn
   // with a different devDir will create a new instance but the old one remains
   // cached. For multi-devDir support, this would need a Map<string, SkynetDB>.
   // Currently the dashboard only serves one project at a time, so this is safe.
-  //
-  // Check if the database file's inode has changed (e.g., restored from backup).
-  // If so, close the stale connection and create a fresh one.
-  // TS-P2-1: Close stale instance when devDir changes (different dbPath)
-  if (_instance && _instancePath !== dbPath) {
-    _instance.close();
+  if (_validateCached(_instance, _instancePath, _instanceIno, dbPath).stale) {
+    _instance!.close();
     _instance = null;
     _instanceIno = null;
-  }
-  if (_instance && _instancePath === dbPath) {
-    try {
-      const currentIno = fsStatSync(dbPath).ino;
-      if (_instanceIno !== null && currentIno !== _instanceIno) {
-        _instance.close();
-        _instance = null;
-        _instanceIno = null;
-      }
-    } catch {
-      // File missing — let the constructor handle the error
-    }
   }
   if (!_instance) {
     _instance = new SkynetDB(dbPath);
@@ -764,7 +782,10 @@ export function getSkynetDB(devDir: string, opts?: { readonly?: boolean }): Skyn
   return _instance;
 }
 
-process.on("exit", () => { _instance?.close(); _instance = null; });
+process.on("exit", () => {
+  _instance?.close(); _instance = null;
+  _roInstance?.close(); _roInstance = null;
+});
 
 /** @internal — Reset singleton for tests only. */
 export function _resetSingleton() {
@@ -772,4 +793,8 @@ export function _resetSingleton() {
   _instance = null;
   _instancePath = null;
   _instanceIno = null;
+  if (_roInstance) { _roInstance.close(); }
+  _roInstance = null;
+  _roInstancePath = null;
+  _roInstanceIno = null;
 }

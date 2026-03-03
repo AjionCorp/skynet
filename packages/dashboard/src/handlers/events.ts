@@ -27,7 +27,7 @@ export function createEventsHandler(config: SkynetConfig) {
     try {
       // Prefer SQLite, fallback to file
       try {
-        const db = getSkynetDB(config.devDir);
+        const db = getSkynetDB(config.devDir, { readonly: true });
         db.countPending(); // verify DB is initialized
         const entries = db.getRecentEvents(100);
         return Response.json({ data: entries, error: null });

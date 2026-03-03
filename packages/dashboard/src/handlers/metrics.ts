@@ -17,7 +17,7 @@ export function createMetricsHandler(config: SkynetConfig) {
     const lines: string[] = [];
 
     try {
-      const db = getSkynetDB(config.devDir);
+      const db = getSkynetDB(config.devDir, { readonly: true });
       // Verify DB is initialized
       db.countPending();
 

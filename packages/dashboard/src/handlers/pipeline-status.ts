@@ -232,7 +232,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       let usingSqlite = false;
       let db: ReturnType<typeof getSkynetDB> | null = null;
       try {
-        db = getSkynetDB(devDir);
+        db = getSkynetDB(devDir, { readonly: true });
         // Verify the DB is initialized (tables exist) with a cheap query
         db.countPending();
         usingSqlite = true;

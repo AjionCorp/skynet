@@ -54,7 +54,7 @@ export function createTasksHandlers(config: SkynetConfig) {
 
       // Prefer SQLite, fallback to file
       try {
-        const db = getSkynetDB(devDir);
+        const db = getSkynetDB(devDir, { readonly: true });
         db.countPending(); // verify DB is initialized
         const activeMission = getActiveMissionSlug(devDir);
         const missionHash = requestedMission || activeMission;
