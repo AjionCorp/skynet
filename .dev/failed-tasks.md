@@ -2,32 +2,6 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
-| 2026-03-03 | [TEST] Add shell regression for `_get_mission_llm_config` helper | dev/add-shell-regression-for-getmissionllmco | typecheck failed | 0 | failed |
-| 2026-03-03 | [TEST] Add handler tests for mission LLM config persistence and retrieval | dev/add-handler-tests-for-mission-llm-config | typecheck failed | 0 | failed |
-| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper to read per-mission LLM settings | dev/add-getmissionllmconfig-shell-helper-to- | typecheck failed | 0 | failed |
-| 2026-03-03 | [INFRA] Thread mission LLM config into dev-worker and task-fixer agent invocation | dev/thread-mission-llm-config-into-dev-worke | typecheck failed | 0 | failed |
-| 2026-03-03 | [FEAT] Display assigned LLM model badge on mission cards and detail view | dev/display-assigned-llm-model-badge-on-miss | merge conflict | 0 | failed |
-| 2026-03-03 | [INFRA] Add `--model` flag support to Claude agent plugin | dev/add---model-flag-support-to-claude-agent | typecheck failed | 0 | failed |
-| 2026-03-03 | [FEAT] Make sure to use shadnc components for the admin | dev/make-sure-to-use-shadnc-components-for-t | typecheck failed | 0 | failed |
-| 2026-03-03 | [FEAT] Add LLM model selector dropdown to MissionDashboard component | dev/add-llm-model-selector-dropdown-to-missi | typecheck failed | 0 | failed |
-| 2026-03-03 | [DATA] Accept and persist LLM config in mission create and detail PUT handlers | dev/accept-and-persist-llm-config-in-mission | merge conflict | 0 | failed |
-| 2026-03-03 | [TEST] test task | dev/test-task | merge conflict | 0 | failed |
-| 2026-03-03 | [DATA] Include per-mission LLM config in missions list and detail GET responses | dev/include-per-mission-llm-config-in-missio | typecheck failed | 0 | failed |
-| 2026-03-03 | [INFRA] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in dashboard types | dev/add-llmconfig-type-and-extend-missioncon | merge conflict | 0 | failed |
-| 2026-02-26 | [INFRA] Add prompt size estimation and truncation before LLM agent invocation | dev/add-prompt-size-estimation-and-truncatio | claude exit code 125 | 0 | failed |
-| 2026-02-26 | [INFRA] Add stale backlog claim marker cleanup during watchdog reconciliation | dev/add-stale-backlog-claim-marker-cleanup-d | claude exit code 125 | 0 | failed |
-| 2026-02-26 | [TEST] Add handler unit tests for pipeline-control endpoint | dev/add-handler-unit-tests-for-pipeline-cont | claude exit code 125 | 0 | failed |
-| 2026-02-25 | [TEST] Add handler unit tests for mission-raw and pipeline-stream endpoints | dev/add-handler-unit-tests-for-mission-raw-a | claude exit code 1 | 0 | failed |
-| 2026-02-25 | [INFRA] Add per-mission backlog isolation in project-driver task generation | dev/add-per-mission-backlog-isolation-in-pro | claude exit code 1 | 0 | failed |
-| 2026-02-25 | [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | dev/add-multi-mission-cli-integration-tests- | typecheck failed post-merge | 0 | failed |
-| 2026-02-25 | [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | failed |
-| 2026-02-25 | [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | failed |
-| 2026-02-25 | [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | failed |
-| 2026-02-25 | [TEST] Add standalone unit tests for `_agent.sh` agent dispatch, timeout, and fallback selection | dev/add-standalone-unit-tests-for-agentsh-ag | worktree missing before gates | 0 | failed |
-| 2026-02-25 | [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | failed |
-| 2026-02-25 | [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | merge conflict | 0 | failed |
-| 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | failed |
-| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | fixing-2 |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | typecheck failed post-merge | 1 | fixed |
 | 2026-02-25 | [DATA] [DATA] Refresh `.dev/blockers.md` active status from canonical state and add mission-achieved celebration block | merged to main | merge conflict | 1 | fixed |
 | 2026-02-25 | [INFRA] [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | merged to main | merge conflict | 1 | fixed |
@@ -172,10 +146,36 @@
 | 2026-02-19 | [FIX] Fix SKYNET_MAX_WORKERS default mismatch between config template and watchdog | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [TEST] Add events handler unit tests and ActivityFeed component tests | merged to main | merge conflict | 1 | fixed |
 | 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 1 | fixed |
+| 2026-03-03 | [TEST] Add shell regression for `_get_mission_llm_config` helper | dev/add-shell-regression-for-getmissionllmco | typecheck failed | 0 | superseded |
+| 2026-03-03 | [TEST] Add handler tests for mission LLM config persistence and retrieval | dev/add-handler-tests-for-mission-llm-config | typecheck failed | 0 | superseded |
+| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper to read per-mission LLM settings | dev/add-getmissionllmconfig-shell-helper-to- | typecheck failed | 0 | superseded |
+| 2026-03-03 | [INFRA] Thread mission LLM config into dev-worker and task-fixer agent invocation | dev/thread-mission-llm-config-into-dev-worke | typecheck failed | 0 | superseded |
+| 2026-03-03 | [FEAT] Display assigned LLM model badge on mission cards and detail view | dev/display-assigned-llm-model-badge-on-miss | merge conflict | 0 | superseded |
+| 2026-03-03 | [INFRA] Add `--model` flag support to Claude agent plugin | dev/add---model-flag-support-to-claude-agent | typecheck failed | 0 | superseded |
+| 2026-03-03 | [FEAT] Make sure to use shadnc components for the admin | dev/make-sure-to-use-shadnc-components-for-t | typecheck failed | 0 | superseded |
+| 2026-03-03 | [FEAT] Add LLM model selector dropdown to MissionDashboard component | dev/add-llm-model-selector-dropdown-to-missi | typecheck failed | 0 | superseded |
+| 2026-03-03 | [DATA] Accept and persist LLM config in mission create and detail PUT handlers | dev/accept-and-persist-llm-config-in-mission | merge conflict | 0 | superseded |
+| 2026-03-03 | [TEST] test task | dev/test-task | merge conflict | 0 | superseded |
+| 2026-03-03 | [DATA] Include per-mission LLM config in missions list and detail GET responses | dev/include-per-mission-llm-config-in-missio | typecheck failed | 0 | superseded |
+| 2026-03-03 | [INFRA] Add `LlmConfig` type and extend `MissionConfig`/`MissionSummary` in dashboard types | dev/add-llmconfig-type-and-extend-missioncon | merge conflict | 0 | superseded |
+| 2026-02-26 | [INFRA] Add prompt size estimation and truncation before LLM agent invocation | dev/add-prompt-size-estimation-and-truncatio | claude exit code 125 | 0 | superseded |
+| 2026-02-26 | [INFRA] Add stale backlog claim marker cleanup during watchdog reconciliation | dev/add-stale-backlog-claim-marker-cleanup-d | claude exit code 125 | 0 | superseded |
 | 2026-02-26 | [INFRA] Auto-supersede stale `status=failed` rows when canonical root is already merged | dev/auto-supersede-stale-statusfailed-rows-w | claude exit code 125 | 0 | superseded |
+| 2026-02-26 | [TEST] Add handler unit tests for pipeline-control endpoint | dev/add-handler-unit-tests-for-pipeline-cont | claude exit code 125 | 0 | superseded |
 | 2026-02-25 | [TEST] Add init/setup-agents end-to-end regression for zero-to-autonomy bootstrap | dev/add-initsetup-agents-end-to-end-regressi | typecheck failed | 0 | superseded |
+| 2026-02-25 | [TEST] Add handler unit tests for mission-raw and pipeline-stream endpoints | dev/add-handler-unit-tests-for-mission-raw-a | claude exit code 1 | 0 | superseded |
+| 2026-02-25 | [INFRA] Add per-mission backlog isolation in project-driver task generation | dev/add-per-mission-backlog-isolation-in-pro | claude exit code 1 | 0 | superseded |
 | 2026-02-25 | [DATA] Surface failed-row reconciliation counters in CLI/dashboard status JSON | dev/surface-failed-row-reconciliation-counte | claude exit code 1 | 0 | superseded |
+| 2026-02-25 | [TEST] Add multi-mission CLI integration tests for mission create, switch, and concurrent status | dev/add-multi-mission-cli-integration-tests- | typecheck failed post-merge | 0 | superseded |
+| 2026-02-25 | [INFRA] Harden worktree lifecycle to prevent "worktree missing before gates" failures | dev/harden-worktree-lifecycle-to-prevent-wor | merge conflict | 0 | superseded |
+| 2026-02-25 | [FIX] Strip duplicate tag prefixes from project-driver task title reconciliation | dev/strip-duplicate-tag-prefixes-from-projec | merge conflict | 0 | superseded |
+| 2026-02-25 | [TEST] Add standalone unit tests for `_worktree.sh` setup, cleanup, and stale detection | dev/add-standalone-unit-tests-for-worktreesh | typecheck failed | 0 | superseded |
 | 2026-02-25 | [TEST] Add unit tests for `_locks.sh` atomic locking and merge mutex | dev/add-unit-tests-for-lockssh-atomic-lockin | merge conflict | 0 | superseded |
+| 2026-02-25 | [TEST] Add standalone unit tests for `_agent.sh` agent dispatch, timeout, and fallback selection | dev/add-standalone-unit-tests-for-agentsh-ag | worktree missing before gates | 0 | superseded |
+| 2026-02-25 | [INFRA] Add watchdog stale-claim recovery to unclaim abandoned [>] backlog markers | dev/backlog-markers | worktree missing before gates | 0 | superseded |
+| 2026-02-25 | [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | merge conflict | 0 | superseded |
+| 2026-02-25 | [FIX] [FIX] Separate `rate_limits` write path from read-only DB access | dev/separate-ratelimits-write-path-from-read | typecheck failed | 0 | superseded |
+| 2026-02-25 | [INFRA] [INFRA] Complete echo agent dry-run lifecycle in `scripts/agents/echo.sh` | dev/complete-echo-agent-dry-run-lifecycle-in | worktree missing before gates | 0 | superseded |
 | 2026-02-20 | [FEAT] Add `echo` agent plugin for pipeline dry-run testing | dev/add-echo-agent-plugin-for-pipeline-dry-r | typecheck failed | 0 | superseded |
 | 2026-02-20 | [FIX] Fix duplicate Activity icon for events page in admin navigation | dev/fix-duplicate-activity-icon-for-events-p | typecheck failed | 0 | superseded |
 | 2026-02-20 | [TEST] Add E2E tests for `skynet stop`, `skynet pause`/`resume`, and remaining CLI smoke tests | dev/add-e2e-tests-for-skynet-stop-skynet-pau | typecheck failed after fix attempt 3 | 3 | superseded |

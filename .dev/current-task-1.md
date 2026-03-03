@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] [FEAT] Add LLM model selector and badge to MissionDashboard
+## [INFRA] [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation
 **Status:** completed
-**Started:** 2026-03-03 15:40
+**Started:** 2026-03-03 15:46
 **Completed:** 2026-03-03
-**Branch:** dev/add-llm-model-selector-and-badge-to-miss
+**Branch:** dev/add-getmissionllmconfig-shell-helper-and
 **Worker:** 1
 
 ### Changes
