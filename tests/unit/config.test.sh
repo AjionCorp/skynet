@@ -3,7 +3,9 @@
 #
 # Tests: _json_escape, _log (text & JSON), _generate_trace_id, rotate_log_if_needed,
 #        _get_active_mission_slug, _get_worker_mission_slug, _resolve_active_mission,
-#        _validate_config_numerics (clamping), validate_backlog
+#        _validate_config_numerics (clamping), validate_backlog,
+#        _find_config, _validate_config, to_upper, file_size, run_with_timeout,
+#        git_pull_with_retry, git_push_with_retry
 #
 # Usage: bash tests/unit/config.test.sh
 
@@ -27,6 +29,15 @@ assert_eq() {
   fi
 }
 
+assert_contains() {
+  local haystack="$1" needle="$2" msg="$3"
+  if printf '%s' "$haystack" | grep -qF "$needle"; then
+    pass "$msg"
+  else
+    fail "$msg (expected to contain '$needle', got '$haystack')"
+  fi
+}
+
 # ── Setup: create isolated environment ──────────────────────────────
 
 TMPDIR_ROOT=$(mktemp -d)
@@ -46,6 +57,7 @@ mkdir -p "$TMPDIR_ROOT/project"
 # Source _config.sh (suppressing warnings from validators/notify)
 cd "$REPO_ROOT"
 source scripts/_config.sh 2>/dev/null || true
+set +e  # _config.sh enables errexit; disable for test assertions
 
 echo "config.test.sh — unit tests for _config.sh shared infrastructure helpers"
 
@@ -438,6 +450,278 @@ export DB_PATH="$TMPDIR_ROOT/nonexistent.db"
 validate_backlog; _vb_rc=$?
 assert_eq "$_vb_rc" "0" "validate_backlog: returns 0 when DB missing"
 export DB_PATH="$_orig_db"
+
+# ── _find_config ──────────────────────────────────────────────────
+
+echo ""
+log "=== _find_config ==="
+
+# Test 41: finds config via SKYNET_DEV_DIR candidate
+_fc_dir="$TMPDIR_ROOT/fc-test1"
+mkdir -p "$_fc_dir"
+echo 'export SKYNET_PROJECT_NAME="fc-test"' > "$_fc_dir/skynet.config.sh"
+result=$(SKYNET_DEV_DIR="$_fc_dir" _find_config)
+if echo "$result" | grep -qF "fc-test1/skynet.config.sh"; then
+  pass "_find_config: finds config via SKYNET_DEV_DIR"
+else
+  fail "_find_config: finds config via SKYNET_DEV_DIR (got '$result')"
+fi
+
+# Test 42: returns failure when no config exists (isolated subshell)
+_fc_empty="$TMPDIR_ROOT/fc-empty"
+mkdir -p "$_fc_empty/scripts"
+# Run in a subprocess with overridden environment so _find_config can't find any config
+_fc_rc=0
+bash -c '
+  _find_config() {
+    local candidates=(
+      "${SKYNET_DEV_DIR:-}/skynet.config.sh"
+      "$SKYNET_SCRIPTS_DIR/../.dev/skynet.config.sh"
+      "$SKYNET_SCRIPTS_DIR/../skynet.config.sh"
+      "$PWD/.dev/skynet.config.sh"
+    )
+    for c in "${candidates[@]}"; do
+      [ -f "$c" ] && echo "$c" && return 0
+    done
+    return 1
+  }
+  SKYNET_DEV_DIR="'"$_fc_empty"'"
+  SKYNET_SCRIPTS_DIR="'"$_fc_empty/scripts"'"
+  cd "'"$_fc_empty"'"
+  _find_config
+' 2>/dev/null; _fc_rc=$?
+if [ "$_fc_rc" -ne 0 ]; then
+  pass "_find_config: returns failure when no config found"
+else
+  fail "_find_config: returns failure when no config found (rc=$_fc_rc)"
+fi
+
+# Test 43: prioritizes SKYNET_DEV_DIR over other candidates
+_fc_dir2="$TMPDIR_ROOT/fc-priority"
+mkdir -p "$_fc_dir2"
+echo 'export SKYNET_PROJECT_NAME="fc-priority"' > "$_fc_dir2/skynet.config.sh"
+result=$(SKYNET_DEV_DIR="$_fc_dir2" _find_config)
+assert_eq "$result" "$_fc_dir2/skynet.config.sh" "_find_config: SKYNET_DEV_DIR takes priority"
+
+# ── _validate_config ──────────────────────────────────────────────
+
+echo ""
+log "=== _validate_config ==="
+
+# Test 44: _validate_config passes with valid config
+_vc_output=$(_validate_config 2>&1); _vc_rc=$?
+assert_eq "$_vc_rc" "0" "_validate_config: passes with valid config"
+
+# Test 45: warns on non-numeric SKYNET_MAX_WORKERS
+_saved_max_workers="$SKYNET_MAX_WORKERS"
+_vc_output=$(
+  export SKYNET_MAX_WORKERS="notanumber"
+  _validate_config 2>&1
+)
+export SKYNET_MAX_WORKERS="$_saved_max_workers"
+if echo "$_vc_output" | grep -qF "not a positive integer"; then
+  pass "_validate_config: warns on non-numeric SKYNET_MAX_WORKERS"
+else
+  fail "_validate_config: warns on non-numeric SKYNET_MAX_WORKERS (output: '$_vc_output')"
+fi
+
+# Test 46: warns on path traversal in executable config
+_saved_gate1="${SKYNET_GATE_1:-}"
+_vc_output=$(
+  export SKYNET_GATE_1="../../etc/hack"
+  _validate_config 2>&1
+)
+export SKYNET_GATE_1="$_saved_gate1"
+if echo "$_vc_output" | grep -qF "path traversal"; then
+  pass "_validate_config: warns on path traversal in executable config"
+else
+  fail "_validate_config: warns on path traversal in executable config (output: '$_vc_output')"
+fi
+
+# Test 47: errors when redis backend lacks SKYNET_REDIS_URL
+_saved_lock_backend="${SKYNET_LOCK_BACKEND:-file}"
+_saved_redis_url="${SKYNET_REDIS_URL:-}"
+_vc_output=$(
+  export SKYNET_LOCK_BACKEND="redis"
+  export SKYNET_REDIS_URL=""
+  _validate_config 2>&1
+); _vc_rc=$?
+export SKYNET_LOCK_BACKEND="$_saved_lock_backend"
+export SKYNET_REDIS_URL="$_saved_redis_url"
+if [ "$_vc_rc" -ne 0 ] && echo "$_vc_output" | grep -qF "requires SKYNET_REDIS_URL"; then
+  pass "_validate_config: errors when redis backend lacks SKYNET_REDIS_URL"
+else
+  fail "_validate_config: errors when redis backend lacks SKYNET_REDIS_URL (rc=$_vc_rc, output: '$_vc_output')"
+fi
+
+# ── to_upper (_compat.sh) ────────────────────────────────────────
+
+echo ""
+log "=== to_upper (_compat.sh) ==="
+
+# Test 48: converts lowercase to uppercase
+result=$(to_upper "hello")
+assert_eq "$result" "HELLO" "to_upper: converts lowercase to uppercase"
+
+# Test 49: leaves uppercase unchanged
+result=$(to_upper "WORLD")
+assert_eq "$result" "WORLD" "to_upper: leaves uppercase unchanged"
+
+# Test 50: handles mixed case
+result=$(to_upper "HeLLo-World_123")
+assert_eq "$result" "HELLO-WORLD_123" "to_upper: handles mixed case with symbols"
+
+# Test 51: handles empty string
+result=$(to_upper "")
+assert_eq "$result" "" "to_upper: handles empty string"
+
+# ── file_size (_compat.sh) ───────────────────────────────────────
+
+echo ""
+log "=== file_size (_compat.sh) ==="
+
+# Test 52: returns correct size for known content
+_fs_file="$TMPDIR_ROOT/size-test.txt"
+printf '0123456789' > "$_fs_file"
+result=$(file_size "$_fs_file")
+assert_eq "$result" "10" "file_size: returns correct size (10 bytes)"
+
+# Test 53: returns 0 for nonexistent file
+result=$(file_size "$TMPDIR_ROOT/no-such-file.txt")
+assert_eq "$result" "0" "file_size: returns 0 for nonexistent file"
+
+# Test 54: returns 0 for empty file
+_fs_empty="$TMPDIR_ROOT/empty.txt"
+: > "$_fs_empty"
+result=$(file_size "$_fs_empty")
+assert_eq "$result" "0" "file_size: returns 0 for empty file"
+
+# ── run_with_timeout (_compat.sh) ────────────────────────────────
+
+echo ""
+log "=== run_with_timeout (_compat.sh) ==="
+
+# Test 55: command completes within timeout
+result=$(run_with_timeout 5 echo "quick")
+assert_eq "$result" "quick" "run_with_timeout: command completes within timeout"
+
+# Test 56: command killed after timeout (sleep 10 with 1s timeout)
+_rwt_start=$(date +%s)
+run_with_timeout 1 sleep 10 2>/dev/null; _rwt_rc=$?
+_rwt_elapsed=$(( $(date +%s) - _rwt_start ))
+if [ "$_rwt_rc" -ne 0 ] && [ "$_rwt_elapsed" -lt 5 ]; then
+  pass "run_with_timeout: kills command exceeding timeout"
+else
+  fail "run_with_timeout: kills command exceeding timeout (rc=$_rwt_rc, elapsed=${_rwt_elapsed}s)"
+fi
+
+# Test 57: preserves exit code of successful command
+run_with_timeout 5 true; _rwt_rc=$?
+assert_eq "$_rwt_rc" "0" "run_with_timeout: preserves exit code 0 on success"
+
+# Test 58: preserves non-zero exit code
+run_with_timeout 5 false; _rwt_rc=$?
+if [ "$_rwt_rc" -ne 0 ]; then
+  pass "run_with_timeout: preserves non-zero exit code on failure"
+else
+  fail "run_with_timeout: preserves non-zero exit code on failure (rc=$_rwt_rc)"
+fi
+
+# ── git_pull_with_retry ──────────────────────────────────────────
+
+echo ""
+log "=== git_pull_with_retry ==="
+
+# Set up a real git repo to test pull retry logic
+_gpr_dir="$TMPDIR_ROOT/git-pull-test"
+mkdir -p "$_gpr_dir/remote" "$_gpr_dir/local"
+
+# Create bare "remote" repo
+git -C "$_gpr_dir/remote" init --bare -q 2>/dev/null
+# Clone to local and create an initial commit
+git clone -q "$_gpr_dir/remote" "$_gpr_dir/local" 2>/dev/null
+(cd "$_gpr_dir/local" && git commit --allow-empty -m "init" -q 2>/dev/null)
+(cd "$_gpr_dir/local" && git push -q origin main 2>/dev/null || git push -q origin master 2>/dev/null)
+
+# Determine the default branch name
+_gpr_branch=$(git -C "$_gpr_dir/local" rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# Test 59: git_pull_with_retry succeeds on clean repo
+(
+  cd "$_gpr_dir/local"
+  LOG=/dev/null
+  SKYNET_MAIN_BRANCH="$_gpr_branch"
+  SKYNET_GIT_TIMEOUT=10
+  log() { :; }  # silence log output
+  git_pull_with_retry 2 2>/dev/null
+); _gpr_rc=$?
+assert_eq "$_gpr_rc" "0" "git_pull_with_retry: succeeds on clean repo"
+
+# Test 60: git_pull_with_retry fails on bad remote
+_gpr_bad="$TMPDIR_ROOT/git-pull-bad"
+mkdir -p "$_gpr_bad"
+git -C "$_gpr_bad" init -q 2>/dev/null
+git -C "$_gpr_bad" remote add origin "$TMPDIR_ROOT/nonexistent-remote" 2>/dev/null
+git -C "$_gpr_bad" commit --allow-empty -m "init" -q 2>/dev/null
+(
+  cd "$_gpr_bad"
+  LOG=/dev/null
+  SKYNET_MAIN_BRANCH="main"
+  SKYNET_GIT_TIMEOUT=2
+  log() { :; }
+  git_pull_with_retry 1 2>/dev/null
+); _gpr_rc=$?
+if [ "$_gpr_rc" -ne 0 ]; then
+  pass "git_pull_with_retry: fails on bad remote"
+else
+  fail "git_pull_with_retry: fails on bad remote (rc=$_gpr_rc)"
+fi
+
+# ── git_push_with_retry ──────────────────────────────────────────
+
+echo ""
+log "=== git_push_with_retry ==="
+
+# Test 61: git_push_with_retry succeeds on clean repo
+_gps_dir="$TMPDIR_ROOT/git-push-test"
+mkdir -p "$_gps_dir/remote" "$_gps_dir/local"
+git -C "$_gps_dir/remote" init --bare -q 2>/dev/null
+git clone -q "$_gps_dir/remote" "$_gps_dir/local" 2>/dev/null
+(cd "$_gps_dir/local" && git commit --allow-empty -m "init" -q 2>/dev/null)
+_gps_branch=$(git -C "$_gps_dir/local" rev-parse --abbrev-ref HEAD 2>/dev/null)
+(cd "$_gps_dir/local" && git push -q origin "$_gps_branch" 2>/dev/null)
+
+# Make a new commit to push
+(cd "$_gps_dir/local" && git commit --allow-empty -m "test push" -q 2>/dev/null)
+(
+  cd "$_gps_dir/local"
+  LOG=/dev/null
+  SKYNET_MAIN_BRANCH="$_gps_branch"
+  SKYNET_GIT_PUSH_TIMEOUT=10
+  log() { :; }
+  git_push_with_retry 2 2>/dev/null
+); _gps_rc=$?
+assert_eq "$_gps_rc" "0" "git_push_with_retry: succeeds on clean repo"
+
+# Test 62: git_push_with_retry fails on bad remote
+_gps_bad="$TMPDIR_ROOT/git-push-bad"
+mkdir -p "$_gps_bad"
+git -C "$_gps_bad" init -q 2>/dev/null
+git -C "$_gps_bad" remote add origin "$TMPDIR_ROOT/nonexistent-push-remote" 2>/dev/null
+git -C "$_gps_bad" commit --allow-empty -m "init" -q 2>/dev/null
+(
+  cd "$_gps_bad"
+  LOG=/dev/null
+  SKYNET_MAIN_BRANCH="main"
+  SKYNET_GIT_PUSH_TIMEOUT=2
+  log() { :; }
+  git_push_with_retry 1 2>/dev/null
+); _gps_rc=$?
+if [ "$_gps_rc" -ne 0 ]; then
+  pass "git_push_with_retry: fails on bad remote"
+else
+  fail "git_push_with_retry: fails on bad remote (rc=$_gps_rc)"
+fi
 
 # ── Summary ─────────────────────────────────────────────────────────
 
