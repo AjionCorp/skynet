@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell unit tests for feature-validator.sh validation logic — Create `tests/unit/feature-validator.test.sh`. Test `validate_feature` for passing and failing cases: verify typecheck gate runs, verify exit codes for pass/fail, verify log output format. Source `scripts/_config.sh` then `scripts/feature-validator.sh`. Use the same test harness pattern as `tests/unit/config.test.sh`. Run `bash -n tests/unit/feature-validator.test.sh`.
 - [>] [INFRA] Add comprehensive vitest configuration for dashboard handler tests — Verify `packages/dashboard/vitest.config.ts` or `packages/dashboard/package.json` has proper vitest setup, ensure `pnpm test` runs all `*.test.ts` files in `packages/dashboard/src/handlers/`, add a CI-compatible test script if missing. Run `pnpm typecheck` and `pnpm --filter @ajioncorp/skynet test` to verify.
 
 # Recent checked history (last 30)

@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [TEST] Add shell unit tests for feature-validator.sh validation logic | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _worktree.sh setup, cleanup, and stale detection | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _skills.sh skill dispatch | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _notify.sh notification helpers | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [INFRA] Complete echo agent dry-run lifecycle in scripts/agents/echo.sh | merged to main | 0m | success |
 | 2026-03-03 | [INFRA] Sync backlog.md claimed markers with DB state during watchdog reconciliation | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Separate rate_limits write path from read-only DB access | merged to main | 0m | success |
-| 2026-03-03 | [DATA] Refresh blockers.md Active section to match current resolved state | merged to main | 9m | success |
