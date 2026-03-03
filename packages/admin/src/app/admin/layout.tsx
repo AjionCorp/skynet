@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@ajioncorp/skynet/components";
 import { Activity, Monitor, ListTodo, Database, FileText, Target, Users, ScrollText, ListOrdered, Settings } from "lucide-react";
@@ -20,6 +20,7 @@ const pages = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
 
   return (
     <AdminLayout
@@ -28,6 +29,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       backHref="/"
       backLabel="Skynet"
       linkComponent={Link}
+      onNavigate={(href) => router.push(href)}
     >
       {children}
     </AdminLayout>

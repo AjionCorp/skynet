@@ -26,3 +26,5 @@ export type { EventsDashboardProps } from "./EventsDashboard";
 export { ProjectDriverDashboard } from "./ProjectDriverDashboard";
 export type { ProjectDriverDashboardProps } from "./ProjectDriverDashboard";
 export { TaskVelocityChart } from "./TaskVelocityChart";
+export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
+export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
