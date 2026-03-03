@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add MissionDashboard LLM selector component tests
+## [FIX] Remove stale .dev/ database artifacts from failed SQLite migration
 **Status:** completed
-**Started:** 2026-03-03 15:57
+**Started:** 2026-03-03 17:27
 **Completed:** 2026-03-03
-**Branch:** dev/add-missiondashboard-llm-selector-compon
+**Branch:** dev/remove-stale-dev-database-artifacts-from
 **Worker:** 3
 
 ### Changes

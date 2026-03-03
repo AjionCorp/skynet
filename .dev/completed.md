@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-03 | [FIX] Remove stale .dev/ database artifacts from failed SQLite migration | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] worker logs when merged - detailed information | merged to main | 15m | success |
 | 2026-03-03 | [INFRA] Add mission-complete idle mode to project-driver | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add shell unit test for _get_mission_llm_config helper | merged to main | 2m | success |
@@ -201,4 +202,3 @@
 | 2026-02-20 | [FIX] Restore config template parity for one-shot/watchdog vars from canonical repro | merged to main | 2m | success |
 | 2026-02-20 | [FIX] Restore config template parity for watchdog and one-shot knobs | merged to main | 1m | success |
 | 2026-02-20 | [FIX] Restore config template parity for watchdog/one-shot knobs | merged to main | 1m | success |
-| 2026-02-20 | [FIX] Restore project-driver backlog ordering convergence when checked rows appear above claims | merged to main | 1m | success |
