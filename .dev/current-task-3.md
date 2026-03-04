@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for `db_get_worker_performance` query
+## [DATA] Create `/api/admin/workers/intents` endpoint
 **Status:** completed
-**Started:** 2026-03-04 09:43
+**Started:** 2026-03-04 10:41
 **Completed:** 2026-03-04
-**Branch:** dev/add-shell-regression-for-dbgetworkerperf
+**Branch:** dev/create-apiadminworkersintents-endpoint
 **Worker:** 3
 
 ### Changes
