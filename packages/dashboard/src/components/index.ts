@@ -34,3 +34,5 @@ export { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 export type { WorkerPerformanceProfilesProps } from "./WorkerPerformanceProfiles";
 export { MissionGoalProgress } from "./MissionGoalProgress";
 export type { MissionGoalProgressProps } from "./MissionGoalProgress";
+export { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
+export type { VelocityEfficiencyPanelProps } from "./VelocityEfficiencyPanel";
