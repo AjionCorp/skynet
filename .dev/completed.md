@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add handler and route regression for mission-status LLM payload defaulting | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Keep CLI `status --json` active mission LLM projection aligned with dashboard mission-status semantics | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add Codex agent `--model` passthrough for mission-selected model | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [FIX] Add request body validation to admin API POST handlers | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add admin page render smoke tests for secondary dashboard pages | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for events, metrics, and monitoring endpoints | merged to main | 7m | success |
-| 2026-03-04 | [TEST] Add admin auth login/logout route tests | merged to main | 2m | success |

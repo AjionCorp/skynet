@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for Codex agent model flag passthrough
+## [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status
 **Status:** completed
-**Started:** 2026-03-03 21:00
+**Started:** 2026-03-03 21:05
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-regression-for-codex-agent-mod
+**Branch:** dev/centralize-mission-llm-defaultingproject
 **Worker:** 2
 
 ### Changes

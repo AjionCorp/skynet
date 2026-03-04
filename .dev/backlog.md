@@ -3,8 +3,12 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status — add one utility in `packages/dashboard/src/lib/` for deriving `{ provider, model, isDefaulted }` from mission config and reuse it in `packages/dashboard/src/handlers/mission-status.ts` and `packages/cli/src/commands/status.ts` to prevent drift.
 - [>] [TEST] Add CLI and cross-surface parity regression for active mission LLM payload — extend `packages/cli/src/commands/status.test.ts` and `packages/dashboard/src/handlers/mission-status.test.ts` fixtures to assert identical `activeMission.llmConfig` semantics for explicit model and defaulted model cases.
+- [>] [TEST] Add Codex agent `--model` passthrough regression for default-preserving behavior — add shell coverage for `scripts/agents/codex.sh` to assert `SKYNET_CODEX_MODEL` threads `--model <value>` only when non-empty and leaves invocation unchanged when unset.
+- [>] [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics — update `packages/dashboard/src/handlers/pipeline-status.ts` to emit `activeMission.llmConfig` as `{ provider, model?, isDefaulted }` using the same defaulting semantics as mission-status.
+- [ ] [TEST] Add pipeline-status route regression for defaulted vs explicit mission LLM model projection — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` and `packages/admin/src/app/api/admin/pipeline/status/route.test.ts` to assert `isDefaulted` behavior for omitted versus explicit model.
+- [ ] [INFRA] Remove stale `scripts/tests/*` references from project-driver prompt templates — update `scripts/project-driver.sh` task-format guidance to reference `tests/unit/` so generated shell-test tasks target the canonical test path.
+- [ ] [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults — add a shared explicit-vs-defaulted fixture matrix in `packages/dashboard/src/handlers/mission-status.test.ts`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and `packages/cli/src/commands/status.test.ts` to prevent projection drift across surfaces.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
