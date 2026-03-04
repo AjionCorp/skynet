@@ -3,8 +3,11 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [ ] [TEST] Add shell regression for per-mission LLM model threading across worker entrypoints — add/extend tests under `scripts/tests/` to assert `dev-worker.sh`, `task-fixer.sh`, and `codex.sh` all pass the same resolved model to agent plugins.
-- [ ] [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` so operators can verify active mission->model mapping without opening mission admin.
+- [>] [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` so operators can verify active mission->model mapping without opening mission admin.
+- [>] [FIX] Reconcile mission LLM status visibility drift across operator surfaces — in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts`, ensure status JSON includes active mission `llmConfig` (`provider`, optional `model`, and whether value is defaulted) sourced from `.dev/missions/_config.json` with safe fallback when files are missing.
+- [>] [TEST] Add cross-surface parity tests for active mission LLM projection in status JSON — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` and CLI status JSON tests to assert both surfaces return identical `activeMission` + `llmConfig` payloads for explicit model, provider-only, and default-auto scenarios.
+- [ ] [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads — in `scripts/_config.sh`, replace broad sed block capture with llmConfigs-scoped exact-slug parsing so `main` cannot consume `main-2` and malformed `_config.json` safely returns empty provider/model.
+- [ ] [TEST] Add shell regression coverage for mission LLM helper failure modes — add shell tests (under the canonical shell test harness path) validating `_get_mission_llm_config` exact-slug behavior, malformed-json fallback, and that `dev-worker.sh`/`task-fixer.sh` export only the selected provider model env var.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
