@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add API route integration tests for admin config and tasks endpoints | merged to main | 9m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for project-driver.sh backlog generation | merged to main | 14m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for migrate-to-sqlite.sh migration logic | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle | merged to main | 16m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FEAT] Make sure to use shadnc components for the admin | merged to main | 7m | success |
 | 2026-03-03 | [INFRA] Archive resolved failed-tasks.md rows older than 7 days to reduce context size | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | 0m | success |
-| 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | 0m | success |

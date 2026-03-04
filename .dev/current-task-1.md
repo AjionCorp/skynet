@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for ui-tester.sh validation flow
+## [TEST] Add API route integration tests for admin config and tasks endpoints
 **Status:** completed
-**Started:** 2026-03-03 19:17
+**Started:** 2026-03-03 19:27
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-ui-testersh-val
+**Branch:** dev/add-api-route-integration-tests-for-admi
 **Worker:** 1
 
 ### Changes
