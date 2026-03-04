@@ -12,6 +12,85 @@ import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
 
+/**
+ * Extract significant keywords from the mission Goals section.
+ * Used for mission-alignment scoring — a completed task is "aligned" if
+ * its tag or title shares significant keywords with mission goals.
+ */
+function extractMissionGoalKeywords(devDir: string, slug: string | null): Set<string> {
+  let raw = "";
+  if (slug) raw = readDevFile(devDir, `missions/${slug}.md`);
+  if (!raw) raw = readDevFile(devDir, "mission.md");
+  if (!raw) return new Set();
+
+  // Extract ## Goals section
+  const goalsMatch = raw.match(/## Goals\s*\n([\s\S]*?)(?:\n## |\n*$)/i);
+  if (!goalsMatch) return new Set();
+
+  const words = goalsMatch[1]
+    .toLowerCase()
+    .split(/\W+/)
+    .filter((w) => w.length > 3);
+  return new Set(words);
+}
+
+/**
+ * Compute mission-alignment score (0-100) for the pipeline.
+ *
+ * Formula:
+ *   - Alignment ratio (60 pts): (aligned / total completed last 24h) * 60
+ *   - Velocity positive (20 pts): any completions in last 24h
+ *   - Fix rate healthy (20 pts): self-correction rate > 50%
+ *
+ * A task is "aligned" if its tag or title shares keywords with mission Goals.
+ * Returns { score, nonAlignedCount }.
+ */
+function computeMissionAlignment(
+  completed: { date: string; task: string }[],
+  goalKeywords: Set<string>,
+  selfCorrectionRate: number,
+): { score: number; nonAlignedCount: number } {
+  if (goalKeywords.size === 0) {
+    return { score: 100, nonAlignedCount: 0 };
+  }
+
+  const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const recent = completed.filter((t) => {
+    if (!t.date) return false;
+    try { return new Date(t.date) >= dayAgo; } catch { return false; }
+  });
+
+  let alignedCount = 0;
+  for (const task of recent) {
+    const taskWords = new Set(
+      task.task.toLowerCase().split(/\W+/).filter((w) => w.length > 3)
+    );
+    // A task is aligned if any significant word matches a goal keyword
+    let aligned = false;
+    for (const word of taskWords) {
+      if (goalKeywords.has(word)) { aligned = true; break; }
+    }
+    if (aligned) alignedCount++;
+  }
+
+  const totalRecent = recent.length;
+  const nonAlignedCount = totalRecent - alignedCount;
+
+  // Alignment ratio: 60 points
+  const alignmentPts = totalRecent > 0
+    ? Math.round((alignedCount / totalRecent) * 60)
+    : 60; // No recent tasks = no penalty
+
+  // Velocity positive: 20 points if any completions in last 24h
+  const velocityPts = totalRecent > 0 ? 20 : 0;
+
+  // Fix rate healthy: 20 points if self-correction rate > 50%
+  const fixRatePts = selfCorrectionRate > 50 ? 20 : 0;
+
+  const score = Math.max(0, Math.min(100, alignmentPts + velocityPts + fixRatePts));
+  return { score, nonAlignedCount };
+}
+
 // Module-level ring buffer for health trend (persists across requests, resets on restart)
 const HEALTH_TREND_MAX = 60;
 export const healthTrendBuffer: { ts: number; score: number }[] = [];
@@ -644,6 +723,11 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         }
       }
 
+      // Mission alignment score
+      const goalKeywords = extractMissionGoalKeywords(devDir, requestedMission || activeMission);
+      const { score: missionAlignmentScore, nonAlignedCount: nonAlignedTaskCount } =
+        computeMissionAlignment(completed, goalKeywords, selfCorrectionRate);
+
       pushHealthTrend(healthScore);
 
       return Response.json({
@@ -689,6 +773,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           },
           missionState: getMissionState(devDir, requestedMission || activeMission),
           missionProgress,
+          missionAlignmentScore,
+          nonAlignedTaskCount,
           workerStats,
           pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
           watchdogRunning,

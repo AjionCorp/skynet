@@ -49,6 +49,8 @@ const MOCK_STATUS: PipelineStatus = {
   postCommitGate: { lastResult: "pass", lastCommit: "abc123", lastTime: "2024-01-01" },
   missionState: null,
   missionProgress: [],
+  missionAlignmentScore: 100,
+  nonAlignedTaskCount: 0,
   pipelinePaused: false,
   workerStats: {},
   watchdogRunning: false,

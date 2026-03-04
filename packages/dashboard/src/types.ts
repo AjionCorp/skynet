@@ -128,6 +128,8 @@ export interface PipelineStatus {
   postCommitGate: PostCommitGate;
   missionState: MissionState | null;
   missionProgress: MissionProgress[];
+  missionAlignmentScore: number;
+  nonAlignedTaskCount: number;
   pipelinePaused: boolean;
   workerStats: Record<string, WorkerPerformanceStats>;
   watchdogRunning: boolean;
