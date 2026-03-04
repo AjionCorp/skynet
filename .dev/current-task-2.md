@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Reconcile mission LLM status visibility drift across operator surfaces
+## [TEST] Add shell regression for provider-specific model env isolation
 **Status:** completed
-**Started:** 2026-03-03 20:56
+**Started:** 2026-03-03 20:58
 **Completed:** 2026-03-03
-**Branch:** dev/reconcile-mission-llm-status-visibility-
+**Branch:** dev/add-shell-regression-for-provider-specif
 **Worker:** 2
 
 ### Changes
