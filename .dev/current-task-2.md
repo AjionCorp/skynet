@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add admin page render smoke tests for core dashboard pages
+## [FIX] Add request body validation to admin API POST handlers
 **Status:** completed
-**Started:** 2026-03-03 19:30
+**Started:** 2026-03-03 19:35
 **Completed:** 2026-03-03
-**Branch:** dev/add-admin-page-render-smoke-tests-for-co
+**Branch:** dev/add-request-body-validation-to-admin-api
 **Worker:** 2
 
 ### Changes

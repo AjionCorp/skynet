@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FIX] Add request body validation to admin API POST handlers — in `packages/admin/src/app/api/admin/tasks/route.ts` and `packages/admin/src/app/api/admin/config/route.ts`, wrap `await req.json()` in try/catch returning 400 on parse failure. Add field-existence checks for required POST fields. DO NOT change success response shapes. Run `pnpm typecheck`.
 - [>] [TEST] Add admin component tests for MissionDashboard LLM config interactions — create `packages/admin/src/components/__tests__/MissionDashboard-llm.test.tsx` testing LLM provider dropdown renders, model input updates, config saves on submit, and model badge displays on cards. Mock `useSkynet()` and `fetch`. Run `pnpm typecheck`.
 - [>] [INFRA] Add structured error logging to admin API route catch blocks — in `packages/admin/src/app/api/admin/missions/route.ts` and `tasks/route.ts`, ensure all catch blocks log `console.error` with request method, path, and error message before returning `{ error }` response. DO NOT change response shapes. Run `pnpm typecheck`.
 
