@@ -4,7 +4,6 @@
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
 - [>] [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit — update `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` to include active mission `llmConfig` (provider/model) read from `.dev/_config.json`, with null-safe fallback when unset.
-- [>] [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery — extend `tests/unit/merge-helpers.test.sh` to cover (a) only `.dev/*` conflicts (recovery allowed), (b) mixed `.dev/*` + source conflicts (hard failure), and (c) only source conflicts (hard failure), asserting stable outputs and exit behavior.
 - [>] [TEST] Add worker threading regression coverage for mission LLM env application — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to assert per-mission `llmConfig` applies the correct provider model env var, clears non-selected provider vars, and leaves defaults untouched when provider is `auto` or model is empty.
 - [ ] [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests — update `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include active mission `llmConfig` from `.dev/_config.json` with null-safe fallback, and add/extend tests proving dashboard/CLI field parity.
 
