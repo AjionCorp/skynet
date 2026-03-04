@@ -38,6 +38,8 @@ export type {
   MissionConfig,
   MissionCreatorSuggestion,
   MissionCreatorResult,
+  GoalBurndownEntry,
+  GoalBurndownPoint,
 } from "./types";
 
 // Config helpers
@@ -83,6 +85,7 @@ export {
   createMissionCreatorHandler,
   createProjectDriverStatusHandler,
   createTaskVelocityHandler,
+  createGoalBurndownHandler,
 } from "./handlers";
 
 // Dashboard UI components

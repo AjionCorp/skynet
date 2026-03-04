@@ -471,6 +471,25 @@ export interface WorkerScaleResult {
   maxCount: number;
 }
 
+// ===== Goal Burndown Types =====
+
+export interface GoalBurndownPoint {
+  date: string;
+  completed: number; // cumulative completed tasks for this goal
+}
+
+export interface GoalBurndownEntry {
+  goalIndex: number;
+  goalText: string;
+  checked: boolean;
+  relatedCompleted: number;
+  relatedRemaining: number;
+  burndown: GoalBurndownPoint[];
+  velocityPerDay: number | null; // avg tasks/day over last 7 days
+  etaDate: string | null; // projected completion date (YYYY-MM-DD)
+  etaDays: number | null; // days until projected completion
+}
+
 // ===== Pipeline Explain Types =====
 
 export interface PipelineExplainState {
