@@ -624,3 +624,70 @@ validate_backlog() {
 
   return 0
 }
+
+# Build pipeline context string for worker prompt injection.
+# Shows other workers' active tasks, recent completions, and mission state.
+# Keeps output under 500 chars to avoid prompt bloat.
+# Usage: ctx=$(_build_pipeline_context "3")   # exclude worker 3 (self)
+_build_pipeline_context() {
+  local self_id="${1:-}"
+  local ctx=""
+  local line=""
+
+  # Other workers' active tasks
+  local others=""
+  for f in "$DEV_DIR"/current-task-*.md; do
+    [ -f "$f" ] || continue
+    # Extract worker number from filename
+    local wnum="${f##*current-task-}"
+    wnum="${wnum%.md}"
+    [ "$wnum" = "$self_id" ] && continue
+    # Read status and title
+    local status="" title=""
+    while IFS= read -r line; do
+      case "$line" in
+        "## "*)  title="${line#\#\# }" ;;
+        "**Status:"*) status="${line#*: }"; status="${status%%\**}" ;;
+      esac
+    done < "$f"
+    [ "$status" = "in_progress" ] && [ -n "$title" ] && others="${others}  - W${wnum}: ${title}
+"
+  done
+
+  # Last 3 completed tasks (skip header rows)
+  local recent=""
+  local count=0
+  while IFS='|' read -r _ date task _rest; do
+    # Skip header and separator rows
+    case "$date" in *Date*|*---*) continue ;; esac
+    task="${task## }"; task="${task%% }"
+    [ -z "$task" ] && continue
+    recent="${recent}  - ${task}
+"
+    count=$((count + 1))
+    [ "$count" -ge 3 ] && break
+  done < "$DEV_DIR/completed.md" 2>/dev/null
+
+  # Mission state
+  local mission_state=""
+  mission_state=$(_get_mission_state "$(_resolve_active_mission)") 2>/dev/null || true
+
+  # Assemble context (only if there's content)
+  if [ -n "$others" ] || [ -n "$recent" ]; then
+    ctx="
+## Pipeline Context
+"
+    [ -n "$others" ] && ctx="${ctx}Other workers active now:
+${others}"
+    [ -n "$recent" ] && ctx="${ctx}Recently completed:
+${recent}"
+    [ -n "$mission_state" ] && ctx="${ctx}Mission state: ${mission_state}
+"
+    # Truncate to 500 chars
+    if [ ${#ctx} -gt 500 ]; then
+      ctx="${ctx:0:497}..."
+    fi
+  fi
+
+  printf '%s' "$ctx"
+}

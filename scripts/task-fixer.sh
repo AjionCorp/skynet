@@ -371,6 +371,9 @@ case "$task_title" in
 esac
 SKILL_CONTENT="$(get_skills_for_tag "${_fixer_task_type:-}")"
 
+# Build pipeline context (other workers' tasks, recent completions)
+PIPELINE_CONTEXT="$(_build_pipeline_context "$FIXER_ID")"
+
 PROMPT="You are the task-fixer agent for the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
 A previous attempt to implement this task FAILED. Your job is to diagnose why and fix it.
@@ -403,7 +406,7 @@ $previous_diff
 If this task is genuinely impossible right now (missing API key, external dependency, etc.):
 - Write the specific blocker to $BLOCKERS with date and task name
 - Do NOT leave broken code committed
-${SKILL_CONTENT:+
+${PIPELINE_CONTEXT}${SKILL_CONTENT:+
 ## Project Skills
 
 $SKILL_CONTENT

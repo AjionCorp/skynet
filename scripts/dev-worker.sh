@@ -542,12 +542,15 @@ EOF
   fi
   log "Worktree ready at $WORKTREE_DIR"
 
+  # --- Build pipeline context (other workers' tasks, recent completions) ---
+  PIPELINE_CONTEXT="$(_build_pipeline_context "$WORKER_ID")"
+
   # --- Implementation via Claude Code (runs in isolated worktree) ---
   PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $WORKTREE_DIR.
 
 Your task: $task_title
 
-${SKYNET_WORKER_CONTEXT:-}
+${SKYNET_WORKER_CONTEXT:-}${PIPELINE_CONTEXT}
 ${SKILL_CONTENT:+
 ## Project Skills
 
