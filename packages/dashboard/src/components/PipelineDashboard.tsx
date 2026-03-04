@@ -31,6 +31,7 @@ import { ActivityFeed } from "./ActivityFeed";
 import { HealthSparkline } from "./HealthSparkline";
 import { TaskVelocityChart } from "./TaskVelocityChart";
 import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
+import { MissionGoalProgress } from "./MissionGoalProgress";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -387,6 +388,12 @@ export function PipelineDashboard() {
 
       {/* Worker Performance Profiles */}
       <WorkerPerformanceProfiles workerStats={status.workerStats} />
+
+      {/* Mission Goal Progress */}
+      <MissionGoalProgress
+        missionProgress={status.missionProgress}
+        alignmentScore={status.missionAlignmentScore}
+      />
 
       {/* Error banner */}
       {error && (
