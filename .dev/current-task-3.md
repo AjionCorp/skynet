@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Create `/api/admin/workers/intents` endpoint
+## [FEAT] Add WorkerPerformanceProfiles panel to admin Pipeline dashboard
 **Status:** completed
-**Started:** 2026-03-04 10:41
+**Started:** 2026-03-04 10:45
 **Completed:** 2026-03-04
-**Branch:** dev/create-apiadminworkersintents-endpoint
+**Branch:** dev/add-workerperformanceprofiles-panel-to-a
 **Worker:** 3
 
 ### Changes

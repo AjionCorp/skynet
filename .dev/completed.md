@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FEAT] Add WorkerPerformanceProfiles panel to admin Pipeline dashboard | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add failure pattern threshold detector and auto-INFRA task generator to `scripts/failure-analyzer.sh` | merged to main | 3m | success |
 | 2026-03-04 | [FEAT] Add WorkerIntents panel to admin Workers dashboard page | merged to main | 7m | success |
 | 2026-03-04 | [DATA] Create `/api/admin/workers/intents` endpoint | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add Codex agent `--model` passthrough regression for default-preserving behavior | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add CLI and cross-surface parity regression for active mission LLM payload | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status | merged to main | 4m | success |
-| 2026-03-04 | [TEST] Add handler and route regression for mission-status LLM payload defaulting | merged to main | 4m | success |

@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FEAT] Add WorkerPerformanceProfiles panel to admin Pipeline dashboard — add a component in `packages/dashboard/src/components/WorkerPerformanceProfiles.tsx` that reads `workerStats` from the pipeline-status API response and renders: per-worker success rate bar, average task duration, total completed/failed counts, and a sparkline of recent task outcomes. Wire it into `packages/admin/src/app/admin/pipeline/page.tsx`. Use existing charting patterns from the dashboard. Mission: Goal 10 (worker performance profiles dashboard).
 - [>] [TEST] Add unit tests for intent registry helpers in `_config.sh` — create `tests/unit/test-intent-helpers.sh` that tests: `_intent_declare` writes valid markdown row, `_intent_release` removes the worker's entry, `_intent_read_active` prunes stale entries (mock PID lock absence), `_intent_check_overlap` returns 0 on overlap and 1 on no-overlap, concurrent declares don't corrupt the file. Use the existing shell test harness pattern from `tests/unit/`. Mission: Goal 5 quality gates.
 
 # Recent checked history (last 30)
