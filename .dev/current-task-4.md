@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add end-to-end mission LLM config smoke test for admin-to-worker flow
+## [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output
 **Status:** completed
-**Started:** 2026-03-03 20:47
+**Started:** 2026-03-03 20:53
 **Completed:** 2026-03-03
-**Branch:** dev/add-end-to-end-mission-llm-config-smoke-
+**Branch:** dev/surface-assigned-mission-llm-in-pipeline
 **Worker:** 4
 
 ### Changes
