@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FIX] Re-land stale unmerged `.dev/` index recovery in merge pipeline | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell unit tests for sync-runner.sh sync lifecycle | merged to main | 3m | success |
 | 2026-03-04 | [FIX] Supersede last stale active failed-task row for resolved _merge.sh orphan fix | merged to main | 7m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for _events.sh event emission helpers | merged to main | 2m | success |
-| 2026-03-04 | [TEST] Add unit tests for handler-error.ts utility | merged to main | 2m | success |

@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults
+## [FIX] Re-land stale unmerged `.dev/` index recovery in merge pipeline
 **Status:** completed
-**Started:** 2026-03-03 21:13
+**Started:** 2026-03-03 21:24
 **Completed:** 2026-03-03
-**Branch:** dev/add-mission-statusclipipeline-status-tri
+**Branch:** dev/re-land-stale-unmerged-dev-index-recover
 **Worker:** 1
 
 ### Changes
