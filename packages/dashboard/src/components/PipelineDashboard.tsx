@@ -274,6 +274,17 @@ export function PipelineDashboard() {
       {/* Connection status indicator */}
       <div className="flex items-center gap-2">
         <h1 className="text-lg font-semibold text-white">Pipeline Dashboard</h1>
+        {status.missionState && (
+          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+            status.missionState.toUpperCase() === "ACTIVE" ? "bg-emerald-500/20 text-emerald-400" :
+            status.missionState.toUpperCase() === "PAUSED" ? "bg-amber-500/20 text-amber-400" :
+            status.missionState.toUpperCase() === "COMPLETE" ? "bg-cyan-500/20 text-cyan-400" :
+            "bg-zinc-500/20 text-zinc-400"
+          }`}>
+            <Target className="h-3 w-3" />
+            {status.missionState.toUpperCase()}
+          </span>
+        )}
         <div className="flex items-center gap-1.5" title={
           connectionStatus === 'connected' ? 'Live — receiving updates' :
           connectionStatus === 'reconnecting' ? 'Reconnecting…' : 'Disconnected'
