@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [INFRA] Add mission-alignment scoring to pipeline health calculation — in `packages/dashboard/src/handlers/pipeline-status.ts`, compute a `missionAlignmentScore` (0-100) by checking: what percentage of tasks completed in last 24h have tags that match mission goals, whether task velocity is positive, and whether fix rate > 50%. Include `missionAlignmentScore` and `nonAlignedTaskCount` in the response. In `scripts/watchdog.sh`, add alignment check that logs a warning when >30% of recent tasks don't advance the mission. Mission: Criterion #4 mission-alignment health metrics.
 - [>] [DATA] Add mission goal progress breakdown to mission-status API response — in `packages/dashboard/src/handlers/mission-status.ts`, parse each goal line from the mission file, cross-reference goal keywords with completed task titles/tags from `.dev/completed.md`, and return a `goalProgress` array with: `goalIndex`, `goalText`, `checked` (boolean), `relatedTasksCompleted` (count of tasks whose title matches goal keywords). Mission: Criterion #6 per-goal burndown + Criterion #8 system explains its own state.
 
 # Recent checked history (last 30)

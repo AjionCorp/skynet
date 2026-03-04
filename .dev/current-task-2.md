@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Build failure pattern analyzer in `scripts/failure-analyzer.sh`
+## [INFRA] Add mission-alignment scoring to pipeline health calculation
 **Status:** completed
-**Started:** 2026-03-04 09:37
+**Started:** 2026-03-04 09:43
 **Completed:** 2026-03-04
-**Branch:** dev/build-failure-pattern-analyzer-in-script
+**Branch:** dev/add-mission-alignment-scoring-to-pipelin
 **Worker:** 2
 
 ### Changes
