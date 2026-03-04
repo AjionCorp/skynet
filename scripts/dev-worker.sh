@@ -488,6 +488,20 @@ EOF
   tg "🔨 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}* starting: $task_title"
   emit_event "task_claimed" "Worker $WORKER_ID: $task_title"
 
+  # --- Intent declaration and overlap check ---
+  # Declare what code areas this task intends to modify so other workers
+  # (and the dashboard) can detect potential merge conflicts early.
+  db_declare_intent "$WORKER_ID" "${task_type:-}" "$task_title" 2>/dev/null || true
+  _overlap=$(db_check_intent_overlap "$WORKER_ID" "${task_type:-}" "$task_title" 2>/dev/null || true)
+  if [ -n "$_overlap" ]; then
+    log "WARNING: Intent overlap detected with other active worker(s):"
+    while IFS='|' read -r _ov_wid _ov_intent _ov_title; do
+      [ -z "$_ov_wid" ] && continue
+      log "  W${_ov_wid}: ${_ov_title} (shared: ${_ov_intent})"
+    done <<< "$_overlap"
+    emit_event "intent_overlap" "Worker $WORKER_ID ($task_title) overlaps with: $_overlap" 2>/dev/null || true
+  fi
+
   # Write current task status for this worker
   task_start_epoch=$(date +%s)
   db_set_worker_status "$WORKER_ID" "dev" "in_progress" "${_db_task_id:-}" "$task_title" "$branch_name" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
@@ -1007,12 +1021,14 @@ WEOF
   tasks_completed=$((tasks_completed + 1))
 
   # Reset worker to idle between tasks so dashboard shows accurate status
+  db_clear_intent "$WORKER_ID" 2>/dev/null || true
   db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
   # Reset progress epoch so next task starts fresh (prevents false hung-worker detection)
   db_update_progress "$WORKER_ID" 2>/dev/null || true
 done
 
 # Worker loop finished — ensure status is idle before exit
+db_clear_intent "$WORKER_ID" 2>/dev/null || true
 db_set_worker_status "$WORKER_ID" "dev" "idle" "" "" "" 2>/dev/null || log "WARNING: db_set_worker_status failed — dashboard may show stale worker status"
 
 log "Dev worker $WORKER_ID finished: $tasks_attempted attempted, $tasks_completed completed, $tasks_failed failed."

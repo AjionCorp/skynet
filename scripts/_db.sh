@@ -402,6 +402,7 @@ SCHEMA
   _db_no_out "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
   _db_no_out "ALTER TABLE tasks ADD COLUMN files_touched TEXT DEFAULT '';" 2>/dev/null || true
   _db_no_out "ALTER TABLE tasks ADD COLUMN reason_code TEXT DEFAULT '';" 2>/dev/null || true
+  _db_no_out "ALTER TABLE workers ADD COLUMN intent TEXT DEFAULT '';" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
@@ -966,11 +967,11 @@ db_set_worker_idle() {
   local info="${2:-}"
   local info_esc; info_esc=$(_sql_escape "$info")
   _sql_exec "
-    INSERT INTO workers (id, status, task_title, branch, started_at, last_info, updated_at)
-    VALUES ($wid, 'idle', '', '', NULL, '$info_esc', datetime('now'))
+    INSERT INTO workers (id, status, task_title, branch, started_at, last_info, intent, updated_at)
+    VALUES ($wid, 'idle', '', '', NULL, '$info_esc', '', datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       status='idle', current_task_id=NULL, task_title='', branch='',
-      started_at=NULL, last_info='$info_esc', updated_at=datetime('now');
+      started_at=NULL, last_info='$info_esc', intent='', updated_at=datetime('now');
   "
 }
 
@@ -1043,6 +1044,102 @@ db_get_hung_workers() {
        AND heartbeat_epoch IS NOT NULL AND ($now - heartbeat_epoch) <= $stale_secs
        AND progress_epoch IS NOT NULL AND progress_epoch > 0
        AND ($now - progress_epoch) > $stale_secs;"
+}
+
+# ============================================================
+# WORKER INTENT (overlap detection)
+# ============================================================
+
+# Extract intent string from a task tag and title.
+# Intent = lowercase tag + key nouns from title, space-separated.
+# Example: "[INFRA] Add intent declaration" → "infra scripts intent declaration"
+# Used to detect when two workers might touch overlapping code areas.
+_extract_intent() {
+  local tag="$1" title="$2"
+  local intent=""
+
+  # Map tag to primary code area
+  local tag_lower
+  tag_lower=$(printf '%s' "$tag" | tr '[:upper:]' '[:lower:]')
+  case "$tag_lower" in
+    infra)   intent="scripts infra" ;;
+    data)    intent="handlers data api" ;;
+    ui)      intent="components ui" ;;
+    test)    intent="test handlers" ;;
+    cli)     intent="cli packages-cli" ;;
+    dash*)   intent="dashboard components" ;;
+    *)       intent="$tag_lower" ;;
+  esac
+
+  # Extract key nouns from title (strip tag prefix, lowercase, remove stop words)
+  local title_words
+  title_words=$(printf '%s' "$title" | sed 's/\[[A-Za-z]*\] *//' | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' ' ')
+  local word
+  for word in $title_words; do
+    case "$word" in
+      add|to|the|a|an|and|or|for|in|of|with|from|into|on|is|be|do|make|set|get|use|new) continue ;;
+      [a-z]) continue ;;  # skip single-letter words
+      *) intent="$intent $word" ;;
+    esac
+  done
+
+  printf '%s' "$intent"
+}
+
+# Store a worker's intent in the DB. Called after claiming a task.
+# Usage: db_declare_intent WORKER_ID TAG TITLE
+db_declare_intent() {
+  local wid; wid=$(_sql_int "$1")
+  local tag="$2" title="$3"
+  local intent
+  intent=$(_extract_intent "$tag" "$title")
+  local intent_esc; intent_esc=$(_sql_escape "$intent")
+  _sql_exec "
+    UPDATE workers SET intent='$intent_esc', updated_at=datetime('now')
+    WHERE id=$wid;
+  "
+}
+
+# Check if any other active worker's intent overlaps with the given task.
+# Returns overlapping worker IDs and their intents (one per line), or empty if no overlap.
+# Output format: worker_id|intent|task_title
+# Usage: overlap=$(db_check_intent_overlap SELF_WORKER_ID TAG TITLE)
+db_check_intent_overlap() {
+  local self_wid; self_wid=$(_sql_int "$1")
+  local tag="$2" title="$3"
+  local my_intent
+  my_intent=$(_extract_intent "$tag" "$title")
+
+  # Get all other active workers' intents
+  local others
+  others=$(_db_sep "SELECT id, intent, task_title FROM workers WHERE id != $self_wid AND status = 'in_progress' AND intent != '';")
+  [ -z "$others" ] && return 0
+
+  # Check for keyword overlap (at least 2 shared keywords = potential conflict)
+  local result=""
+  while IFS="$_DB_SEP" read -r _ow_id _ow_intent _ow_title; do
+    [ -z "$_ow_id" ] && continue
+    local shared=0
+    local my_word
+    for my_word in $my_intent; do
+      case " $_ow_intent " in
+        *" $my_word "*) shared=$((shared + 1)) ;;
+      esac
+    done
+    if [ "$shared" -ge 2 ]; then
+      result="${result}${_ow_id}|${_ow_intent}|${_ow_title}
+"
+    fi
+  done <<< "$others"
+
+  printf '%s' "$result"
+}
+
+# Clear a worker's intent (called when task completes or worker goes idle).
+# Usage: db_clear_intent WORKER_ID
+db_clear_intent() {
+  local wid; wid=$(_sql_int "$1")
+  _sql_exec "UPDATE workers SET intent='', updated_at=datetime('now') WHERE id=$wid;"
 }
 
 # Output: worker_id|completed|failed|avg_duration_secs|success_rate
