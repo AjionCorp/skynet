@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Wire `watchdog.sh` to evaluate mission state transitions each cycle | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Create `scripts/mission-state.sh` state machine function library | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add shell regression for mission LLM override/default execution in canonical harness | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Prevent stale `scripts/tests/*` references in generated shell test tasks | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Include mission/provider/model metadata in worker lifecycle events for audit traceability | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add Pipeline dashboard regression for mission LLM status visibility | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Display active mission LLM assignment in Pipeline dashboard status cards | merged to main | 2m | success |
-| 2026-03-04 | [DATA] Preserve active mission `llmConfig` in admin pipeline status route contract tests | merged to main | 2m | success |
