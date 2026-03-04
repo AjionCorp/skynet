@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell unit tests for project-driver.sh backlog generation | merged to main | 14m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for migrate-to-sqlite.sh migration logic | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle | merged to main | 16m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for ui-tester.sh validation flow | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [INFRA] Archive resolved failed-tasks.md rows older than 7 days to reduce context size | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | 0m | success |
-| 2026-03-03 | [INFRA] Add --model flag passthrough to agents/codex.sh for LLM provider parity | merged to main | 2m | success |
