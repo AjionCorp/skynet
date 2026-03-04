@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add cross-surface parity tests for active mission LLM source metadata
+## [INFRA] Prevent stale `scripts/tests/*` references in generated shell test tasks
 **Status:** completed
-**Started:** 2026-03-03 21:29
+**Started:** 2026-03-03 21:32
 **Completed:** 2026-03-03
-**Branch:** dev/add-cross-surface-parity-tests-for-activ
+**Branch:** dev/prevent-stale-scriptstests-references-in
 **Worker:** 3
 
 ### Changes
