@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add exponential retry backoff for transient HTTP failures in sync-runner.sh | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for dashboard.sh dev server lifecycle | merged to main | 7m | success |
 | 2026-03-04 | [FIX] Supersede moot blocked failed-task rows for completed mission.md and subsumed _merge.sh goals | merged to main | 9m | success |
 | 2026-03-04 | [TEST] Add admin middleware auth enforcement tests | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FIX] Supersede moot blocked "Update mission.md" row in failed-tasks.md | merged to main | 0m | success |
 | 2026-03-03 | [FIX] Remove stale .dev/ database artifacts from failed SQLite migration | merged to main | 0m | success |
 | 2026-03-03 | [FEAT] worker logs when merged - detailed information | merged to main | 15m | success |
-| 2026-03-03 | [INFRA] Add mission-complete idle mode to project-driver | merged to main | 4m | success |
