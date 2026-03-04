@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Add mission goal progress breakdown to mission-status API response — in `packages/dashboard/src/handlers/mission-status.ts`, parse each goal line from the mission file, cross-reference goal keywords with completed task titles/tags from `.dev/completed.md`, and return a `goalProgress` array with: `goalIndex`, `goalText`, `checked` (boolean), `relatedTasksCompleted` (count of tasks whose title matches goal keywords). Mission: Criterion #6 per-goal burndown + Criterion #8 system explains its own state.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
