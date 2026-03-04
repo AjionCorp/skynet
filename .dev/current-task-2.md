@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Create `scripts/mission-state.sh` state machine function library
+## [INFRA] Wire `project-driver.sh` to respect mission lifecycle state
 **Status:** completed
-**Started:** 2026-03-04 07:31
+**Started:** 2026-03-04 07:36
 **Completed:** 2026-03-04
-**Branch:** dev/create-scriptsmission-statesh-state-mach
+**Branch:** dev/wire-project-driversh-to-respect-mission
 **Worker:** 2
 
 ### Changes

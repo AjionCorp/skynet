@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Wire `project-driver.sh` to respect mission lifecycle state | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Record `files_touched` on task completion in `dev-worker.sh` | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Add `## State: ACTIVE` line to mission file format and `_get_mission_state` helper | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add shell regression for `mission-state.sh` state transitions | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell regression for mission LLM model propagation to worker agents | merged to main | 2m | success |
 | 2026-03-04 | [FIX] Thread mission LLM model into Codex agent invocation path | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add pipeline-status handler regression for active mission LLM projection | merged to main | 4m | success |
-| 2026-03-04 | [TEST] Add shell regression coverage for mission LLM metadata event emission | merged to main | 4m | success |

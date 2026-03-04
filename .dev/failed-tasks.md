@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
+| 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | dev/add-outcomereason-and-filestouched-colum | merge conflict | 0 | failed |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | merge conflict | 1 | fixed |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | merge conflict after fix attempt 1 | 2 | fixed |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | typecheck failed post-merge | 1 | fixed |
