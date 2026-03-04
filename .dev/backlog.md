@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [INFRA] Include mission/provider/model metadata in worker lifecycle events for audit traceability — update `scripts/dev-worker.sh`, `scripts/task-fixer.sh`, and `scripts/_events.sh` so `task_started`, `task_failed`, and `fix_started` emit effective mission slug and LLM provider/model without renaming event types.
 - [>] [TEST] Add shell regression coverage for mission LLM metadata event emission — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to validate metadata is emitted for configured mission LLM and omitted safely when unset.
 - [>] [TEST] Add pipeline-status handler regression for active mission LLM projection — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` to verify `/api/admin/pipeline/status` returns active mission `llmConfig` when configured and preserves a null-safe fallback shape when unset.
 
