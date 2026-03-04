@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler test for failure-analysis endpoint
+## [INFRA] Add intent read/write/prune helpers to `scripts/_config.sh` for worker intent registry
 **Status:** completed
-**Started:** 2026-03-04 09:43
+**Started:** 2026-03-04 10:39
 **Completed:** 2026-03-04
-**Branch:** dev/add-handler-test-for-failure-analysis-en
+**Branch:** dev/add-intent-readwriteprune-helpers-to-scr
 **Worker:** 1
 
 ### Changes
