@@ -941,6 +941,117 @@ log() { :; }
 rm -f "$_DBG_LOG_FILE"
 
 
+# ── Test: db_get_worker_performance ──────────────────────────────
+
+echo ""
+log "=== db_get_worker_performance ==="
+
+# Start fresh: create an isolated DB for performance tests to avoid
+# interference from earlier test data.
+PERF_TMPDIR=$(mktemp -d)
+PERF_OLD_DIR="$SKYNET_DEV_DIR"
+export SKYNET_DEV_DIR="$PERF_TMPDIR/.dev"
+mkdir -p "$SKYNET_DEV_DIR"
+DB_PATH="$SKYNET_DEV_DIR/pipeline.db"
+db_init
+
+# 1) Empty table — no workers, no output
+PERF_EMPTY=$(db_get_worker_performance)
+assert_empty "$PERF_EMPTY" "db_get_worker_performance: empty when no tasks"
+
+# 2) Tasks without worker_id are excluded
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status) VALUES ('orphan','FEAT','completed');"
+PERF_NO_WORKER=$(db_get_worker_performance)
+assert_empty "$PERF_NO_WORKER" "db_get_worker_performance: ignores tasks with NULL worker_id"
+
+# 3) Single worker with one completed task
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-a','FEAT','completed',1,120);"
+PERF_ONE=$(db_get_worker_performance)
+assert_not_empty "$PERF_ONE" "db_get_worker_performance: returns data for worker with tasks"
+W1_ID=$(echo "$PERF_ONE" | head -1 | cut -d"$SEP" -f1)
+W1_COMPLETED=$(echo "$PERF_ONE" | head -1 | cut -d"$SEP" -f2)
+W1_FAILED=$(echo "$PERF_ONE" | head -1 | cut -d"$SEP" -f3)
+W1_AVG_DUR=$(echo "$PERF_ONE" | head -1 | cut -d"$SEP" -f4)
+W1_RATE=$(echo "$PERF_ONE" | head -1 | cut -d"$SEP" -f5)
+assert_eq "$W1_ID" "1" "db_get_worker_performance: correct worker_id"
+assert_eq "$W1_COMPLETED" "1" "db_get_worker_performance: 1 completed task"
+assert_eq "$W1_FAILED" "0" "db_get_worker_performance: 0 failed tasks"
+assert_eq "$W1_AVG_DUR" "120.0" "db_get_worker_performance: avg duration correct"
+assert_eq "$W1_RATE" "100" "db_get_worker_performance: 100% success rate"
+
+# 4) Add a failed task for the same worker
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-b','FIX','failed',1,0);"
+PERF_MIXED=$(db_get_worker_performance)
+W1_COMPLETED2=$(echo "$PERF_MIXED" | head -1 | cut -d"$SEP" -f2)
+W1_FAILED2=$(echo "$PERF_MIXED" | head -1 | cut -d"$SEP" -f3)
+W1_RATE2=$(echo "$PERF_MIXED" | head -1 | cut -d"$SEP" -f5)
+assert_eq "$W1_COMPLETED2" "1" "db_get_worker_performance: completed count unchanged after fail"
+assert_eq "$W1_FAILED2" "1" "db_get_worker_performance: failed count incremented"
+assert_eq "$W1_RATE2" "50" "db_get_worker_performance: 50% success rate (1/2)"
+
+# 5) 'fixed' status counts as completed
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-c','FIX','fixed',1,180);"
+PERF_FIXED=$(db_get_worker_performance)
+W1_COMPLETED3=$(echo "$PERF_FIXED" | head -1 | cut -d"$SEP" -f2)
+W1_RATE3=$(echo "$PERF_FIXED" | head -1 | cut -d"$SEP" -f5)
+assert_eq "$W1_COMPLETED3" "2" "db_get_worker_performance: 'fixed' counts as completed"
+assert_eq "$W1_RATE3" "67" "db_get_worker_performance: 67% success rate (2/3)"
+
+# 6) avg_duration_secs only includes completed/fixed with duration > 0
+W1_AVG3=$(echo "$PERF_FIXED" | head -1 | cut -d"$SEP" -f4)
+assert_eq "$W1_AVG3" "150.0" "db_get_worker_performance: avg duration = (120+180)/2"
+
+# 7) Multiple workers, ordered by worker_id
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-d','FEAT','completed',3,60);"
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-e','FEAT','completed',3,90);"
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-f','FEAT','completed',2,200);"
+PERF_MULTI=$(db_get_worker_performance)
+PERF_LINE_CT=$(echo "$PERF_MULTI" | wc -l | tr -d ' ')
+assert_eq "$PERF_LINE_CT" "3" "db_get_worker_performance: 3 workers returned"
+
+# Verify ordering: worker 1, 2, 3
+MULTI_W1=$(echo "$PERF_MULTI" | sed -n '1p' | cut -d"$SEP" -f1)
+MULTI_W2=$(echo "$PERF_MULTI" | sed -n '2p' | cut -d"$SEP" -f1)
+MULTI_W3=$(echo "$PERF_MULTI" | sed -n '3p' | cut -d"$SEP" -f1)
+assert_eq "$MULTI_W1" "1" "db_get_worker_performance: ordered by worker_id (1st)"
+assert_eq "$MULTI_W2" "2" "db_get_worker_performance: ordered by worker_id (2nd)"
+assert_eq "$MULTI_W3" "3" "db_get_worker_performance: ordered by worker_id (3rd)"
+
+# Verify worker 2 stats
+W2_COMPLETED=$(echo "$PERF_MULTI" | sed -n '2p' | cut -d"$SEP" -f2)
+W2_RATE=$(echo "$PERF_MULTI" | sed -n '2p' | cut -d"$SEP" -f5)
+assert_eq "$W2_COMPLETED" "1" "db_get_worker_performance: worker 2 has 1 completed"
+assert_eq "$W2_RATE" "100" "db_get_worker_performance: worker 2 at 100% success"
+
+# Verify worker 3 stats
+W3_COMPLETED=$(echo "$PERF_MULTI" | sed -n '3p' | cut -d"$SEP" -f2)
+W3_AVG=$(echo "$PERF_MULTI" | sed -n '3p' | cut -d"$SEP" -f4)
+assert_eq "$W3_COMPLETED" "2" "db_get_worker_performance: worker 3 has 2 completed"
+assert_eq "$W3_AVG" "75.0" "db_get_worker_performance: worker 3 avg duration = (60+90)/2"
+
+# 8) Worker with only 'pending'/'claimed' tasks excluded from completed/failed counts
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id) VALUES ('task-g','FEAT','claimed',4);"
+PERF_CLAIMED=$(db_get_worker_performance)
+W4_COMPLETED=$(echo "$PERF_CLAIMED" | sed -n '4p' | cut -d"$SEP" -f2)
+W4_FAILED=$(echo "$PERF_CLAIMED" | sed -n '4p' | cut -d"$SEP" -f3)
+W4_RATE=$(echo "$PERF_CLAIMED" | sed -n '4p' | cut -d"$SEP" -f5)
+assert_eq "$W4_COMPLETED" "0" "db_get_worker_performance: claimed task not counted as completed"
+assert_eq "$W4_FAILED" "0" "db_get_worker_performance: claimed task not counted as failed"
+assert_eq "$W4_RATE" "0" "db_get_worker_performance: 0% when no completed/failed"
+
+# 9) Completed task with duration_secs=0 excluded from avg calculation
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-h','FEAT','completed',5,0);"
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, worker_id, duration_secs) VALUES ('task-i','FEAT','completed',5,300);"
+PERF_ZERO_DUR=$(db_get_worker_performance)
+W5_AVG=$(echo "$PERF_ZERO_DUR" | sed -n '5p' | cut -d"$SEP" -f4)
+assert_eq "$W5_AVG" "300.0" "db_get_worker_performance: zero-duration task excluded from avg"
+
+# Restore original DB
+export SKYNET_DEV_DIR="$PERF_OLD_DIR"
+DB_PATH="$SKYNET_DEV_DIR/pipeline.db"
+rm -rf "$PERF_TMPDIR"
+
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""
