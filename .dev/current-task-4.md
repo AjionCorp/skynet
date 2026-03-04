@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Thread mission-selected model into Codex agent execution path
+## [INFRA] Add Codex agent `--model` passthrough for mission-selected model
 **Status:** completed
-**Started:** 2026-03-03 20:57
+**Started:** 2026-03-03 21:01
 **Completed:** 2026-03-03
-**Branch:** dev/thread-mission-selected-model-into-codex
+**Branch:** dev/add-codex-agent---model-passthrough-for-
 **Worker:** 4
 
 ### Changes

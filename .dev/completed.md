@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add Codex agent `--model` passthrough for mission-selected model | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add shell regression for Codex agent model flag passthrough | merged to main | 1m | success |
 | 2026-03-04 | [DATA] Surface assigned mission LLM in mission status endpoint payload | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add end-to-end mission LLM routing smoke for worker invocation | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add admin auth login/logout route tests | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for missions CRUD and assignment endpoints | merged to main | 7m | success |
 | 2026-03-04 | [TEST] Add admin page render smoke tests for core dashboard pages | merged to main | 2m | success |
-| 2026-03-04 | [TEST] Add admin API route tests for pipeline status, control, and trigger endpoints | merged to main | 6m | success |
