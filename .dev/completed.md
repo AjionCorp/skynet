@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add admin middleware auth enforcement tests | merged to main | 3m | success |
 | 2026-03-04 | [FIX] Add isFinite guards for Number() query param parsing in dashboard handlers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch | merged to main | 10m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for auth-refresh.sh token lifecycle | merged to main | 6m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [INFRA] Add mission-complete idle mode to project-driver | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add shell unit test for _get_mission_llm_config helper | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Bulk-archive resolved failed-task rows older than 7 days | merged to main | 4m | success |
-| 2026-03-03 | [INFRA] Clean up stale dev/* branches from failed LLM task attempts | merged to main | 0m | success |
