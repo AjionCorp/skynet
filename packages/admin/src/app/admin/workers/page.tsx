@@ -1,14 +1,21 @@
 import { Suspense } from "react";
-import { WorkerScaling } from "@ajioncorp/skynet/components";
+import { WorkerScaling, WorkerIntents } from "@ajioncorp/skynet/components";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { LoadingSkeleton } from "@/components/LoadingSkeleton";
 
 export default function WorkersPage() {
   return (
-    <ErrorBoundary>
-      <Suspense fallback={<LoadingSkeleton />}>
-        <WorkerScaling />
-      </Suspense>
-    </ErrorBoundary>
+    <div className="space-y-6">
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSkeleton />}>
+          <WorkerScaling />
+        </Suspense>
+      </ErrorBoundary>
+      <ErrorBoundary>
+        <Suspense fallback={<LoadingSkeleton />}>
+          <WorkerIntents />
+        </Suspense>
+      </ErrorBoundary>
+    </div>
   );
 }

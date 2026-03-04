@@ -12,6 +12,8 @@ export { PromptsDashboard } from "./PromptsDashboard";
 export type { PromptsDashboardProps } from "./PromptsDashboard";
 export { WorkerScaling } from "./WorkerScaling";
 export type { WorkerScalingProps } from "./WorkerScaling";
+export { WorkerIntents } from "./WorkerIntents";
+export type { WorkerIntentsProps } from "./WorkerIntents";
 export { MissionDashboard } from "./MissionDashboard";
 export { MissionSidebar } from "./MissionSidebar";
 export type { MissionDashboardProps } from "./MissionDashboard";
