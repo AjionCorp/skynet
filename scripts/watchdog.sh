@@ -1056,6 +1056,46 @@ done
 driver_running=false
 is_running "${SKYNET_LOCK_PREFIX}-project-driver-${_active_mission_slug:-global}.lock" && driver_running=true
 
+# --- Mission state evaluation ---
+# Evaluate the current mission state each cycle and detect transitions.
+# States: no-mission, complete, idle, stalled, on-track
+_ms_state="no-mission"
+_ms_criteria_met=0
+_ms_criteria_total=0
+
+if [ -n "${_active_mission_slug:-}" ]; then
+  _ms_file=$(_resolve_active_mission 2>/dev/null || echo "")
+  if [ -n "$_ms_file" ] && [ -f "$_ms_file" ]; then
+    # Parse success criteria from mission file (same approach as project-driver.sh)
+    _ms_raw_criteria=$(sed -n '/^## Success Criteria/,/^## /p' "$_ms_file" | grep '^[-*]\s*\[[ xX]\]' || true)
+    if [ -n "$_ms_raw_criteria" ]; then
+      _ms_criteria_total=$(echo "$_ms_raw_criteria" | wc -l | grep -oE '[0-9]+' | head -1 || echo 0)
+      _ms_criteria_met=$(echo "$_ms_raw_criteria" | grep -ci '\[x\]' | grep -oE '[0-9]+' | head -1 || echo 0)
+    fi
+
+    # Check mission-complete sentinel
+    _ms_slug_safe=$(echo "$_active_mission_slug" | sed 's/[^a-zA-Z0-9]/_/g')
+    if [ -f "$DEV_DIR/mission-complete-${_ms_slug_safe}" ]; then
+      _ms_state="complete"
+    elif [ "$dev_workers_running" -eq 0 ] && [ "$backlog_count" -eq 0 ] && [ "$failed_pending" -eq 0 ]; then
+      _ms_state="idle"
+    elif [ "$backlog_count" -gt 0 ] && [ "$dev_workers_running" -eq 0 ]; then
+      _ms_state="stalled"
+    else
+      _ms_state="on-track"
+    fi
+  fi
+fi
+
+# Detect state transitions and emit events
+_ms_prev=$(db_get_metadata "mission_state" 2>/dev/null || echo "")
+if [ "$_ms_state" != "$_ms_prev" ]; then
+  log "Mission state: ${_ms_prev:-initial} -> $_ms_state (slug=${_active_mission_slug:-none} criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running)"
+  emit_event "mission_state_changed" "state=$_ms_state prev=${_ms_prev:-initial} slug=${_active_mission_slug:-none} criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running" 2>/dev/null || true
+  db_set_metadata "mission_state" "$_ms_state" 2>/dev/null || true
+fi
+log "Mission: ${_active_mission_slug:-none} state=$_ms_state criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running"
+
 # --- Stale heartbeat detection ---
 # Dual-source design: The file-based heartbeat check below uses .dev/worker-N.heartbeat
 # files, while the DB is authoritative (db_get_stale_heartbeats / db_get_hung_workers).
