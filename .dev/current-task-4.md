@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch
+## [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle
 **Status:** completed
-**Started:** 2026-03-03 18:54
+**Started:** 2026-03-03 19:21
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-sync-runnersh-g
+**Branch:** dev/add-shell-unit-tests-for-codex-auth-refr
 **Worker:** 4
 
 ### Changes

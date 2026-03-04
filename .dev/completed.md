@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle | merged to main | 16m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for ui-tester.sh validation flow | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add exponential retry backoff for transient HTTP failures in sync-runner.sh | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for dashboard.sh dev server lifecycle | merged to main | 7m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | 0m | success |
 | 2026-03-03 | [INFRA] Add --model flag passthrough to agents/codex.sh for LLM provider parity | merged to main | 2m | success |
 | 2026-03-03 | [FIX] Supersede moot blocked "Update mission.md" row in failed-tasks.md | merged to main | 0m | success |
-| 2026-03-03 | [FIX] Remove stale .dev/ database artifacts from failed SQLite migration | merged to main | 0m | success |
