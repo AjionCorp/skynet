@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Default `activeMission.llmConfig` in mission status payloads when mission has no explicit override | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Auto-demote stale claimed backlog rows whose normalized roots are already completed | merged to main | 4m | success |
 | 2026-03-04 | [FIX] Re-land stale unmerged `.dev/` index recovery in merge pipeline | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add regression guard that project-driver never emits non-existent shell test paths | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for sync-runner.sh sync lifecycle | merged to main | 3m | success |
-| 2026-03-04 | [FIX] Supersede last stale active failed-task row for resolved _merge.sh orphan fix | merged to main | 7m | success |

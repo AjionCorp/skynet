@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads
+## [DATA] Default `activeMission.llmConfig` in mission status payloads when mission has no explicit override
 **Status:** completed
-**Started:** 2026-03-03 21:16
+**Started:** 2026-03-03 21:25
 **Completed:** 2026-03-03
-**Branch:** dev/add-pipeline-status-projection-unit-cove
+**Branch:** dev/default-activemissionllmconfig-in-missio
 **Worker:** 2
 
 ### Changes
