@@ -2,7 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { spawnSync } from "child_process";
 import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
-import type { SkynetConfig, CodexAuthStatus } from "../types";
+import type { SkynetConfig, CodexAuthStatus, MissionState } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { STALE_THRESHOLD_SECONDS } from "../lib/constants";
 import { getWorkerStatus } from "../lib/worker-status";
@@ -37,6 +37,20 @@ function getActiveMissionSlug(devDir: string | undefined): string | null {
   } catch {
     return null;
   }
+}
+
+function getMissionState(devDir: string | undefined, slug: string | null): MissionState | null {
+  if (!devDir) return null;
+  let raw = "";
+  if (slug) {
+    raw = readDevFile(devDir, `missions/${slug}.md`);
+  }
+  if (!raw) {
+    raw = readDevFile(devDir, "mission.md");
+  }
+  if (!raw) return null;
+  const match = raw.match(/^## State:\s*(.+)/im);
+  return match ? (match[1].trim().toUpperCase() as MissionState) : null;
 }
 
 import { logHandlerError } from "../lib/handler-error";
@@ -662,6 +676,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             lastCommit: postCommitLastCommit,
             lastTime: postCommitLastTime,
           },
+          missionState: getMissionState(devDir, requestedMission || activeMission),
           missionProgress,
           pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
           watchdogRunning,

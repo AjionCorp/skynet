@@ -126,6 +126,7 @@ export interface PipelineStatus {
   backlogLocked: boolean;
   git: GitStatus;
   postCommitGate: PostCommitGate;
+  missionState: MissionState | null;
   missionProgress: MissionProgress[];
   pipelinePaused: boolean;
   watchdogRunning: boolean;

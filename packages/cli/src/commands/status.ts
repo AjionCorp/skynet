@@ -406,6 +406,24 @@ export async function statusCommand(options: StatusOptions) {
     }
   } catch { /* ignore — fall through to legacy mission.md */ }
 
+  // Read mission lifecycle state from mission file (## State: line)
+  let missionState: string | null = null;
+  try {
+    let missionRaw = "";
+    if (activeMissionSlug) {
+      const mp = join(devDir, "missions", `${activeMissionSlug}.md`);
+      if (existsSync(mp)) missionRaw = readFileSync(mp, "utf-8");
+    }
+    if (!missionRaw) {
+      const mp = join(devDir, "mission.md");
+      if (existsSync(mp)) missionRaw = readFileSync(mp, "utf-8");
+    }
+    if (missionRaw) {
+      const stateMatch = missionRaw.match(/^## State:\s*(.+)/im);
+      if (stateMatch) missionState = stateMatch[1].trim().toUpperCase();
+    }
+  } catch { /* ignore */ }
+
   // Count handler files for mission evaluation context
   const handlersDir = join(projectDir, "packages/dashboard/src/handlers");
   let handlerCount = 0;
@@ -435,6 +453,10 @@ export async function statusCommand(options: StatusOptions) {
     handlerCount,
     missionSlug: activeMissionSlug,
   });
+
+  if (missionState) {
+    print(`\n  Mission State: ${missionState}`);
+  }
 
   if (missionProgress.length > 0) {
     const metCount = missionProgress.filter((mp) => mp.status === "met").length;
@@ -479,6 +501,7 @@ export async function statusCommand(options: StatusOptions) {
       healthScore,
       selfCorrectionRate: scrRate,
       activeMission: activeMissionSlug,
+      missionState,
       missionProgress,
       lastActivity: lastActivity ? lastActivity.toISOString() : null,
     };

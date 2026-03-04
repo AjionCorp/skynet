@@ -53,6 +53,7 @@ const MOCK_PIPELINE: PipelineStatus = {
   backlogLocked: false,
   git: { branch: "main", commitsAhead: 0, dirtyFiles: 0, lastCommit: null },
   postCommitGate: { lastResult: null, lastCommit: null, lastTime: null },
+  missionState: null,
   missionProgress: [],
   pipelinePaused: false,
   watchdogRunning: true,
