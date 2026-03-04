@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for sync-runner.sh sync lifecycle
+## [TEST] Add regression guard that project-driver never emits non-existent shell test paths
 **Status:** completed
-**Started:** 2026-03-03 20:21
+**Started:** 2026-03-03 20:28
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-sync-runnersh-s
+**Branch:** dev/add-regression-guard-that-project-driver
 **Worker:** 4
 
 ### Changes
