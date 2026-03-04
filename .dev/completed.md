@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add unit coverage for `_merge.sh` stale-index guardrails with mixed conflict sets | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Eliminate stale `scripts/tests/*` path generation in project-driver prompts | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add regression guard that project-driver never emits non-existent shell test paths | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add shell unit tests for clean-logs.sh log rotation | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add agent plugin unit tests for claude.sh and codex.sh | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _agent.sh agent dispatch | merged to main | 6m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for _lock_backend.sh lock backend abstraction | merged to main | 2m | success |

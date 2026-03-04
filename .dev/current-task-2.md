@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic
+## [TEST] Add unit coverage for `_merge.sh` stale-index guardrails with mixed conflict sets
 **Status:** completed
-**Started:** 2026-03-03 20:22
+**Started:** 2026-03-03 20:28
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-watchdogsh-disp
+**Branch:** dev/add-unit-coverage-for-mergesh-stale-inde
 **Worker:** 2
 
 ### Changes
