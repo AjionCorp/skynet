@@ -275,7 +275,7 @@ if [ "${SKYNET_ONE_SHOT:-}" != "true" ] && grep -q "in_progress" "$WORKER_TASK_F
     if [ -n "$_stale_id" ]; then
       _stale_status=$(_db "SELECT status FROM tasks WHERE id=$(_sql_int "$_stale_id");" 2>/dev/null || true)
       if [ "$_stale_status" = "claimed" ]; then
-        db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" || true
+        db_fail_task "$_stale_id" "--" "Stale lock after ${age_minutes}m" "stale_lock" || true
       elif case "$_stale_status" in fixing-*) true ;; *) false ;; esac; then
         log "Stale lock on $task_title but task is $_stale_status (fixer handling) — skipping"
       fi
@@ -630,7 +630,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     emit_event "task_failed" "Worker $WORKER_ID: $task_title"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree "$branch_name"
-    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "claude exit code $exit_code" "agent_failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed after claude failure — dashboard may show stale status"
     emit_event "worker_idle" "Worker $WORKER_ID: claude failed — $task_title"
     _CURRENT_TASK_TITLE=""
@@ -658,7 +658,7 @@ EOF
       emit_event "task_failed" "Worker $WORKER_ID: $task_title (worktree missing)"
       tasks_failed=$((tasks_failed + 1))
       cleanup_worktree "$branch_name"
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "worktree missing before gates" "worktree_missing" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: worktree missing — $task_title"
       _CURRENT_TASK_TITLE=""
@@ -718,7 +718,7 @@ EOF
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: $_gate_label)"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree  # Keep branch for task-fixer
-    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "$_gate_label failed" "gate_failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: gate failed — $task_title"
     _CURRENT_TASK_TITLE=""
@@ -763,7 +763,7 @@ EOF
     emit_event "task_failed" "Worker $WORKER_ID: $task_title (gate: bash-n)"
     tasks_failed=$((tasks_failed + 1))
     cleanup_worktree
-    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+    [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "bash-n failed" "shell_syntax" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: bash-n failed — $task_title"
     _CURRENT_TASK_TITLE=""
@@ -886,7 +886,7 @@ WEOF
       log "MERGE FAILED for $branch_name — moving to failed."
       emit_event "merge_conflict" "Worker $WORKER_ID: $task_title on $branch_name"
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "merge conflict" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "merge conflict" "merge_conflict" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -899,7 +899,7 @@ WEOF
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (typecheck failed post-merge)" || true
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (typecheck failed post-merge)" || true
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "typecheck failed post-merge" "typecheck_post_merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files || true
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title" || true
@@ -912,7 +912,7 @@ WEOF
       # Critical failure (revert failed, main may be broken)
       tg "🚨 *${SKYNET_PROJECT_NAME_UPPER}* CRITICAL: revert failed for $task_title — main may be broken" || true
       emit_event "revert_failed" "Worker $WORKER_ID: $task_title — critical merge failure" || true
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" "critical_merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
       exit 1
@@ -939,7 +939,7 @@ WEOF
       tg "🔄 *${SKYNET_PROJECT_NAME_UPPER} W${WORKER_ID} REVERTED*: $task_title (push failed)"
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (push failed post-merge)"
       tasks_failed=$((tasks_failed + 1))
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" "push_failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""
@@ -947,7 +947,7 @@ WEOF
       ;;
     7)
       # Smoke test failed (reverted + pushed)
-      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
+      [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" "smoke_test" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
       _CURRENT_TASK_DB_TITLE=""

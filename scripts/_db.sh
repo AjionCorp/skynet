@@ -401,6 +401,7 @@ SCHEMA
   _db_no_out "ALTER TABLE tasks ADD COLUMN mission_hash TEXT DEFAULT '';" 2>/dev/null || true
   _db_no_out "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
   _db_no_out "ALTER TABLE tasks ADD COLUMN files_touched TEXT DEFAULT '';" 2>/dev/null || true
+  _db_no_out "ALTER TABLE tasks ADD COLUMN reason_code TEXT DEFAULT '';" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
@@ -730,16 +731,21 @@ _db_set_files_touched_inner() {
 db_set_files_touched() { _db_retry _db_set_files_touched_inner "$@"; }
 
 # Record task failure
+# Args: task_id branch error [reason_code]
+# reason_code: structured category — agent_failed, worktree_missing, gate_failed,
+#   shell_syntax, merge_conflict, typecheck_post_merge, critical_merge,
+#   push_failed, smoke_test
 _db_fail_task_inner() {
   local task_id; task_id=$(_sql_int "$1")
-  local branch="$2" error="$3"
+  local branch="$2" error="$3" reason_code="${4:-}"
   local _cur_status; _cur_status=$(_get_task_status "$task_id" 2>/dev/null || true)
   [ "$_cur_status" != "ERROR" ] && _validate_status_transition "$task_id" "$_cur_status" "failed" "db_fail_task"
   local branch_esc; branch_esc=$(_sql_escape "$branch")
   local error_esc; error_esc=$(_sql_escape "$error")
+  local reason_esc; reason_esc=$(_sql_escape "$reason_code")
   _sql_exec "
     UPDATE tasks SET status='failed', branch='$branch_esc', error='$error_esc',
-      failed_at=datetime('now'), updated_at=datetime('now')
+      reason_code='$reason_esc', failed_at=datetime('now'), updated_at=datetime('now')
     WHERE id=$task_id AND status NOT IN ('superseded','done','fixed');
   "
 }
@@ -852,10 +858,14 @@ db_update_failure() {
   local error="$2"
   local attempts; attempts=$(_sql_int "$3")
   local status="$4"
+  local reason_code="${5:-}"
   local error_esc; error_esc=$(_sql_escape "$error")
   local status_esc; status_esc=$(_sql_escape "$status")
+  local reason_esc; reason_esc=$(_sql_escape "$reason_code")
+  local _reason_clause=""
+  [ -n "$reason_code" ] && _reason_clause=", reason_code='$reason_esc'"
   _sql_exec "
-    UPDATE tasks SET error='$error_esc', attempts=$attempts, status='$status_esc', updated_at=datetime('now')
+    UPDATE tasks SET error='$error_esc', attempts=$attempts, status='$status_esc'${_reason_clause}, updated_at=datetime('now')
     WHERE id=$task_id;
   "
 }
@@ -1315,10 +1325,10 @@ db_export_failed() {
   {
     echo "# Failed Tasks"
     echo ""
-    echo "| Date | Task | Branch | Error | Attempts | Status |"
-    echo "|------|------|--------|-------|----------|--------|"
+    echo "| Date | Task | Branch | Error | Reason | Attempts | Status |"
+    echo "|------|------|--------|-------|--------|----------|--------|"
     _db_sep \
-      "SELECT COALESCE(failed_at,''), tag, title, COALESCE(branch,''), COALESCE(error,''), COALESCE(attempts,0), status
+      "SELECT COALESCE(failed_at,''), tag, title, COALESCE(branch,''), COALESCE(error,''), COALESCE(reason_code,''), COALESCE(attempts,0), status
        FROM tasks
        WHERE status IN ('failed','blocked','fixed','superseded')
           OR status LIKE 'fixing-%'
@@ -1329,13 +1339,13 @@ db_export_failed() {
          WHEN status='fixed' THEN 3
          WHEN status='superseded' THEN 4
          ELSE 5
-       END, failed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _error _attempts _status; do
+       END, failed_at DESC;" 2>/dev/null | while IFS="$_DB_SEP" read -r _date _tag _title _branch _error _reason _attempts _status; do
       _datestr="${_date%% *}"
       [ -z "$_datestr" ] && _datestr="$(date '+%Y-%m-%d')"
       # Strip leading [TAG] from title if already present (legacy data)
       _title=$(echo "$_title" | sed "s/^\[${_tag}\] *//")
       _task="[${_tag}] ${_title}"
-      echo "| ${_datestr} | ${_task} | ${_branch} | ${_error} | ${_attempts:-0} | ${_status} |"
+      echo "| ${_datestr} | ${_task} | ${_branch} | ${_error} | ${_reason} | ${_attempts:-0} | ${_status} |"
     done
   } > "$tmpfile"
   mv "$tmpfile" "$output"
