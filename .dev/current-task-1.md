@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard
+## [TEST] Add unit tests for intent overlap enforcement and task-skip behavior
 **Status:** completed
-**Started:** 2026-03-04 10:59
+**Started:** 2026-03-04 11:03
 **Completed:** 2026-03-04
-**Branch:** dev/add-missiongoalprogress-panel-to-admin-p
+**Branch:** dev/add-unit-tests-for-intent-overlap-enforc
 **Worker:** 1
 
 ### Changes
