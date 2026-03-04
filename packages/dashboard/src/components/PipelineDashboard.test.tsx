@@ -51,6 +51,8 @@ const MOCK_STATUS: PipelineStatus = {
   missionProgress: [],
   missionAlignmentScore: 100,
   nonAlignedTaskCount: 0,
+  goalCompletionPercentage: 0,
+  laggingGoals: [],
   pipelinePaused: false,
   workerStats: {},
   watchdogRunning: false,

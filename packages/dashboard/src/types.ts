@@ -133,6 +133,8 @@ export interface PipelineStatus {
   missionProgress: MissionProgress[];
   missionAlignmentScore: number;
   nonAlignedTaskCount: number;
+  goalCompletionPercentage: number;
+  laggingGoals: MissionProgress[];
   pipelinePaused: boolean;
   workerStats: Record<string, WorkerPerformanceStats>;
   watchdogRunning: boolean;

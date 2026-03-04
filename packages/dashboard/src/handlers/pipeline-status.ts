@@ -723,6 +723,13 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         }
       }
 
+      // Goal completion percentage and lagging goals
+      const metCount = missionProgress.filter(p => p.status === "met").length;
+      const goalCompletionPercentage = missionProgress.length > 0
+        ? Math.round((metCount / missionProgress.length) * 100)
+        : 0;
+      const laggingGoals = missionProgress.filter(p => p.status === "not-met");
+
       // Mission alignment score
       const goalKeywords = extractMissionGoalKeywords(devDir, requestedMission || activeMission);
       const { score: missionAlignmentScore, nonAlignedCount: nonAlignedTaskCount } =
@@ -775,6 +782,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           missionProgress,
           missionAlignmentScore,
           nonAlignedTaskCount,
+          goalCompletionPercentage,
+          laggingGoals,
           workerStats,
           pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
           watchdogRunning,
