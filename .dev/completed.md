@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add shell regression for per-mission LLM model threading across worker entrypoints | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded | merged to main | 3m | success |
 | 2026-03-04 | [DATA] Expose active mission LLM assignment in operator status surfaces | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell unit tests for dashboard.sh dev server lifecycle | merged to main | 7m | success |
 | 2026-03-04 | [FIX] Supersede moot blocked failed-task rows for completed mission.md and subsumed _merge.sh goals | merged to main | 9m | success |
 | 2026-03-04 | [TEST] Add admin middleware auth enforcement tests | merged to main | 3m | success |
-| 2026-03-04 | [FIX] Add isFinite guards for Number() query param parsing in dashboard handlers | merged to main | 3m | success |

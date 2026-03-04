@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for per-mission LLM model threading across worker entrypoints
+## [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads
 **Status:** completed
-**Started:** 2026-03-03 20:51
+**Started:** 2026-03-03 20:53
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-regression-for-per-mission-llm
+**Branch:** dev/harden-getmissionllmconfig-parsing-to-av
 **Worker:** 1
 
 ### Changes
