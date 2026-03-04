@@ -52,10 +52,19 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
         );
       }
 
+      const SLUG_PATTERN = /^[a-z0-9-]+$/i;
+      const VALID_PROVIDERS = ["claude", "codex", "gemini", "auto"] as const;
+
       const missionConfig = readConfig(configPath);
 
       // Update active mission
       if (typeof body.activeMission === "string") {
+        if (!SLUG_PATTERN.test(body.activeMission)) {
+          return Response.json(
+            { data: null, error: "Invalid activeMission slug format (alphanumeric and hyphens only)" },
+            { status: 400 },
+          );
+        }
         const missionFile = resolve(missionsDir, `${body.activeMission}.md`);
         if (!existsSync(missionFile)) {
           return Response.json(
@@ -74,7 +83,19 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
       // Update worker assignments
       if (body.assignments && typeof body.assignments === "object") {
         for (const [worker, slug] of Object.entries(body.assignments)) {
+          if (typeof worker !== "string" || worker.length > 100 || !/^[a-zA-Z0-9_-]+$/.test(worker)) {
+            return Response.json(
+              { data: null, error: `Invalid worker name '${worker}' (alphanumeric, hyphens, underscores only, max 100 chars)` },
+              { status: 400 },
+            );
+          }
           if (slug !== null && typeof slug === "string") {
+            if (!SLUG_PATTERN.test(slug)) {
+              return Response.json(
+                { data: null, error: `Invalid mission slug '${slug}' for worker '${worker}' (alphanumeric and hyphens only)` },
+                { status: 400 },
+              );
+            }
             const missionFile = resolve(missionsDir, `${slug}.md`);
             if (!existsSync(missionFile)) {
               return Response.json(
@@ -82,6 +103,11 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
                 { status: 404 },
               );
             }
+          } else if (slug !== null) {
+            return Response.json(
+              { data: null, error: `Assignment for worker '${worker}' must be a string slug or null` },
+              { status: 400 },
+            );
           }
           missionConfig.assignments[worker] = slug;
         }
@@ -91,6 +117,30 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
       if (body.llmConfigs && typeof body.llmConfigs === "object") {
         if (!missionConfig.llmConfigs) missionConfig.llmConfigs = {};
         for (const [slug, llmCfg] of Object.entries(body.llmConfigs)) {
+          if (!SLUG_PATTERN.test(slug)) {
+            return Response.json(
+              { data: null, error: `Invalid mission slug '${slug}' in llmConfigs (alphanumeric and hyphens only)` },
+              { status: 400 },
+            );
+          }
+          if (typeof llmCfg !== "object" || llmCfg === null) {
+            return Response.json(
+              { data: null, error: `llmConfig for '${slug}' must be an object` },
+              { status: 400 },
+            );
+          }
+          if (typeof llmCfg.provider !== "string" || !VALID_PROVIDERS.includes(llmCfg.provider as typeof VALID_PROVIDERS[number])) {
+            return Response.json(
+              { data: null, error: `Invalid provider for '${slug}'. Must be one of: ${VALID_PROVIDERS.join(", ")}` },
+              { status: 400 },
+            );
+          }
+          if (llmCfg.model !== undefined && (typeof llmCfg.model !== "string" || llmCfg.model.length > 100)) {
+            return Response.json(
+              { data: null, error: `llmConfig.model for '${slug}' must be a string (max 100 chars)` },
+              { status: 400 },
+            );
+          }
           const missionFile = resolve(missionsDir, `${slug}.md`);
           if (!existsSync(missionFile)) {
             return Response.json(

@@ -107,6 +107,15 @@ export function createMissionCreatorHandler(_config: SkynetConfig) {
       if (!input || typeof input !== "string" || !input.trim()) {
         return Response.json({ data: null, error: "Missing 'input' field (string)" }, { status: 400 });
       }
+      if (input.length > 10_000) {
+        return Response.json({ data: null, error: "Input must be 10,000 characters or fewer" }, { status: 400 });
+      }
+      if (currentMission !== undefined && typeof currentMission !== "string") {
+        return Response.json({ data: null, error: "'currentMission' must be a string" }, { status: 400 });
+      }
+      if (typeof currentMission === "string" && currentMission.length > 100_000) {
+        return Response.json({ data: null, error: "currentMission must be 100,000 characters or fewer" }, { status: 400 });
+      }
 
       const missionContext = currentMission
         ? `\n\nCurrent mission document for reference:\n${currentMission}`
@@ -166,6 +175,15 @@ Rules:
       const { suggestion, currentMission } = body;
       if (!suggestion || typeof suggestion !== "string" || !suggestion.trim()) {
         return Response.json({ data: null, error: "Missing 'suggestion' field (string)" }, { status: 400 });
+      }
+      if (suggestion.length > 10_000) {
+        return Response.json({ data: null, error: "Suggestion must be 10,000 characters or fewer" }, { status: 400 });
+      }
+      if (currentMission !== undefined && typeof currentMission !== "string") {
+        return Response.json({ data: null, error: "'currentMission' must be a string" }, { status: 400 });
+      }
+      if (typeof currentMission === "string" && currentMission.length > 100_000) {
+        return Response.json({ data: null, error: "currentMission must be 100,000 characters or fewer" }, { status: 400 });
       }
 
       const missionContext = currentMission

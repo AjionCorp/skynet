@@ -143,6 +143,46 @@ export function createMissionsHandler(config: SkynetConfig) {
           { status: 400 },
         );
       }
+      if (name.length > 200) {
+        return Response.json(
+          { data: null, error: "Mission name must be 200 characters or fewer" },
+          { status: 400 },
+        );
+      }
+      if (content !== undefined && typeof content !== "string") {
+        return Response.json(
+          { data: null, error: "'content' must be a string" },
+          { status: 400 },
+        );
+      }
+      if (typeof content === "string" && content.length > 100_000) {
+        return Response.json(
+          { data: null, error: "Mission content must be 100,000 characters or fewer" },
+          { status: 400 },
+        );
+      }
+
+      const VALID_PROVIDERS = ["claude", "codex", "gemini", "auto"] as const;
+      if (body.llmConfig !== undefined) {
+        if (typeof body.llmConfig !== "object" || body.llmConfig === null) {
+          return Response.json(
+            { data: null, error: "'llmConfig' must be an object" },
+            { status: 400 },
+          );
+        }
+        if (typeof body.llmConfig.provider !== "string" || !VALID_PROVIDERS.includes(body.llmConfig.provider as typeof VALID_PROVIDERS[number])) {
+          return Response.json(
+            { data: null, error: `Invalid llmConfig.provider. Must be one of: ${VALID_PROVIDERS.join(", ")}` },
+            { status: 400 },
+          );
+        }
+        if (body.llmConfig.model !== undefined && (typeof body.llmConfig.model !== "string" || body.llmConfig.model.length > 100)) {
+          return Response.json(
+            { data: null, error: "'llmConfig.model' must be a string (max 100 chars)" },
+            { status: 400 },
+          );
+        }
+      }
 
       const slug = slugify(name);
       const missionsDir = ensureMissionsDir(devDir);

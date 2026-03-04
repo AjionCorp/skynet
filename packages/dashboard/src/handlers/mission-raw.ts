@@ -84,6 +84,9 @@ export function createMissionRawHandler(config: SkynetConfig) {
       if (typeof raw !== "string") {
         return Response.json({ data: null, error: "Missing 'raw' field (string)" }, { status: 400 });
       }
+      if (raw.length > 100_000) {
+        return Response.json({ data: null, error: "Mission content must be 100,000 characters or fewer" }, { status: 400 });
+      }
 
       const { path } = resolveMissionPath(devDir, request);
       writeFileSync(path, raw, "utf-8");

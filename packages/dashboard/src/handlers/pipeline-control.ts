@@ -22,6 +22,14 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         return Response.json({ data: null, error: parseError || "Invalid request body" }, { status: 400 });
       }
       const { action } = body;
+      const VALID_ACTIONS = ["pause", "resume", "start", "stop"] as const;
+
+      if (typeof action !== "string" || !VALID_ACTIONS.includes(action as typeof VALID_ACTIONS[number])) {
+        return Response.json(
+          { data: null, error: `Invalid or missing action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { status: 400 },
+        );
+      }
 
       if (action === "pause") {
         if (existsSync(pauseFile)) {
@@ -130,7 +138,8 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         return Response.json({ data: { stopped: true, killed }, error: null });
       }
 
-      return Response.json({ data: null, error: "Unknown action. Use 'pause', 'resume', 'start', or 'stop'" }, { status: 400 });
+      // Unreachable: VALID_ACTIONS check above covers all cases
+      return Response.json({ data: null, error: "Unknown action" }, { status: 400 });
     } catch (err) {
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Internal error" },

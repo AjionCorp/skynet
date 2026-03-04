@@ -99,6 +99,12 @@ export function createMissionDetailHandler(config: SkynetConfig) {
           { status: 400 },
         );
       }
+      if (body.raw.length > 100_000) {
+        return Response.json(
+          { data: null, error: "Mission content must be 100,000 characters or fewer" },
+          { status: 400 },
+        );
+      }
 
       writeFileSync(filePath, body.raw, "utf-8");
       return Response.json({ data: { slug, saved: true }, error: null });
