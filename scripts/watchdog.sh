@@ -737,10 +737,15 @@ fi
 #      in the same cycle). Without this, stale [>] markers persist silently.
 {
 if [ -f "$DB_PATH" ] && [ -f "$BACKLOG" ]; then
-  _bl_db_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='pending';" 2>/dev/null || echo "")
-  _bl_db_claimed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='claimed';" 2>/dev/null || echo "")
+  _bl_db_pending=$(_db "SELECT COUNT(*) FROM tasks WHERE status='pending';" 2>/dev/null | head -1 || echo "0")
+  _bl_db_claimed=$(_db "SELECT COUNT(*) FROM tasks WHERE status='claimed';" 2>/dev/null | head -1 || echo "0")
   _bl_md_pending=$(grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo "0")
   _bl_md_claimed=$(grep -c '^\- \[>\]' "$BACKLOG" 2>/dev/null || echo "0")
+  # Guard against malformed/multi-line values to keep arithmetic safe.
+  case "${_bl_db_pending:-}" in ''|*[!0-9]*) _bl_db_pending=0 ;; esac
+  case "${_bl_db_claimed:-}" in ''|*[!0-9]*) _bl_db_claimed=0 ;; esac
+  case "${_bl_md_pending:-}" in ''|*[!0-9]*) _bl_md_pending=0 ;; esac
+  case "${_bl_md_claimed:-}" in ''|*[!0-9]*) _bl_md_claimed=0 ;; esac
 
   _bl_needs_sync=false
   _bl_stale_count=0
