@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add admin API route tests for prompts, project-driver status, and worker-scale endpoints | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for pipeline data endpoints | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for mission single-resource endpoints | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Delete 5 stale remote dev/* branches from completed/superseded tasks | merged to main | 0m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [INFRA] Add comprehensive vitest configuration for dashboard handler tests | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for feature-validator.sh validation logic | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _worktree.sh setup, cleanup, and stale detection | merged to main | 3m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for _skills.sh skill dispatch | merged to main | 3m | success |

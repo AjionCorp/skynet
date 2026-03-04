@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Delete 5 stale remote dev/* branches from completed/superseded tasks
+## [TEST] Add admin API route tests for prompts, project-driver status, and worker-scale endpoints
 **Status:** completed
-**Started:** 2026-03-03 20:12
+**Started:** 2026-03-03 20:15
 **Completed:** 2026-03-03
-**Branch:** dev/delete-5-stale-remote-dev-branches-from-
+**Branch:** dev/add-admin-api-route-tests-for-prompts-pr
 **Worker:** 3
 
 ### Changes
