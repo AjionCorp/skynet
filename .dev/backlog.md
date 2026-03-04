@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Expose active mission LLM assignment in operator status surfaces — extend dashboard/CLI status handlers to include mission id/name + effective provider/model so operators can verify runtime selection without opening mission detail pages.
 - [>] [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded — hard-cap retained entries and rotate overflow to archive in a stable/idempotent pass so project-driver prompts remain small and mission-relevant.
 
 # Recent checked history (last 30)

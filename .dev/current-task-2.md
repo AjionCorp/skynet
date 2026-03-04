@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression coverage for mission LLM metadata event emission
+## [DATA] Expose active mission LLM assignment in operator status surfaces
 **Status:** completed
-**Started:** 2026-03-03 20:41
+**Started:** 2026-03-03 20:48
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-regression-coverage-for-missio
+**Branch:** dev/expose-active-mission-llm-assignment-in-
 **Worker:** 2
 
 ### Changes
