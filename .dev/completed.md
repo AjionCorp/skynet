@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Thread mission-selected model into Codex agent execution path | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM projection in status JSON | merged to main | 5m | success |
 | 2026-03-04 | [FIX] Reconcile mission LLM status visibility drift across operator surfaces | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell regression coverage for mission LLM helper failure modes | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell unit tests for project-driver.sh backlog generation | merged to main | 14m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for migrate-to-sqlite.sh migration logic | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle | merged to main | 16m | success |
-| 2026-03-04 | [TEST] Add shell unit tests for ui-tester.sh validation flow | merged to main | 3m | success |
