@@ -2,9 +2,6 @@
 
 | Date | Task | Branch | Error | Attempts | Status |
 |------|------|--------|-------|----------|--------|
-| 2026-03-03 | [FIX] Commit orphaned _merge.sh stale-index recovery and supersede 2 blocked failed rows | dev/commit-orphaned-mergesh-stale-index-reco | merge conflict after fix attempt 2 | 2 | failed |
-| 2026-03-03 | [INFRA] Add stale unmerged .dev/ index recovery to _merge.sh merge pipeline | dev/add-stale-unmerged-dev-index-recovery-to | merge conflict after fix attempt 3 | 3 | blocked |
-| 2026-03-03 | [DATA] Update mission.md to declare LLM Provider Selection mission complete | dev/update-missionmd-to-declare-llm-provider | merge conflict after fix attempt 3 | 3 | blocked |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | merge conflict | 1 | fixed |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | merge conflict after fix attempt 1 | 2 | fixed |
 | 2026-02-25 | [TEST] [TEST] Add unit tests for `_config.sh` shared infrastructure helpers | merged to main | typecheck failed post-merge | 1 | fixed |
@@ -150,7 +147,10 @@
 | 2026-02-19 | [FEAT] Add `skynet pause` and `skynet resume` CLI commands for pipeline flow control | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [FIX] Fix SKYNET_MAX_WORKERS default mismatch between config template and watchdog | merged to main | merge conflict | 1 | fixed |
 | 2026-02-19 | [TEST] Add events handler unit tests and ActivityFeed component tests | merged to main | merge conflict | 1 | fixed |
-| 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 1 | fixed |
+| 2026-03-04 | [INFRA] Add `_get_mission_llm_config` shell helper and thread model into worker agent invocation | merged to main | Phantom completion: implementation commit lost during merge, function not present on main | 1 | fixed |
+| 2026-03-03 | [FIX] Commit orphaned _merge.sh stale-index recovery and supersede 2 blocked failed rows | dev/commit-orphaned-mergesh-stale-index-reco | merge conflict after fix attempt 2 | 2 | superseded |
+| 2026-03-03 | [INFRA] Add stale unmerged .dev/ index recovery to _merge.sh merge pipeline | dev/add-stale-unmerged-dev-index-recovery-to | merge conflict after fix attempt 3 | 3 | superseded |
+| 2026-03-03 | [DATA] Update mission.md to declare LLM Provider Selection mission complete | dev/update-missionmd-to-declare-llm-provider | merge conflict after fix attempt 3 | 3 | superseded |
 | 2026-03-03 | [TEST] Add shell regression for `_get_mission_llm_config` helper | dev/add-shell-regression-for-getmissionllmco | typecheck failed | 0 | superseded |
 | 2026-03-03 | [TEST] Add handler tests for mission LLM config persistence and retrieval | dev/add-handler-tests-for-mission-llm-config | typecheck failed | 0 | superseded |
 | 2026-03-03 | [INFRA] Add `_get_mission_llm_config` shell helper to read per-mission LLM settings | dev/add-getmissionllmconfig-shell-helper-to- | typecheck failed | 0 | superseded |
@@ -320,4 +320,4 @@
 | 2026-02-19 | [FEAT] Add `/admin/events` page with EventsDashboard | dev/add-adminevents-page-with-event-filterin | claude exit code 1 | 0 | superseded |
 | 2026-02-19 | [INFRA] Add pipeline performance summary to project-driver | dev/add-pipeline-performance-summary-to-proj | claude exit code 1 | 0 | superseded |
 | 2026-02-19 | [FIX] Clean up stale failed-tasks.md entries | dev/clean-up-stale-failed-tasksmd-entries-an | claude exit code 1 | 0 | superseded |
-| 2026-03-03 | [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation |  |  | 0 | superseded |
+| 2026-03-04 | [INFRA] Add _get_mission_llm_config shell helper and thread model into worker agent invocation |  |  | 0 | superseded |
