@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Default `activeMission.llmConfig` in mission status payloads when mission has no explicit override
+## [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads
 **Status:** completed
-**Started:** 2026-03-03 21:25
+**Started:** 2026-03-03 21:30
 **Completed:** 2026-03-03
-**Branch:** dev/default-activemissionllmconfig-in-missio
+**Branch:** dev/surface-active-mission-llm-source-explic
 **Worker:** 2
 
 ### Changes

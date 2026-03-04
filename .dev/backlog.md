@@ -3,10 +3,9 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads — in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts`, add deterministic metadata showing whether `activeMission.llmConfig` came from mission override or fallback default.
 - [>] [DATA] Default `activeMission.llmConfig` when mission override is missing or partial — in `packages/dashboard/src/handlers/pipeline-status.ts`, return effective `{ provider, model }` values using configured defaults while preserving a stable response shape.
 - [>] [TEST] Add handler regressions for Claude tier validation in mission writes — extend `packages/dashboard/src/handlers/missions.test.ts` and `packages/dashboard/src/handlers/mission-assignments.test.ts` to assert invalid Claude models are rejected while Opus/Sonnet/Haiku values are accepted and persisted.
-- [ ] [INFRA] Prevent stale `scripts/tests/*` references in generated shell test tasks — in `scripts/project-driver.sh`, keep an explicit rule that shell-test task paths must target `tests/unit/`, and add coverage in `scripts/tests/project-driver.sh` to fail if generated backlog text includes deprecated `scripts/tests/*` paths.
+- [>] [INFRA] Prevent stale `scripts/tests/*` references in generated shell test tasks — in `scripts/project-driver.sh`, keep an explicit rule that shell-test task paths must target `tests/unit/`, and add coverage in `scripts/tests/project-driver.sh` to fail if generated backlog text includes deprecated `scripts/tests/*` paths.
 - [ ] [TEST] Add shell regression for mission LLM override/default execution in canonical harness — add a `tests/unit/` shell test proving worker invocation uses mission-specific model override when present and configured default when absent.
 
 # Recent checked history (last 30)

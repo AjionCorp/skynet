@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM source metadata | merged to main | 3m | success |
 | 2026-03-04 | [FIX] Enforce canonical Claude tier model validation in mission LLM writes | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add MissionDashboard regression for provider/model coupling safety | merged to main | 1m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add worker threading regression coverage for mission LLM env application | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Deduplicate mission LLM env export logic into one shell helper | merged to main | 1m | success |
-| 2026-03-04 | [FIX] Harden stale unmerged-index recovery boundaries in `_merge.sh` | merged to main | 2m | success |
