@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add cross-surface parity tests for active mission LLM projection in status JSON
+## [DATA] Surface assigned mission LLM in mission status endpoint payload
 **Status:** completed
-**Started:** 2026-03-03 20:56
+**Started:** 2026-03-03 20:59
 **Completed:** 2026-03-03
-**Branch:** dev/add-cross-surface-parity-tests-for-activ
+**Branch:** dev/surface-assigned-mission-llm-in-mission-
 **Worker:** 3
 
 ### Changes

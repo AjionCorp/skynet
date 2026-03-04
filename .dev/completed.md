@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Surface assigned mission LLM in mission status endpoint payload | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add end-to-end mission LLM routing smoke for worker invocation | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add shell regression for provider-specific model env isolation | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Thread mission-selected model into Codex agent execution path | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add admin page render smoke tests for core dashboard pages | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for pipeline status, control, and trigger endpoints | merged to main | 6m | success |
 | 2026-03-04 | [TEST] Add API route integration tests for admin config and tasks endpoints | merged to main | 9m | success |
-| 2026-03-04 | [TEST] Add shell unit tests for project-driver.sh backlog generation | merged to main | 14m | success |
