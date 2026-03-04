@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for sync-runner.sh sync lifecycle | merged to main | 3m | success |
 | 2026-03-04 | [FIX] Supersede last stale active failed-task row for resolved _merge.sh orphan fix | merged to main | 7m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for _events.sh event emission helpers | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add shell unit tests for _lock_backend.sh lock backend abstraction | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for _compat.sh compatibility helpers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for missions.ts handler | merged to main | 7m | success |
-| 2026-03-03 | [FEAT] are we tracking our mission | merged to main | 7m | success |

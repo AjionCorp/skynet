@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic — create `scripts/tests/watchdog.test.sh`. Test worker dispatch decision (when to spawn vs skip), heartbeat staleness detection, stale-claim recovery logic, backlog marker validation, and idle detection. Source `scripts/_config.sh` in test setup. Follow existing shell test patterns (see `project-driver.test.sh` for reference on testing complex scripts). DO NOT modify source scripts. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
