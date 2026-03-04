@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Restore shell test infrastructure coverage for mission LLM flow
+## [TEST] Add MissionDashboard regression for provider/model coupling safety
 **Status:** completed
-**Started:** 2026-03-03 21:26
+**Started:** 2026-03-03 21:28
 **Completed:** 2026-03-03
-**Branch:** dev/restore-shell-test-infrastructure-covera
+**Branch:** dev/add-missiondashboard-regression-for-prov
 **Worker:** 1
 
 ### Changes
