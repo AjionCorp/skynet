@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add intent declaration and overlap check to `scripts/dev-worker.sh` claim flow | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Add intent read/write/prune helpers to `scripts/_config.sh` for worker intent registry | merged to main | 3m | success |
 | 2026-03-04 | [DATA] Add mission goal progress breakdown to mission-status API response | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add mission-alignment scoring to pipeline health calculation | merged to main | 6m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [DATA] Keep CLI `status --json` active mission LLM projection aligned with dashboard mission-status semantics | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add Codex agent `--model` passthrough for mission-selected model | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add shell regression for Codex agent model flag passthrough | merged to main | 1m | success |
-| 2026-03-04 | [DATA] Surface assigned mission LLM in mission status endpoint payload | merged to main | 2m | success |
