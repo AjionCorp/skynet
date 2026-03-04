@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Create `scripts/_adaptive.sh` helper for lagging-goal task weighting
+## [TEST] Add unit tests for adaptive goal weighting helpers
 **Status:** completed
-**Started:** 2026-03-04 11:14
+**Started:** 2026-03-04 11:20
 **Completed:** 2026-03-04
-**Branch:** dev/create-scriptsadaptivesh-helper-for-lagg
+**Branch:** dev/add-unit-tests-for-adaptive-goal-weighti
 **Worker:** 1
 
 ### Changes
