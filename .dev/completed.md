@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | merged to main | 0m | success |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | merged to main | 0m | success |
 | 2026-03-04 | [DATA] Create `/api/admin/mission/state` endpoint for lifecycle state visibility | merged to main | 0m | success |
 | 2026-03-04 | [TEST] Add unit tests for intent registry helpers in `_config.sh` | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Centralize mission LLM default projection into one shared helper | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Remove stale `scripts/tests/*` references from project-driver prompt templates | merged to main | 2m | success |
-| 2026-03-04 | [TEST] Add pipeline-status route regression for defaulted vs explicit mission LLM model projection | merged to main | 2m | success |
