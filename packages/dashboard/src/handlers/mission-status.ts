@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import type { SkynetConfig, MissionCriterion, MissionConfig, MissionState, GoalProgress } from "../types";
+import type { SkynetConfig, MissionCriterion, MissionConfig, MissionState, GoalProgress, WorkerContribution } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { logHandlerError } from "../lib/handler-error";
+import { getSkynetDB } from "../lib/db";
 
 /**
  * Extract a named section from mission.md.
@@ -242,6 +243,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
             goalProgress: [],
             currentFocus: null,
             completionPercentage: 0,
+            workerContributions: [],
             raw: "",
           },
           error: null,
@@ -280,6 +282,42 @@ export function createMissionStatusHandler(config: SkynetConfig) {
           ? Math.round((completedCriteria / totalCriteria) * 100)
           : 0;
 
+      // Worker contribution breakdown from DB
+      const maxW = config.maxWorkers ?? 4;
+      let workerContributions: WorkerContribution[] = [];
+      try {
+        const db = getSkynetDB(devDir, { readonly: true });
+        try {
+          const rows = db.getWorkerContributions(maxW);
+          workerContributions = rows.map((r) => {
+            const total = r.completed + r.failed;
+            let avgDuration: string | null = null;
+            if (r.avgSecs != null && r.avgSecs > 0) {
+              const minutes = r.avgSecs / 60;
+              if (minutes < 60) {
+                avgDuration = `${Math.round(minutes)}m`;
+              } else {
+                const h = Math.floor(minutes / 60);
+                const rem = Math.round(minutes % 60);
+                avgDuration = rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+              }
+            }
+            return {
+              workerId: r.workerId,
+              tasksCompleted: r.completed,
+              tasksFailed: r.failed,
+              avgDuration,
+              successRate: total > 0 ? Math.round((r.completed / total) * 100) : 0,
+              recentTasks: r.recentTasks,
+            };
+          });
+        } finally {
+          db.close();
+        }
+      } catch {
+        // DB unavailable — return empty contributions
+      }
+
       return Response.json({
         data: {
           state,
@@ -289,6 +327,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
           goalProgress,
           currentFocus,
           completionPercentage,
+          workerContributions,
           raw,
         },
         error: null,

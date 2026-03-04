@@ -683,6 +683,46 @@ export class SkynetDB {
     return result;
   }
 
+  /** Per-worker contribution breakdown: completed/failed counts, avg duration, recent task titles. */
+  getWorkerContributions(maxWorkers: number): { workerId: number; completed: number; failed: number; avgSecs: number | null; recentTasks: string[] }[] {
+    const statsRows = this.db
+      .prepare(
+        `SELECT
+           worker_id,
+           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed,
+           AVG(CASE WHEN status IN ('completed','fixed') AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
+         FROM tasks
+         WHERE worker_id IS NOT NULL AND worker_id <= ?
+         GROUP BY worker_id`
+      )
+      .all(maxWorkers) as { worker_id: number; completed: number; failed: number; avg_secs: number | null }[];
+
+    const results: { workerId: number; completed: number; failed: number; avgSecs: number | null; recentTasks: string[] }[] = [];
+
+    for (const r of statsRows) {
+      if (r.completed === 0 && r.failed === 0) continue;
+      // Fetch last 5 completed task titles for this worker
+      const taskRows = this.db
+        .prepare(
+          `SELECT title FROM tasks
+           WHERE worker_id = ? AND status IN ('completed','fixed')
+           ORDER BY completed_at DESC LIMIT 5`
+        )
+        .all(r.worker_id) as { title: string }[];
+
+      results.push({
+        workerId: r.worker_id,
+        completed: r.completed,
+        failed: r.failed,
+        avgSecs: r.avg_secs,
+        recentTasks: taskRows.map((t) => t.title),
+      });
+    }
+
+    return results;
+  }
+
   // ── Fixer Stats ────────────────────────────────────────────────────
 
   getFixRate24h(): number {

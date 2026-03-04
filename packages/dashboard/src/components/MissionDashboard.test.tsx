@@ -29,6 +29,10 @@ const MOCK_MISSION: MissionStatus = {
   ],
   currentFocus: "Setting up CI/CD integration",
   completionPercentage: 65,
+  workerContributions: [
+    { workerId: 1, tasksCompleted: 5, tasksFailed: 1, avgDuration: "3m", successRate: 83, recentTasks: ["Add monitoring", "Fix tests"] },
+    { workerId: 2, tasksCompleted: 3, tasksFailed: 0, avgDuration: "4m", successRate: 100, recentTasks: ["Add dashboard"] },
+  ],
   raw: "# Mission\nBuild the best autonomous pipeline\n\n## Purpose\nAutomate everything",
 };
 

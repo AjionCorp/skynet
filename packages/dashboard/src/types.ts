@@ -251,6 +251,15 @@ export interface GoalProgress {
   relatedTasksCompleted: number;
 }
 
+export interface WorkerContribution {
+  workerId: number;
+  tasksCompleted: number;
+  tasksFailed: number;
+  avgDuration: string | null;
+  successRate: number;
+  recentTasks: string[];
+}
+
 export interface MissionStatus {
   state: MissionState | null;
   purpose: string | null;
@@ -259,6 +268,7 @@ export interface MissionStatus {
   goalProgress: GoalProgress[];
   currentFocus: string | null;
   completionPercentage: number;
+  workerContributions: WorkerContribution[];
   raw: string;
 }
 
