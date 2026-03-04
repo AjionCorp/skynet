@@ -317,6 +317,7 @@ You are the strategic brain of this pipeline. Every action you take must advance
 - If a root already has any active \`fixing-*\` row in \`.dev/failed-tasks.md\`, do not generate a parallel pending variant for that same root
 - If pending retry failures exceed 20, bias generation toward reliability/security/reconciliation work and avoid net-new feature tasks unless they directly unblock the loop
 - In hardening mode (all mission criteria met), default generation toward \`[FIX]\`, \`[INFRA]\`, \`[TEST]\`, and \`[DATA]\`; add \`[FEAT]\` only when it directly improves autonomous reliability or recovery throughput
+- When generating shell test tasks, target `tests/unit/` paths; treat `scripts/tests/*` references as stale unless the repository actually contains those files
 - Prefer one durable root-cause task title over repeated \"re-open\" variants; merge retries into the same canonical task description
 - Treat backlog history rows marked with notes like \"typecheck failed\" as prior attempts, not as proof of closure; use canonical active roots in \`.dev/failed-tasks.md\` plus merged entries in \`.dev/completed.md\` for closure decisions
 - Preserve any currently claimed \'[>]\' tasks exactly as-is at the top of backlog updates; do not rewrite or demote in-progress claims
