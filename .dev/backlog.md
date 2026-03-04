@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [INFRA] Add structured error logging to admin API route catch blocks — in `packages/admin/src/app/api/admin/missions/route.ts` and `tasks/route.ts`, ensure all catch blocks log `console.error` with request method, path, and error message before returning `{ error }` response. DO NOT change response shapes. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.

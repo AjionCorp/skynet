@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add structured error logging to admin API route catch blocks | merged to main | 6m | success |
 | 2026-03-04 | [TEST] Add admin component tests for MissionDashboard LLM config interactions | merged to main | 5m | success |
 | 2026-03-04 | [FIX] Add request body validation to admin API POST handlers | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add admin page render smoke tests for secondary dashboard pages | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add shell unit tests for _notify.sh notification helpers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for project-driver-status handler | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add unit tests for pipeline-health-trend and task-velocity handlers | merged to main | 2m | success |
-| 2026-03-03 | [FEAT] mission status | merged to main | 6m | success |
