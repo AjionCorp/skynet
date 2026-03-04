@@ -344,4 +344,187 @@ else
   echo ""
 fi
 
+# ============================================================
+# FAILURE PATTERN THRESHOLD DETECTOR
+# ============================================================
+# Counts failures by error category within a 24h window.
+# When any category hits the threshold (default: 5), generates
+# a targeted [INFRA] task and prepends it to the backlog.
+
+FAILURE_THRESHOLD="${SKYNET_FAILURE_THRESHOLD:-5}"
+BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
+
+# Count failures by category in the last 24 hours
+_24h_merge_conflict=0
+_24h_typecheck=0
+_24h_agent_failed=0
+_24h_worktree_missing=0
+_24h_gate_failed=0
+_24h_usage_limit=0
+
+_count_24h_category() {
+  local cat="$1"
+  case "$cat" in
+    merge_conflict)   _24h_merge_conflict=$((_24h_merge_conflict + 1)) ;;
+    typecheck)        _24h_typecheck=$((_24h_typecheck + 1)) ;;
+    agent_failed)     _24h_agent_failed=$((_24h_agent_failed + 1)) ;;
+    worktree_missing) _24h_worktree_missing=$((_24h_worktree_missing + 1)) ;;
+    gate_failed)      _24h_gate_failed=$((_24h_gate_failed + 1)) ;;
+    usage_limit)      _24h_usage_limit=$((_24h_usage_limit + 1)) ;;
+  esac
+}
+
+# Collect 24h failure counts from DB or markdown
+_cutoff_24h=$(date -v-1d "+%Y-%m-%d %H:%M:%S" 2>/dev/null || date -d "-1 day" "+%Y-%m-%d %H:%M:%S" 2>/dev/null)
+_cutoff_24h_date="${_cutoff_24h:0:10}"
+
+if $USE_DB; then
+  _rows_24h=$(_db_sep "
+    SELECT COALESCE(error, ''), status
+    FROM tasks
+    WHERE status IN ('failed', 'blocked')
+      AND COALESCE(failed_at, updated_at) >= '$(_sql_escape "$_cutoff_24h")'
+    ORDER BY COALESCE(failed_at, updated_at) DESC;
+  " 2>/dev/null) || _rows_24h=""
+
+  while IFS="$_DB_SEP" read -r _err24 _st24; do
+    [ -z "$_err24" ] && continue
+    _cat24=$(_classify_error "$_err24")
+    _count_24h_category "$_cat24"
+  done <<< "$_rows_24h"
+else
+  if [ -f "$FAILED_FILE" ]; then
+    while IFS='|' read -r _ _d24 _t24 _b24 _e24 _a24 _s24 _; do
+      case "$_d24" in *"Date"*|*"---"*) continue ;; esac
+      _d24=$(echo "$_d24" | sed 's/^ *//;s/ *$//')
+      _e24=$(echo "$_e24" | sed 's/^ *//;s/ *$//')
+      _s24=$(echo "$_s24" | sed 's/^ *//;s/ *$//')
+      [ -z "$_d24" ] && continue
+      # Only count failed/blocked within last 24h
+      case "$_s24" in failed|blocked) ;; *) continue ;; esac
+      # Simple date comparison (YYYY-MM-DD >= cutoff date)
+      _d24_date="${_d24:0:10}"
+      [ "$_d24_date" \< "$_cutoff_24h_date" ] && continue
+      _cat24=$(_classify_error "$_e24")
+      _count_24h_category "$_cat24"
+    done < "$FAILED_FILE"
+  fi
+fi
+
+# --- Check thresholds and generate INFRA tasks ---
+_generate_infra_task() {
+  local category="$1" count="$2" description="$3"
+  local task_title="[INFRA] Fix recurring $category failures ($count in 24h)"
+
+  # Dedup: check if this task (or similar) already exists in backlog or completed
+  if $USE_DB; then
+    local _existing
+    _existing=$(_db "SELECT COUNT(*) FROM tasks WHERE status IN ('pending','claimed','fixing-1','fixing-2','fixing-3')
+      AND title LIKE '%Fix recurring ${category}%';" 2>/dev/null || echo "0")
+    if [ "${_existing:-0}" -gt 0 ]; then
+      log "Skipping auto-INFRA for $category — similar task already in backlog"
+      return 0
+    fi
+  else
+    if [ -f "$BACKLOG" ] && grep -qi "Fix recurring ${category}" "$BACKLOG" 2>/dev/null; then
+      log "Skipping auto-INFRA for $category — similar task already in backlog"
+      return 0
+    fi
+    if [ -f "$COMPLETED" ] && grep -qi "Fix recurring ${category}" "$COMPLETED" 2>/dev/null; then
+      log "Skipping auto-INFRA for $category — similar task recently completed"
+      return 0
+    fi
+  fi
+
+  log "Threshold hit: $category has $count failures in 24h (threshold: $FAILURE_THRESHOLD)"
+
+  # Add task via DB if available, otherwise prepend to backlog.md with lock
+  if $USE_DB; then
+    local _new_id
+    _new_id=$(db_add_task "$task_title" "INFRA" "$description" "top")
+    if [ -n "$_new_id" ] && [ "$_new_id" -gt 0 ] 2>/dev/null; then
+      db_export_backlog "$BACKLOG" 2>/dev/null || true
+      log "Auto-generated INFRA task #$_new_id: $task_title"
+    else
+      log "ERROR: Failed to add auto-INFRA task for $category"
+      return 1
+    fi
+  else
+    # Fallback: prepend to backlog.md with mkdir lock
+    local _max_wait=50 _waited=0
+    while ! mkdir "$BACKLOG_LOCK" 2>/dev/null; do
+      _waited=$((_waited + 1))
+      if [ "$_waited" -ge "$_max_wait" ]; then
+        log "ERROR: Could not acquire backlog lock for auto-INFRA task"
+        return 1
+      fi
+      sleep 0.1
+    done
+    echo $$ > "$BACKLOG_LOCK/pid" 2>/dev/null || true
+
+    if [ -f "$BACKLOG" ]; then
+      local _tmpbl
+      _tmpbl=$(mktemp /tmp/skynet-fa-backlog-XXXXXX)
+      # Insert new task after the header comments (first blank line after comments)
+      awk -v task="- [ ] $task_title — $description" '
+        /^$/ && !inserted && header_done { print task; inserted=1 }
+        /^#|^<!--/ { header_done=1 }
+        { print }
+        END { if (!inserted) print task }
+      ' "$BACKLOG" > "$_tmpbl"
+      mv "$_tmpbl" "$BACKLOG"
+      log "Auto-generated INFRA task (markdown): $task_title"
+    fi
+
+    rmdir "$BACKLOG_LOCK" 2>/dev/null || rm -rf "$BACKLOG_LOCK" 2>/dev/null || true
+  fi
+
+  # Log to auto-generated-tasks record
+  local _auto_log="$DEV_DIR/auto-generated-tasks.md"
+  if [ ! -f "$_auto_log" ]; then
+    printf '# Auto-Generated Tasks\n\n| Date | Task | Trigger |\n|------|------|---------|\n' > "$_auto_log"
+  fi
+  printf '| %s | %s | %s=%d (threshold=%d) |\n' \
+    "$(date '+%Y-%m-%d %H:%M')" "$task_title" "$category" "$count" "$FAILURE_THRESHOLD" >> "$_auto_log"
+
+  return 0
+}
+
+# Check each category against threshold
+_tasks_generated=0
+if [ "$_24h_merge_conflict" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "merge_conflict" "$_24h_merge_conflict" \
+    "Investigate and fix root cause of merge conflicts — consider reducing concurrent workers, improving rebase strategy, or isolating conflicting file paths"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+if [ "$_24h_typecheck" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "typecheck" "$_24h_typecheck" \
+    "Investigate recurring typecheck failures — check for type regressions, missing exports, or incompatible dependency updates"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+if [ "$_24h_agent_failed" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "agent_failed" "$_24h_agent_failed" \
+    "Investigate recurring agent failures — check agent prompts, context limits, or task complexity issues"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+if [ "$_24h_worktree_missing" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "worktree_missing" "$_24h_worktree_missing" \
+    "Investigate recurring worktree setup failures — check disk space, git state, or worktree cleanup logic"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+if [ "$_24h_gate_failed" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "gate_failed" "$_24h_gate_failed" \
+    "Investigate recurring quality gate failures — review gate scripts, thresholds, or environment dependencies"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+if [ "$_24h_usage_limit" -ge "$FAILURE_THRESHOLD" ]; then
+  _generate_infra_task "usage_limit" "$_24h_usage_limit" \
+    "Investigate recurring usage limit failures — check API key rotation, rate limiting, or agent pool sizing"
+  _tasks_generated=$((_tasks_generated + 1))
+fi
+
+if [ "$_tasks_generated" -gt 0 ]; then
+  log "Auto-generated $_tasks_generated INFRA task(s) from failure pattern detection"
+fi
+
 log "Analysis complete: $total_failures failures analyzed"
