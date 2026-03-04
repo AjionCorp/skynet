@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Create `scripts/_adaptive.sh` helper for lagging-goal task weighting | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add regression for mission completion summary writer | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Surface mission goal completion percentage and lagging goals in pipeline-status API | merged to main | 2m | success |
 | 2026-03-04 | [FEAT] Add per-goal burndown and ETA estimation to MissionDashboard | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [FIX] Enforce canonical Claude tier model validation in mission LLM writes | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add MissionDashboard regression for provider/model coupling safety | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Restore shell test infrastructure coverage for mission LLM flow | merged to main | 1m | success |
-| 2026-03-04 | [TEST] Add cross-surface parity tests for mission-status LLM defaults | merged to main | 5m | success |
