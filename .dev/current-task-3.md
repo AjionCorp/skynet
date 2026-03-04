@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add WorkerPerformanceProfiles panel to admin Pipeline dashboard
+## [DATA] Create `/api/admin/pipeline/explain` endpoint for pipeline state explainability
 **Status:** completed
-**Started:** 2026-03-04 10:45
+**Started:** 2026-03-04 10:58
 **Completed:** 2026-03-04
-**Branch:** dev/add-workerperformanceprofiles-panel-to-a
+**Branch:** dev/create-apiadminpipelineexplain-endpoint-
 **Worker:** 3
 
 ### Changes
