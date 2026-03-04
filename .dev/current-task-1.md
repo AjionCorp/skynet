@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery
+## [DATA] Display active mission LLM assignment in Pipeline dashboard status cards
 **Status:** completed
-**Started:** 2026-03-03 20:30
+**Started:** 2026-03-03 20:37
 **Completed:** 2026-03-03
-**Branch:** dev/add-mixed-conflict-guardrail-coverage-fo
+**Branch:** dev/display-active-mission-llm-assignment-in
 **Worker:** 1
 
 ### Changes
