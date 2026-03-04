@@ -422,6 +422,9 @@ if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
   _SKYNET_DB_INITIALIZED=1
 fi
 
+# Source adaptive task weighting (lagging-goal priority boost)
+source "$SKYNET_SCRIPTS_DIR/_adaptive.sh"
+
 # --- Structured logging ---
 # Shared log formatter. When SKYNET_LOG_FORMAT=json, outputs JSON lines.
 # Each script's log() delegates to _log() with its worker label and log file.
