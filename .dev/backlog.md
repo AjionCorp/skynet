@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell unit tests for sync-runner.sh sync lifecycle — create `scripts/tests/sync-runner.test.sh`. Test pre-flight URL validation, lock acquisition, error handling for missing config, and graceful exit on signal. Source `scripts/_config.sh` in test setup. Follow existing shell test patterns. DO NOT modify source scripts. Run `pnpm typecheck`.
 - [>] [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic — create `scripts/tests/watchdog.test.sh`. Test worker dispatch decision (when to spawn vs skip), heartbeat staleness detection, stale-claim recovery logic, backlog marker validation, and idle detection. Source `scripts/_config.sh` in test setup. Follow existing shell test patterns (see `project-driver.test.sh` for reference on testing complex scripts). DO NOT modify source scripts. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
