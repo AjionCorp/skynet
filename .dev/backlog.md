@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Surface mission goal completion percentage and lagging goals in pipeline-status API — extend `packages/dashboard/src/handlers/pipeline-status.ts` to parse mission.md goals section and include `missionGoals: { total, checked, unchecked, lagGoals[] }` in the response, where `lagGoals` are the text of unchecked `- [ ]` goals. Add the fields as optional to `PipelineStatusResponse` in `types.ts`. Do NOT modify bash scripts or create new routes. Mission: Goal 7 (real-time completion percentage), Success Criterion 6.
 - [>] [TEST] Add regression for mission completion summary writer — create `tests/unit/mission-completion-summary.test.sh` that: (1) creates a fixture mission.md with mixed checked/unchecked criteria, (2) calls `mission_write_completion_summary`, (3) asserts `.dev/completed-missions/` contains a timestamped copy, (4) asserts the copy has a `## Completion Summary` section with non-zero stats, (5) asserts `.dev/mission-transitions.log` has an entry. Use the existing shell test harness. Mission: Goal 4 (mission completion engine).
 
 # Recent checked history (last 30)
