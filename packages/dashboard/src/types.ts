@@ -387,6 +387,37 @@ export interface MissionTracking {
   trackingMessage: string;
 }
 
+// ===== Failure Analysis Types =====
+
+export interface ErrorPattern {
+  pattern: string;
+  count: number;
+  tasks: string[];
+}
+
+export interface FailureTimelinePoint {
+  date: string;
+  failures: number;
+  fixed: number;
+  blocked: number;
+  superseded: number;
+}
+
+export interface WorkerFailureStats {
+  workerId: number;
+  failures: number;
+  fixed: number;
+  avgAttempts: number;
+}
+
+export interface FailureAnalysis {
+  summary: SelfCorrectionStats & { total: number };
+  errorPatterns: ErrorPattern[];
+  timeline: FailureTimelinePoint[];
+  byWorker: WorkerFailureStats[];
+  recentFailures: FailedTask[];
+}
+
 // ===== Worker Scaling Types =====
 
 export interface WorkerScalePayload {

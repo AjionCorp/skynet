@@ -313,6 +313,41 @@ export class SkynetDB {
     }));
   }
 
+  /** Failed tasks with worker_id for failure analysis. */
+  getFailedTasksWithWorker(missionHash = ""): Array<{
+    date: string;
+    task: string;
+    branch: string;
+    error: string;
+    attempts: number;
+    status: string;
+    workerId: number | null;
+  }> {
+    const missionFilter =
+      this.hasMissionHash && missionHash
+        ? " AND mission_hash = ?"
+        : "";
+    const rows = this.db
+      .prepare(
+        `SELECT failed_at, title, branch, error, attempts, status, worker_id
+         FROM tasks
+         WHERE (status IN ('failed','blocked','fixed','superseded')
+            OR status LIKE 'fixing-%')${missionFilter}
+         ORDER BY failed_at DESC`
+      )
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "failed_at" | "title" | "branch" | "error" | "attempts" | "status" | "worker_id">[];
+
+    return rows.map((r) => ({
+      date: r.failed_at ? r.failed_at.slice(0, 10) : "",
+      task: r.title,
+      branch: r.branch ?? "",
+      error: r.error ?? "",
+      attempts: r.attempts ?? 0,
+      status: r.status,
+      workerId: r.worker_id,
+    }));
+  }
+
   /** Self-correction breakdown. */
   getSelfCorrectionStats(missionHash = ""): SelfCorrectionStats {
     const missionFilter =
