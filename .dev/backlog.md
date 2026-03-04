@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add shell regression coverage for mission LLM metadata event emission — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to validate metadata is emitted for configured mission LLM and omitted safely when unset.
 - [>] [TEST] Add pipeline-status handler regression for active mission LLM projection — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` to verify `/api/admin/pipeline/status` returns active mission `llmConfig` when configured and preserves a null-safe fallback shape when unset.
 
 # Recent checked history (last 30)

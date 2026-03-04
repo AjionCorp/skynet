@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell regression coverage for mission LLM metadata event emission | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Include mission/provider/model metadata in worker lifecycle events for audit traceability | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add Pipeline dashboard regression for mission LLM status visibility | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Display active mission LLM assignment in Pipeline dashboard status cards | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add unit tests for mission-tracking.ts handler | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add unit tests for ErrorBoundary and LoadingSkeleton admin components | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp | merged to main | 3m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for check-server-errors.sh error detection | merged to main | 2m | success |
