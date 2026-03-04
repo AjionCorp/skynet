@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add handler test for failure-analysis endpoint | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add shell regression for `db_get_worker_performance` query | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Add `/api/admin/pipeline/failure-analysis` endpoint | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Wire failure analyzer into watchdog cycle and auto-generate INFRA tasks on threshold breach | merged to main | 6m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add end-to-end mission LLM routing smoke for worker invocation | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add shell regression for provider-specific model env isolation | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Thread mission-selected model into Codex agent execution path | merged to main | 3m | success |
-| 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM projection in status JSON | merged to main | 5m | success |
