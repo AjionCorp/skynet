@@ -3,7 +3,20 @@ import type { SkynetConfig, MissionCreatorResult } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { logHandlerError } from "../lib/handler-error";
 
-const GENERATE_TIMEOUT_MS = 120_000;
+const DEFAULT_GENERATE_TIMEOUT_MS = 300_000;
+const DEFAULT_EXPAND_TIMEOUT_MS = 180_000;
+const TIMEOUT_ERROR_MESSAGE = "AI generation timed out";
+
+function timeoutMsFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  if (!/^\d+$/.test(raw)) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  if (parsed < 5_000) return 5_000;
+  if (parsed > 900_000) return 900_000;
+  return parsed;
+}
 
 function extractJson<T>(raw: string): T {
   const trimmed = raw.trim();
@@ -62,7 +75,7 @@ function runClaude(prompt: string, timeoutMs: number): Promise<string> {
       if (!done) {
         done = true;
         child.kill("SIGTERM");
-        reject(new Error("AI generation timed out"));
+        reject(new Error(TIMEOUT_ERROR_MESSAGE));
       }
     }, timeoutMs);
 
@@ -96,6 +109,7 @@ function runClaude(prompt: string, timeoutMs: number): Promise<string> {
 export function createMissionCreatorHandler(_config: SkynetConfig) {
   async function POST(request: Request): Promise<Response> {
     try {
+      const generateTimeoutMs = timeoutMsFromEnv("SKYNET_MISSION_CREATOR_TIMEOUT_MS", DEFAULT_GENERATE_TIMEOUT_MS);
       const { data: body, error: parseError, status: parseStatus } = await parseBody<{
         input?: string;
         currentMission?: string;
@@ -142,7 +156,7 @@ Rules:
 - Each suggestion should be actionable and specific
 - Respond ONLY with the JSON object, no other text`;
 
-      const raw = await runClaude(prompt, GENERATE_TIMEOUT_MS);
+      const raw = await runClaude(prompt, generateTimeoutMs);
       const result = extractJson<MissionCreatorResult>(raw);
 
       // Validate shape
@@ -157,6 +171,15 @@ Rules:
       return Response.json({ data: result, error: null });
     } catch (err) {
       logHandlerError(_config.devDir, "mission-creator:POST", err);
+      if (err instanceof Error && err.message === TIMEOUT_ERROR_MESSAGE) {
+        return Response.json(
+          {
+            data: null,
+            error: "AI mission generation timed out. Please try again or shorten the prompt.",
+          },
+          { status: 504 },
+        );
+      }
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "AI generation failed" },
         { status: 500 },
@@ -166,6 +189,7 @@ Rules:
 
   async function expand(request: Request): Promise<Response> {
     try {
+      const expandTimeoutMs = timeoutMsFromEnv("SKYNET_MISSION_EXPAND_TIMEOUT_MS", DEFAULT_EXPAND_TIMEOUT_MS);
       const { data: body, error: parseError, status: parseStatus } = await parseBody<{
         suggestion?: string;
         currentMission?: string;
@@ -210,7 +234,7 @@ Rules:
 - Be specific and detailed
 - Respond ONLY with the JSON object, no other text`;
 
-      const raw = await runClaude(prompt, GENERATE_TIMEOUT_MS);
+      const raw = await runClaude(prompt, expandTimeoutMs);
       const result = extractJson<{ suggestions: Array<{ title: string; content: string }> }>(raw);
 
       if (!Array.isArray(result.suggestions)) {
@@ -224,6 +248,15 @@ Rules:
       return Response.json({ data: result, error: null });
     } catch (err) {
       logHandlerError(_config.devDir, "mission-creator:expand", err);
+      if (err instanceof Error && err.message === TIMEOUT_ERROR_MESSAGE) {
+        return Response.json(
+          {
+            data: null,
+            error: "AI suggestion expansion timed out. Please try again.",
+          },
+          { status: 504 },
+        );
+      }
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "AI expansion failed" },
         { status: 500 },

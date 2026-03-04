@@ -63,12 +63,22 @@ function simulateClaudeError(code: number, stderr = "") {
 }
 
 describe("createMissionCreatorHandler", () => {
+  const originalMissionTimeout = process.env.SKYNET_MISSION_CREATOR_TIMEOUT_MS;
+  const originalExpandTimeout = process.env.SKYNET_MISSION_EXPAND_TIMEOUT_MS;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.SKYNET_MISSION_CREATOR_TIMEOUT_MS;
+    delete process.env.SKYNET_MISSION_EXPAND_TIMEOUT_MS;
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
+    if (originalMissionTimeout !== undefined) process.env.SKYNET_MISSION_CREATOR_TIMEOUT_MS = originalMissionTimeout;
+    else delete process.env.SKYNET_MISSION_CREATOR_TIMEOUT_MS;
+    if (originalExpandTimeout !== undefined) process.env.SKYNET_MISSION_EXPAND_TIMEOUT_MS = originalExpandTimeout;
+    else delete process.env.SKYNET_MISSION_EXPAND_TIMEOUT_MS;
+    vi.useRealTimers();
   });
 
   describe("POST (generate)", () => {
@@ -124,6 +134,22 @@ describe("createMissionCreatorHandler", () => {
       const body = await res.json();
       expect(res.status).toBe(500);
       expect(body.error).toBe("Claude CLI not found");
+    });
+
+    it("returns 504 when generation times out", async () => {
+      vi.useFakeTimers();
+      process.env.SKYNET_MISSION_CREATOR_TIMEOUT_MS = "5000";
+
+      const handler = createMissionCreatorHandler(makeConfig());
+      const promise = handler.POST(makeJsonRequest({ input: "Large custom mission" }));
+
+      await vi.advanceTimersByTimeAsync(5001);
+
+      const res = await promise;
+      const body = await res.json();
+      expect(res.status).toBe(504);
+      expect(body.error).toContain("timed out");
+      expect(mockKill).toHaveBeenCalledWith("SIGTERM");
     });
 
     it("returns 502 when AI returns invalid shape", async () => {
@@ -212,6 +238,27 @@ describe("createMissionCreatorHandler", () => {
       const body = await res.json();
       expect(res.status).toBe(200);
       expect(body.data.suggestions).toHaveLength(3);
+    });
+
+    it("returns 504 when expand times out", async () => {
+      vi.useFakeTimers();
+      process.env.SKYNET_MISSION_EXPAND_TIMEOUT_MS = "5000";
+
+      const handler = createMissionCreatorHandler(makeConfig());
+      const req = new Request("http://localhost/mission/creator/expand", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suggestion: "Expand this", currentMission: "# Mission" }),
+      });
+      const promise = handler.expand(req);
+
+      await vi.advanceTimersByTimeAsync(5001);
+
+      const res = await promise;
+      const body = await res.json();
+      expect(res.status).toBe(504);
+      expect(body.error).toContain("timed out");
+      expect(mockKill).toHaveBeenCalledWith("SIGTERM");
     });
   });
 });
