@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Enforce intent overlap task-skip in `dev-worker.sh` | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | merged to main | 0m | success |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | merged to main | 0m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Centralize mission LLM default projection into one shared helper | merged to main | 2m | success |
-| 2026-03-04 | [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics | merged to main | 5m | success |
