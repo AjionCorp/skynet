@@ -153,6 +153,111 @@ _stop_heartbeat() {
 # WORKTREE_INSTALL_STRICT=true (default) — fail on install error.
 # NOTE: _worktree.sh is already sourced by _config.sh; no need to re-source here.
 
+# --- Task-type affinity scoring ---
+# Computes per-tag success rates for this worker from historical data,
+# then scores pending tasks to prefer types the worker succeeds at.
+# Returns the task ID with the highest affinity score, or empty for FIFO fallback.
+_compute_task_affinity() {
+  local worker_id="$1"
+
+  # Get per-tag success rates for this worker
+  local _tag_stats
+  _tag_stats=$(_db_sep "
+    SELECT tag,
+      SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END),
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END)
+    FROM tasks
+    WHERE worker_id = $worker_id
+      AND tag IS NOT NULL AND tag != ''
+      AND status IN ('completed','fixed','failed')
+    GROUP BY tag;
+  " 2>/dev/null) || return 0
+
+  # No history — fall back to FIFO
+  [ -z "$_tag_stats" ] && return 0
+
+  # Build tag→score map in a temp file (bash 3.2: no associative arrays)
+  local _affinity_map="/tmp/skynet-affinity-${worker_id}-$$"
+  : > "$_affinity_map"
+  while IFS=$'\x1f' read -r _atag _acompleted _afailed; do
+    [ -z "$_atag" ] && continue
+    local _atotal=$((_acompleted + _afailed))
+    if [ "$_atotal" -gt 0 ]; then
+      local _arate=$((100 * _acompleted / _atotal))
+      echo "${_atag}|${_arate}|${_atotal}" >> "$_affinity_map"
+    fi
+  done <<< "$_tag_stats"
+
+  # No valid stats computed
+  if [ ! -s "$_affinity_map" ]; then
+    rm -f "$_affinity_map"
+    return 0
+  fi
+
+  # Get pending unblocked tasks (lightweight check — mirrors claim CTE logic)
+  local _pending
+  _pending=$(_db_sep "
+    SELECT id, tag, priority FROM tasks
+    WHERE status = 'pending'
+      AND (blocked_by = '' OR blocked_by IS NULL)
+    ORDER BY priority ASC;
+  " 2>/dev/null) || { rm -f "$_affinity_map"; return 0; }
+
+  [ -z "$_pending" ] && { rm -f "$_affinity_map"; return 0; }
+
+  # Count pending tasks — affinity only matters with multiple candidates
+  local _pcount=0
+  while IFS= read -r _line; do
+    [ -n "$_line" ] && _pcount=$((_pcount + 1))
+  done <<< "$_pending"
+  if [ "$_pcount" -le 1 ]; then
+    rm -f "$_affinity_map"
+    return 0
+  fi
+
+  # Score each pending task: affinity rate (0-100), tiebreak by priority
+  local _best_id="" _best_score=-1 _best_priority=999999
+  while IFS=$'\x1f' read -r _ptid _pttag _ptpri; do
+    [ -z "$_ptid" ] && continue
+    local _pscore=50  # default for unknown tags
+    if [ -n "$_pttag" ]; then
+      local _pmatch
+      _pmatch=$(grep "^${_pttag}|" "$_affinity_map" 2>/dev/null || true)
+      if [ -n "$_pmatch" ]; then
+        _pscore=$(echo "$_pmatch" | cut -d'|' -f2)
+      fi
+    fi
+    # Higher score wins; on tie, lower priority number wins (higher priority)
+    if [ "$_pscore" -gt "$_best_score" ] || { [ "$_pscore" -eq "$_best_score" ] && [ "$_ptpri" -lt "$_best_priority" ]; }; then
+      _best_score=$_pscore
+      _best_id=$_ptid
+      _best_priority=$_ptpri
+    fi
+  done <<< "$_pending"
+
+  rm -f "$_affinity_map"
+
+  # Only use affinity if the best score beats the default (worker has real data for this tag)
+  if [ -n "$_best_id" ] && [ "$_best_score" -gt 50 ]; then
+    echo "$_best_id"
+  fi
+}
+
+# Claim a specific task by ID (used by affinity scoring).
+# Returns same format as db_claim_next_task: id\x1ftitle\x1ftag\x1fdescription\x1fbranch
+_claim_task_by_id() {
+  local worker_id="$1" task_id="$2"
+  _db_sep "
+    BEGIN IMMEDIATE;
+    UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
+      claimed_at = datetime('now'), updated_at = datetime('now')
+    WHERE id = $task_id AND status = 'pending';
+    SELECT id, title, tag, description, branch FROM tasks
+      WHERE id = $task_id AND worker_id = $worker_id AND status = 'claimed';
+    COMMIT;
+  "
+}
+
 # --- PID lock to prevent duplicate runs (per worker ID, mkdir-based atomic lock) ---
 LOCKFILE="${SKYNET_LOCK_PREFIX}-dev-worker-${WORKER_ID}.lock"
 if ! acquire_worker_lock "$LOCKFILE" "$LOG" "W${WORKER_ID}"; then
@@ -344,10 +449,27 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
     next_task="- [ ] ${SKYNET_ONE_SHOT_TASK}"
     _db_task_id=""
   else
-    if [ -n "$_worker_mission_hash" ]; then
-      _db_result=$(db_claim_next_task_for_mission "$WORKER_ID" "$_worker_mission_hash")
-    else
-      _db_result=$(db_claim_next_task "$WORKER_ID")
+    _db_result=""
+
+    # --- Task-type affinity: prefer tasks matching this worker's strengths ---
+    # Skip affinity for mission-filtered workers (they use a separate claim path)
+    if [ -z "$_worker_mission_hash" ]; then
+      _affinity_task_id=$(_compute_task_affinity "$WORKER_ID" 2>/dev/null || true)
+      if [ -n "$_affinity_task_id" ]; then
+        _db_result=$(_claim_task_by_id "$WORKER_ID" "$_affinity_task_id" 2>/dev/null || true)
+        if [ -n "$_db_result" ]; then
+          log "Affinity claim: selected task $_affinity_task_id (worker has high success rate for this type)"
+        fi
+      fi
+    fi
+
+    # Fall back to standard FIFO claim if affinity didn't yield a result
+    if [ -z "$_db_result" ]; then
+      if [ -n "$_worker_mission_hash" ]; then
+        _db_result=$(db_claim_next_task_for_mission "$WORKER_ID" "$_worker_mission_hash")
+      else
+        _db_result=$(db_claim_next_task "$WORKER_ID")
+      fi
     fi
     if [ -n "$_db_result" ]; then
       _db_task_id=$(echo "$_db_result" | cut -d$'\x1f' -f1)
