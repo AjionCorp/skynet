@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add CLI and cross-surface parity regression for active mission LLM payload
+## [INFRA] Remove stale `scripts/tests/*` references from project-driver prompt templates
 **Status:** completed
-**Started:** 2026-03-03 21:06
+**Started:** 2026-03-03 21:09
 **Completed:** 2026-03-03
-**Branch:** dev/add-cli-and-cross-surface-parity-regress
+**Branch:** dev/remove-stale-scriptstests-references-fro
 **Worker:** 4
 
 ### Changes

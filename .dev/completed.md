@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Remove stale `scripts/tests/*` references from project-driver prompt templates | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add pipeline-status route regression for defaulted vs explicit mission LLM model projection | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add Codex agent `--model` passthrough regression for default-preserving behavior | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add CLI and cross-surface parity regression for active mission LLM payload | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add admin API route tests for mission single-resource endpoints | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Delete 5 stale remote dev/* branches from completed/superseded tasks | merged to main | 0m | success |
 | 2026-03-04 | [INFRA] Add structured error logging to admin API route catch blocks | merged to main | 6m | success |
-| 2026-03-04 | [TEST] Add admin component tests for MissionDashboard LLM config interactions | merged to main | 5m | success |
