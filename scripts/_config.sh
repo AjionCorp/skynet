@@ -10,9 +10,11 @@ set -euo pipefail
 # back to 0. The XOR with $$ and $PPID ensures uniqueness even without %N.
 # Strip leading zeros from %N to prevent bash octal interpretation (e.g., 090842000)
 _skynet_ns=$(date +%N 2>/dev/null || echo 0)
-_skynet_ns=${_skynet_ns##0}
-_skynet_ns=${_skynet_ns:-0}
-RANDOM=$((RANDOM ^ $$ ^ ${PPID:-0} ^ _skynet_ns))
+case "${_skynet_ns:-}" in
+  ''|*[!0-9]*) _skynet_ns=0 ;;
+esac
+# Force base-10 to avoid octal parse errors when nanoseconds start with 0.
+RANDOM=$((RANDOM ^ $$ ^ ${PPID:-0} ^ 10#${_skynet_ns:-0}))
 unset _skynet_ns
 
 # Resolve the scripts directory (where this file lives)
