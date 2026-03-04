@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status
+## [TEST] Add pipeline-status route regression for defaulted vs explicit mission LLM model projection
 **Status:** completed
-**Started:** 2026-03-03 21:05
+**Started:** 2026-03-03 21:07
 **Completed:** 2026-03-03
-**Branch:** dev/centralize-mission-llm-defaultingproject
+**Branch:** dev/add-pipeline-status-route-regression-for
 **Worker:** 2
 
 ### Changes
