@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add `## State: ACTIVE` line to mission file format and `_get_mission_state` helper
+## [INFRA] Record `files_touched` on task completion in `dev-worker.sh`
 **Status:** completed
-**Started:** 2026-03-04 07:34
+**Started:** 2026-03-04 07:36
 **Completed:** 2026-03-04
-**Branch:** dev/add--state-active-line-to-mission-file-f
+**Branch:** dev/record-filestouched-on-task-completion-i
 **Worker:** 1
 
 ### Changes
