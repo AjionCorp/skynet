@@ -4,6 +4,7 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
+source "$SCRIPTS_DIR/mission-state.sh"
 _require_db
 
 # --- Load mission (supports multi-mission via SKYNET_MISSION_SLUG env) ---
@@ -97,17 +98,41 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
   exit 0
 fi
 
-# --- Mission-complete idle mode ---
-# If the mission is already complete (sentinel exists), skip the expensive agent
-# cycle. The project-driver's job is to generate tasks toward the mission — once
-# all success criteria are met and the sentinel is written, there's no point
-# running the LLM to generate more work. The watchdog also gates dispatch on
-# this sentinel, but we check here too as defense-in-depth.
+# --- Mission lifecycle state gate ---
+# Check the mission's State: field. Only draft and active missions are workable.
+# Paused, reviewing, complete, and failed missions skip the expensive agent cycle.
+_mission_state=$(mission_get_state "$_mission_file")
+case "$_mission_state" in
+  complete)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission state is 'complete' — idle mode. Exiting." >> "$LOG"
+    exit 0
+    ;;
+  failed)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission state is 'failed' — cannot proceed. Exiting." >> "$LOG"
+    exit 0
+    ;;
+  paused)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission state is 'paused' — skipping project-driver. Exiting." >> "$LOG"
+    exit 0
+    ;;
+  reviewing)
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission state is 'reviewing' — skipping task generation. Exiting." >> "$LOG"
+    exit 0
+    ;;
+  draft)
+    # Auto-transition draft → active when project-driver runs
+    mission_set_state "$_mission_file" "$MISSION_STATE_ACTIVE" "project-driver"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission transitioned from draft → active." >> "$LOG"
+    _mission_state="$MISSION_STATE_ACTIVE"
+    ;;
+esac
+
+# Sentinel-based fallback (backward compat with watchdog)
 _mission_id_safe_early=$(echo "${_mission_hash:-$(_get_active_mission_slug 2>/dev/null)}" | sed 's/[^a-zA-Z0-9]/_/g')
 [ -z "$_mission_id_safe_early" ] && _mission_id_safe_early="global"
 _mc_sentinel_early="$DEV_DIR/mission-complete-${_mission_id_safe_early}"
 if [ -f "$_mc_sentinel_early" ]; then
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission already complete — idle mode (sentinel: $_mc_sentinel_early). Exiting." >> "$LOG"
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission-complete sentinel exists — idle mode. Exiting." >> "$LOG"
   exit 0
 fi
 
@@ -493,9 +518,9 @@ else
   fi
 fi
 
-# --- Mission completion detection ---
-# Check if all success criteria in the mission file are met and no pending tasks remain.
-# Uses a sentinel file to prevent repeated notifications.
+# --- Mission completion detection (via mission-state.sh) ---
+# Uses the state machine library for criteria evaluation and state transitions.
+# Keeps sentinel file for backward compatibility with watchdog.
 _mission_id_safe=$(echo "${_mission_hash:-global}" | sed 's/[^a-zA-Z0-9]/_/g')
 MISSION_COMPLETE_SENTINEL="$DEV_DIR/mission-complete-${_mission_id_safe}"
 
@@ -506,57 +531,55 @@ if [ ! -f "$MISSION_COMPLETE_SENTINEL" ]; then
   else
     mc_pending=$(db_count_pending 2>/dev/null | grep -oE '[0-9]+' | head -1 || grep -c '^\- \[ \]' "$BACKLOG" 2>/dev/null || echo 0)
   fi
-  # SH-P3-2: Ensure mc_pending is a single clean integer
   mc_pending=${mc_pending:-0}
 
-  if [ "$mc_pending" -eq 0 ]; then
-    log "Zero pending tasks — evaluating mission success criteria."
+  # Evaluate criteria using the state machine library
+  _next_state=$(mission_evaluate_criteria "$_mission_file" "$mc_pending")
 
-    # Parse Success Criteria from the mission file
-    # We look for '- [ ]' or '- [x]' lines under '## Success Criteria'
-    # The sed command pulls lines from Success Criteria header until the next header or EOF
-    _mc_raw_criteria=$(sed -n '/^## Success Criteria/,/^## /p' "$_mission_file" | grep '^[-*]\s*\[[ xX]\]' || true)
-    
-    if [ -n "$_mc_raw_criteria" ]; then
+  case "$_next_state" in
+    complete)
+      log "MISSION COMPLETE: All criteria met."
+      mission_set_state "$_mission_file" "$MISSION_STATE_COMPLETE" "project-driver"
+
+      _mission_name=$(grep '^# ' "$_mission_file" | head -1 | sed 's/^# //' || echo "${_mission_hash:-global}")
+
+      # Parse criteria for notification details
+      _mc_raw_criteria=$(sed -n '/^## Success Criteria/,/^## /p' "$_mission_file" \
+        | grep '^[-*][[:space:]]*\[[ xX]\]' || true)
       mc_total_criteria=$(echo "$_mc_raw_criteria" | wc -l | grep -oE '[0-9]+' | head -1 || echo 0)
-      mc_met_criteria=$(echo "$_mc_raw_criteria" | grep -ci '\[x\]' | grep -oE '[0-9]+' | head -1 || echo 0)
-      
-      log "Mission criteria check: $mc_met_criteria/$mc_total_criteria met."
 
-      if [ "$mc_met_criteria" -ge "$mc_total_criteria" ] && [ "$mc_total_criteria" -gt 0 ]; then
-        log "MISSION COMPLETE: All criteria met."
+      emit_event "mission_complete" "Mission '$_mission_name' ($([ -z "$_mission_hash" ] && echo "global" || echo "$_mission_hash")) completed. All $mc_total_criteria criteria met."
 
-        _mission_name=$(grep '^# ' "$_mission_file" | head -1 | sed 's/^# //' || echo "${_mission_hash:-global}")
-
-        # Emit structured event
-        emit_event "mission_complete" "Mission '$_mission_name' ($([ -z "$_mission_hash" ] && echo "global" || echo "$_mission_hash")) completed. All $mc_total_criteria criteria met."
-
-        # Notify all configured channels
-        tg "🎉🏆 *$SKYNET_PROJECT_NAME_UPPER MISSION COMPLETE!*
+      tg "🎉🏆 *$SKYNET_PROJECT_NAME_UPPER MISSION COMPLETE!*
 Mission: *$_mission_name*
 All $mc_total_criteria success criteria have been achieved. The pipeline has fulfilled this mission's objectives!"
 
-        # Write celebration entry to blockers.md
-        {
-          echo ""
-          echo "## 🎉 Mission Complete: $_mission_name — $(date '+%Y-%m-%d %H:%M')"
-          echo ""
-          echo "All success criteria for mission '$_mission_name' have been met."
-          echo ""
-          echo "$_mc_raw_criteria"
-          echo ""
-        } >> "$BLOCKERS"
+      # Write celebration entry to blockers.md
+      {
+        echo ""
+        echo "## 🎉 Mission Complete: $_mission_name — $(date '+%Y-%m-%d %H:%M')"
+        echo ""
+        echo "All success criteria for mission '$_mission_name' have been met."
+        echo ""
+        echo "$_mc_raw_criteria"
+        echo ""
+      } >> "$BLOCKERS"
 
-        # Set sentinel to prevent repeated notifications
-        echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"mission\": \"$_mission_name\", \"slug\": \"${_mission_hash:-global}\", \"criteriaCount\": $mc_total_criteria}" > "$MISSION_COMPLETE_SENTINEL"
-        log "Mission-complete sentinel written to $MISSION_COMPLETE_SENTINEL"
-      else
-        log "Mission not yet complete — $((mc_total_criteria - mc_met_criteria)) criteria remaining."
-      fi
-    else
+      # Sentinel for backward compat with watchdog
+      echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"mission\": \"$_mission_name\", \"slug\": \"${_mission_hash:-global}\", \"criteriaCount\": $mc_total_criteria}" > "$MISSION_COMPLETE_SENTINEL"
+      log "Mission state set to 'complete'. Sentinel written to $MISSION_COMPLETE_SENTINEL"
+      ;;
+    reviewing)
+      log "Zero pending tasks but not all criteria met — transitioning to 'reviewing'."
+      mission_set_state "$_mission_file" "$MISSION_STATE_REVIEWING" "project-driver"
+      ;;
+    active)
+      # Tasks still pending — no state change needed
+      ;;
+    "")
       log "No success criteria found in mission file. Skipping completion detection."
-    fi
-  fi
+      ;;
+  esac
 fi
 
 log "Project driver finished."
