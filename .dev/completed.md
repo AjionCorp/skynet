@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Wire failure analyzer into watchdog cycle and auto-generate INFRA tasks on threshold breach | merged to main | 6m | success |
 | 2026-03-04 | [INFRA] Add worker reassignment protocol on mission DONE in `scripts/dev-worker.sh` and `scripts/task-fixer.sh` | merged to main | 1m | success |
 | 2026-03-04 | [DATA] Surface per-worker performance stats in pipeline-status API response | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Build failure pattern analyzer in `scripts/failure-analyzer.sh` | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM projection in status JSON | merged to main | 5m | success |
 | 2026-03-04 | [FIX] Reconcile mission LLM status visibility drift across operator surfaces | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell regression coverage for mission LLM helper failure modes | merged to main | 2m | success |
-| 2026-03-04 | [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output | merged to main | 2m | success |
