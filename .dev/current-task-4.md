@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle
+## [TEST] Add admin API route tests for missions CRUD and assignment endpoints
 **Status:** completed
-**Started:** 2026-03-03 19:21
+**Started:** 2026-03-03 19:31
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-codex-auth-refr
+**Branch:** dev/add-admin-api-route-tests-for-missions-c
 **Worker:** 4
 
 ### Changes
