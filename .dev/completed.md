@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FEAT] Add per-goal burndown and ETA estimation to MissionDashboard | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Add task-type affinity scoring to worker task selection in `dev-worker.sh` | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add unit tests for intent overlap enforcement and task-skip behavior | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add mission queue support for worker reassignment on DONE | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add cross-surface parity tests for mission-status LLM defaults | merged to main | 5m | success |
 | 2026-03-04 | [DATA] Default `activeMission.llmConfig` in mission status payloads when mission has no explicit override | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Auto-demote stale claimed backlog rows whose normalized roots are already completed | merged to main | 4m | success |
-| 2026-03-04 | [FIX] Re-land stale unmerged `.dev/` index recovery in merge pipeline | merged to main | 3m | success |

@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard
+## [FEAT] Add per-goal burndown and ETA estimation to MissionDashboard
 **Status:** completed
-**Started:** 2026-03-04 10:58
+**Started:** 2026-03-04 11:04
 **Completed:** 2026-03-04
-**Branch:** dev/add-missiongoalprogress-panel-to-admin-p
+**Branch:** dev/add-per-goal-burndown-and-eta-estimation
 **Worker:** 2
 
 ### Changes
