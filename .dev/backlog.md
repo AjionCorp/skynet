@@ -3,9 +3,8 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults — add a shared explicit-vs-defaulted fixture matrix in `packages/dashboard/src/handlers/mission-status.test.ts`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and `packages/cli/src/commands/status.test.ts` to prevent projection drift across surfaces.
 - [>] [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` to assert safe fallback behavior when `llmConfig` is missing fields or serialized in legacy shapes.
-- [ ] [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to assert both workers export `SKYNET_CLAUDE_MODEL` consistently for explicit mission model and default fallback cases.
+- [>] [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to assert both workers export `SKYNET_CLAUDE_MODEL` consistently for explicit mission model and default fallback cases.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
