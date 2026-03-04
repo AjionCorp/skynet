@@ -691,3 +691,105 @@ ${recent}"
 
   printf '%s' "$ctx"
 }
+
+# --- Worker intent registry ---
+# Lightweight file-based registry for workers to declare their current intent
+# (e.g., "claiming", "building", "merging", "idle"). Enables coordination
+# between workers and the watchdog without SQLite overhead.
+#
+# Storage: $DEV_DIR/intents/worker-N  (one file per worker)
+# Format:  intent_name|epoch_timestamp
+#
+# Intent files are ephemeral — they exist only while a worker is active.
+# The prune helper cleans up stale entries from dead workers.
+
+SKYNET_INTENTS_DIR="$DEV_DIR/intents"
+
+# Read a worker's current intent.
+# Returns the intent name on stdout, or empty string if no intent is set.
+# Usage: current=$(_intent_read 3)
+_intent_read() {
+  local worker_id="$1"
+  local intent_file="$SKYNET_INTENTS_DIR/worker-${worker_id}"
+  [ -f "$intent_file" ] || { echo ""; return; }
+  local content
+  content=$(cat "$intent_file" 2>/dev/null) || { echo ""; return; }
+  # Extract intent name (before the pipe separator)
+  local intent="${content%%|*}"
+  echo "${intent:-}"
+}
+
+# Read a worker's intent with its epoch timestamp.
+# Outputs two fields separated by pipe: intent|epoch
+# Usage: IFS='|' read -r intent epoch <<< "$(_intent_read_full 3)"
+_intent_read_full() {
+  local worker_id="$1"
+  local intent_file="$SKYNET_INTENTS_DIR/worker-${worker_id}"
+  [ -f "$intent_file" ] || { echo ""; return; }
+  cat "$intent_file" 2>/dev/null || echo ""
+}
+
+# List all active worker intents.
+# Outputs one line per worker: worker_id|intent|epoch
+# Usage: while IFS='|' read -r wid intent epoch; do ...; done <<< "$(_intent_list)"
+_intent_list() {
+  [ -d "$SKYNET_INTENTS_DIR" ] || return 0
+  local f wid content
+  for f in "$SKYNET_INTENTS_DIR"/worker-*; do
+    [ -f "$f" ] || continue
+    wid="${f##*/worker-}"
+    content=$(cat "$f" 2>/dev/null) || continue
+    [ -n "$content" ] && echo "${wid}|${content}"
+  done
+}
+
+# Write (set) a worker's current intent.
+# Creates the intents directory if needed. Atomic via temp+mv.
+# Usage: _intent_write 3 "merging"
+_intent_write() {
+  local worker_id="$1" intent="$2"
+  mkdir -p "$SKYNET_INTENTS_DIR" 2>/dev/null || true
+  local intent_file="$SKYNET_INTENTS_DIR/worker-${worker_id}"
+  local epoch
+  epoch=$(date +%s)
+  # Atomic write: temp file + mv prevents partial reads
+  local tmp="${intent_file}.tmp.$$"
+  printf '%s|%s' "$intent" "$epoch" > "$tmp" && mv -f "$tmp" "$intent_file"
+}
+
+# Clear a worker's intent (remove the file).
+# Usage: _intent_clear 3
+_intent_clear() {
+  local worker_id="$1"
+  rm -f "$SKYNET_INTENTS_DIR/worker-${worker_id}" 2>/dev/null || true
+}
+
+# Prune stale intent files from dead workers.
+# Removes intents older than max_age_minutes whose worker PID is no longer running.
+# Safe to call from watchdog on every cycle.
+# Usage: _intent_prune [max_age_minutes]
+_intent_prune() {
+  local max_age_minutes="${1:-${SKYNET_STALE_MINUTES:-30}}"
+  [ -d "$SKYNET_INTENTS_DIR" ] || return 0
+  local now f wid content epoch age_secs max_age_secs
+  now=$(date +%s)
+  max_age_secs=$((max_age_minutes * 60))
+  for f in "$SKYNET_INTENTS_DIR"/worker-*; do
+    [ -f "$f" ] || continue
+    wid="${f##*/worker-}"
+    content=$(cat "$f" 2>/dev/null) || continue
+    # Extract epoch (after the pipe separator)
+    epoch="${content##*|}"
+    case "$epoch" in ''|*[!0-9]*) rm -f "$f" 2>/dev/null; continue ;; esac
+    age_secs=$((now - epoch))
+    if [ "$age_secs" -gt "$max_age_secs" ]; then
+      # Check if the worker's PID lock still exists and is alive
+      local pid_file="${SKYNET_LOCK_PREFIX}-dev-${wid}.lock"
+      local worker_pid=""
+      [ -f "$pid_file" ] && worker_pid=$(cat "$pid_file" 2>/dev/null)
+      if [ -z "$worker_pid" ] || ! kill -0 "$worker_pid" 2>/dev/null; then
+        rm -f "$f" 2>/dev/null || true
+      fi
+    fi
+  done
+}
