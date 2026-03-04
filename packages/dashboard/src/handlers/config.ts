@@ -338,7 +338,7 @@ export function createConfigHandler(config: SkynetConfig) {
             let isStale = false;
 
             // Check if holder PID is dead
-            if (!isNaN(holderPid) && holderPid > 0) {
+            if (Number.isFinite(holderPid) && holderPid > 0) {
               try { process.kill(holderPid, 0); } catch { isStale = true; }
             }
 

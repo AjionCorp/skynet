@@ -284,12 +284,16 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           const hbRaw = readDevFile(devDir, `worker-${wid}.heartbeat`).trim();
           if (hbRaw) {
             const epoch = Number(hbRaw);
-            const ageMs = Date.now() - epoch * 1000;
-            heartbeats[`worker-${wid}`] = {
-              lastEpoch: epoch,
-              ageMs,
-              isStale: ageMs > staleThresholdMs,
-            };
+            if (Number.isFinite(epoch)) {
+              const ageMs = Date.now() - epoch * 1000;
+              heartbeats[`worker-${wid}`] = {
+                lastEpoch: epoch,
+                ageMs,
+                isStale: ageMs > staleThresholdMs,
+              };
+            } else {
+              heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
+            }
           } else {
             heartbeats[`worker-${wid}`] = { lastEpoch: null, ageMs: null, isStale: false };
           }
@@ -430,9 +434,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       let lastFailEpoch: number | null = null;
       if (authFailFlag) {
         try {
-          lastFailEpoch = Number(
-            readFileSync(authFailPath, "utf-8").trim()
-          );
+          const raw = Number(readFileSync(authFailPath, "utf-8").trim());
+          lastFailEpoch = Number.isFinite(raw) ? raw : null;
         } catch {
           /* ignore */
         }
