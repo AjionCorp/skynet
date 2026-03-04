@@ -633,6 +633,17 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         missionSlug: requestedMission || activeMission,
       });
 
+      // Per-worker performance stats
+      let workerStats: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> = {};
+      if (usingSqlite && db) {
+        workerStats = db.getWorkerPerformanceStats(maxW);
+      } else {
+        // File fallback: completed.md lacks worker_id — return empty stats
+        for (let wid = 1; wid <= maxW; wid++) {
+          workerStats[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0 };
+        }
+      }
+
       pushHealthTrend(healthScore);
 
       return Response.json({
@@ -678,6 +689,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           },
           missionState: getMissionState(devDir, requestedMission || activeMission),
           missionProgress,
+          workerStats,
           pipelinePaused: existsSync(resolve(devDir, "pipeline-paused")),
           watchdogRunning,
           projectDriverRunning,

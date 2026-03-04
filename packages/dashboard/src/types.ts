@@ -129,6 +129,7 @@ export interface PipelineStatus {
   missionState: MissionState | null;
   missionProgress: MissionProgress[];
   pipelinePaused: boolean;
+  workerStats: Record<string, WorkerPerformanceStats>;
   watchdogRunning: boolean;
   projectDriverRunning: boolean;
   timestamp: string;
@@ -306,6 +307,15 @@ export interface MissionCreatorResult {
     title: string;
     content: string;
   }>;
+}
+
+// ===== Worker Performance Stats =====
+
+export interface WorkerPerformanceStats {
+  completedCount: number;
+  failedCount: number;
+  avgDuration: string | null;
+  successRate: number;
 }
 
 // ===== Self-Correction Stats =====

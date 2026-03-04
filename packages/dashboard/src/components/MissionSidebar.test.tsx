@@ -56,6 +56,7 @@ const MOCK_PIPELINE: PipelineStatus = {
   missionState: null,
   missionProgress: [],
   pipelinePaused: false,
+  workerStats: {},
   watchdogRunning: true,
   projectDriverRunning: false,
   timestamp: "2024-11-14T22:13:20.000Z",

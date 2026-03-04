@@ -562,6 +562,54 @@ export class SkynetDB {
     return row.cnt;
   }
 
+  // ── Worker Performance Stats ────────────────────────────────────────
+
+  /** Per-worker performance stats (completed, failed, avg duration, success rate). */
+  getWorkerPerformanceStats(maxWorkers: number): Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> {
+    const rows = this.db
+      .prepare(
+        `SELECT
+           worker_id,
+           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed,
+           AVG(CASE WHEN status IN ('completed','fixed') AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
+         FROM tasks
+         WHERE worker_id IS NOT NULL AND worker_id <= ?
+         GROUP BY worker_id`
+      )
+      .all(maxWorkers) as { worker_id: number; completed: number; failed: number; avg_secs: number | null }[];
+
+    const result: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> = {};
+
+    // Initialize all workers with zeros
+    for (let wid = 1; wid <= maxWorkers; wid++) {
+      result[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0 };
+    }
+
+    for (const r of rows) {
+      const total = r.completed + r.failed;
+      let avgDuration: string | null = null;
+      if (r.avg_secs != null && r.avg_secs > 0) {
+        const minutes = r.avg_secs / 60;
+        if (minutes < 60) {
+          avgDuration = `${Math.round(minutes)}m`;
+        } else {
+          const h = Math.floor(minutes / 60);
+          const rem = Math.round(minutes % 60);
+          avgDuration = rem === 0 ? `${h}h` : `${h}h ${rem}m`;
+        }
+      }
+      result[`worker-${r.worker_id}`] = {
+        completedCount: r.completed,
+        failedCount: r.failed,
+        avgDuration,
+        successRate: total > 0 ? Math.round((r.completed / total) * 100) : 0,
+      };
+    }
+
+    return result;
+  }
+
   // ── Fixer Stats ────────────────────────────────────────────────────
 
   getFixRate24h(): number {
