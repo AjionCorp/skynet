@@ -494,12 +494,17 @@ EOF
   db_declare_intent "$WORKER_ID" "${task_type:-}" "$task_title" 2>/dev/null || true
   _overlap=$(db_check_intent_overlap "$WORKER_ID" "${task_type:-}" "$task_title" 2>/dev/null || true)
   if [ -n "$_overlap" ]; then
-    log "WARNING: Intent overlap detected with other active worker(s):"
+    log "SKIP: Intent overlap detected — unclaiming task to avoid merge conflicts:"
     while IFS='|' read -r _ov_wid _ov_intent _ov_title; do
       [ -z "$_ov_wid" ] && continue
       log "  W${_ov_wid}: ${_ov_title} (shared: ${_ov_intent})"
     done <<< "$_overlap"
-    emit_event "intent_overlap" "Worker $WORKER_ID ($task_title) overlaps with: $_overlap" 2>/dev/null || true
+    emit_event "intent_overlap_skip" "Worker $WORKER_ID skipped ($task_title) — overlaps with: $_overlap" 2>/dev/null || true
+    db_clear_intent "$WORKER_ID" 2>/dev/null || true
+    [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
+    _CURRENT_TASK_TITLE=""
+    _CURRENT_TASK_DB_TITLE=""
+    continue
   fi
 
   # Write current task status for this worker
