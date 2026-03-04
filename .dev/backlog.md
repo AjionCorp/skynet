@@ -3,10 +3,9 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add admin page render smoke tests for secondary dashboard pages — create `packages/admin/src/app/admin/__tests__/page-smoke-secondary.test.tsx` testing events, logs, monitoring, and settings pages render without errors. Same mocking strategy as primary smoke tests. Run `pnpm typecheck`.
 - [>] [FIX] Add request body validation to admin API POST handlers — in `packages/admin/src/app/api/admin/tasks/route.ts` and `packages/admin/src/app/api/admin/config/route.ts`, wrap `await req.json()` in try/catch returning 400 on parse failure. Add field-existence checks for required POST fields. DO NOT change success response shapes. Run `pnpm typecheck`.
 - [>] [TEST] Add admin component tests for MissionDashboard LLM config interactions — create `packages/admin/src/components/__tests__/MissionDashboard-llm.test.tsx` testing LLM provider dropdown renders, model input updates, config saves on submit, and model badge displays on cards. Mock `useSkynet()` and `fetch`. Run `pnpm typecheck`.
-- [ ] [INFRA] Add structured error logging to admin API route catch blocks — in `packages/admin/src/app/api/admin/missions/route.ts` and `tasks/route.ts`, ensure all catch blocks log `console.error` with request method, path, and error message before returning `{ error }` response. DO NOT change response shapes. Run `pnpm typecheck`.
+- [>] [INFRA] Add structured error logging to admin API route catch blocks — in `packages/admin/src/app/api/admin/missions/route.ts` and `tasks/route.ts`, ensure all catch blocks log `console.error` with request method, path, and error message before returning `{ error }` response. DO NOT change response shapes. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
