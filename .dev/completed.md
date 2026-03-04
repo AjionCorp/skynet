@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add unit tests for handler-error.ts utility | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add unit tests for useKeyboardShortcuts hook | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for prompts, project-driver status, and worker-scale endpoints | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for pipeline data endpoints | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add unit tests for mission-assignments.ts handler | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-detail.ts handler | merged to main | 2m | success |
 | 2026-03-03 | [INFRA] Add comprehensive vitest configuration for dashboard handler tests | merged to main | 3m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for feature-validator.sh validation logic | merged to main | 5m | success |
