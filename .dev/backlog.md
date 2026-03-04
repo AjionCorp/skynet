@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [FIX] Supersede last stale active failed-task row for resolved _merge.sh orphan fix — in `.dev/failed-tasks.md`, change status of the row `[FIX] Commit orphaned _merge.sh stale-index recovery and supersede 2 blocked failed rows` (branch `dev/commit-orphaned-mergesh-stale-index-reco`, status=failed, 2 attempts) to `superseded`. The _merge.sh changes landed in commit 9ebffae and the 2 blocked rows were already superseded in commit c16041c. DO NOT modify any TypeScript or shell source files. Only edit `.dev/failed-tasks.md`. Run `pnpm typecheck`.
 - [>] [TEST] Add shell unit tests for sync-runner.sh sync lifecycle — create `scripts/tests/sync-runner.test.sh`. Test pre-flight URL validation, lock acquisition, error handling for missing config, and graceful exit on signal. Source `scripts/_config.sh` in test setup. Follow existing shell test patterns. DO NOT modify source scripts. Run `pnpm typecheck`.
 - [>] [TEST] Add shell unit tests for watchdog.sh dispatch and reconciliation core logic — create `scripts/tests/watchdog.test.sh`. Test worker dispatch decision (when to spawn vs skip), heartbeat staleness detection, stale-claim recovery logic, backlog marker validation, and idle detection. Source `scripts/_config.sh` in test setup. Follow existing shell test patterns (see `project-driver.test.sh` for reference on testing complex scripts). DO NOT modify source scripts. Run `pnpm typecheck`.
 
