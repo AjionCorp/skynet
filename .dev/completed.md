@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell unit tests for _events.sh event emission helpers | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add unit tests for handler-error.ts utility | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add unit tests for useKeyboardShortcuts hook | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for prompts, project-driver status, and worker-scale endpoints | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FEAT] are we tracking our mission | merged to main | 7m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-assignments.ts handler | merged to main | 4m | success |
 | 2026-03-03 | [TEST] Add unit tests for mission-detail.ts handler | merged to main | 2m | success |
-| 2026-03-03 | [INFRA] Add comprehensive vitest configuration for dashboard handler tests | merged to main | 3m | success |
