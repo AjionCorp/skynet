@@ -3,9 +3,9 @@
 | Date | Task | Branch | Error | Reason | Attempts | Status |
 |------|------|--------|-------|--------|----------|--------|
 | 2026-03-04 | [INFRA] Wire adaptive goal weighting into project-driver.sh | dev/wire-adaptive-goal-weighting-into-projec | merge conflict | merge_conflict | 0 | failed |
-| 2026-03-04 | [INFRA] Align `scripts/mission-state.sh` state names with mission spec | dev/align-scriptsmission-statesh-state-names | merge conflict after fix attempt 3 | merge_conflict | 3 | blocked |
-| 2026-03-04 | [INFRA] Add intent-aware negative constraints to `scripts/project-driver.sh` task generation | dev/add-intent-aware-negative-constraints-to | merge conflict after fix attempt 3 | merge_conflict | 3 | blocked |
-| 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict after fix attempt 3 | merge_conflict | 3 | blocked |
+| 2026-03-04 | [INFRA] Align `scripts/mission-state.sh` state names with mission spec | dev/align-scriptsmission-statesh-state-names | merge conflict after fix attempt 3 | merge_conflict | 3 | superseded |
+| 2026-03-04 | [INFRA] Add intent-aware negative constraints to `scripts/project-driver.sh` task generation | dev/add-intent-aware-negative-constraints-to | merge conflict after fix attempt 3 | merge_conflict | 3 | superseded |
+| 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict after fix attempt 3 | merge_conflict | 3 | superseded |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | merged to main | merge conflict |  | 1 | fixed |
 | 2026-03-04 | [DATA] Create `/api/admin/mission/state` endpoint for lifecycle state visibility | merged to main | merge conflict |  | 1 | fixed |
 | 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | merged to main | merge conflict |  | 1 | fixed |
