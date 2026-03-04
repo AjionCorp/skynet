@@ -5,6 +5,7 @@ import { parseBody } from "../lib/parse-body";
 import { getSkynetDB } from "../lib/db";
 import { checkRateLimit } from "../lib/rate-limiter";
 import { parseBacklogWithBlocked } from "../lib/backlog-parser";
+import { logHandlerError } from "../lib/handler-error";
 
 const MAX_DESCRIPTION_LENGTH = 2000;
 
@@ -86,6 +87,7 @@ export function createTasksHandlers(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(devDir, "tasks:GET", err);
       return Response.json(
         {
           data: null,
@@ -296,6 +298,7 @@ export function createTasksHandlers(config: SkynetConfig) {
         } catch { /* lock cleanup failure is non-fatal — lock dir may already be removed by another process */ }
       }
     } catch (err) {
+      logHandlerError(devDir, "tasks:POST", err);
       return Response.json(
         {
           data: null,

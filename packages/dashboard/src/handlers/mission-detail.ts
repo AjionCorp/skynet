@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig, MissionConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { logHandlerError } from "../lib/handler-error";
 
 /** Read _config.json, returning defaults if missing */
 function readConfig(configPath: string): MissionConfig {
@@ -66,6 +67,7 @@ export function createMissionDetailHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(config.devDir, "mission-detail:GET", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to read mission" },
         { status: 500 },
@@ -109,6 +111,7 @@ export function createMissionDetailHandler(config: SkynetConfig) {
       writeFileSync(filePath, body.raw, "utf-8");
       return Response.json({ data: { slug, saved: true }, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "mission-detail:PUT", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to update mission" },
         { status: 500 },
@@ -154,6 +157,7 @@ export function createMissionDetailHandler(config: SkynetConfig) {
 
       return Response.json({ data: { slug, deleted: true }, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "mission-detail:DELETE", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to delete mission" },
         { status: 500 },

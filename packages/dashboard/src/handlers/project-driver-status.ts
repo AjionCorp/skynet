@@ -1,6 +1,7 @@
 import type { SkynetConfig, ProjectDriverTelemetry } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Create a GET handler for the project-driver/status endpoint.
@@ -35,6 +36,7 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(config.devDir, "project-driver-status", err);
       return Response.json(
         {
           data: null,

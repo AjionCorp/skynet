@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, copyFi
 import { resolve } from "path";
 import type { SkynetConfig, MissionSummary, MissionConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { logHandlerError } from "../lib/handler-error";
 
 const DEFAULT_CONFIG: MissionConfig = { activeMission: "main", assignments: {} };
 
@@ -115,6 +116,7 @@ export function createMissionsHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(config.devDir, "missions:GET", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to list missions" },
         { status: 500 },
@@ -220,6 +222,7 @@ export function createMissionsHandler(config: SkynetConfig) {
 
       return Response.json({ data: { slug, name: name.trim() }, error: null }, { status: 201 });
     } catch (err) {
+      logHandlerError(config.devDir, "missions:POST", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to create mission" },
         { status: 500 },

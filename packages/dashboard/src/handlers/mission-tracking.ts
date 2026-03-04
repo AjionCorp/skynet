@@ -3,6 +3,7 @@ import { resolve } from "path";
 import type { SkynetConfig, MissionConfig, MissionTracking } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { getSkynetDB } from "../lib/db";
+import { logHandlerError } from "../lib/handler-error";
 
 function readMissionConfig(devDir: string): MissionConfig {
   try {
@@ -192,6 +193,7 @@ export function createMissionTrackingHandler(config: SkynetConfig) {
 
       return Response.json({ data: tracking, error: null });
     } catch (err) {
+      logHandlerError(devDir, "mission-tracking", err);
       return Response.json(
         {
           data: null,

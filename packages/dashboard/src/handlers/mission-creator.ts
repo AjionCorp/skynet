@@ -1,6 +1,7 @@
 import { spawn } from "child_process";
 import type { SkynetConfig, MissionCreatorResult } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { logHandlerError } from "../lib/handler-error";
 
 const GENERATE_TIMEOUT_MS = 120_000;
 
@@ -155,6 +156,7 @@ Rules:
 
       return Response.json({ data: result, error: null });
     } catch (err) {
+      logHandlerError(_config.devDir, "mission-creator:POST", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "AI generation failed" },
         { status: 500 },
@@ -221,6 +223,7 @@ Rules:
 
       return Response.json({ data: result, error: null });
     } catch (err) {
+      logHandlerError(_config.devDir, "mission-creator:expand", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "AI expansion failed" },
         { status: 500 },

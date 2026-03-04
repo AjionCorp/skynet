@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import type { SkynetConfig, PromptTemplate } from "../types";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * List of worker/agent scripts that have associated prompt files.
@@ -76,6 +77,7 @@ export function createPromptsHandler(config: SkynetConfig) {
 
       return Response.json({ data: prompts, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "prompts", err);
       return Response.json(
         {
           data: null,

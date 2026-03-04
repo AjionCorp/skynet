@@ -4,6 +4,7 @@ import { resolve, join } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { SAFE_SCRIPT_NAME } from "../lib/constants";
+import { logHandlerError } from "../lib/handler-error";
 
 const SCALABLE_TYPES = ["dev-worker", "task-fixer", "project-driver"] as const;
 
@@ -139,6 +140,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
       });
       return Response.json({ data: { workers }, error: null });
     } catch (err) {
+      logHandlerError(devDir, "worker-scaling:GET", err);
       return Response.json(
         {
           data: null,
@@ -342,6 +344,7 @@ export function createWorkerScalingHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(devDir, "worker-scaling:POST", err);
       return Response.json(
         {
           data: null,

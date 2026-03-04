@@ -3,6 +3,7 @@ import { resolve } from "path";
 import type { SkynetConfig, MissionConfig } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { parseBody } from "../lib/parse-body";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Resolve which mission file to read/write.
@@ -60,6 +61,7 @@ export function createMissionRawHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(devDir, "mission-raw:GET", err);
       return Response.json(
         {
           data: null,
@@ -93,6 +95,7 @@ export function createMissionRawHandler(config: SkynetConfig) {
 
       return Response.json({ data: { saved: true }, error: null });
     } catch (err) {
+      logHandlerError(devDir, "mission-raw:PUT", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to write mission.md" },
         { status: 500 },

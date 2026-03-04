@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig, MissionConfig, LlmConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
+import { logHandlerError } from "../lib/handler-error";
 
 function readConfig(configPath: string): MissionConfig {
   try {
@@ -31,6 +32,7 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
       const missionConfig = readConfig(configPath);
       return Response.json({ data: missionConfig, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "mission-assignments:GET", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to read assignments" },
         { status: 500 },
@@ -155,6 +157,7 @@ export function createMissionAssignmentsHandler(config: SkynetConfig) {
       writeConfig(configPath, missionConfig);
       return Response.json({ data: missionConfig, error: null });
     } catch (err) {
+      logHandlerError(config.devDir, "mission-assignments:PUT", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Failed to update assignments" },
         { status: 500 },

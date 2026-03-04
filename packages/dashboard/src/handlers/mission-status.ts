@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
 import type { SkynetConfig, MissionCriterion, MissionConfig } from "../types";
 import { readDevFile } from "../lib/file-reader";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Extract a named section from mission.md.
@@ -227,6 +228,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(devDir, "mission-status", err);
       return Response.json(
         {
           data: null,

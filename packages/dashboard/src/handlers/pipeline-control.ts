@@ -5,6 +5,7 @@ import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { readPid, isProcessAlive, killByLock, listProjectDriverLocks } from "../lib/process-locks";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Pipeline control handler: pause, resume, start (watchdog), stop (pause + kill workers).
@@ -141,6 +142,7 @@ export function createPipelineControlHandler(config: SkynetConfig) {
       // Unreachable: VALID_ACTIONS check above covers all cases
       return Response.json({ data: null, error: "Unknown action" }, { status: 400 });
     } catch (err) {
+      logHandlerError(devDir, "pipeline-control", err);
       return Response.json(
         { data: null, error: err instanceof Error ? err.message : "Internal error" },
         { status: 500 },

@@ -4,6 +4,7 @@ import { resolve } from "path";
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { SAFE_SCRIPT_NAME } from "../lib/constants";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Create a POST handler for the pipeline/trigger endpoint.
@@ -89,6 +90,7 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(config.devDir, "pipeline-trigger", err);
       return Response.json(
         {
           data: null,

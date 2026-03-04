@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync, rmSync,
 import type { SkynetConfig } from "../types";
 import { parseBody } from "../lib/parse-body";
 import { VALID_CONFIG_KEY } from "../lib/constants";
+import { logHandlerError } from "../lib/handler-error";
 
 /**
  * Parse a skynet.config.sh file into key-value pairs.
@@ -276,6 +277,7 @@ export function createConfigHandler(config: SkynetConfig) {
         error: null,
       });
     } catch (err) {
+      logHandlerError(config.devDir, "config:GET", err);
       return Response.json(
         {
           data: null,
@@ -387,6 +389,7 @@ export function createConfigHandler(config: SkynetConfig) {
         try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* lock cleanup failure is non-fatal */ }
       }
     } catch (err) {
+      logHandlerError(config.devDir, "config:POST", err);
       return Response.json(
         {
           data: null,

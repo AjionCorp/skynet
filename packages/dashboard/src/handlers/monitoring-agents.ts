@@ -3,6 +3,7 @@ import { resolve } from "path";
 import { spawnSync } from "child_process";
 import { homedir, platform } from "os";
 import type { SkynetConfig } from "../types";
+import { logHandlerError } from "../lib/handler-error";
 import { SAFE_SCRIPT_PATH, SAFE_AGENT_NAME } from "../lib/constants";
 
 /**
@@ -233,6 +234,7 @@ export function createMonitoringAgentsHandler(config: SkynetConfig) {
       }
       return getDarwinAgents(agentPrefix, plistDir, agentDefs);
     } catch (err) {
+      logHandlerError(config.devDir, "monitoring-agents", err);
       return Response.json(
         {
           data: null,
