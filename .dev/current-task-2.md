@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Expose active mission LLM assignment in operator status surfaces
+## [FIX] Reconcile mission LLM status visibility drift across operator surfaces
 **Status:** completed
-**Started:** 2026-03-03 20:48
+**Started:** 2026-03-03 20:56
 **Completed:** 2026-03-03
-**Branch:** dev/expose-active-mission-llm-assignment-in-
+**Branch:** dev/reconcile-mission-llm-status-visibility-
 **Worker:** 2
 
 ### Changes

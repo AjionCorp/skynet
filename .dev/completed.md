@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FIX] Reconcile mission LLM status visibility drift across operator surfaces | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell regression coverage for mission LLM helper failure modes | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell unit tests for codex-auth-refresh.sh token lifecycle | merged to main | 16m | success |
 | 2026-03-04 | [TEST] Add shell unit tests for ui-tester.sh validation flow | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add exponential retry backoff for transient HTTP failures in sync-runner.sh | merged to main | 1m | success |
-| 2026-03-04 | [TEST] Add shell unit tests for dashboard.sh dev server lifecycle | merged to main | 7m | success |
