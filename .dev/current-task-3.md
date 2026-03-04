@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Record failure reason codes in `dev-worker.sh` task completion
+## [INFRA] Add worker context injection with other workers' active tasks into Claude Code prompt
 **Status:** completed
-**Started:** 2026-03-04 07:37
+**Started:** 2026-03-04 07:41
 **Completed:** 2026-03-04
-**Branch:** dev/record-failure-reason-codes-in-dev-worke
+**Branch:** dev/add-worker-context-injection-with-other-
 **Worker:** 3
 
 ### Changes
