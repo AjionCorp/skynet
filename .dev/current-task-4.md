@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add Codex agent `--model` passthrough for mission-selected model
+## [TEST] Add CLI and cross-surface parity regression for active mission LLM payload
 **Status:** completed
-**Started:** 2026-03-03 21:01
+**Started:** 2026-03-03 21:06
 **Completed:** 2026-03-03
-**Branch:** dev/add-codex-agent---model-passthrough-for-
+**Branch:** dev/add-cli-and-cross-surface-parity-regress
 **Worker:** 4
 
 ### Changes
