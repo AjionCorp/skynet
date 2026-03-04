@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add Pipeline dashboard regression for mission LLM status visibility | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Display active mission LLM assignment in Pipeline dashboard status cards | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Preserve active mission `llmConfig` in admin pipeline status route contract tests | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add component tests for MissionSidebar and KeyboardShortcutsHelp | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for check-server-errors.sh error detection | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add component tests for HealthSparkline, TaskVelocityChart, and ProjectDriverDashboard | merged to main | 5m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for post-merge-smoke.sh validation checks | merged to main | 2m | success |

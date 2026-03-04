@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add worker threading regression coverage for mission LLM env application
+## [TEST] Add Pipeline dashboard regression for mission LLM status visibility
 **Status:** completed
-**Started:** 2026-03-03 20:30
+**Started:** 2026-03-03 20:39
 **Completed:** 2026-03-03
-**Branch:** dev/add-worker-threading-regression-coverage
+**Branch:** dev/add-pipeline-dashboard-regression-for-mi
 **Worker:** 3
 
 ### Changes
