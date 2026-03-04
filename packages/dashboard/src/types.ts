@@ -239,11 +239,19 @@ export interface MissionCriterion {
 
 export type MissionState = "ACTIVE" | "PAUSED" | "COMPLETE" | (string & {});
 
+export interface GoalProgress {
+  goalIndex: number;
+  goalText: string;
+  checked: boolean;
+  relatedTasksCompleted: number;
+}
+
 export interface MissionStatus {
   state: MissionState | null;
   purpose: string | null;
   goals: MissionCriterion[];
   successCriteria: MissionCriterion[];
+  goalProgress: GoalProgress[];
   currentFocus: string | null;
   completionPercentage: number;
   raw: string;

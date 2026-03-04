@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import type { SkynetConfig, MissionCriterion, MissionConfig, MissionState } from "../types";
+import type { SkynetConfig, MissionCriterion, MissionConfig, MissionState, GoalProgress } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { logHandlerError } from "../lib/handler-error";
 
@@ -153,6 +153,52 @@ function crossReferenceCompleted(
 }
 
 /**
+ * Build goal progress breakdown: for each goal, count how many completed tasks
+ * have titles that match the goal's keywords (fuzzy word-boundary matching).
+ */
+function buildGoalProgress(
+  goals: MissionCriterion[],
+  completedRaw: string
+): GoalProgress[] {
+  const completedTasks = completedRaw
+    .split("\n")
+    .filter(
+      (l) =>
+        l.startsWith("|") && !l.includes("Date") && !l.includes("---")
+    )
+    .map((l) => {
+      const parts = l.split("|").map((p) => p.trim());
+      return (parts[2] ?? "").toLowerCase();
+    })
+    .filter((t) => t.length > 0);
+
+  return goals.map((goal, index) => {
+    const goalWords = goal.text
+      .toLowerCase()
+      .split(/\W+/)
+      .filter((w) => w.length > 3);
+
+    let relatedCount = 0;
+    if (goalWords.length >= 2) {
+      for (const task of completedTasks) {
+        const taskWords = new Set(task.split(/\W+/).filter((w) => w.length > 3));
+        const matchCount = goalWords.filter((word) => taskWords.has(word)).length;
+        if (matchCount / goalWords.length >= 0.4) {
+          relatedCount++;
+        }
+      }
+    }
+
+    return {
+      goalIndex: index,
+      goalText: goal.text,
+      checked: goal.completed,
+      relatedTasksCompleted: relatedCount,
+    };
+  });
+}
+
+/**
  * Create a GET handler for the mission/status endpoint.
  * Parses mission.md into structured sections and cross-references with completed tasks.
  */
@@ -193,6 +239,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
             purpose: null,
             goals: [],
             successCriteria: [],
+            goalProgress: [],
             currentFocus: null,
             completionPercentage: 0,
             raw: "",
@@ -222,6 +269,9 @@ export function createMissionStatusHandler(config: SkynetConfig) {
         successCriteria = crossReferenceCompleted(successCriteria, completedRaw);
       }
 
+      // Build goal progress breakdown
+      const goalProgress = buildGoalProgress(goals, completedRaw || "");
+
       // Completion percentage is based on success criteria
       const totalCriteria = successCriteria.length;
       const completedCriteria = successCriteria.filter((c) => c.completed).length;
@@ -236,6 +286,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
           purpose,
           goals,
           successCriteria,
+          goalProgress,
           currentFocus,
           completionPercentage,
           raw,

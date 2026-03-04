@@ -22,6 +22,11 @@ const MOCK_MISSION: MissionStatus = {
     { text: "Self-correction rate above 90%", completed: false },
     { text: "Complete handler test coverage", completed: true },
   ],
+  goalProgress: [
+    { goalIndex: 0, goalText: "Automate all deployments", checked: true, relatedTasksCompleted: 3 },
+    { goalIndex: 1, goalText: "Add real-time monitoring", checked: false, relatedTasksCompleted: 1 },
+    { goalIndex: 2, goalText: "Achieve zero downtime", checked: true, relatedTasksCompleted: 2 },
+  ],
   currentFocus: "Setting up CI/CD integration",
   completionPercentage: 65,
   raw: "# Mission\nBuild the best autonomous pipeline\n\n## Purpose\nAutomate everything",
