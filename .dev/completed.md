@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FIX] Enforce canonical Claude tier model validation in mission LLM writes | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add MissionDashboard regression for provider/model coupling safety | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Restore shell test infrastructure coverage for mission LLM flow | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add cross-surface parity tests for mission-status LLM defaults | merged to main | 5m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Deduplicate mission LLM env export logic into one shell helper | merged to main | 1m | success |
 | 2026-03-04 | [FIX] Harden stale unmerged-index recovery boundaries in `_merge.sh` | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add unit coverage for `_merge.sh` stale-index guardrails with mixed conflict sets | merged to main | 2m | success |
-| 2026-03-04 | [INFRA] Eliminate stale `scripts/tests/*` path generation in project-driver prompts | merged to main | 2m | success |

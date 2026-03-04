@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Auto-demote stale claimed backlog rows whose normalized roots are already completed
+## [FIX] Enforce canonical Claude tier model validation in mission LLM writes
 **Status:** completed
-**Started:** 2026-03-03 21:25
+**Started:** 2026-03-03 21:29
 **Completed:** 2026-03-03
-**Branch:** dev/auto-demote-stale-claimed-backlog-rows-w
+**Branch:** dev/enforce-canonical-claude-tier-model-vali
 **Worker:** 4
 
 ### Changes
