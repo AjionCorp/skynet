@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Add request body validation to admin API POST handlers
+## [TEST] Add admin API route tests for pipeline data endpoints
 **Status:** completed
-**Started:** 2026-03-03 19:35
+**Started:** 2026-03-03 20:15
 **Completed:** 2026-03-03
-**Branch:** dev/add-request-body-validation-to-admin-api
+**Branch:** dev/add-admin-api-route-tests-for-pipeline-d
 **Worker:** 2
 
 ### Changes
