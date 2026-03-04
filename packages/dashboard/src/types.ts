@@ -428,6 +428,24 @@ export interface FailureAnalysis {
   recentFailures: FailedTask[];
 }
 
+// ===== Worker Intent Types =====
+
+export interface WorkerIntent {
+  workerId: number;
+  workerType: string;
+  status: string;
+  taskId: number | null;
+  taskTitle: string | null;
+  branch: string | null;
+  startedAt: string | null;
+  lastHeartbeat: number | null;
+  heartbeatAgeMs: number | null;
+  lastProgress: number | null;
+  progressAgeMs: number | null;
+  lastInfo: string | null;
+  updatedAt: string;
+}
+
 // ===== Worker Scaling Types =====
 
 export interface WorkerScalePayload {

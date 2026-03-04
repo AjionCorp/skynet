@@ -513,6 +513,39 @@ export class SkynetDB {
     return result;
   }
 
+  /** Get all workers' intent data (status, task, heartbeat, progress). */
+  getWorkerIntents(): Array<{
+    workerId: number;
+    workerType: string;
+    status: string;
+    taskId: number | null;
+    taskTitle: string | null;
+    branch: string | null;
+    startedAt: string | null;
+    heartbeatEpoch: number | null;
+    progressEpoch: number | null;
+    lastInfo: string | null;
+    updatedAt: string;
+  }> {
+    const rows = this.db
+      .prepare("SELECT * FROM workers ORDER BY id")
+      .all() as (WorkerRow & { progress_epoch?: number | null })[];
+
+    return rows.map((row) => ({
+      workerId: row.id,
+      workerType: row.worker_type,
+      status: row.status,
+      taskId: row.current_task_id,
+      taskTitle: row.task_title || null,
+      branch: row.branch || null,
+      startedAt: row.started_at,
+      heartbeatEpoch: row.heartbeat_epoch,
+      progressEpoch: row.progress_epoch ?? null,
+      lastInfo: row.last_info || null,
+      updatedAt: row.updated_at,
+    }));
+  }
+
   // ── Blockers ───────────────────────────────────────────────────────
 
   /** Active blocker lines (for dashboard display). */
