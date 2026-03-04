@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence
+## [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models
 **Status:** completed
-**Started:** 2026-03-03 21:12
+**Started:** 2026-03-03 21:15
 **Completed:** 2026-03-03
-**Branch:** dev/add-admin-mission-api-regression-for-def
+**Branch:** dev/add-worker-mission-llm-shell-parity-cove
 **Worker:** 3
 
 ### Changes
