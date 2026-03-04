@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for admin skynet-config.ts configuration module
+## [FIX] Supersede moot blocked failed-task rows for completed mission.md and subsumed _merge.sh goals
 **Status:** completed
-**Started:** 2026-03-03 18:52
+**Started:** 2026-03-03 19:14
 **Completed:** 2026-03-03
-**Branch:** dev/add-unit-tests-for-admin-skynet-configts
+**Branch:** dev/supersede-moot-blocked-failed-task-rows-
 **Worker:** 1
 
 ### Changes
