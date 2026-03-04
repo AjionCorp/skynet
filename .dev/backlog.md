@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics — update `packages/dashboard/src/handlers/pipeline-status.ts` to emit `activeMission.llmConfig` as `{ provider, model?, isDefaulted }` using the same defaulting semantics as mission-status.
 - [>] [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults — add a shared explicit-vs-defaulted fixture matrix in `packages/dashboard/src/handlers/mission-status.test.ts`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and `packages/cli/src/commands/status.test.ts` to prevent projection drift across surfaces.
 - [>] [INFRA] Centralize mission LLM default projection into one shared helper — implement a single projector for `{ provider, model?, isDefaulted }` semantics and reuse it in `packages/dashboard/src/handlers/mission-status.ts`, `packages/dashboard/src/handlers/pipeline-status.ts`, and `packages/cli/src/commands/status.ts`.
 - [ ] [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence — extend `packages/admin/src/app/api/admin/missions/route.test.ts` and `packages/admin/src/app/api/admin/mission/route.test.ts` to verify create/edit preserve explicit `model` and keep defaulted behavior when `model` is omitted.

@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler and route regression for mission-status LLM payload defaulting
+## [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics
 **Status:** completed
-**Started:** 2026-03-03 21:03
+**Started:** 2026-03-03 21:10
 **Completed:** 2026-03-03
-**Branch:** dev/add-handler-and-route-regression-for-mis
+**Branch:** dev/keep-pipeline-status-active-mission-llm-
 **Worker:** 3
 
 ### Changes
