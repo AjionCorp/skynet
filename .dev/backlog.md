@@ -3,7 +3,11 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [ ] [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests — update `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include active mission `llmConfig` from `.dev/_config.json` with null-safe fallback, and add/extend tests proving dashboard/CLI field parity.
+- [>] [DATA] Display active mission LLM assignment in Pipeline dashboard status cards — update `packages/dashboard/src/components/PipelineDashboard.tsx` to render active mission `llmConfig.provider/model` from `/api/admin/pipeline/status` with deterministic fallback text when unset.
+- [>] [TEST] Add Pipeline dashboard regression for mission LLM status visibility — extend `packages/dashboard/src/components/PipelineDashboard.test.tsx` to verify explicit model rendering and fallback rendering when `llmConfig` is absent.
+- [>] [DATA] Preserve active mission `llmConfig` in admin pipeline status route contract tests — update `packages/admin/src/app/api/admin/pipeline/status/route.test.ts` to assert pass-through shape includes `activeMission` and mission `llmConfig` fields.
+- [ ] [INFRA] Include mission/provider/model metadata in worker lifecycle events for audit traceability — update `scripts/dev-worker.sh`, `scripts/task-fixer.sh`, and `scripts/_events.sh` so `task_started`, `task_failed`, and `fix_started` emit effective mission slug and LLM provider/model without renaming event types.
+- [ ] [TEST] Add shell regression coverage for mission LLM metadata event emission — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to validate metadata is emitted for configured mission LLM and omitted safely when unset.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
