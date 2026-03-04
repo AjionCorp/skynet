@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add mission completion summary writer to `scripts/mission-state.sh`
+## [INFRA] Add task-type affinity scoring to worker task selection in `dev-worker.sh`
 **Status:** completed
-**Started:** 2026-03-04 10:59
+**Started:** 2026-03-04 11:03
 **Completed:** 2026-03-04
-**Branch:** dev/add-mission-completion-summary-writer-to
+**Branch:** dev/add-task-type-affinity-scoring-to-worker
 **Worker:** 4
 
 ### Changes
