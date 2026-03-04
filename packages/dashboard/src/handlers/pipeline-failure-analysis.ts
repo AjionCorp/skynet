@@ -49,6 +49,8 @@ function parseFailedTasksFile(devDir: string): FailedTask[] {
       error: parts[4] ?? "",
       attempts: parts[6] ?? "0",
       status: parts[7] ?? "failed",
+      outcomeReason: "",
+      filesTouched: "",
     };
   });
 }
@@ -160,6 +162,8 @@ export function createPipelineFailureAnalysisHandler(config: SkynetConfig) {
           error: r.error,
           attempts: String(r.attempts),
           status: r.status,
+          outcomeReason: "",
+          filesTouched: "",
           workerId: r.workerId,
           attemptsNum: r.attempts,
         }));

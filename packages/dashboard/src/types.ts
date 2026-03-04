@@ -65,6 +65,7 @@ export interface CompletedTask {
   branch: string;
   duration: string;
   notes: string;
+  filesTouched: string;
 }
 
 export interface FailedTask {
@@ -74,6 +75,8 @@ export interface FailedTask {
   error: string;
   attempts: string;
   status: string;
+  outcomeReason: string;
+  filesTouched: string;
 }
 
 export interface SyncEndpoint {

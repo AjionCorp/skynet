@@ -67,6 +67,8 @@ interface TaskRow {
   claimed_at: string | null;
   completed_at: string | null;
   failed_at: string | null;
+  reason_code: string;
+  files_touched: string;
 }
 
 interface BlockerRow {
@@ -241,13 +243,13 @@ export class SkynetDB {
         : "";
     const rows = this.db
       .prepare(
-        `SELECT completed_at, title, branch, duration, notes
+        `SELECT completed_at, title, branch, duration, notes, files_touched
          FROM tasks
          WHERE status IN ('completed','fixed')${missionFilter}
          ORDER BY completed_at DESC
          LIMIT ?`
       )
-      .all(...(missionFilter ? [missionHash, limit] : [limit])) as Pick<TaskRow, "completed_at" | "title" | "branch" | "duration" | "notes">[];
+      .all(...(missionFilter ? [missionHash, limit] : [limit])) as Pick<TaskRow, "completed_at" | "title" | "branch" | "duration" | "notes" | "files_touched">[];
 
     return rows.map((r) => ({
       date: r.completed_at ? r.completed_at.slice(0, 10) : "",
@@ -255,6 +257,7 @@ export class SkynetDB {
       branch: r.branch ?? "",
       duration: r.duration ?? "",
       notes: r.notes ?? "",
+      filesTouched: r.files_touched ?? "",
     }));
   }
 
@@ -295,13 +298,13 @@ export class SkynetDB {
         : "";
     const rows = this.db
       .prepare(
-        `SELECT failed_at, title, branch, error, attempts, status
+        `SELECT failed_at, title, branch, error, attempts, status, reason_code, files_touched
          FROM tasks
          WHERE (status IN ('failed','blocked','fixed','superseded')
             OR status LIKE 'fixing-%')${missionFilter}
          ORDER BY failed_at DESC`
       )
-      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "failed_at" | "title" | "branch" | "error" | "attempts" | "status">[];
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "failed_at" | "title" | "branch" | "error" | "attempts" | "status" | "reason_code" | "files_touched">[];
 
     return rows.map((r) => ({
       date: r.failed_at ? r.failed_at.slice(0, 10) : "",
@@ -310,6 +313,8 @@ export class SkynetDB {
       error: r.error ?? "",
       attempts: String(r.attempts ?? 0),
       status: r.status,
+      outcomeReason: r.reason_code ?? "",
+      filesTouched: r.files_touched ?? "",
     }));
   }
 

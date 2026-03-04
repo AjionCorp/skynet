@@ -25,7 +25,7 @@ const MOCK_STATUS: PipelineStatus = {
     claimedCount: 1,
     manualDoneCount: 10,
   },
-  completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "" }],
+  completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "", filesTouched: "" }],
   completedCount: 15,
   averageTaskDuration: "45m",
   failed: [],

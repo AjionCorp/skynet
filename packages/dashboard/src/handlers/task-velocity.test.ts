@@ -50,6 +50,7 @@ function makeTask(overrides?: Partial<CompletedTask>): CompletedTask {
     branch: "feat/test",
     duration: "30m",
     notes: "",
+    filesTouched: "",
     ...overrides,
   };
 }

@@ -27,11 +27,11 @@ const MOCK_STATUS: MonitoringStatus = {
     claimedCount: 1,
     manualDoneCount: 10,
   },
-  completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "" }],
+  completed: [{ date: "2024-01-01", task: "Setup project", branch: "feat/setup", duration: "1h", notes: "", filesTouched: "" }],
   completedCount: 15,
   averageTaskDuration: "45m",
   failed: [
-    { date: "2024-01-02", task: "Fix billing", branch: "fix/billing", error: "Tests", attempts: "2", status: "fixing-2" },
+    { date: "2024-01-02", task: "Fix billing", branch: "fix/billing", error: "Tests", attempts: "2", status: "fixing-2", outcomeReason: "", filesTouched: "" },
   ],
   failedPendingCount: 0,
   hasBlockers: false,
