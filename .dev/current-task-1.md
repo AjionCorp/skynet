@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Supersede last stale active failed-task row for resolved _merge.sh orphan fix
+## [INFRA] Eliminate stale `scripts/tests/*` path generation in project-driver prompts
 **Status:** completed
-**Started:** 2026-03-03 20:18
+**Started:** 2026-03-03 20:28
 **Completed:** 2026-03-03
-**Branch:** dev/supersede-last-stale-active-failed-task-
+**Branch:** dev/eliminate-stale-scriptstests-path-genera
 **Worker:** 1
 
 ### Changes
