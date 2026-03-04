@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add admin component tests for MissionDashboard LLM config interactions — create `packages/admin/src/components/__tests__/MissionDashboard-llm.test.tsx` testing LLM provider dropdown renders, model input updates, config saves on submit, and model badge displays on cards. Mock `useSkynet()` and `fetch`. Run `pnpm typecheck`.
 - [>] [INFRA] Add structured error logging to admin API route catch blocks — in `packages/admin/src/app/api/admin/missions/route.ts` and `tasks/route.ts`, ensure all catch blocks log `console.error` with request method, path, and error message before returning `{ error }` response. DO NOT change response shapes. Run `pnpm typecheck`.
 
 # Recent checked history (last 30)
