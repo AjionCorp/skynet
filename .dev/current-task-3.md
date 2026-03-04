@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for migrate-to-sqlite.sh migration logic
+## [TEST] Add admin API route tests for pipeline status, control, and trigger endpoints
 **Status:** completed
-**Started:** 2026-03-03 19:22
+**Started:** 2026-03-03 19:29
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-migrate-to-sqli
+**Branch:** dev/add-admin-api-route-tests-for-pipeline-s
 **Worker:** 3
 
 ### Changes
