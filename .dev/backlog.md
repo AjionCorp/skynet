@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add unit tests for intent registry helpers in `_config.sh` — create `tests/unit/test-intent-helpers.sh` that tests: `_intent_declare` writes valid markdown row, `_intent_release` removes the worker's entry, `_intent_read_active` prunes stale entries (mock PID lock absence), `_intent_check_overlap` returns 0 on overlap and 1 on no-overlap, concurrent declares don't corrupt the file. Use the existing shell test harness pattern from `tests/unit/`. Mission: Goal 5 quality gates.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.

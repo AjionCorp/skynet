@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add WorkerIntents panel to admin Workers dashboard page
+## [TEST] Add unit tests for intent registry helpers in `_config.sh`
 **Status:** completed
-**Started:** 2026-03-04 10:44
+**Started:** 2026-03-04 10:46
 **Completed:** 2026-03-04
-**Branch:** dev/add-workerintents-panel-to-admin-workers
+**Branch:** dev/add-unit-tests-for-intent-registry-helpe
 **Worker:** 4
 
 ### Changes
