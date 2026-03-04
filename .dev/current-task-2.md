@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell unit tests for project-driver.sh backlog generation
+## [TEST] Add admin page render smoke tests for core dashboard pages
 **Status:** completed
-**Started:** 2026-03-03 19:23
+**Started:** 2026-03-03 19:30
 **Completed:** 2026-03-03
-**Branch:** dev/add-shell-unit-tests-for-project-drivers
+**Branch:** dev/add-admin-page-render-smoke-tests-for-co
 **Worker:** 2
 
 ### Changes
