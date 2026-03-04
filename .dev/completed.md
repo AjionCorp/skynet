@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add admin API route tests for events, metrics, and monitoring endpoints | merged to main | 7m | success |
 | 2026-03-04 | [TEST] Add admin auth login/logout route tests | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for missions CRUD and assignment endpoints | merged to main | 7m | success |
 | 2026-03-04 | [TEST] Add admin page render smoke tests for core dashboard pages | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add unit tests for pipeline-control handler | merged to main | 3m | success |
 | 2026-03-03 | [FIX] Remove duplicate prompt CLI argument from gemini.sh agent_run | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add handler unit tests for mission LLM config persistence round-trip | merged to main | 3m | success |
-| 2026-03-03 | [FIX] Add missing SKYNET_CLAUDE_MODEL and SKYNET_CODEX_MODEL to CLI config KNOWN_VARS | merged to main | 1m | success |
