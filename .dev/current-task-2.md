@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit coverage for `_merge.sh` stale-index guardrails with mixed conflict sets
+## [INFRA] Deduplicate mission LLM env export logic into one shell helper
 **Status:** completed
-**Started:** 2026-03-03 20:28
+**Started:** 2026-03-03 20:30
 **Completed:** 2026-03-03
-**Branch:** dev/add-unit-coverage-for-mergesh-stale-inde
+**Branch:** dev/deduplicate-mission-llm-env-export-logic
 **Worker:** 2
 
 ### Changes
