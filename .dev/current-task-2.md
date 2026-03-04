@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Deduplicate mission LLM env export logic into one shell helper
+## [DATA] Preserve active mission `llmConfig` in admin pipeline status route contract tests
 **Status:** completed
-**Started:** 2026-03-03 20:30
+**Started:** 2026-03-03 20:36
 **Completed:** 2026-03-03
-**Branch:** dev/deduplicate-mission-llm-env-export-logic
+**Branch:** dev/preserve-active-mission-llmconfig-in-adm
 **Worker:** 2
 
 ### Changes

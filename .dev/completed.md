@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Preserve active mission `llmConfig` in admin pipeline status route contract tests | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add worker threading regression coverage for mission LLM env application | merged to main | 1m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add component tests for HealthSparkline, TaskVelocityChart, and ProjectDriverDashboard | merged to main | 5m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for post-merge-smoke.sh validation checks | merged to main | 2m | success |
 | 2026-03-03 | [TEST] Add unit tests for process-locks.ts and rate-limiter.ts library utilities | merged to main | 2m | success |
-| 2026-03-03 | [FEAT] improve events | merged to main | 8m | success |
