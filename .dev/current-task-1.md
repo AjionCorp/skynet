@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Re-land stale unmerged `.dev/` index recovery in merge pipeline
+## [TEST] Restore shell test infrastructure coverage for mission LLM flow
 **Status:** completed
-**Started:** 2026-03-03 21:24
+**Started:** 2026-03-03 21:26
 **Completed:** 2026-03-03
-**Branch:** dev/re-land-stale-unmerged-dev-index-recover
+**Branch:** dev/restore-shell-test-infrastructure-covera
 **Worker:** 1
 
 ### Changes
