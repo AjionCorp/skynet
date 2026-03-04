@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models
+## [TEST] Add cross-surface parity tests for mission-status LLM defaults
 **Status:** completed
-**Started:** 2026-03-03 21:15
+**Started:** 2026-03-03 21:26
 **Completed:** 2026-03-03
-**Branch:** dev/add-worker-mission-llm-shell-parity-cove
+**Branch:** dev/add-cross-surface-parity-tests-for-missi
 **Worker:** 3
 
 ### Changes

@@ -3,10 +3,9 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add cross-surface parity tests for mission-status LLM defaults — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` and CLI status JSON tests to assert dashboard and CLI return identical `activeMission.llmConfig` defaulting semantics when mission config is missing/partial.
 - [>] [TEST] Restore shell test infrastructure coverage for mission LLM flow — re-enable/repair `scripts/tests/*` path and fixtures needed for mission LLM shell regressions, then add one end-to-end shell test proving worker invocation uses mission override when present and default model when absent.
 - [>] [FIX] Enforce canonical Claude tier model validation in mission LLM writes — in `packages/dashboard/src/handlers/missions.ts` and `packages/dashboard/src/handlers/mission-assignments.ts`, reject invalid `llmConfig.model` values when `provider=claude` (allow at least Opus/Sonnet/Haiku tiers), and keep non-Claude providers backward-compatible.
-- [ ] [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads — in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts`, add deterministic metadata showing whether `activeMission.llmConfig` came from mission override or fallback default.
+- [>] [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads — in `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts`, add deterministic metadata showing whether `activeMission.llmConfig` came from mission override or fallback default.
 - [ ] [TEST] Add cross-surface parity tests for active mission LLM source metadata — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` and CLI status JSON tests to assert source semantics (`explicit`/`default`) stay aligned for missing, partial, and fully configured mission LLM configs.
 - [ ] [TEST] Add MissionDashboard regression for provider/model coupling safety — in `packages/dashboard/src/components/MissionDashboard.test.tsx`, assert changing provider from `claude` to non-Claude clears/stops sending stale Claude tier model values so persisted `llmConfig` remains valid.
 
