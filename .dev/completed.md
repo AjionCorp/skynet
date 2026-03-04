@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Centralize mission LLM default projection into one shared helper | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Remove stale `scripts/tests/*` references from project-driver prompt templates | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add unit tests for useKeyboardShortcuts hook | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for prompts, project-driver status, and worker-scale endpoints | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add admin API route tests for pipeline data endpoints | merged to main | 3m | success |
-| 2026-03-04 | [TEST] Add admin API route tests for mission single-resource endpoints | merged to main | 3m | success |

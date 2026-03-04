@@ -4,8 +4,7 @@
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
 - [>] [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults — add a shared explicit-vs-defaulted fixture matrix in `packages/dashboard/src/handlers/mission-status.test.ts`, `packages/dashboard/src/handlers/pipeline-status.test.ts`, and `packages/cli/src/commands/status.test.ts` to prevent projection drift across surfaces.
-- [>] [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence — extend `packages/admin/src/app/api/admin/missions/route.test.ts` and `packages/admin/src/app/api/admin/mission/route.test.ts` to verify create/edit preserve explicit `model` and keep defaulted behavior when `model` is omitted.
-- [ ] [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` to assert safe fallback behavior when `llmConfig` is missing fields or serialized in legacy shapes.
+- [>] [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads — extend `packages/dashboard/src/handlers/pipeline-status.test.ts` to assert safe fallback behavior when `llmConfig` is missing fields or serialized in legacy shapes.
 - [ ] [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models — extend `tests/unit/dev-worker.test.sh` and `tests/unit/task-fixer.test.sh` to assert both workers export `SKYNET_CLAUDE_MODEL` consistently for explicit mission model and default fallback cases.
 
 # Recent checked history (last 30)

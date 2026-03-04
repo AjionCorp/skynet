@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Keep pipeline-status active mission LLM payload aligned with mission-status projection semantics
+## [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence
 **Status:** completed
-**Started:** 2026-03-03 21:10
+**Started:** 2026-03-03 21:12
 **Completed:** 2026-03-03
-**Branch:** dev/keep-pipeline-status-active-mission-llm-
+**Branch:** dev/add-admin-mission-api-regression-for-def
 **Worker:** 3
 
 ### Changes
