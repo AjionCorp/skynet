@@ -32,6 +32,7 @@ import { HealthSparkline } from "./HealthSparkline";
 import { TaskVelocityChart } from "./TaskVelocityChart";
 import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 import { MissionGoalProgress } from "./MissionGoalProgress";
+import { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -385,6 +386,9 @@ export function PipelineDashboard() {
 
       {/* Task Completion Velocity */}
       <TaskVelocityChart />
+
+      {/* Velocity & Worker Efficiency */}
+      <VelocityEfficiencyPanel workerStats={status.workerStats} />
 
       {/* Worker Performance Profiles */}
       <WorkerPerformanceProfiles workerStats={status.workerStats} />
