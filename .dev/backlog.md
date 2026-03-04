@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add handler tests for `/api/admin/mission/state` endpoint — in `packages/dashboard/src/handlers/mission-state.test.ts`, test: (a) GET returns valid `state`/`slug`/`criteria` fields from fixture mission file, (b) `transitionHistory` is an array with correct shape, (c) missing mission file returns `{state: 'ACTIVE', criteria: {total: 0, checked: 0, percentage: 0}}`, (d) response includes velocity and fixRate numbers. Follow test patterns from existing `packages/dashboard/src/handlers/pipeline-status.test.ts`. Use `vi.stubGlobal('fetch', ...)` pattern for mocks. Run `pnpm typecheck`. Mission: Goal #1 quality gate.
 - [>] [INFRA] Add mission state badge to admin Pipeline dashboard — in `packages/admin/src/app/admin/pipeline/page.tsx`, fetch `/api/admin/mission/state` alongside existing status calls. Display a color-coded badge next to the mission name: green for ON_TRACK, yellow for AT_RISK, red for BLOCKED, blue for DONE, gray for DRAFT/ACTIVE. Show `criteria.percentage + "% complete"` text beside the badge. Use existing Tailwind classes with static color mapping (no dynamic class construction). Run `pnpm typecheck`. Mission: Success Criterion #6 + Goal #7.
 
 # Recent checked history (last 30)
