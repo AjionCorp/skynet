@@ -4,9 +4,9 @@
 |------|------|--------|-------|--------|----------|--------|
 | 2026-03-04 | [INFRA] Align `scripts/mission-state.sh` state names with mission spec | dev/align-scriptsmission-statesh-state-names | merge conflict | merge_conflict | 0 | failed |
 | 2026-03-04 | [INFRA] Add intent-aware negative constraints to `scripts/project-driver.sh` task generation | dev/add-intent-aware-negative-constraints-to | merge conflict | merge_conflict | 0 | failed |
-| 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict | merge_conflict | 0 | failed |
-| 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | dev/add-mission-state-badge-to-admin-pipelin | merge conflict |  | 0 | fixing-1 |
+| 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict after fix attempt 1 | merge_conflict | 1 | failed |
 | 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | dev/add-outcomereason-and-filestouched-colum | merge conflict |  | 0 | fixing-2 |
+| 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | merged to main | merge conflict |  | 1 | fixed |
 | 2026-03-04 | [DATA] Create `/api/admin/mission/state` endpoint for lifecycle state visibility | merged to main | merge conflict |  | 1 | fixed |
 | 2026-03-03 | [TEST] Add end-to-end LLM config smoke test for shell pipeline | merged to main | merge conflict |  | 1 | fixed |
 | 2026-03-03 | [FIX] Prune completed.md to last 50 entries | merged to main | merge conflict after fix attempt 1 |  | 2 | fixed |
