@@ -2330,6 +2330,47 @@ if [ $((_maint_cycle % 10)) -eq 0 ] && [ "$_maint_cycle" -gt 0 ]; then
   # (f) Temp file cleanup — remove stale skynet SQL temp files older than 60 minutes
   find /tmp -maxdepth 1 -name "skynet-sql-*" -user "$(id -u)" -mmin +60 -exec rm -f {} + 2>/dev/null || true
 
+  # (f1) Auto-stash hygiene — prune stale merge helper stashes to avoid
+  # unbounded growth when stash re-apply conflicts occur repeatedly.
+  # Only touches entries created by _merge.sh:
+  #   "auto-stash .dev/ for merge"
+  _auto_stash_keep="${SKYNET_AUTO_STASH_KEEP:-5}"
+  _auto_stash_max_age_secs="${SKYNET_AUTO_STASH_MAX_AGE_SECS:-86400}"  # 24h
+  case "$_auto_stash_keep" in ''|*[!0-9]*) _auto_stash_keep=5 ;; esac
+  case "$_auto_stash_max_age_secs" in ''|*[!0-9]*) _auto_stash_max_age_secs=86400 ;; esac
+  _auto_stash_pruned=0
+  _auto_stash_total=0
+  _auto_stash_seen=0
+  _auto_stash_cap=200
+  _auto_stash_now=$(date +%s)
+  _auto_stash_rows=$(git -C "$PROJECT_DIR" reflog show refs/stash --format='%gd|%ct|%gs' 2>/dev/null | grep 'auto-stash \.dev/ for merge' || true)
+  if [ -n "$_auto_stash_rows" ]; then
+    _auto_stash_total=$(printf '%s\n' "$_auto_stash_rows" | wc -l | tr -d ' ')
+    while IFS='|' read -r _as_ref _as_ct _as_msg; do
+      [ -z "$_as_ref" ] && continue
+      _auto_stash_seen=$((_auto_stash_seen + 1))
+      [ "$_auto_stash_seen" -gt "$_auto_stash_cap" ] && break
+      _drop_auto_stash=false
+      _as_age=$((_auto_stash_now - ${_as_ct:-0}))
+      # Keep newest N auto-stashes regardless of age for a short recovery window.
+      if [ "$_auto_stash_seen" -gt "$_auto_stash_keep" ]; then
+        _drop_auto_stash=true
+      fi
+      # Also prune any auto-stash older than max age.
+      if [ "$_as_age" -gt "$_auto_stash_max_age_secs" ]; then
+        _drop_auto_stash=true
+      fi
+      if $_drop_auto_stash; then
+        git -C "$PROJECT_DIR" stash drop "$_as_ref" >/dev/null 2>&1 && _auto_stash_pruned=$((_auto_stash_pruned + 1)) || true
+      fi
+    done <<EOF
+$_auto_stash_rows
+EOF
+  fi
+  if [ "$_auto_stash_pruned" -gt 0 ]; then
+    log "Maintenance: pruned $_auto_stash_pruned auto-stash entr$( [ "$_auto_stash_pruned" -eq 1 ] && echo y || echo ies ) (total before prune: $_auto_stash_total)"
+  fi
+
   # (f2) Stale .stale.PID lock directory cleanup — these are leftover from
   # atomic lock reclaim (mv + rm) when a crash occurs between the two operations.
   _stale_cleaned=0

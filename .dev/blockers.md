@@ -106,12 +106,7 @@
 
 ## Active
 
-- **2026-03-03**: No active blockers. Pipeline is idle — mission complete, cleanup tasks in progress. **Awaiting new mission definition from operator.**
-
-- **2026-03-03**: Blocked `[DATA] Update mission.md to declare LLM Provider Selection mission complete` (3 attempts, merge conflict) is **moot** — mission.md was already updated with full "Mission Complete" declaration via a different code path. Row in failed-tasks.md will be superseded on next reconciliation pass or can be manually cleared.
-
-- **2026-03-03**: Shell test infrastructure lives at `tests/unit/` (18 test files), not `scripts/tests/`. Backlog test task descriptions referencing `scripts/tests/` should use `tests/unit/` instead. Not a blocker — workers have been correctly placing tests in the right directory.
-
+- **2026-03-04**: No active blockers. Mission is achieved; pipeline is in hardening mode with reliability and parity follow-up tasks tracked in backlog.
 ## Resolved (Recent)
 
 - **2026-03-03**: blocked_by title mismatch bug — backlog tasks stored blocked_by references WITHOUT backticks but completed task titles stored WITH backticks. **Fixed** — backtick-stripping normalization merged to _db.sh in `_db_claim_next_task_inner`.
@@ -134,4 +129,4 @@ After 12+ consecutive failures across earlier attempts, the ultra-precise 5-task
 
 **Key enablers**: exact file-scope constraints, additive-only optional fields, mandatory `git pull origin main`, embedded "DO NOT touch" guardrails.
 
-**Remaining cleanup tasks** (non-blocking): codex.sh --model passthrough, completed.md pruning, shell test infrastructure (scripts/tests/ missing), E2E LLM config smoke test. Backtick normalization, LLM component tests, and stale branch cleanup all completed.
+**Remaining cleanup tasks** (non-blocking): codex.sh --model passthrough, completed.md pruning, backlog/prompt shell-test path hygiene (`tests/unit/`), and E2E LLM config smoke parity hardening. Backtick normalization, LLM component tests, and stale branch cleanup all completed.

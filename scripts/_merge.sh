@@ -174,11 +174,14 @@ _release_merge_lock_with_duration() {
     else
       log "WARNING: Failed to re-apply stashed .dev/ changes cleanly — attempting .dev auto-recovery"
       _resolve_stale_unmerged_index "${LOG:-/dev/null}" || true
-      # Keep stash entry when apply fails so no state is silently lost.
       if [ -z "$(git diff --name-only --diff-filter=U 2>/dev/null || true)" ]; then
-        log "WARNING: .dev auto-recovery succeeded after stash apply failure; keeping stash entry for manual review"
+        # Auto-recovery succeeded and index is clean — drop the consumed stash
+        # to prevent unbounded stash growth across merges.
+        git stash drop --quiet 2>/dev/null || true
+        log "WARNING: .dev auto-recovery succeeded after stash apply failure; dropped auto-stash entry"
       else
-        log "WARNING: Unmerged entries remain after stash apply failure; stash entry preserved"
+        # Keep stash entry only when unresolved entries remain.
+        log "WARNING: Unmerged entries remain after stash apply failure; stash entry preserved for manual recovery"
       fi
     fi
     _dev_stashed=false
