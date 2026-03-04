@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add regression guard that project-driver never emits non-existent shell test paths
+## [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit
 **Status:** completed
-**Started:** 2026-03-03 20:28
+**Started:** 2026-03-03 20:32
 **Completed:** 2026-03-03
-**Branch:** dev/add-regression-guard-that-project-driver
+**Branch:** dev/surface-active-mission-llm-assignment-in
 **Worker:** 4
 
 ### Changes

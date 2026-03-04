@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit — update `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` to include active mission `llmConfig` (provider/model) read from `.dev/_config.json`, with null-safe fallback when unset.
 - [ ] [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests — update `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` (`--json`) to include active mission `llmConfig` from `.dev/_config.json` with null-safe fallback, and add/extend tests proving dashboard/CLI field parity.
 
 # Recent checked history (last 30)

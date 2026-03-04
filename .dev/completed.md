@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add worker threading regression coverage for mission LLM env application | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Deduplicate mission LLM env export logic into one shell helper | merged to main | 1m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add unit tests for process-locks.ts and rate-limiter.ts library utilities | merged to main | 2m | success |
 | 2026-03-03 | [FEAT] improve events | merged to main | 8m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for health-check.sh operational checks | merged to main | 14m | success |
-| 2026-03-03 | [FEAT] issue on parse | merged to main | 5m | success |
