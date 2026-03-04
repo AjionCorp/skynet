@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Default `activeMission.llmConfig` when mission override is missing or partial | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add handler regressions for Claude tier validation in mission writes | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM source metadata | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status surfaces with parity tests | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM assignment in pipeline status outputs for operator audit | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add worker threading regression coverage for mission LLM env application | merged to main | 1m | success |
-| 2026-03-04 | [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery | merged to main | 1m | success |
