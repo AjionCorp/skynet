@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Thread mission LLM model into Codex agent invocation path
+## [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded
 **Status:** completed
-**Started:** 2026-03-03 20:45
+**Started:** 2026-03-03 20:49
 **Completed:** 2026-03-03
-**Branch:** dev/thread-mission-llm-model-into-codex-agen
+**Branch:** dev/enforce-deterministic-completedmd-compac
 **Worker:** 1
 
 ### Changes

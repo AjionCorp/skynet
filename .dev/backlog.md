@@ -3,7 +3,8 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded — hard-cap retained entries and rotate overflow to archive in a stable/idempotent pass so project-driver prompts remain small and mission-relevant.
+- [ ] [TEST] Add shell regression for per-mission LLM model threading across worker entrypoints — add/extend tests under `scripts/tests/` to assert `dev-worker.sh`, `task-fixer.sh`, and `codex.sh` all pass the same resolved model to agent plugins.
+- [ ] [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output — extend `packages/dashboard/src/handlers/pipeline-status.ts` and `packages/cli/src/commands/status.ts` so operators can verify active mission->model mapping without opening mission admin.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.

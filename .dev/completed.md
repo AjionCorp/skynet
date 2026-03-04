@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded | merged to main | 3m | success |
 | 2026-03-04 | [DATA] Expose active mission LLM assignment in operator status surfaces | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add end-to-end mission LLM config smoke test for admin-to-worker flow | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add shell regression for mission LLM model propagation to worker agents | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add admin middleware auth enforcement tests | merged to main | 3m | success |
 | 2026-03-04 | [FIX] Add isFinite guards for Number() query param parsing in dashboard handlers | merged to main | 3m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for sync-runner.sh guard validation and endpoint dispatch | merged to main | 10m | success |
-| 2026-03-03 | [TEST] Add shell unit tests for auth-refresh.sh token lifecycle | merged to main | 6m | success |
