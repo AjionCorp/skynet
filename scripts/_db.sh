@@ -400,6 +400,7 @@ SCHEMA
   _db_no_out "ALTER TABLE events ADD COLUMN trace_id TEXT DEFAULT '';" 2>/dev/null || true
   _db_no_out "ALTER TABLE tasks ADD COLUMN mission_hash TEXT DEFAULT '';" 2>/dev/null || true
   _db_no_out "CREATE INDEX IF NOT EXISTS idx_tasks_mission_status ON tasks(mission_hash, status);" 2>/dev/null || true
+  _db_no_out "ALTER TABLE tasks ADD COLUMN files_touched TEXT DEFAULT '';" 2>/dev/null || true
 
   # Periodic WAL checkpoint — truncate the WAL file to reclaim disk space.
   # Safe to run on every init; TRUNCATE waits for readers to finish and is a no-op
@@ -719,6 +720,14 @@ _db_complete_task_inner() {
   "
 }
 db_complete_task() { _db_retry _db_complete_task_inner "$@"; }
+
+# Record files touched by a task (newline-separated list of file paths)
+_db_set_files_touched_inner() {
+  local task_id; task_id=$(_sql_int "$1")
+  local files_esc; files_esc=$(_sql_escape "$2")
+  _sql_exec "UPDATE tasks SET files_touched='$files_esc', updated_at=datetime('now') WHERE id=$task_id;"
+}
+db_set_files_touched() { _db_retry _db_set_files_touched_inner "$@"; }
 
 # Record task failure
 _db_fail_task_inner() {

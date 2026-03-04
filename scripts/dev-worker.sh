@@ -809,6 +809,12 @@ EOF
   # --- All gates passed -- merge to main ---
   log "All checks passed. Merging $branch_name into $SKYNET_MAIN_BRANCH."
 
+  # Collect files touched before merge (worktree may be removed after merge)
+  _files_touched=""
+  if [ -d "$WORKTREE_DIR" ]; then
+    _files_touched=$(cd "$WORKTREE_DIR" && git diff --name-only "origin/$SKYNET_MAIN_BRANCH"...HEAD 2>/dev/null || true)
+  fi
+
   # Define state commit hook for do_merge_to_main
   task_duration_secs=$(( $(date +%s) - task_start_epoch ))
   task_duration=$(format_duration $task_duration_secs)
@@ -817,6 +823,10 @@ EOF
     # SQLite: mark task completed
     if [ -n "${_db_task_id:-}" ]; then
       db_complete_task "$_db_task_id" "merged to $SKYNET_MAIN_BRANCH" "$task_duration" "$task_duration_secs" "success" || log "WARNING: db_complete_task failed — task may not be recorded as completed"
+      # Record files touched by this task
+      if [ -n "$_files_touched" ]; then
+        db_set_files_touched "$_db_task_id" "$_files_touched" || log "WARNING: db_set_files_touched failed"
+      fi
     fi
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
       # Regenerate state files from SQLite (authoritative source)
