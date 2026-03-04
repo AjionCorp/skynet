@@ -1045,6 +1045,27 @@ db_get_hung_workers() {
        AND ($now - progress_epoch) > $stale_secs;"
 }
 
+# Output: worker_id|completed|failed|avg_duration_secs|success_rate
+# Per-worker performance stats derived from tasks table.
+# success_rate is integer 0-100 (completed / (completed + failed)).
+db_get_worker_performance() {
+  _db_sep "
+    SELECT
+      worker_id,
+      SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      COALESCE(AVG(CASE WHEN status IN ('completed','fixed') AND duration_secs > 0 THEN duration_secs END), 0) AS avg_duration_secs,
+      CASE WHEN SUM(CASE WHEN status IN ('completed','fixed','failed') THEN 1 ELSE 0 END) = 0 THEN 0
+        ELSE CAST(ROUND(100.0 * SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END)
+          / SUM(CASE WHEN status IN ('completed','fixed','failed') THEN 1 ELSE 0 END)) AS INTEGER)
+      END AS success_rate
+    FROM tasks
+    WHERE worker_id IS NOT NULL
+    GROUP BY worker_id
+    ORDER BY worker_id;
+  "
+}
+
 # ============================================================
 # BLOCKERS
 # ============================================================
