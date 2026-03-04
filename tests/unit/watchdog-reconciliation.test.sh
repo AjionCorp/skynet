@@ -223,6 +223,23 @@ SUPERSEDED3=$(db_auto_supersede_completed)
 assert_eq "$SUPERSEDED3" "0" "db_auto_supersede: skips empty normalized_root"
 
 # ============================================================
+# TEST: db_auto_supersede_completed — also supersedes blocked tasks
+# ============================================================
+
+echo ""
+log "=== db_auto_supersede_completed: blocked tasks ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM tasks;"
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, normalized_root) VALUES ('Deploy feature X', 'FEAT', 'completed', 'deploy feature x');"
+sqlite3 "$DB_PATH" "INSERT INTO tasks (title, tag, status, normalized_root) VALUES ('Deploy feature X retry', 'FEAT', 'blocked', 'deploy feature x');"
+
+SUPERSEDED4=$(db_auto_supersede_completed)
+assert_eq "$SUPERSEDED4" "1" "db_auto_supersede_completed: supersedes blocked task with matching root"
+
+STATUS4=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE title='Deploy feature X retry';")
+assert_eq "$STATUS4" "superseded" "db_auto_supersede_completed: blocked task status is superseded"
+
+# ============================================================
 # TEST: stale heartbeat detection via SQLite
 # ============================================================
 

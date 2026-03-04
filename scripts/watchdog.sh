@@ -1224,9 +1224,9 @@ _auto_supersede_merged_branches() {
     | sed 's/^[* ]*//' | sed 's/^ *//;s/ *$//' || true)
   [ -z "$merged" ] && { echo 0; return; }
 
-  # Get failed/fixing tasks with branches from DB (small set)
+  # Get failed/blocked/fixing tasks with branches from DB (small set)
   local failed_rows
-  failed_rows=$(_db_sep "SELECT id, branch FROM tasks WHERE (status='failed' OR status LIKE 'fixing-%') AND branch != '' AND branch NOT LIKE 'merged%';" 2>/dev/null || true)
+  failed_rows=$(_db_sep "SELECT id, branch FROM tasks WHERE (status IN ('failed','blocked') OR status LIKE 'fixing-%') AND branch != '' AND branch NOT LIKE 'merged%';" 2>/dev/null || true)
   [ -z "$failed_rows" ] && { echo 0; return; }
 
   local count=0
@@ -1246,6 +1246,55 @@ _auto_supersede_merged_branches() {
 _merged_superseded=$(_auto_supersede_merged_branches 2>/dev/null || echo 0)
 if [ "${_merged_superseded:-0}" -gt 0 ] 2>/dev/null; then
   log "Merged-branch auto-superseded $_merged_superseded stale failed task(s)"
+fi
+
+# --- Auto-supersede moot blocked tasks whose goals are already achieved ---
+# Handles two cases the normalized_root and merged-branch checks miss:
+#   1. Mission-complete: blocked task references updating mission.md, but
+#      mission.md already declares "Mission Complete" via a different code path.
+#   2. Subsumed meta-fix: blocked/failed task whose purpose was to supersede
+#      OTHER blocked rows — if those rows are already resolved, the meta-task
+#      is moot.
+_auto_supersede_moot_blocked() {
+  local count=0
+
+  # Case 1: mission.md already complete — supersede blocked tasks about updating it
+  if [ -f "$MISSION" ] && grep -q '## Mission Complete' "$MISSION" 2>/dev/null; then
+    local _mission_rows
+    _mission_rows=$(_db_sep "SELECT id FROM tasks WHERE status IN ('failed','blocked') AND lower(title) LIKE '%mission.md%';" 2>/dev/null || true)
+    if [ -n "$_mission_rows" ]; then
+      while IFS="$_DB_SEP" read -r _mid; do
+        [ -z "$_mid" ] && continue
+        db_supersede_task "$_mid" 2>/dev/null || true
+        log "Auto-superseded task $_mid — mission.md already declares Mission Complete"
+        count=$((count + 1))
+      done <<< "$_mission_rows"
+    fi
+  fi
+
+  # Case 2: meta-fix tasks about superseding blocked rows — moot when those rows are resolved
+  local _meta_rows
+  _meta_rows=$(_db_sep "SELECT id FROM tasks WHERE status IN ('failed','blocked') AND lower(title) LIKE '%supersede%blocked%';" 2>/dev/null || true)
+  if [ -n "$_meta_rows" ]; then
+    while IFS="$_DB_SEP" read -r _mid; do
+      [ -z "$_mid" ] && continue
+      # Check if any blocked tasks still exist (excluding this meta-task itself)
+      local _remaining_blocked
+      _remaining_blocked=$(_db "SELECT COUNT(*) FROM tasks WHERE status='blocked' AND id != $_mid;" 2>/dev/null || echo "0")
+      if [ "${_remaining_blocked:-0}" -eq 0 ] 2>/dev/null; then
+        db_supersede_task "$_mid" 2>/dev/null || true
+        log "Auto-superseded meta-fix task $_mid — no remaining blocked tasks"
+        count=$((count + 1))
+      fi
+    done <<< "$_meta_rows"
+  fi
+
+  echo "$count"
+}
+
+_moot_superseded=$(_auto_supersede_moot_blocked 2>/dev/null || echo 0)
+if [ "${_moot_superseded:-0}" -gt 0 ] 2>/dev/null; then
+  log "Moot-blocked auto-superseded $_moot_superseded task(s)"
 fi
 
 # --- Archive old completed tasks to prevent unbounded state file growth ---

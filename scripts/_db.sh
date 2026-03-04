@@ -882,13 +882,16 @@ db_supersede_task() {
   fi
 }
 
-# Auto-supersede failed tasks matching completed roots. Returns count of changes.
+# Auto-supersede failed/blocked tasks matching completed roots. Returns count of changes.
 # Also resolves orphaned blockers linked to newly-superseded tasks.
 # Both UPDATEs are wrapped in a single transaction for atomicity.
 # Returns a single number (task changes) — the caller in watchdog.sh expects one number.
 #
 # Checks all terminal success states: completed (dev-worker merge), fixed
 # (task-fixer merge), and done (manual/external completion).
+#
+# Includes blocked tasks: a blocked task whose normalized_root matches a
+# completed task is moot — the goal was achieved via a different code path.
 #
 # SH-P3-4: The subquery is duplicated in both UPDATE statements. This is
 # intentional for simplicity — the tasks table is small (typically < 200 rows),
@@ -900,12 +903,12 @@ db_auto_supersede_completed() {
     UPDATE blockers SET status='resolved', resolved_at=datetime('now')
     WHERE status='active' AND task_title IN (
       SELECT title FROM tasks
-      WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
+      WHERE (status IN ('failed','blocked') OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
         SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed','done') AND normalized_root != ''
       )
     );
     UPDATE tasks SET status='superseded', updated_at=datetime('now')
-    WHERE (status='failed' OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
+    WHERE (status IN ('failed','blocked') OR status LIKE 'fixing-%') AND normalized_root != '' AND normalized_root IN (
       SELECT normalized_root FROM tasks WHERE status IN ('completed','fixed','done') AND normalized_root != ''
     );
     SELECT changes();

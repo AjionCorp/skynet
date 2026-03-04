@@ -403,6 +403,16 @@ CHANGES=$(db_auto_supersede_completed)
 STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$AS_FAIL_ID;")
 assert_eq "$STATUS" "superseded" "db_auto_supersede_completed: failed task superseded"
 
+# Also test blocked task supersede
+AS_BLOCK_ID=$(db_add_task "Auto supersede blocked test" "FEAT" "" "bottom")
+sqlite3 "$DB_PATH" "UPDATE tasks SET status='blocked', normalized_root='auto supersede test' WHERE id=$AS_BLOCK_ID;"
+
+CHANGES2=$(db_auto_supersede_completed)
+[ "$CHANGES2" -ge 1 ] && pass "db_auto_supersede_completed: superseded blocked task" || fail "db_auto_supersede_completed: expected changes >= 1 for blocked (got: $CHANGES2)"
+
+STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$AS_BLOCK_ID;")
+assert_eq "$STATUS" "superseded" "db_auto_supersede_completed: blocked task superseded"
+
 # ── Test: db_get_task_id_by_title / db_get_task / db_task_exists ──
 
 echo ""
