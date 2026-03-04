@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Wire `project-driver.sh` to respect mission lifecycle state
+## [DATA] Surface mission lifecycle state in pipeline-status and CLI status responses
 **Status:** completed
-**Started:** 2026-03-04 07:36
+**Started:** 2026-03-04 07:42
 **Completed:** 2026-03-04
-**Branch:** dev/wire-project-driversh-to-respect-mission
+**Branch:** dev/surface-mission-lifecycle-state-in-pipel
 **Worker:** 2
 
 ### Changes

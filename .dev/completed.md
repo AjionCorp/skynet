@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Surface mission lifecycle state in pipeline-status and CLI status responses | merged to main | 5m | success |
 | 2026-03-04 | [INFRA] Add worker context injection with other workers' active tasks into Claude Code prompt | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Record failure reason codes in `dev-worker.sh` task completion | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Wire `project-driver.sh` to respect mission lifecycle state | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded | merged to main | 3m | success |
 | 2026-03-04 | [DATA] Expose active mission LLM assignment in operator status surfaces | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add end-to-end mission LLM config smoke test for admin-to-worker flow | merged to main | 3m | success |
-| 2026-03-04 | [TEST] Add shell regression for mission LLM model propagation to worker agents | merged to main | 2m | success |
