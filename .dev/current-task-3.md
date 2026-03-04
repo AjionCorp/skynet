@@ -1,9 +1,9 @@
 # Current Task
-## [FIX] Harden stale unmerged-index recovery boundaries in `_merge.sh`
+## [TEST] Add worker threading regression coverage for mission LLM env application
 **Status:** completed
-**Started:** 2026-03-03 20:29
+**Started:** 2026-03-03 20:30
 **Completed:** 2026-03-03
-**Branch:** dev/harden-stale-unmerged-index-recovery-bou
+**Branch:** dev/add-worker-threading-regression-coverage
 **Worker:** 3
 
 ### Changes

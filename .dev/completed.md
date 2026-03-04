@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add worker threading regression coverage for mission LLM env application | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add mixed-conflict guardrail coverage for `_merge.sh` stale-index recovery | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Deduplicate mission LLM env export logic into one shell helper | merged to main | 1m | success |
 | 2026-03-04 | [FIX] Harden stale unmerged-index recovery boundaries in `_merge.sh` | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [FEAT] improve events | merged to main | 8m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for health-check.sh operational checks | merged to main | 14m | success |
 | 2026-03-03 | [FEAT] issue on parse | merged to main | 5m | success |
-| 2026-03-03 | [FEAT] mission criteria | merged to main | 6m | success |
