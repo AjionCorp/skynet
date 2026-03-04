@@ -470,3 +470,15 @@ export interface WorkerScaleResult {
   currentCount: number;
   maxCount: number;
 }
+
+// ===== Pipeline Explain Types =====
+
+export interface PipelineExplainState {
+  state: MissionState | null;
+  completionPct: number;
+  lagGoals: string[];
+  topBlockers: string[];
+  activeFailures: Record<string, number>;
+  velocity24h: number;
+  summary: string;
+}

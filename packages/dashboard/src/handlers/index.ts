@@ -25,3 +25,4 @@ export { createMissionTrackingHandler } from "./mission-tracking";
 export { createMissionStateHandler } from "./mission-state";
 export { createPipelineFailureAnalysisHandler } from "./pipeline-failure-analysis";
 export { createWorkerIntentsHandler } from "./worker-intents";
+export { createPipelineExplainHandler } from "./pipeline-explain";
