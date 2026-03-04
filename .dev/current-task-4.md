@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add admin API route tests for missions CRUD and assignment endpoints
+## [TEST] Add admin auth login/logout route tests
 **Status:** completed
-**Started:** 2026-03-03 19:31
+**Started:** 2026-03-03 19:33
 **Completed:** 2026-03-03
-**Branch:** dev/add-admin-api-route-tests-for-missions-c
+**Branch:** dev/add-admin-auth-loginlogout-route-tests
 **Worker:** 4
 
 ### Changes
