@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for `mission-state.sh` state transitions
+## [INFRA] Record failure reason codes in `dev-worker.sh` task completion
 **Status:** completed
-**Started:** 2026-03-04 07:32
+**Started:** 2026-03-04 07:37
 **Completed:** 2026-03-04
-**Branch:** dev/add-shell-regression-for-mission-statesh
+**Branch:** dev/record-failure-reason-codes-in-dev-worke
 **Worker:** 3
 
 ### Changes
