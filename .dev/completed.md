@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [DATA] Surface per-worker performance stats in pipeline-status API response | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Build failure pattern analyzer in `scripts/failure-analyzer.sh` | merged to main | 3m | success |
 | 2026-03-04 | [INFRA] Add `db_get_worker_performance` query to `scripts/_db.sh` | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add handler tests for `/api/admin/mission/state` endpoint | merged to main | 6m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add shell regression coverage for mission LLM helper failure modes | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface assigned mission LLM in pipeline status JSON and CLI status output | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads | merged to main | 2m | success |
-| 2026-03-04 | [TEST] Add shell regression for per-mission LLM model threading across worker entrypoints | merged to main | 2m | success |
