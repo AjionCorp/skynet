@@ -77,22 +77,62 @@ declare -a _sync_results=()
 run_sync() {
   local name="$1"
   local endpoint="$2"
+  local max_attempts=3
+  local backoff=2  # seconds; doubles each retry: 2s, 4s
 
   log "Syncing: $name"
 
-  # Capture both HTTP status code and response body
-  local tmpfile
-  tmpfile=$(mktemp "/tmp/skynet-${SKYNET_PROJECT_NAME}-sync-${name}-XXXXXX")
-  local http_code
-  http_code=$(curl -s --max-time 120 -o "$tmpfile" -w "%{http_code}" -X POST "$BASE_URL$endpoint" -H "Content-Type: application/json" 2>&1) || {
-    log "$name: FAILED (curl error)"
-    _sync_results+=("error|0|curl failed")
+  local attempt=1
+  local http_code="" response="" curl_failed=false
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    curl_failed=false
+
+    # Capture both HTTP status code and response body
+    local tmpfile
+    tmpfile=$(mktemp "/tmp/skynet-${SKYNET_PROJECT_NAME}-sync-${name}-XXXXXX")
+    http_code=$(curl -s --max-time 120 -o "$tmpfile" -w "%{http_code}" -X POST "$BASE_URL$endpoint" -H "Content-Type: application/json" 2>&1) || {
+      curl_failed=true
+    }
+    response=$(cat "$tmpfile" 2>/dev/null || echo "")
     rm -f "$tmpfile"
+
+    # Determine if this is a transient failure worth retrying
+    local transient=false
+    if $curl_failed; then
+      transient=true
+    elif [ "$http_code" -ge 500 ] 2>/dev/null; then
+      transient=true
+    fi
+
+    # If not transient, break out — no point retrying
+    if ! $transient; then
+      break
+    fi
+
+    # Log the transient failure
+    if $curl_failed; then
+      log "$name: curl error (attempt $attempt/$max_attempts)"
+    else
+      log "$name: HTTP $http_code (attempt $attempt/$max_attempts)"
+    fi
+
+    # Retry with exponential backoff if attempts remain
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      log "$name: retrying in ${backoff}s..."
+      sleep "$backoff"
+      backoff=$((backoff * 2))
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  # --- Evaluate final result ---
+
+  if $curl_failed; then
+    log "$name: FAILED (curl error after $max_attempts attempts)"
+    _sync_results+=("error|0|curl failed")
     return
-  }
-  local response
-  response=$(cat "$tmpfile" 2>/dev/null || echo "")
-  rm -f "$tmpfile"
+  fi
 
   # Check HTTP status code first
   if [ "$http_code" -ge 300 ] 2>/dev/null; then
