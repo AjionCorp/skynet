@@ -3,6 +3,8 @@
 <!-- This file drives the project-driver agent. Define your project's purpose, goals, and success criteria. -->
 <!-- The project-driver reads this file and generates tasks that advance the mission. -->
 
+## State: ACTIVE
+
 ## Purpose
 
 Describe what this project does and why it exists.

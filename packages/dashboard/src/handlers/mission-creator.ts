@@ -142,7 +142,7 @@ User wants: ${input}${missionContext}
 
 You MUST respond with valid JSON matching this exact shape:
 {
-  "mission": "# Mission\\n\\n## Purpose\\n...\\n\\n## Goals\\n- [ ] Goal 1\\n- [ ] Goal 2\\n...\\n\\n## Success Criteria\\n- [ ] Criterion 1\\n- [ ] Criterion 2\\n...\\n\\n## Current Focus\\n...",
+  "mission": "# Mission\\n\\n## State: ACTIVE\\n\\n## Purpose\\n...\\n\\n## Goals\\n- [ ] Goal 1\\n- [ ] Goal 2\\n...\\n\\n## Success Criteria\\n- [ ] Criterion 1\\n- [ ] Criterion 2\\n...\\n\\n## Current Focus\\n...",
   "suggestions": [
     { "title": "Short title", "content": "Detailed description of the improvement suggestion" },
     { "title": "Short title", "content": "Detailed description of the improvement suggestion" },
@@ -151,7 +151,8 @@ You MUST respond with valid JSON matching this exact shape:
 }
 
 Rules:
-- The mission field must be valid markdown with Purpose, Goals, Success Criteria, and Current Focus sections
+- The mission field must be valid markdown with State, Purpose, Goals, Success Criteria, and Current Focus sections
+- The State section must be "## State: ACTIVE" for new missions
 - Goals and Success Criteria should use "- [ ]" checkbox syntax
 - Each suggestion should be actionable and specific
 - Respond ONLY with the JSON object, no other text`;

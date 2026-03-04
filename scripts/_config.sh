@@ -341,6 +341,17 @@ _resolve_active_mission() {
   echo "$MISSION"
 }
 
+# Read the ## State: <value> line from a mission file.
+# Returns the state string (e.g. "ACTIVE", "PAUSED", "COMPLETE") or empty if not found.
+# Usage: state=$(_get_mission_state "/path/to/mission.md")
+_get_mission_state() {
+  local file="${1:-}"
+  [ -n "$file" ] && [ -f "$file" ] || { echo ""; return; }
+  local state
+  state=$(sed -n 's/^## State: *\(.*\)/\1/p' "$file" | head -1)
+  echo "${state:-}"
+}
+
 # Read per-mission LLM config from _config.json.
 # Outputs two lines: provider (line 1) and model (line 2). Either may be empty.
 # Usage:

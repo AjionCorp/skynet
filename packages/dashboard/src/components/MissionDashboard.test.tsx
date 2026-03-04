@@ -10,6 +10,7 @@ import type { MissionStatus, MissionProgress, PipelineStatus } from "../types";
 // ---------------------------------------------------------------------------
 
 const MOCK_MISSION: MissionStatus = {
+  state: "ACTIVE",
   purpose: "Build the best autonomous pipeline",
   goals: [
     { text: "Automate all deployments", completed: true },

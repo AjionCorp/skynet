@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import type { SkynetConfig, MissionCriterion, MissionConfig } from "../types";
+import type { SkynetConfig, MissionCriterion, MissionConfig, MissionState } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { logHandlerError } from "../lib/handler-error";
 
@@ -86,6 +86,16 @@ function parseCurrentFocus(sectionContent: string): string | null {
     .filter((l) => l.length > 0)
     .join(" ");
   return text || null;
+}
+
+/**
+ * Parse the `## State: VALUE` line from the mission file.
+ * Also supports legacy `State: VALUE` format (without `##` heading prefix).
+ * Returns the state string (e.g. "ACTIVE", "PAUSED", "COMPLETE") or null.
+ */
+function parseState(raw: string): MissionState | null {
+  const match = raw.match(/^(?:## )?State:\s*(.+)/im);
+  return match ? match[1].trim() : null;
 }
 
 /**
@@ -179,6 +189,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
       if (!raw) {
         return Response.json({
           data: {
+            state: null,
             purpose: null,
             goals: [],
             successCriteria: [],
@@ -189,6 +200,9 @@ export function createMissionStatusHandler(config: SkynetConfig) {
           error: null,
         });
       }
+
+      // Parse state from `## State: VALUE` line
+      const state = parseState(raw);
 
       // Parse each section
       const purposeSection = extractSection(raw, "Purpose");
@@ -218,6 +232,7 @@ export function createMissionStatusHandler(config: SkynetConfig) {
 
       return Response.json({
         data: {
+          state,
           purpose,
           goals,
           successCriteria,

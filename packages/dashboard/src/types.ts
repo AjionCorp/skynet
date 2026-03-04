@@ -233,7 +233,10 @@ export interface MissionCriterion {
   completed: boolean;
 }
 
+export type MissionState = "ACTIVE" | "PAUSED" | "COMPLETE" | (string & {});
+
 export interface MissionStatus {
+  state: MissionState | null;
   purpose: string | null;
   goals: MissionCriterion[];
   successCriteria: MissionCriterion[];

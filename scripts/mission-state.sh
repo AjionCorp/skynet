@@ -4,7 +4,7 @@
 # Sourced by project-driver.sh and watchdog.sh. Requires _config.sh to be loaded first.
 #
 # Mission states track the lifecycle of a mission from creation to completion.
-# State is persisted as a "State: <state>" line in the mission .md file header.
+# State is persisted as a "## State: <state>" heading in the mission .md file.
 #
 # Bash 3.2 compatible — no associative arrays, no ${VAR^^}.
 
@@ -134,8 +134,9 @@ mission_get_state() {
   [ -f "$mission_file" ] || return 0
 
   local state
-  state=$(grep -i '^State:' "$mission_file" 2>/dev/null | head -1 \
-    | sed 's/^[Ss]tate:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+  # Match both "## State: value" (canonical) and legacy "State: value" formats
+  state=$(grep -iE '^(## )?State:' "$mission_file" 2>/dev/null | head -1 \
+    | sed 's/^## //' | sed 's/^[Ss]tate:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
     | tr '[:upper:]' '[:lower:]')
 
   if [ -z "$state" ]; then
@@ -184,13 +185,15 @@ mission_set_state() {
   slug=$(basename "$mission_file" .md)
   mission_validate_transition "$slug" "$current_state" "$new_state" "$caller"
 
-  # Update or insert the State: line
-  if grep -qi '^State:' "$mission_file" 2>/dev/null; then
-    # Replace existing State: line (case-insensitive match, exact case output)
-    sed -i.bak "s/^[Ss]tate:.*$/State: $new_state/" "$mission_file"
+  # Update or insert the ## State: line
+  if grep -qiE '^(## )?State:' "$mission_file" 2>/dev/null; then
+    # Replace existing State: line (supports both ## State: and legacy State: formats)
+    sed -i.bak "s/^## [Ss]tate:.*$/## State: $new_state/" "$mission_file"
+    # Also handle legacy format without ##
+    sed -i.bak "s/^[Ss]tate:.*$/## State: $new_state/" "$mission_file"
     rm -f "${mission_file}.bak"
   else
-    # Insert State: line after the first heading (# Title)
+    # Insert ## State: line after the first heading (# Title)
     # If no heading found, prepend to file
     if grep -q '^# ' "$mission_file" 2>/dev/null; then
       # Insert after first heading line
@@ -199,7 +202,7 @@ mission_set_state() {
       while IFS= read -r line || [ -n "$line" ]; do
         printf '%s\n' "$line"
         if ! $inserted && echo "$line" | grep -q '^# '; then
-          printf 'State: %s\n' "$new_state"
+          printf '## State: %s\n' "$new_state"
           inserted=true
         fi
       done < "$mission_file" > "$tmp"
@@ -207,7 +210,7 @@ mission_set_state() {
     else
       # No heading — prepend state line
       local tmp="${mission_file}.tmp.$$"
-      printf 'State: %s\n' "$new_state" > "$tmp"
+      printf '## State: %s\n' "$new_state" > "$tmp"
       cat "$mission_file" >> "$tmp"
       mv "$tmp" "$mission_file"
     fi
