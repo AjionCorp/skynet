@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add shell regression for mission LLM model propagation to worker agents | merged to main | 2m | success |
 | 2026-03-04 | [FIX] Thread mission LLM model into Codex agent invocation path | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add pipeline-status handler regression for active mission LLM projection | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add shell regression coverage for mission LLM metadata event emission | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-03 | [TEST] Add shell unit tests for auth-refresh.sh token lifecycle | merged to main | 6m | success |
 | 2026-03-03 | [TEST] Add unit tests for admin skynet-config.ts configuration module | merged to main | 1m | success |
 | 2026-03-03 | [TEST] Add shell unit tests for start-dev.sh server lifecycle management | merged to main | 7m | success |
-| 2026-03-03 | [TEST] Add unit tests for mission-tracking.ts handler | merged to main | 3m | success |
