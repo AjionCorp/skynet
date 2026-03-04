@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add pipeline-status handler regression for active mission LLM projection
+## [FIX] Thread mission LLM model into Codex agent invocation path
 **Status:** completed
-**Started:** 2026-03-03 20:42
+**Started:** 2026-03-03 20:45
 **Completed:** 2026-03-03
-**Branch:** dev/add-pipeline-status-handler-regression-f
+**Branch:** dev/thread-mission-llm-model-into-codex-agen
 **Worker:** 1
 
 ### Changes
