@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for intent registry helpers in `_config.sh`
+## [INFRA] Add mission completion summary writer to `scripts/mission-state.sh`
 **Status:** completed
-**Started:** 2026-03-04 10:46
+**Started:** 2026-03-04 10:59
 **Completed:** 2026-03-04
-**Branch:** dev/add-unit-tests-for-intent-registry-helpe
+**Branch:** dev/add-mission-completion-summary-writer-to
 **Worker:** 4
 
 ### Changes

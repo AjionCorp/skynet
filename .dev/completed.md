@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [INFRA] Add mission completion summary writer to `scripts/mission-state.sh` | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Create `/api/admin/pipeline/explain` endpoint for pipeline state explainability | merged to main | 3m | success |
 | 2026-03-04 | [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Enforce intent overlap task-skip in `dev-worker.sh` | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [TEST] Add pipeline-status projection unit coverage for malformed/legacy mission LLM payloads | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add worker mission-LLM shell parity coverage for explicit and defaulted models | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add mission-status/CLI/pipeline-status triple-parity fixture for active mission LLM defaults | merged to main | 5m | success |
-| 2026-03-04 | [TEST] Add admin mission API regression for defaulted vs explicit LLM model persistence | merged to main | 2m | success |
