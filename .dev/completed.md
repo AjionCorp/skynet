@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add Codex agent `--model` passthrough regression for default-preserving behavior | merged to main | 2m | success |
 | 2026-03-04 | [TEST] Add CLI and cross-surface parity regression for active mission LLM payload | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status | merged to main | 4m | success |
 | 2026-03-04 | [TEST] Add handler and route regression for mission-status LLM payload defaulting | merged to main | 4m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Add structured error logging to admin API route catch blocks | merged to main | 6m | success |
 | 2026-03-04 | [TEST] Add admin component tests for MissionDashboard LLM config interactions | merged to main | 5m | success |
 | 2026-03-04 | [FIX] Add request body validation to admin API POST handlers | merged to main | 5m | success |
-| 2026-03-04 | [TEST] Add admin page render smoke tests for secondary dashboard pages | merged to main | 5m | success |
