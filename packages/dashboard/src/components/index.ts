@@ -30,3 +30,5 @@ export type { ProjectDriverDashboardProps } from "./ProjectDriverDashboard";
 export { TaskVelocityChart } from "./TaskVelocityChart";
 export { KeyboardShortcutsHelp } from "./KeyboardShortcutsHelp";
 export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
+export { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
+export type { WorkerPerformanceProfilesProps } from "./WorkerPerformanceProfiles";
