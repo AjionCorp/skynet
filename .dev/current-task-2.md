@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Surface mission lifecycle state in pipeline-status and CLI status responses
+## [INFRA] Build failure pattern analyzer in `scripts/failure-analyzer.sh`
 **Status:** completed
-**Started:** 2026-03-04 07:42
+**Started:** 2026-03-04 09:37
 **Completed:** 2026-03-04
-**Branch:** dev/surface-mission-lifecycle-state-in-pipel
+**Branch:** dev/build-failure-pattern-analyzer-in-script
 **Worker:** 2
 
 ### Changes
