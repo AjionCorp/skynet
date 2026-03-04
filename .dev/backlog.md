@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add regression for mission completion summary writer — create `tests/unit/mission-completion-summary.test.sh` that: (1) creates a fixture mission.md with mixed checked/unchecked criteria, (2) calls `mission_write_completion_summary`, (3) asserts `.dev/completed-missions/` contains a timestamped copy, (4) asserts the copy has a `## Completion Summary` section with non-zero stats, (5) asserts `.dev/mission-transitions.log` has an entry. Use the existing shell test harness. Mission: Goal 4 (mission completion engine).
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.

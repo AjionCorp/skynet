@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Add task-type affinity scoring to worker task selection in `dev-worker.sh`
+## [TEST] Add regression for mission completion summary writer
 **Status:** completed
-**Started:** 2026-03-04 11:03
+**Started:** 2026-03-04 11:08
 **Completed:** 2026-03-04
-**Branch:** dev/add-task-type-affinity-scoring-to-worker
+**Branch:** dev/add-regression-for-mission-completion-su
 **Worker:** 4
 
 ### Changes
