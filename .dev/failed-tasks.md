@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Reason | Attempts | Status |
 |------|------|--------|-------|--------|----------|--------|
+| 2026-03-04 | [INFRA] Align `scripts/mission-state.sh` state names with mission spec | dev/align-scriptsmission-statesh-state-names | merge conflict | merge_conflict | 0 | failed |
 | 2026-03-04 | [INFRA] Add intent-aware negative constraints to `scripts/project-driver.sh` task generation | dev/add-intent-aware-negative-constraints-to | merge conflict | merge_conflict | 0 | failed |
 | 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict | merge_conflict | 0 | failed |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | dev/add-mission-state-badge-to-admin-pipelin | merge conflict |  | 0 | failed |
