@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Harden `_get_mission_llm_config` parsing to avoid slug-collision misreads
+## [TEST] Add shell regression coverage for mission LLM helper failure modes
 **Status:** completed
-**Started:** 2026-03-03 20:53
+**Started:** 2026-03-03 20:56
 **Completed:** 2026-03-03
-**Branch:** dev/harden-getmissionllmconfig-parsing-to-av
+**Branch:** dev/add-shell-regression-coverage-for-missio
 **Worker:** 1
 
 ### Changes
