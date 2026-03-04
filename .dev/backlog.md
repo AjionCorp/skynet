@@ -3,10 +3,9 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [DATA] Keep CLI `status --json` active mission LLM projection aligned with dashboard mission-status semantics — update `packages/cli/src/commands/status.ts` to include `activeMission.llmConfig` (`provider`, optional `model`, `isDefaulted`) with the same defaulting behavior used in dashboard handlers.
 - [>] [TEST] Add handler and route regression for mission-status LLM payload defaulting — extend `packages/dashboard/src/handlers/mission-status.test.ts` and admin mission status API route tests to assert `llmConfig.isDefaulted` is true when mission config omits model and false when model is explicit.
 - [>] [INFRA] Centralize mission LLM defaulting/projection into a shared helper consumed by mission-status and CLI status — add one utility in `packages/dashboard/src/lib/` for deriving `{ provider, model, isDefaulted }` from mission config and reuse it in `packages/dashboard/src/handlers/mission-status.ts` and `packages/cli/src/commands/status.ts` to prevent drift.
-- [ ] [TEST] Add CLI and cross-surface parity regression for active mission LLM payload — extend `packages/cli/src/commands/status.test.ts` and `packages/dashboard/src/handlers/mission-status.test.ts` fixtures to assert identical `activeMission.llmConfig` semantics for explicit model and defaulted model cases.
+- [>] [TEST] Add CLI and cross-surface parity regression for active mission LLM payload — extend `packages/cli/src/commands/status.test.ts` and `packages/dashboard/src/handlers/mission-status.test.ts` fixtures to assert identical `activeMission.llmConfig` semantics for explicit model and defaulted model cases.
 
 # Recent checked history (last 30)
 - [x] [TEST] Add watchdog regression for active-root precedence and tie-break determinism — in `scripts/tests/watchdog.sh`, include fixtures where the same normalized root appears as `fixing-*`, `blocked`, and `pending`; assert canonical row selection follows precedence, unaffected rows are byte-identical, and second identical run is no-op. Mission: Criterion #2 quality gates and Criterion #3 convergent state.
