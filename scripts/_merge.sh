@@ -169,7 +169,18 @@ _merge_push_with_ttl_guard() {
 _release_merge_lock_with_duration() {
   # Restore any stashed .dev/ files before releasing the lock
   if [ "${_dev_stashed:-false}" = "true" ]; then
-    git stash pop --quiet 2>/dev/null || true
+    if git stash apply --quiet 2>/dev/null; then
+      git stash drop --quiet 2>/dev/null || true
+    else
+      log "WARNING: Failed to re-apply stashed .dev/ changes cleanly — attempting .dev auto-recovery"
+      _resolve_stale_unmerged_index "${LOG:-/dev/null}" || true
+      # Keep stash entry when apply fails so no state is silently lost.
+      if [ -z "$(git diff --name-only --diff-filter=U 2>/dev/null || true)" ]; then
+        log "WARNING: .dev auto-recovery succeeded after stash apply failure; keeping stash entry for manual review"
+      else
+        log "WARNING: Unmerged entries remain after stash apply failure; stash entry preserved"
+      fi
+    fi
     _dev_stashed=false
   fi
   local duration
@@ -228,6 +239,52 @@ _do_revert() {
   return 0
 }
 
+_resolve_stale_unmerged_index() {
+  local log_file="$1"
+  local _unmerged
+  _unmerged=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+  [ -z "$_unmerged" ] && return 0
+
+  log "WARNING: Found unresolved index entries before merge: $(printf '%s' "$_unmerged" | tr '\n' ' ')"
+
+  local _non_dev_unmerged=""
+  local _path=""
+  while IFS= read -r _path; do
+    [ -z "$_path" ] && continue
+    case "$_path" in
+      .dev/*)
+        # Stale merge entries in .dev/ are operational state drift.
+        # If markers leaked into the file, prefer ours to keep local state coherent.
+        if [ -f "$_path" ] && grep -Eq '^(<<<<<<< |=======|>>>>>>> )' "$_path" 2>/dev/null; then
+          log "WARNING: Conflict markers in $_path — taking ours to recover"
+          git checkout --ours -- "$_path" 2>>"$log_file" || true
+        fi
+        git add -- "$_path" 2>>"$log_file" || true
+        ;;
+      *)
+        _non_dev_unmerged="${_non_dev_unmerged}${_path} "
+        ;;
+    esac
+  done <<EOF
+$_unmerged
+EOF
+
+  if [ -n "$_non_dev_unmerged" ]; then
+    log "ERROR: Non-.dev unresolved paths detected: $_non_dev_unmerged"
+    log "ERROR: Refusing auto-resolution for code files; resolve conflicts manually."
+    return 1
+  fi
+
+  _unmerged=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+  if [ -n "$_unmerged" ]; then
+    log "ERROR: Could not clear unresolved .dev index entries: $(printf '%s' "$_unmerged" | tr '\n' ' ')"
+    return 1
+  fi
+
+  log "Recovered stale unresolved .dev index entries."
+  return 0
+}
+
 do_merge_to_main() {
   local branch_name="$1"
   local worktree_dir="$2"
@@ -264,10 +321,19 @@ do_merge_to_main() {
   fi
   cd "$PROJECT_DIR"
 
+  # Recover stale unresolved index entries before stashing/pulling.
+  # This prevents repeated git pull retries when a prior run left .dev/* as "needs merge".
+  if ! _resolve_stale_unmerged_index "$log_file"; then
+    _release_merge_lock_with_duration
+    return 5
+  fi
+
   # --- Stash dirty .dev/ files that would block pull/merge ---
   local _dev_stashed=false
-  if ! git diff --quiet -- .dev/ 2>/dev/null; then
-    log "Stashing dirty .dev/ files before pull/merge..."
+  # Include both unstaged and staged .dev/ changes.
+  # Staged .dev files can still block git merge with "would be overwritten".
+  if ! git diff --quiet -- .dev/ 2>/dev/null || ! git diff --cached --quiet -- .dev/ 2>/dev/null; then
+    log "Stashing dirty .dev/ files (staged/unstaged) before pull/merge..."
     git stash push --quiet -m "auto-stash .dev/ for merge" -- .dev/ 2>>"$log_file" && _dev_stashed=true || true
   fi
 
