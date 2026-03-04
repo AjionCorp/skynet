@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [>] [TEST] Add end-to-end mission LLM config smoke test for admin-to-worker flow — validate create/edit mission LLM selection persists to mission state, worker reads it, and task execution uses the selected model across one full pipeline run.
 - [>] [DATA] Expose active mission LLM assignment in operator status surfaces — extend dashboard/CLI status handlers to include mission id/name + effective provider/model so operators can verify runtime selection without opening mission detail pages.
 - [>] [INFRA] Enforce deterministic `completed.md` compaction to keep planning context bounded — hard-cap retained entries and rotate overflow to archive in a stable/idempotent pass so project-driver prompts remain small and mission-relevant.
 
