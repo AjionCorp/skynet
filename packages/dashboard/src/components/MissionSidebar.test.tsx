@@ -55,6 +55,8 @@ const MOCK_PIPELINE: PipelineStatus = {
   postCommitGate: { lastResult: null, lastCommit: null, lastTime: null },
   missionState: null,
   missionProgress: [],
+  missionAlignmentScore: 100,
+  nonAlignedTaskCount: 0,
   pipelinePaused: false,
   workerStats: {},
   watchdogRunning: true,

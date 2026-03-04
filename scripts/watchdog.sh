@@ -1878,6 +1878,70 @@ _health_score_alert() {
 }
 _health_score_alert
 
+# --- Mission alignment check ---
+# Warns when >30% of recently completed tasks don't advance mission goals.
+# Uses completed tasks from last 24h and keywords from mission Goals section.
+_mission_alignment_check() {
+  local mission_slug mission_file goals_text
+  mission_slug=$(_get_active_mission_slug)
+  if [ -n "$mission_slug" ]; then
+    mission_file="$MISSIONS_DIR/${mission_slug}.md"
+  else
+    mission_file="$MISSION"
+  fi
+  [ -f "$mission_file" ] || return 0
+
+  # Extract Goals section keywords (words >3 chars)
+  goals_text=$(awk '/^## Goals/{found=1; next} /^## /{found=0} found{print}' "$mission_file" 2>/dev/null || true)
+  [ -z "$goals_text" ] && return 0
+
+  # Build goal keywords (lowercase, >3 chars, unique)
+  local goal_keywords
+  goal_keywords=$(echo "$goals_text" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alpha:]' '\n' | awk 'length>3' | sort -u)
+  [ -z "$goal_keywords" ] && return 0
+
+  # Get tasks completed in last 24h
+  local recent_tasks total_recent aligned=0 non_aligned=0
+  if [ -n "$DB_PATH" ] && [ -f "$DB_PATH" ]; then
+    recent_tasks=$(_db "SELECT title FROM tasks WHERE status IN ('completed','fixed') AND completed_at IS NOT NULL AND completed_at >= datetime('now','-1 day');" 2>/dev/null || true)
+  else
+    # File fallback: check dates from completed.md (format: | YYYY-MM-DD ... |)
+    local yesterday
+    yesterday=$(date -v-1d +%Y-%m-%d 2>/dev/null || date -d "yesterday" +%Y-%m-%d 2>/dev/null || echo "")
+    [ -z "$yesterday" ] && return 0
+    recent_tasks=$(awk -F'|' -v dt="$yesterday" '$2 ~ /[0-9]/ && $2 >= dt {print $3}' "$COMPLETED" 2>/dev/null || true)
+  fi
+  [ -z "$recent_tasks" ] && return 0
+
+  total_recent=0
+  while IFS= read -r task_title; do
+    [ -z "$task_title" ] && continue
+    total_recent=$((total_recent + 1))
+    local task_lower
+    task_lower=$(echo "$task_title" | tr '[:upper:]' '[:lower:]')
+    local is_aligned=0
+    while IFS= read -r keyword; do
+      [ -z "$keyword" ] && continue
+      case "$task_lower" in
+        *"$keyword"*) is_aligned=1; break ;;
+      esac
+    done <<< "$goal_keywords"
+    if [ "$is_aligned" -eq 1 ]; then
+      aligned=$((aligned + 1))
+    else
+      non_aligned=$((non_aligned + 1))
+    fi
+  done <<< "$recent_tasks"
+
+  [ "$total_recent" -eq 0 ] && return 0
+
+  local non_aligned_pct=$((non_aligned * 100 / total_recent))
+  if [ "$non_aligned_pct" -gt 30 ]; then
+    log "Mission alignment warning: ${non_aligned_pct}% of recent tasks (${non_aligned}/${total_recent}) don't advance mission goals"
+  fi
+}
+_mission_alignment_check
+
 # --- Periodic smoke check (if enabled) ---
 # If main is broken (server returns errors), pause pipeline to prevent cascading failures.
 # Uses 2-strike rule: first failure sets sentinel, second consecutive failure pauses.
