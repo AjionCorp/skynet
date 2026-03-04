@@ -153,6 +153,19 @@ if [ -f "$DEV_DIR/pipeline-paused" ]; then
   exit 0
 fi
 
+# --- Mission completion check ---
+# If this fixer's assigned mission is complete, stop claiming failed tasks.
+if [ -n "${_fixer_mission_slug:-}" ] && [ -f "$MISSIONS_DIR/${_fixer_mission_slug}.md" ]; then
+  _fixer_mission_state=$(_get_mission_state "$MISSIONS_DIR/${_fixer_mission_slug}.md")
+  if [ "$_fixer_mission_state" = "complete" ]; then
+    log "Mission '${_fixer_mission_slug}' is complete — no fixes needed. Exiting."
+    db_set_worker_idle "$FIXER_ID" "Mission '${_fixer_mission_slug}' complete" 2>/dev/null || true
+    emit_event "fixer_idle" "Fixer $FIXER_ID: mission '${_fixer_mission_slug}' complete — reassignment needed" 2>/dev/null || true
+    tg "🏁 *$SKYNET_PROJECT_NAME_UPPER TASK-FIXER F${FIXER_ID}*: Mission '${_fixer_mission_slug}' complete — fixer idle, awaiting reassignment"
+    exit 0
+  fi
+fi
+
 # --- Claude Code auth pre-check (with alerting) ---
 # Idempotent source — auth-check.sh has re-source guard
 source "$SCRIPTS_DIR/auth-check.sh"

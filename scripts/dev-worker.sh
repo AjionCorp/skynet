@@ -303,6 +303,18 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
     break
   fi
 
+  # Mission completion detection: if this worker's mission is complete, stop claiming tasks.
+  if [ -n "${_worker_mission_slug:-}" ] && [ -f "$MISSIONS_DIR/${_worker_mission_slug}.md" ]; then
+    _worker_mission_state=$(_get_mission_state "$MISSIONS_DIR/${_worker_mission_slug}.md")
+    if [ "$_worker_mission_state" = "complete" ]; then
+      log "Mission '${_worker_mission_slug}' is complete — no more tasks to claim. Exiting."
+      db_set_worker_idle "$WORKER_ID" "Mission '${_worker_mission_slug}' complete" 2>/dev/null || true
+      emit_event "worker_idle" "Worker $WORKER_ID: mission '${_worker_mission_slug}' complete — reassignment needed" 2>/dev/null || true
+      tg "🏁 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: Mission '${_worker_mission_slug}' complete — worker idle, awaiting reassignment"
+      break
+    fi
+  fi
+
   # Update progress epoch — proves the main loop is making forward progress
   # (distinct from heartbeat which runs in a background subshell)
   db_update_progress "$WORKER_ID" 2>/dev/null || log "WARNING: db_update_progress failed — watchdog may detect false hung worker"
