@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Wire failure analyzer into watchdog cycle and auto-generate INFRA tasks on threshold breach
+## [TEST] Add shell regression for `db_get_worker_performance` query
 **Status:** completed
-**Started:** 2026-03-04 09:39
+**Started:** 2026-03-04 09:43
 **Completed:** 2026-03-04
-**Branch:** dev/wire-failure-analyzer-into-watchdog-cycl
+**Branch:** dev/add-shell-regression-for-dbgetworkerperf
 **Worker:** 3
 
 ### Changes

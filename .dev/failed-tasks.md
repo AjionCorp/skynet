@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Error | Reason | Attempts | Status |
 |------|------|--------|-------|--------|----------|--------|
+| 2026-03-04 | [INFRA] Add adaptive task weighting toward lagging mission goals in project-driver prompt | dev/add-adaptive-task-weighting-toward-laggi | merge conflict | merge_conflict | 0 | failed |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | dev/add-mission-state-badge-to-admin-pipelin | merge conflict |  | 0 | failed |
 | 2026-03-04 | [DATA] Create `/api/admin/mission/state` endpoint for lifecycle state visibility | dev/create-apiadminmissionstate-endpoint-for | merge conflict |  | 0 | failed |
 | 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | dev/add-outcomereason-and-filestouched-colum | merge conflict |  | 0 | failed |
