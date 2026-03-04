@@ -7,6 +7,7 @@
 set -uo pipefail  # no -e: loop must survive individual cycle failures
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
+source "$SCRIPTS_DIR/mission-state.sh"
 
 # _config.sh re-enables set -e; disable it again so the loop survives failures.
 # NOTE: set +e is critical here — crash_recovery must complete all cleanup steps
@@ -1098,6 +1099,13 @@ if [ "$_ms_state" != "$_ms_prev" ]; then
   log "Mission state: ${_ms_prev:-initial} -> $_ms_state (slug=${_active_mission_slug:-none} criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running)"
   emit_event "mission_state_changed" "state=$_ms_state prev=${_ms_prev:-initial} slug=${_active_mission_slug:-none} criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running" 2>/dev/null || true
   db_set_metadata "mission_state" "$_ms_state" 2>/dev/null || true
+
+  # Write completion summary when mission transitions to complete
+  if [ "$_ms_state" = "complete" ] && [ "$_ms_prev" != "complete" ]; then
+    if [ -n "$_ms_file" ] && [ -n "$_active_mission_slug" ]; then
+      mission_write_completion_summary "$_ms_file" "$_active_mission_slug" "$DEV_DIR" 2>/dev/null || true
+    fi
+  fi
 fi
 log "Mission: ${_active_mission_slug:-none} state=$_ms_state criteria=${_ms_criteria_met}/${_ms_criteria_total} backlog=$backlog_count workers=$dev_workers_running"
 

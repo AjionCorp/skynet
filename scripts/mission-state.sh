@@ -283,3 +283,157 @@ mission_evaluate_criteria() {
     echo "$MISSION_STATE_ACTIVE"
   fi
 }
+
+# ============================================================
+# COMPLETION SUMMARY WRITER
+# ============================================================
+
+# Write a mission completion summary to .dev/mission-summary-<slug>.md.
+# Gathers task stats from SQLite and success criteria from the mission file.
+# Uses atomic write (tmp+mv) to prevent partial reads.
+# Requires _db.sh to be sourced (for _db, _db_sep, DB_PATH).
+#
+# Usage: mission_write_completion_summary "/path/to/mission.md" "slug" ["output_dir"]
+mission_write_completion_summary() {
+  local mission_file="$1"
+  local slug="$2"
+  local output_dir="${3:-${DEV_DIR:-.dev}}"
+
+  [ -f "$mission_file" ] || {
+    if declare -f log >/dev/null 2>&1; then
+      log "WARNING: Cannot write completion summary — mission file not found: $mission_file"
+    fi
+    return 1
+  }
+
+  # Need DB access for task stats
+  [ -f "${DB_PATH:-/dev/null}" ] || {
+    if declare -f log >/dev/null 2>&1; then
+      log "WARNING: Cannot write completion summary — database not found"
+    fi
+    return 1
+  }
+
+  local slug_safe
+  slug_safe=$(echo "$slug" | sed 's/[^a-zA-Z0-9]/_/g')
+  local output="${output_dir}/mission-summary-${slug_safe}.md"
+  local tmpfile="${output}.tmp.$$"
+  local now
+  now=$(date '+%Y-%m-%d %H:%M:%S')
+  local today
+  today=$(date '+%Y-%m-%d')
+
+  # --- Gather task stats from SQLite ---
+  local total_completed total_failed total_fixed total_blocked total_superseded
+  total_completed=$(_db "SELECT COUNT(*) FROM tasks WHERE status IN ('completed','fixed');" 2>/dev/null || echo 0)
+  total_failed=$(_db "SELECT COUNT(*) FROM tasks WHERE status = 'failed';" 2>/dev/null || echo 0)
+  total_fixed=$(_db "SELECT COUNT(*) FROM tasks WHERE status = 'fixed';" 2>/dev/null || echo 0)
+  total_blocked=$(_db "SELECT COUNT(*) FROM tasks WHERE status = 'blocked';" 2>/dev/null || echo 0)
+  total_superseded=$(_db "SELECT COUNT(*) FROM tasks WHERE status = 'superseded';" 2>/dev/null || echo 0)
+
+  # Total tasks ever created
+  local total_tasks
+  total_tasks=$(_db "SELECT COUNT(*) FROM tasks;" 2>/dev/null || echo 0)
+
+  # Average duration (completed tasks only, stored as "Xm" text)
+  local avg_duration
+  avg_duration=$(_db "SELECT COALESCE(CAST(AVG(CAST(REPLACE(duration,'m','') AS INTEGER)) AS INTEGER), 0)
+    FROM tasks WHERE status IN ('completed','fixed') AND duration IS NOT NULL AND duration != '';" 2>/dev/null || echo 0)
+
+  # Self-correction rate: fixed / (failed + fixed)
+  local fix_denominator fix_rate
+  fix_denominator=$((total_failed + total_fixed))
+  if [ "$fix_denominator" -gt 0 ]; then
+    fix_rate=$(( (total_fixed * 100) / fix_denominator ))
+  else
+    fix_rate=0
+  fi
+
+  # --- Parse success criteria from mission file ---
+  local criteria_section criteria_total criteria_met
+  criteria_section=$(sed -n '/^## Success Criteria/,/^## /p' "$mission_file" \
+    | grep '^[-*][[:space:]]*\[[ xX]\]' || true)
+  if [ -n "$criteria_section" ]; then
+    criteria_total=$(echo "$criteria_section" | wc -l | grep -oE '[0-9]+' | head -1)
+    criteria_met=$(echo "$criteria_section" | grep -ci '\[x\]' | grep -oE '[0-9]+' | head -1 || echo 0)
+  else
+    criteria_total=0
+    criteria_met=0
+  fi
+  criteria_total=${criteria_total:-0}
+  criteria_met=${criteria_met:-0}
+
+  # --- Extract mission title ---
+  local mission_title
+  mission_title=$(grep '^# ' "$mission_file" 2>/dev/null | head -1 | sed 's/^# *//')
+  mission_title=${mission_title:-$slug}
+
+  # --- Task breakdown by tag ---
+  local tag_breakdown
+  tag_breakdown=$(_db_sep "
+    SELECT tag,
+      COUNT(*) AS total,
+      SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) AS merged,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed
+    FROM tasks
+    WHERE tag IS NOT NULL AND tag != ''
+    GROUP BY tag
+    ORDER BY COUNT(*) DESC;" 2>/dev/null || true)
+
+  # --- Write the summary ---
+  {
+    echo "# Mission Completion Summary"
+    echo ""
+    echo "**Mission**: ${mission_title} | **Completed**: ${today} | **Status**: COMPLETE"
+    echo ""
+    echo "## Metrics"
+    echo ""
+    echo "| Metric | Value |"
+    echo "|--------|-------|"
+    echo "| Total tasks | ${total_tasks} |"
+    echo "| Completed | ${total_completed} |"
+    echo "| Failed (unresolved) | ${total_failed} |"
+    echo "| Self-corrected (fixed) | ${total_fixed} |"
+    echo "| Blocked | ${total_blocked} |"
+    echo "| Superseded | ${total_superseded} |"
+    echo "| Self-correction rate | ${fix_rate}% |"
+    echo "| Avg task duration | ${avg_duration}m |"
+    echo "| Success criteria | ${criteria_met}/${criteria_total} |"
+    echo ""
+    echo "## Task Breakdown by Category"
+    echo ""
+    echo "| Category | Total | Merged | Failed |"
+    echo "|----------|-------|--------|--------|"
+    if [ -n "$tag_breakdown" ]; then
+      echo "$tag_breakdown" | while IFS="$_DB_SEP" read -r _tag _total _merged _failed; do
+        echo "| [${_tag}] | ${_total} | ${_merged} | ${_failed} |"
+      done
+    else
+      echo "| (no data) | 0 | 0 | 0 |"
+    fi
+    echo ""
+    echo "## Success Criteria"
+    echo ""
+    if [ -n "$criteria_section" ]; then
+      echo "$criteria_section"
+    else
+      echo "(no criteria defined)"
+    fi
+    echo ""
+    echo "---"
+    echo "*Generated at ${now}*"
+  } > "$tmpfile"
+
+  mv "$tmpfile" "$output"
+
+  if declare -f log >/dev/null 2>&1; then
+    log "Mission completion summary written to $output"
+  fi
+
+  # Emit event if available
+  if declare -f emit_event >/dev/null 2>&1; then
+    emit_event "mission_summary_written" "Summary for '$slug' written to $output (${total_completed} completed, ${total_failed} failed, fix_rate=${fix_rate}%)"
+  fi
+
+  echo "$output"
+}
