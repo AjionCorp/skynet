@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Record `files_touched` on task completion in `dev-worker.sh`
+## [INFRA] Add `db_get_worker_performance` query to `scripts/_db.sh`
 **Status:** completed
-**Started:** 2026-03-04 07:36
+**Started:** 2026-03-04 09:34
 **Completed:** 2026-03-04
-**Branch:** dev/record-filestouched-on-task-completion-i
+**Branch:** dev/add-dbgetworkerperformance-query-to-scri
 **Worker:** 1
 
 ### Changes
