@@ -2,9 +2,9 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Add mission completion summary writer to `scripts/mission-state.sh` | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Create `/api/admin/pipeline/explain` endpoint for pipeline state explainability | merged to main | 3m | success |
-| 2026-03-04 | [FEAT] Add MissionGoalProgress panel to admin Pipeline dashboard | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Enforce intent overlap task-skip in `dev-worker.sh` | merged to main | 2m | success |
 | 2026-03-04 | [INFRA] Add `outcome_reason` and `files_touched` columns to SQLite tasks table | merged to main | 0m | success |
 | 2026-03-04 | [INFRA] Add mission state badge to admin Pipeline dashboard | merged to main | 0m | success |
