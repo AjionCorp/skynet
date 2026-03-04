@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-04 | [TEST] Add unit tests for task-type affinity scoring | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add unit tests for adaptive goal weighting helpers | merged to main | 3m | success |
 | 2026-03-04 | [FEAT] Add velocity and worker efficiency metrics panel to admin Pipeline dashboard | merged to main | 4m | success |
 | 2026-03-04 | [DATA] Add worker contribution breakdown to mission-status API | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [DATA] Default `activeMission.llmConfig` when mission override is missing or partial | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add handler regressions for Claude tier validation in mission writes | merged to main | 2m | success |
 | 2026-03-04 | [DATA] Surface active mission LLM source (`explicit` vs `default`) in status payloads | merged to main | 4m | success |
-| 2026-03-04 | [TEST] Add cross-surface parity tests for active mission LLM source metadata | merged to main | 3m | success |
