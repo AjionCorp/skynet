@@ -148,7 +148,7 @@ _adaptive_reweight_pending() {
   local boosted=0
   local total=0
 
-  while IFS='|' read -r task_id task_title task_tag; do
+  while IFS="$_DB_SEP" read -r task_id task_title task_tag; do
     [ -n "$task_id" ] || continue
     total=$((total + 1))
 
