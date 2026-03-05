@@ -44,6 +44,13 @@ _fixer_mission_slug=$(_get_worker_mission_slug "task-fixer-${FIXER_ID}")
 # task-fixer logs to file AND stdout (tee behavior)
 log() { _log "info" "F${FIXER_ID}" "$*" "$LOG"; _log "info" "F${FIXER_ID}" "$*"; }
 
+# Fail fast when configured agent plugin scripts are missing.
+if ! validate_agent_plugin_files "$SKYNET_AGENT_PLUGIN"; then
+  log "Missing required agent plugin script(s) for SKYNET_AGENT_PLUGIN=$SKYNET_AGENT_PLUGIN. Exiting."
+  emit_event "fixer_idle" "Fixer $FIXER_ID: missing agent plugin scripts"
+  exit 1
+fi
+
 # Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
 format_duration() {
   local seconds=$1

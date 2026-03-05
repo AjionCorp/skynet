@@ -67,6 +67,13 @@ cd "$PROJECT_DIR"
 
 log() { _log "info" "W${WORKER_ID}" "$*" "$LOG"; }
 
+# Fail fast when configured agent plugin scripts are missing.
+if ! validate_agent_plugin_files "$SKYNET_AGENT_PLUGIN"; then
+  log "Missing required agent plugin script(s) for SKYNET_AGENT_PLUGIN=$SKYNET_AGENT_PLUGIN. Exiting."
+  emit_event "worker_idle" "Worker $WORKER_ID: missing agent plugin scripts"
+  exit 1
+fi
+
 # Format elapsed seconds as human-readable duration (e.g., "23m", "1h 12m")
 format_duration() {
   local seconds=$1

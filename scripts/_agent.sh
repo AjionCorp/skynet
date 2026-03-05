@@ -107,6 +107,44 @@ _resolve_plugin_path() {
   esac
 }
 
+# Validate required plugin script files for the selected agent mode.
+# Usage: validate_agent_plugin_files [plugin_mode]
+# Returns 0 when all required files exist, 1 otherwise.
+validate_agent_plugin_files() {
+  local mode="${1:-$SKYNET_AGENT_PLUGIN}"
+  local missing=0
+  local _plugin_file=""
+  local _name=""
+
+  _require_plugin_file() {
+    local _file="$1"
+    local _label="$2"
+    if [ ! -f "$_file" ]; then
+      echo "ERROR: Missing agent plugin script ($_label): $_file" >&2
+      missing=1
+    fi
+  }
+
+  case "$mode" in
+    auto)
+      for _name in claude codex gemini; do
+        _plugin_file="$SKYNET_SCRIPTS_DIR/agents/${_name}.sh"
+        _require_plugin_file "$_plugin_file" "$_name"
+      done
+      ;;
+    claude|codex|gemini|echo)
+      _plugin_file="$SKYNET_SCRIPTS_DIR/agents/${mode}.sh"
+      _require_plugin_file "$_plugin_file" "$mode"
+      ;;
+    *)
+      _plugin_file="$(_resolve_plugin_path "$mode")"
+      _require_plugin_file "$_plugin_file" "$mode"
+      ;;
+  esac
+
+  [ "$missing" -eq 0 ]
+}
+
 # Load a plugin and rename its functions under a prefix.
 # Usage: _load_plugin_as "prefix" "/path/to/plugin.sh"
 # Creates: prefix_agent_run(), prefix_agent_check()
