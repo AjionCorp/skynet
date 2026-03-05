@@ -524,6 +524,8 @@ _db_retry() {
 # blocker dependencies and claim atomically — no race window between check and claim.
 _db_claim_next_task_inner() {
   local worker_id; worker_id=$(_sql_int "$1")
+  local _aoc
+  _aoc=$(_adaptive_order_clause 2>/dev/null) || _aoc="priority ASC"
 
   # ── Claim Algorithm ──────────────────────────────────────────────
   # Single atomic SQL that finds and claims the next eligible task:
@@ -567,7 +569,7 @@ _db_claim_next_task_inner() {
       SELECT id FROM tasks
       WHERE status = 'pending'
         AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
-      ORDER BY priority ASC
+      ORDER BY ${_aoc}
       LIMIT 1
     )
     UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
@@ -592,6 +594,8 @@ db_claim_next_task() {
 _db_claim_next_task_for_mission_inner() {
   local worker_id; worker_id=$(_sql_int "$1")
   local mhash; mhash=$(_sql_escape "$2")
+  local _aoc
+  _aoc=$(_adaptive_order_clause 2>/dev/null) || _aoc="priority ASC"
 
   _db_sep "
     BEGIN IMMEDIATE;
@@ -619,7 +623,7 @@ _db_claim_next_task_for_mission_inner() {
       SELECT id FROM tasks
       WHERE status = 'pending' AND mission_hash = '$mhash'
         AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
-      ORDER BY priority ASC
+      ORDER BY ${_aoc}
       LIMIT 1
     )
     UPDATE tasks SET status = 'claimed', worker_id = $worker_id,
@@ -643,6 +647,8 @@ db_claim_next_task_for_mission() {
 # Usage: db_explain_claim 1
 db_explain_claim() {
   local worker_id; worker_id=$(_sql_int "$1")
+  local _aoc
+  _aoc=$(_adaptive_order_clause 2>/dev/null) || _aoc="priority ASC"
   _db "
     EXPLAIN QUERY PLAN
     WITH RECURSIVE dep_split(task_id, dep, rest) AS (
@@ -669,7 +675,7 @@ db_explain_claim() {
       SELECT id FROM tasks
       WHERE status = 'pending'
         AND (blocked_by = '' OR blocked_by IS NULL OR id NOT IN (SELECT task_id FROM unresolved))
-      ORDER BY priority ASC
+      ORDER BY ${_aoc}
       LIMIT 1
     )
     SELECT * FROM target;
