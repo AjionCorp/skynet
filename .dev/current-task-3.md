@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Add `db_get_worker_tag_breakdown()` query to `scripts/_db.sh`
+## [TEST] Add unit tests for adaptive goal weighting wiring in watchdog and dev-worker
 **Status:** completed
-**Started:** 2026-03-05 09:06
+**Started:** 2026-03-05 09:10
 **Completed:** 2026-03-05
-**Branch:** dev/add-dbgetworkertagbreakdown-query-to-scr
+**Branch:** dev/add-unit-tests-for-adaptive-goal-weighti
 **Worker:** 3
 
 ### Changes
