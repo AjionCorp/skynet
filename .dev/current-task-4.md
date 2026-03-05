@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add task-type affinity visualization to WorkerPerformanceProfiles panel
+## [INFRA] Trigger mission DONE state transition and write completion summary
 **Status:** completed
-**Started:** 2026-03-05 09:01
+**Started:** 2026-03-05 09:18
 **Completed:** 2026-03-05
-**Branch:** dev/add-task-type-affinity-visualization-to-
+**Branch:** dev/trigger-mission-done-state-transition-an
 **Worker:** 4
 
 ### Changes
