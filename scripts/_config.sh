@@ -373,6 +373,30 @@ _get_mission_llm_config() {
   echo "${model:-}"
 }
 
+# Keep runtime script mirrors in sync when running from .dev/scripts.
+# This prevents missing helper regressions when new script files are added
+# under project scripts/ but runtime workers still execute from .dev/scripts.
+if [ "$SKYNET_SCRIPTS_DIR" != "$SKYNET_PROJECT_DIR/scripts" ] && [ -d "$SKYNET_PROJECT_DIR/scripts" ]; then
+  _sync_script_dir() {
+    local _src_dir="$1"
+    local _dst_dir="$2"
+    local _src_file="" _base=""
+    mkdir -p "$_dst_dir" 2>/dev/null || true
+    for _src_file in "$_src_dir"/*.sh; do
+      [ -f "$_src_file" ] || continue
+      _base=$(basename "$_src_file")
+      if [ ! -f "$_dst_dir/$_base" ] || ! cmp -s "$_src_file" "$_dst_dir/$_base" 2>/dev/null; then
+        cp "$_src_file" "$_dst_dir/$_base" 2>/dev/null || true
+        chmod +x "$_dst_dir/$_base" 2>/dev/null || true
+      fi
+    done
+  }
+  _sync_script_dir "$SKYNET_PROJECT_DIR/scripts" "$SKYNET_SCRIPTS_DIR"
+  _sync_script_dir "$SKYNET_PROJECT_DIR/scripts/agents" "$SKYNET_SCRIPTS_DIR/agents"
+  _sync_script_dir "$SKYNET_PROJECT_DIR/scripts/notify" "$SKYNET_SCRIPTS_DIR/notify"
+  _sync_script_dir "$SKYNET_PROJECT_DIR/scripts/lock-backends" "$SKYNET_SCRIPTS_DIR/lock-backends"
+fi
+
 # Source cross-platform compatibility layer
 source "$SKYNET_SCRIPTS_DIR/_compat.sh"
 
@@ -422,8 +446,13 @@ if [ "${_SKYNET_DB_INITIALIZED:-}" != "1" ]; then
   _SKYNET_DB_INITIALIZED=1
 fi
 
-# Source adaptive task weighting (lagging-goal priority boost)
-source "$SKYNET_SCRIPTS_DIR/_adaptive.sh"
+# Source adaptive task weighting (lagging-goal priority boost).
+# Runtime scripts may execute from .dev/scripts where _adaptive.sh can be absent.
+if [ -f "$SKYNET_SCRIPTS_DIR/_adaptive.sh" ]; then
+  source "$SKYNET_SCRIPTS_DIR/_adaptive.sh"
+elif [ -f "$SKYNET_PROJECT_DIR/scripts/_adaptive.sh" ]; then
+  source "$SKYNET_PROJECT_DIR/scripts/_adaptive.sh"
+fi
 
 # --- Structured logging ---
 # Shared log formatter. When SKYNET_LOG_FORMAT=json, outputs JSON lines.

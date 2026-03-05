@@ -4,7 +4,11 @@
 set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
-source "$SCRIPTS_DIR/mission-state.sh"
+if [ -f "$SCRIPTS_DIR/mission-state.sh" ]; then
+  source "$SCRIPTS_DIR/mission-state.sh"
+else
+  source "$PROJECT_DIR/scripts/mission-state.sh"
+fi
 _require_db
 
 # --- Load mission (supports multi-mission via SKYNET_MISSION_SLUG env) ---
@@ -116,8 +120,11 @@ case "$_mission_state" in
     exit 0
     ;;
   reviewing)
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission state is 'reviewing' — skipping task generation. Exiting." >> "$LOG"
-    exit 0
+    # "reviewing" is a transient checkpoint; if criteria are still unmet we must
+    # resume generation instead of stalling forever.
+    mission_set_state "$_mission_file" "$MISSION_STATE_ACTIVE" "project-driver"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Mission transitioned from reviewing → active (resuming generation)." >> "$LOG"
+    _mission_state="$MISSION_STATE_ACTIVE"
     ;;
   draft)
     # Auto-transition draft → active when project-driver runs

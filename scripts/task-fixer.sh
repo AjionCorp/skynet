@@ -31,6 +31,7 @@ else
 fi
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
 FIXER_COOLDOWN="$DEV_DIR/fixer-cooldown"
+FIXER_COOLDOWN_STREAK_EPOCH="$DEV_DIR/fixer-cooldown-last-epoch"
 
 # Instance-specific worktree (isolated from dev-workers and other fixers)
 WORKTREE_DIR="${SKYNET_WORKTREE_BASE}/fixer-${FIXER_ID}"
@@ -176,24 +177,37 @@ if ! check_any_auth; then
 fi
 
 # --- Retry budget: check for consecutive failures before attempting a fix ---
+# Guard against permanent cooldown loops by only applying cooldown when the
+# newest observed failure in the streak is newer than the last cooled streak.
 _consec_all_fail=false
-# Try SQLite first
-_db_last5=$(db_get_consecutive_failures 5 2>/dev/null || true)
+_newest_fail_epoch=0
+# Per-fixer history (not global): each fixer should evaluate its own streak.
+_db_last5=$(_db_sep "SELECT epoch, result FROM fixer_stats WHERE fixer_id=$FIXER_ID ORDER BY epoch DESC LIMIT 5;" 2>/dev/null || true)
 if [ -n "$_db_last5" ]; then
   _fail_count=0; _total_count=0
-  while IFS=$'\x1f' read -r _result; do
+  while IFS=$'\x1f' read -r _epoch _result; do
     [ -z "$_result" ] && continue
+    case "${_epoch:-}" in ''|*[!0-9]*) _epoch=0 ;; esac
+    [ "$_newest_fail_epoch" -eq 0 ] && _newest_fail_epoch=$_epoch
     _total_count=$((_total_count + 1))
     [ "$_result" = "failure" ] && _fail_count=$((_fail_count + 1))
   done <<< "$_db_last5"
   [ "$_total_count" -ge 5 ] && [ "$_fail_count" -ge 5 ] && _consec_all_fail=true
 fi
 if $_consec_all_fail; then
-  date +%s > "$FIXER_COOLDOWN"
-  log "Fixer paused: 5 consecutive failures, cooling down 30min"
-  emit_event "fixer_idle" "Fixer $FIXER_ID: cooldown after 5 consecutive failures"
-  rm -rf "$LOCKFILE"
-  exit 0
+  _last_cooled_epoch=0
+  if [ -f "$FIXER_COOLDOWN_STREAK_EPOCH" ]; then
+    _last_cooled_epoch=$(cat "$FIXER_COOLDOWN_STREAK_EPOCH" 2>/dev/null || echo 0)
+    case "${_last_cooled_epoch:-}" in ''|*[!0-9]*) _last_cooled_epoch=0 ;; esac
+  fi
+  if [ "$_newest_fail_epoch" -gt "$_last_cooled_epoch" ]; then
+    date +%s > "$FIXER_COOLDOWN"
+    echo "$_newest_fail_epoch" > "$FIXER_COOLDOWN_STREAK_EPOCH"
+    log "Fixer paused: 5 consecutive failures, cooling down 30min"
+    emit_event "fixer_idle" "Fixer $FIXER_ID: cooldown after 5 consecutive failures"
+    rm -rf "$LOCKFILE"
+    exit 0
+  fi
 fi
 
 # --- Pre-flight: atomically claim next pending failed task ---
