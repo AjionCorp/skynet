@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler test for `/api/admin/pipeline/explain` state explainability
+## [INFRA] Clean up stale dev/* branches from completed and superseded failed tasks
 **Status:** completed
-**Started:** 2026-03-05 09:17
+**Started:** 2026-03-05 09:21
 **Completed:** 2026-03-05
-**Branch:** dev/add-handler-test-for-apiadminpipelineexp
+**Branch:** dev/clean-up-stale-dev-branches-from-complet
 **Worker:** 3
 
 ### Changes
