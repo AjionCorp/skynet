@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit test for `_adaptive_order_clause()` priority weighting
+## [TEST] Add handler test for /api/admin/pipeline/explain route
 **Status:** completed
-**Started:** 2026-03-05 09:33
+**Started:** 2026-03-05 09:36
 **Completed:** 2026-03-05
-**Branch:** dev/add-unit-test-for-adaptiveorderclause-pr
+**Branch:** dev/add-handler-test-for-apiadminpipelineexp
 **Worker:** 1
 
 ### Changes
