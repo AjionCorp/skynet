@@ -12,7 +12,7 @@ Transform Skynet into a fully self-aware, self-improving autonomous development 
 - [x] Implement cross-worker coordination signals so workers avoid overlapping file edits, duplicate implementations, and merge conflicts through a shared intent registry
 - [x] Build a self-improvement task generator that analyzes pipeline failure patterns, admin tool gaps, and worker inefficiencies to propose infrastructure improvements
 - [x] Add a mission progress dashboard with real-time completion percentage, per-goal burndown, worker contribution breakdown, and projected completion timeline
-- [ ] Create an adaptive project driver that weights task generation toward lagging goals, deprioritizes areas with high failure rates, and adjusts batch size based on worker throughput
+- [x] Create an adaptive project driver that weights task generation toward lagging goals, deprioritizes areas with high failure rates, and adjusts batch size based on worker throughput
 - [x] Implement structured task outcome tracking with success/failure reason taxonomy, duration, files touched, and merge conflict indicators stored in the metrics DB
 - [ ] Build worker performance profiles that track per-worker success rate, average task duration, task-type strengths, and use this data to optimize task assignment
 
@@ -27,11 +27,9 @@ Transform Skynet into a fully self-aware, self-improving autonomous development 
 - [x] The system can explain its own state: any API consumer can query why the pipeline is in its current state, what's blocking progress, and what would accelerate completion
 
 ## Current Focus
-Phase 4: Final push — 2 unchecked goals and 1 unchecked success criterion remain.
-
-Strategy: Fresh 12-task batch avoids project-driver.sh contention. Each task touches exactly one file to prevent merge conflicts.
+Phase 5: Mission completion — 1 unchecked goal and 1 unchecked success criterion remain. Goal 8 (adaptive driver) completed 2026-03-05 with all three wirings merged.
 
 Remaining:
-(a) Goal 8 — adaptive project driver: `_adaptive.sh` helpers exist and are sourced via `_config.sh`, but `_adaptive_reweight_pending()` is never called and `_adaptive_order_clause()` is never used. 3 tasks: wire reweight into watchdog.sh, wire order clause into dev-worker.sh, wire order clause into _db.sh claim CTEs. Previous blocked tasks targeting project-driver.sh are superseded.
-(b) Goal 10 — worker performance profiles: WorkerPerformanceProfiles panel shows success rate/counts but lacks task-type affinity. 3 tasks: add `db_get_worker_tag_breakdown()`, populate `tagBreakdown` in types/handler, render affinity visualization in component.
-(c) Success Criterion 6 — Per-goal ETA exists in MissionGoalProgress. Missing: overall mission projected completion date. 2 tasks: compute `overallMissionEta` in burndown handler, display in component header.
+(a) Goal 10 — worker performance profiles: `tagBreakdown` type + handler population landed. Still need: `db_get_worker_tag_breakdown()` DB query (pending), tag affinity visualization in component (claimed). Once both land, Goal 10 is done.
+(b) Success Criterion 6 — Per-goal ETA exists in MissionGoalProgress. Missing: `overallMissionEta` computation in burndown handler (claimed) and display in component header (claimed). Once both land, SC6 is done.
+(c) When Goal 10 + SC6 are met, all 10 goals and 8 success criteria are satisfied → mission transitions to DONE automatically via mission-state.sh.

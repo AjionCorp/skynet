@@ -1,10 +1,6 @@
 # Current Task
-## [INFRA] Supersede 4 blocked/failed project-driver.sh adaptive wiring tasks with fresh canonical approaches
-**Status:** completed
+## [DATA] Add `db_get_worker_tag_breakdown()` query to `scripts/_db.sh`
+**Status:** in_progress
 **Started:** 2026-03-05 09:05
-**Completed:** 2026-03-05
-**Branch:** dev/supersede-4-blockedfailed-project-driver
+**Branch:** dev/add-dbgetworkertagbreakdown-query-to-scr
 **Worker:** 3
-
-### Changes
--- See git log for details
