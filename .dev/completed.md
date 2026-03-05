@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [FEAT] Add task-type affinity visualization to WorkerPerformanceProfiles panel | merged to main | 3m | success |
 | 2026-03-05 | [INFRA] Use `_adaptive_order_clause()` in `_db.sh` claim CTE queries | merged to main | 2m | success |
 | 2026-03-05 | [DATA] Add `tagBreakdown` to `WorkerPerformanceStats` type and populate in pipeline-status handler | merged to main | 2m | success |
 | 2026-03-05 | [INFRA] Use `_adaptive_order_clause()` in dev-worker.sh affinity task scoring | merged to main | 1m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Add `## State: ACTIVE` line to mission file format and `_get_mission_state` helper | merged to main | 5m | success |
 | 2026-03-04 | [TEST] Add shell regression for `mission-state.sh` state transitions | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Wire `watchdog.sh` to evaluate mission state transitions each cycle | merged to main | 3m | success |
-| 2026-03-04 | [INFRA] Create `scripts/mission-state.sh` state machine function library | merged to main | 3m | success |
