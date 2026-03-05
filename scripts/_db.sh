@@ -737,6 +737,52 @@ _db_set_files_touched_inner() {
 }
 db_set_files_touched() { _db_retry _db_set_files_touched_inner "$@"; }
 
+# Reconcile phantom completed entries: tasks marked 'completed' whose files
+# never actually landed on the main branch. For each completed task that has
+# files_touched, verify at least one file exists on HEAD. If none do, update
+# the notes to "phantom — file never landed" so velocity metrics aren't inflated.
+# Echoes newline-separated "id|title" for each phantom found (empty if none).
+db_reconcile_phantom_completed() {
+  [ ! -f "$DB_PATH" ] && return 0
+  local _phantoms=""
+  local _rows
+  _rows=$(_db_sep "
+    SELECT id, title, files_touched
+    FROM tasks
+    WHERE status IN ('completed','fixed')
+      AND files_touched != ''
+      AND notes NOT LIKE '%phantom%';
+  " 2>/dev/null || true)
+  [ -z "$_rows" ] && return 0
+
+  while IFS="$_DB_SEP" read -r _pc_id _pc_title _pc_files; do
+    [ -z "$_pc_id" ] && continue
+    [ -z "$_pc_files" ] && continue
+    # Check if at least one file from files_touched exists on HEAD
+    local _found=false
+    while IFS= read -r _fpath; do
+      [ -z "$_fpath" ] && continue
+      if git cat-file -e "HEAD:$_fpath" 2>/dev/null; then
+        _found=true
+        break
+      fi
+    done <<< "$_pc_files"
+    if ! $_found; then
+      # None of the files exist on HEAD — mark as phantom
+      local _int_id; _int_id=$(_sql_int "$_pc_id")
+      _db "
+        UPDATE tasks SET notes='phantom — file never landed', updated_at=datetime('now')
+        WHERE id=$_int_id AND status IN ('completed','fixed');
+      " 2>/dev/null || true
+      _phantoms="${_phantoms:+$_phantoms
+}${_pc_id}|${_pc_title}"
+    fi
+  done <<< "$_rows"
+
+  [ -n "$_phantoms" ] && echo "$_phantoms"
+  return 0
+}
+
 # Record task failure
 # Args: task_id branch error [reason_code]
 # reason_code: structured category — agent_failed, worktree_missing, gate_failed,

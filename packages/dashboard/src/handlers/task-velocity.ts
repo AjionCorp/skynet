@@ -59,7 +59,8 @@ export function createTaskVelocityHandler(config: SkynetConfig) {
             (l) =>
               l.startsWith("|") &&
               !l.includes("Date") &&
-              !l.includes("---")
+              !l.includes("---") &&
+              !l.includes("phantom")
           );
 
         const byDate: Record<string, DateBucket> = {};

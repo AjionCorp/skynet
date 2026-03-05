@@ -386,7 +386,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             (l) =>
               l.startsWith("|") &&
               !l.includes("Date") &&
-              !l.includes("---")
+              !l.includes("---") &&
+              !l.includes("phantom")
           );
         completed = completedLines.map((l) => {
           const parts = l.split("|").map((p) => p.trim());

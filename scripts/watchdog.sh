@@ -724,6 +724,25 @@ if [ -n "$_stale_fixing" ]; then
 fi
 } || { log "Phase: stale-fixing reconciliation failed, continuing"; true; }
 
+# --- Reconcile phantom completed entries ---
+# Completed tasks whose files_touched never landed on HEAD are phantom entries.
+# Update their notes so velocity metrics exclude them and the audit trail is accurate.
+# OPS-P2-2: Error isolation — wrap in braces with || to ensure subsequent phases run
+{
+if [ -f "$DB_PATH" ]; then
+  _phantom_results=$(db_reconcile_phantom_completed 2>/dev/null || true)
+  if [ -n "$_phantom_results" ]; then
+    while IFS="|" read -r _ph_id _ph_title; do
+      [ -z "$_ph_id" ] && continue
+      log "Reconciled phantom completed entry: '$_ph_title' (id=$_ph_id) — files never landed on HEAD"
+      emit_event "phantom_completed_reconciled" "Task '$_ph_title' (id=$_ph_id) marked as phantom — files never landed" 2>/dev/null || true
+    done <<< "$_phantom_results"
+    # Re-export completed.md to reflect the updated notes
+    db_export_completed "$COMPLETED" 2>/dev/null || log "WARNING: db_export_completed failed after phantom reconciliation"
+  fi
+fi
+} || { log "Phase: phantom-completed reconciliation failed, continuing"; true; }
+
 # --- Sync backlog.md markers after reconciliation ---
 # After crash recovery and orphaned-claim reconciliation, SQLite may have tasks
 # reset from 'claimed' to 'pending' — but backlog.md still shows stale [>]

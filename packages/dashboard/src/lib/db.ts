@@ -245,7 +245,8 @@ export class SkynetDB {
       .prepare(
         `SELECT completed_at, title, branch, duration, notes, files_touched
          FROM tasks
-         WHERE status IN ('completed','fixed')${missionFilter}
+         WHERE status IN ('completed','fixed')
+           AND notes NOT LIKE '%phantom%'${missionFilter}
          ORDER BY completed_at DESC
          LIMIT ?`
       )
@@ -267,7 +268,7 @@ export class SkynetDB {
         ? " AND mission_hash = ?"
         : "";
     const row = this.db
-      .prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed','done')${missionFilter}`)
+      .prepare(`SELECT COUNT(*) as cnt FROM tasks WHERE status IN ('completed','fixed','done') AND notes NOT LIKE '%phantom%'${missionFilter}`)
       .get(...(missionFilter ? [missionHash] : [])) as { cnt: number };
     return row.cnt;
   }
@@ -278,7 +279,8 @@ export class SkynetDB {
       .prepare(
         `SELECT AVG(duration_secs) as avg_secs
          FROM tasks
-         WHERE status IN ('completed','fixed') AND duration_secs IS NOT NULL AND duration_secs > 0`
+         WHERE status IN ('completed','fixed') AND duration_secs IS NOT NULL AND duration_secs > 0
+           AND notes NOT LIKE '%phantom%'`
       )
       .get() as { avg_secs: number | null };
 
@@ -643,22 +645,23 @@ export class SkynetDB {
       .prepare(
         `SELECT
            worker_id,
-           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('completed','fixed') AND notes NOT LIKE '%phantom%' THEN 1 ELSE 0 END) as completed,
            SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed,
-           AVG(CASE WHEN status IN ('completed','fixed') AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
+           AVG(CASE WHEN status IN ('completed','fixed') AND notes NOT LIKE '%phantom%' AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
          FROM tasks
          WHERE worker_id IS NOT NULL AND worker_id <= ?
          GROUP BY worker_id`
       )
       .all(maxWorkers) as { worker_id: number; completed: number; failed: number; avg_secs: number | null }[];
 
-    // Per-worker tag breakdown (completed + fixed tasks only)
+    // Per-worker tag breakdown (completed + fixed tasks only, excluding phantoms)
     const tagRows = this.db
       .prepare(
         `SELECT worker_id, tag, COUNT(*) as cnt
          FROM tasks
          WHERE worker_id IS NOT NULL AND worker_id <= ?
            AND status IN ('completed','fixed')
+           AND notes NOT LIKE '%phantom%'
            AND tag IS NOT NULL
          GROUP BY worker_id, tag`
       )
@@ -709,7 +712,7 @@ export class SkynetDB {
         `SELECT
            worker_id,
            tag,
-           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('completed','fixed') AND notes NOT LIKE '%phantom%' THEN 1 ELSE 0 END) as completed,
            SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed
          FROM tasks
          WHERE worker_id IS NOT NULL AND worker_id <= ? AND tag != ''
@@ -746,9 +749,9 @@ export class SkynetDB {
       .prepare(
         `SELECT
            worker_id,
-           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('completed','fixed') AND notes NOT LIKE '%phantom%' THEN 1 ELSE 0 END) as completed,
            SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed,
-           AVG(CASE WHEN status IN ('completed','fixed') AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
+           AVG(CASE WHEN status IN ('completed','fixed') AND notes NOT LIKE '%phantom%' AND duration_secs > 0 THEN duration_secs ELSE NULL END) as avg_secs
          FROM tasks
          WHERE worker_id IS NOT NULL AND worker_id <= ?
          GROUP BY worker_id`
@@ -764,6 +767,7 @@ export class SkynetDB {
         .prepare(
           `SELECT title FROM tasks
            WHERE worker_id = ? AND status IN ('completed','fixed')
+             AND notes NOT LIKE '%phantom%'
            ORDER BY completed_at DESC LIMIT 5`
         )
         .all(r.worker_id) as { title: string }[];
