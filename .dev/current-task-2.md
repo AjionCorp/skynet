@@ -1,9 +1,9 @@
 # Current Task
-## [FEAT] Add per-goal burndown and ETA estimation to MissionDashboard
+## [DATA] Add `tagBreakdown` to `WorkerPerformanceStats` type and populate in pipeline-status handler
 **Status:** completed
-**Started:** 2026-03-04 11:04
-**Completed:** 2026-03-04
-**Branch:** dev/add-per-goal-burndown-and-eta-estimation
+**Started:** 2026-03-05 08:57
+**Completed:** 2026-03-05
+**Branch:** dev/add-tagbreakdown-to-workerperformancesta
 **Worker:** 2
 
 ### Changes
