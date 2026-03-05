@@ -743,6 +743,40 @@ if [ -f "$DB_PATH" ]; then
 fi
 } || { log "Phase: phantom-completed reconciliation failed, continuing"; true; }
 
+# --- Auto-prune stale worker intents ---
+# Two intent systems exist: file-based (intents/worker-N) for lightweight coordination
+# and DB-based (workers.intent column) for overlap detection. Prune both.
+# File-based: remove intent files from dead workers (uses _intent_prune from _config.sh).
+# DB-based: clear intent column for workers not actively in_progress.
+{
+  # File-based intent prune (dead worker PIDs, stale timestamps)
+  _pruned_file_intents=0
+  if [ -d "$SKYNET_INTENTS_DIR" ]; then
+    _before_count=$(ls "$SKYNET_INTENTS_DIR"/worker-* 2>/dev/null | wc -l | tr -d ' ')
+    _intent_prune
+    _after_count=$(ls "$SKYNET_INTENTS_DIR"/worker-* 2>/dev/null | wc -l | tr -d ' ')
+    _pruned_file_intents=$((_before_count - _after_count))
+  fi
+
+  # DB-based intent prune: clear intent for workers that are not in_progress
+  _pruned_db_intents=0
+  if [ -f "$DB_PATH" ]; then
+    _pruned_db_intents=$(_db "
+      SELECT COUNT(*) FROM workers
+      WHERE intent != '' AND status != 'in_progress';
+    " 2>/dev/null | head -1 || echo "0")
+    case "$_pruned_db_intents" in ''|*[!0-9]*) _pruned_db_intents=0 ;; esac
+    if [ "$_pruned_db_intents" -gt 0 ]; then
+      _db "UPDATE workers SET intent='', updated_at=datetime('now') WHERE intent != '' AND status != 'in_progress';" 2>/dev/null || true
+    fi
+  fi
+
+  if [ "$_pruned_file_intents" -gt 0 ] || [ "$_pruned_db_intents" -gt 0 ]; then
+    log "Pruned stale intents: ${_pruned_file_intents} file-based, ${_pruned_db_intents} DB-based"
+    emit_event "intent_prune" "file=${_pruned_file_intents} db=${_pruned_db_intents}" 2>/dev/null || true
+  fi
+} || { log "Phase: intent auto-prune failed, continuing"; true; }
+
 # --- Sync backlog.md markers after reconciliation ---
 # After crash recovery and orphaned-claim reconciliation, SQLite may have tasks
 # reset from 'claimed' to 'pending' — but backlog.md still shows stale [>]
