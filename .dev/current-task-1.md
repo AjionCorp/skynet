@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add component test for VelocityEfficiencyPanel
+## [TEST] Add component test for WorkerPerformanceProfiles
 **Status:** completed
-**Started:** 2026-03-05 10:45
+**Started:** 2026-03-05 10:47
 **Completed:** 2026-03-05
-**Branch:** dev/add-component-test-for-velocityefficienc
+**Branch:** dev/add-component-test-for-workerperformance
 **Worker:** 1
 
 ### Changes
