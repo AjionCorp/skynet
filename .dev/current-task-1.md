@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler test for /api/admin/pipeline/failure-analysis route
+## [TEST] Add handler test for /api/admin/workers/intents route
 **Status:** completed
-**Started:** 2026-03-05 09:38
+**Started:** 2026-03-05 09:40
 **Completed:** 2026-03-05
-**Branch:** dev/add-handler-test-for-apiadminpipelinefai
+**Branch:** dev/add-handler-test-for-apiadminworkersinte
 **Worker:** 1
 
 ### Changes
