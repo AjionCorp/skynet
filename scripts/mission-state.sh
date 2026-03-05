@@ -22,7 +22,7 @@
 #
 # Valid transitions:
 #   draft      → active, failed
-#   active     → paused, reviewing, failed
+#   active     → paused, reviewing, complete, failed
 #   paused     → active, failed
 #   reviewing  → active, complete, failed
 #   complete   → (terminal)
@@ -65,7 +65,7 @@ mission_validate_transition() {
       ;;
     active)
       case "$to_state" in
-        paused|reviewing|failed) valid=true ;;
+        paused|reviewing|complete|failed) valid=true ;;
       esac
       ;;
     paused)

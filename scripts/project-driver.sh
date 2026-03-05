@@ -572,6 +572,10 @@ All $mc_total_criteria success criteria have been achieved. The pipeline has ful
         echo ""
       } >> "$BLOCKERS"
 
+      # Write completion summary immediately (don't wait for watchdog cycle)
+      mission_write_completion_summary "$_mission_file" "${_mission_hash:-global}" "$DEV_DIR" 2>/dev/null || \
+        log "WARNING: Failed to write completion summary (watchdog will retry)"
+
       # Sentinel for backward compat with watchdog
       echo "{\"completedAt\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\", \"mission\": \"$_mission_name\", \"slug\": \"${_mission_hash:-global}\", \"criteriaCount\": $mc_total_criteria}" > "$MISSION_COMPLETE_SENTINEL"
       log "Mission state set to 'complete'. Sentinel written to $MISSION_COMPLETE_SENTINEL"

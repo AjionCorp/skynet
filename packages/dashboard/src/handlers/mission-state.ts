@@ -119,6 +119,29 @@ export function createMissionStateHandler(config: SkynetConfig) {
       }
 
       writeFileSync(path, updated, "utf-8");
+
+      // When transitioning to COMPLETE, create sentinel file so watchdog
+      // writes the completion summary on its next cycle.
+      if (trimmed === "COMPLETE") {
+        const { filename } = resolveMissionPath(devDir, request);
+        const slug = filename.replace(/^missions\//, "").replace(/\.md$/, "");
+        const slugSafe = slug.replace(/[^a-zA-Z0-9]/g, "_");
+        const sentinelPath = resolve(devDir, `mission-complete-${slugSafe}`);
+        if (!existsSync(sentinelPath)) {
+          const titleMatch = raw.match(/^# (.+)$/m);
+          const missionName = titleMatch ? titleMatch[1].trim() : slug;
+          const criteriaMatches = raw.match(/^[-*]\s*\[[xX]\]/gm);
+          const criteriaCount = criteriaMatches ? criteriaMatches.length : 0;
+          const sentinel = JSON.stringify({
+            completedAt: new Date().toISOString(),
+            mission: missionName,
+            slug,
+            criteriaCount,
+          });
+          writeFileSync(sentinelPath, sentinel, "utf-8");
+        }
+      }
+
       return Response.json({ data: { state: trimmed }, error: null });
     } catch (err) {
       logHandlerError(devDir, "mission-state:POST", err);
