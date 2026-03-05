@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [INFRA] Supersede 4 blocked/failed project-driver.sh adaptive wiring tasks with fresh canonical approaches | merged to main | 3m | success |
 | 2026-03-05 | [DATA] Compute `overallMissionEta` from per-goal ETAs in goal-burndown handler | merged to main | 4m | success |
 | 2026-03-05 | [FEAT] Add task-type affinity visualization to WorkerPerformanceProfiles panel | merged to main | 3m | success |
 | 2026-03-05 | [INFRA] Use `_adaptive_order_clause()` in `_db.sh` claim CTE queries | merged to main | 2m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Wire `project-driver.sh` to respect mission lifecycle state | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Record `files_touched` on task completion in `dev-worker.sh` | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Add `## State: ACTIVE` line to mission file format and `_get_mission_state` helper | merged to main | 5m | success |
-| 2026-03-04 | [TEST] Add shell regression for `mission-state.sh` state transitions | merged to main | 4m | success |
