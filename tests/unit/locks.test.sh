@@ -613,6 +613,211 @@ else
   pass "acquire_merge_lock: force-released merge lock with empty PID file (age > TTL)"
 fi
 
+# ── Test 21: acquire_worker_lock — disk space failure on fresh acquire ─
+
+echo ""
+log "=== acquire_worker_lock: disk space failure on fresh acquire path ==="
+
+LOCKFILE="$TMPDIR_ROOT/locks/worker-test-10.lock"
+: > "$LOGFILE"
+
+# Override _lock_check_disk_space to simulate failure
+_lock_check_disk_space_orig=$(declare -f _lock_check_disk_space)
+_lock_check_disk_space() { return 1; }
+
+if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
+  fail "acquire_worker_lock: should fail when disk space check fails on fresh acquire"
+else
+  pass "acquire_worker_lock: returns 1 when disk space check fails on fresh acquire"
+fi
+
+# Verify log mentions disk space
+if grep -q "Low disk space" "$LOGFILE" 2>/dev/null; then
+  pass "acquire_worker_lock: logs disk space critical message on fresh acquire"
+else
+  fail "acquire_worker_lock: should log disk space message on fresh acquire"
+fi
+
+# Lock dir should NOT exist (rmdir after disk space failure)
+if [ -d "$LOCKFILE" ]; then
+  fail "acquire_worker_lock: lock dir should be cleaned up after disk space failure on fresh acquire"
+else
+  pass "acquire_worker_lock: lock dir cleaned up after disk space failure on fresh acquire"
+fi
+
+# Restore original _lock_check_disk_space
+eval "$_lock_check_disk_space_orig"
+rm -rf "$LOCKFILE"
+: > "$LOGFILE"
+
+# ── Test 22: acquire_worker_lock — multiple stale reclaims in sequence ─
+
+echo ""
+log "=== acquire_worker_lock: sequential stale reclaims ==="
+
+LOCKFILE="$TMPDIR_ROOT/locks/worker-test-11.lock"
+: > "$LOGFILE"
+
+# First stale lock
+mkdir -p "$LOCKFILE"
+echo "4999998" > "$LOCKFILE/pid"
+if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
+  pass "acquire_worker_lock: first stale reclaim succeeds"
+else
+  fail "acquire_worker_lock: first stale reclaim should succeed"
+fi
+stored_pid=$(cat "$LOCKFILE/pid" 2>/dev/null)
+assert_eq "$stored_pid" "$$" "acquire_worker_lock: owns lock after first stale reclaim"
+
+# Simulate our process dying — replace PID with another dead PID
+echo "4999997" > "$LOCKFILE/pid"
+
+# Second stale reclaim
+if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
+  pass "acquire_worker_lock: second stale reclaim succeeds"
+else
+  fail "acquire_worker_lock: second stale reclaim should succeed"
+fi
+stored_pid=$(cat "$LOCKFILE/pid" 2>/dev/null)
+assert_eq "$stored_pid" "$$" "acquire_worker_lock: owns lock after second stale reclaim"
+
+rm -rf "$LOCKFILE"
+: > "$LOGFILE"
+
+# ── Test 23: acquire_worker_lock — self-contention (our own PID holds lock) ─
+
+echo ""
+log "=== acquire_worker_lock: self-contention (our PID already holds lock) ==="
+
+LOCKFILE="$TMPDIR_ROOT/locks/worker-test-12.lock"
+: > "$LOGFILE"
+
+# Create a lock owned by our own PID
+mkdir -p "$LOCKFILE"
+echo "$$" > "$LOCKFILE/pid"
+touch "$LOCKFILE/pid"  # Fresh mtime
+
+# Try to acquire again — our PID is alive, so it should fail (no double-acquire)
+if acquire_worker_lock "$LOCKFILE" "$LOGFILE" "T1"; then
+  fail "acquire_worker_lock: should NOT allow double-acquire by same PID"
+else
+  pass "acquire_worker_lock: prevents double-acquire by same PID"
+fi
+
+if grep -q "Already running" "$LOGFILE" 2>/dev/null; then
+  pass "acquire_worker_lock: logs 'Already running' for self-contention"
+else
+  fail "acquire_worker_lock: should log 'Already running' for self-contention"
+fi
+
+rm -rf "$LOCKFILE"
+: > "$LOGFILE"
+
+# ── Test 24: MERGE_LOCK and MERGE_FLOCK paths derived from prefix ─────
+
+echo ""
+log "=== lock paths: MERGE_LOCK and MERGE_FLOCK derived from SKYNET_LOCK_PREFIX ==="
+
+assert_eq "$MERGE_LOCK" "${SKYNET_LOCK_PREFIX}-merge.lock" "MERGE_LOCK: correct path from prefix"
+assert_eq "$MERGE_FLOCK" "${SKYNET_LOCK_PREFIX}-merge.flock" "MERGE_FLOCK: correct path from prefix"
+
+# ── Test 25: acquire_merge_lock — emergency unlock cleans flock files ──
+
+echo ""
+log "=== acquire_merge_lock: emergency unlock removes flock files ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+_emergency_path="${SKYNET_LOCK_PREFIX}-unlock-emergency"
+touch "$_emergency_path"
+
+# Create merge lock dir and flock files
+mkdir -p "$MERGE_LOCKDIR"
+echo "$$" > "$MERGE_LOCKDIR/pid"
+touch "$MERGE_FLOCK"
+touch "${MERGE_FLOCK}.owner"
+
+acquire_merge_lock
+
+# Sentinel consumed
+if [ ! -f "$_emergency_path" ]; then
+  pass "acquire_merge_lock: emergency sentinel consumed (flock cleanup test)"
+else
+  fail "acquire_merge_lock: sentinel should be consumed"
+fi
+
+# Flock files should be removed
+if [ -f "$MERGE_FLOCK" ]; then
+  fail "acquire_merge_lock: MERGE_FLOCK should be removed by emergency unlock"
+else
+  pass "acquire_merge_lock: MERGE_FLOCK removed by emergency unlock"
+fi
+
+if [ -f "${MERGE_FLOCK}.owner" ]; then
+  fail "acquire_merge_lock: MERGE_FLOCK.owner should be removed by emergency unlock"
+else
+  pass "acquire_merge_lock: MERGE_FLOCK.owner removed by emergency unlock"
+fi
+
+rm -rf "$MERGE_LOCKDIR"
+
+# ── Test 26: acquire_merge_lock — no stale check when lock dir missing ─
+
+echo ""
+log "=== acquire_merge_lock: no-op stale check when merge lock dir absent ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+# Ensure no merge lock dir exists
+rm -rf "$MERGE_LOCKDIR"
+
+acquire_merge_lock
+
+# Backend should still be called (stale check is a no-op, not a blocker)
+case "$_MOCK_BACKEND_CALLS" in
+  *"acquire:merge:$SKYNET_MERGE_LOCK_TTL;"*)
+    pass "acquire_merge_lock: delegates to backend even when no stale lock dir exists"
+    ;;
+  *)
+    fail "acquire_merge_lock: should call backend when no stale lock dir (got '$_MOCK_BACKEND_CALLS')"
+    ;;
+esac
+
+# ── Test 27: acquire_merge_lock — stale lock dir but no pid file ───────
+
+echo ""
+log "=== acquire_merge_lock: lock dir exists but no pid file — skips stale check ==="
+
+_MOCK_BACKEND_CALLS=""
+_MOCK_BACKEND_ACQUIRE_RC=0
+
+# Create merge lock dir WITHOUT a pid file
+mkdir -p "$MERGE_LOCKDIR"
+
+acquire_merge_lock
+
+# The stale-check requires both -d MERGE_LOCK and -f MERGE_LOCK/pid.
+# Without the pid file, the stale check is skipped — backend still called.
+case "$_MOCK_BACKEND_CALLS" in
+  *"acquire:merge:$SKYNET_MERGE_LOCK_TTL;"*)
+    pass "acquire_merge_lock: delegates to backend when lock dir has no pid file"
+    ;;
+  *)
+    fail "acquire_merge_lock: should call backend even with lock dir but no pid file"
+    ;;
+esac
+
+# Lock dir should still exist (stale check didn't touch it)
+if [ -d "$MERGE_LOCKDIR" ]; then
+  pass "acquire_merge_lock: lock dir untouched when pid file is absent"
+else
+  fail "acquire_merge_lock: should not remove lock dir without pid file"
+fi
+
+rm -rf "$MERGE_LOCKDIR"
+
 # ── Summary ──────────────────────────────────────────────────────────
 
 echo ""
