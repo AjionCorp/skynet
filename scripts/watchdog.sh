@@ -787,6 +787,13 @@ if [ -f "$DB_PATH" ] && [ -f "$BACKLOG" ]; then
 fi
 } || { log "Phase: backlog marker sync failed, continuing"; true; }
 
+# --- Adaptive reweight pending tasks ---
+# After reconciliation settles task statuses, reweight pending tasks based on
+# lagging mission goals so the next claim cycle picks goal-aligned work first.
+{
+  _adaptive_reweight_pending
+} || { log "Phase: adaptive reweight failed, continuing"; true; }
+
 # --- Proactive merge lock cleanup ---
 # If the merge lock holder's PID is dead (or PID file is missing, indicating a
 # crash between mkdir and PID write), remove the lock immediately rather than
