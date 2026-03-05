@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add regression for mission DONE transition when all checkboxes are checked
+## [TEST] Add unit test for worker intent overlap detection
 **Status:** completed
-**Started:** 2026-03-05 09:26
+**Started:** 2026-03-05 09:31
 **Completed:** 2026-03-05
-**Branch:** dev/add-regression-for-mission-done-transiti
+**Branch:** dev/add-unit-test-for-worker-intent-overlap-
 **Worker:** 1
 
 ### Changes
