@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Re-add handler test for /api/admin/workers/intents route
+## [TEST] Re-add handler test for /api/admin/pipeline/explain route
 **Status:** completed
-**Started:** 2026-03-05 09:50
+**Started:** 2026-03-05 09:51
 **Completed:** 2026-03-05
-**Branch:** dev/re-add-handler-test-for-apiadminworkersi
+**Branch:** dev/re-add-handler-test-for-apiadminpipeline
 **Worker:** 3
 
 ### Changes
