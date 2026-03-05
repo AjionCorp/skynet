@@ -33,6 +33,7 @@ playwright-report/
 .dev/worker-*.heartbeat
 .dev/pipeline-paused
 .dev/fixer-cooldown
+.dev/fixer-cooldown-last-epoch
 .dev/worktrees/
 .dev/skynet.db*
 .dev/pipeline.db

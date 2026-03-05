@@ -14,7 +14,7 @@ Transform Skynet into a fully self-aware, self-improving autonomous development 
 - [x] Add a mission progress dashboard with real-time completion percentage, per-goal burndown, worker contribution breakdown, and projected completion timeline
 - [x] Create an adaptive project driver that weights task generation toward lagging goals, deprioritizes areas with high failure rates, and adjusts batch size based on worker throughput
 - [x] Implement structured task outcome tracking with success/failure reason taxonomy, duration, files touched, and merge conflict indicators stored in the metrics DB
-- [ ] Build worker performance profiles that track per-worker success rate, average task duration, task-type strengths, and use this data to optimize task assignment
+- [x] Build worker performance profiles that track per-worker success rate, average task duration, task-type strengths, and use this data to optimize task assignment
 
 ## Success Criteria
 - [x] Every mission has a quantifiable completion percentage derived from checked success criteria AND task outcome data
@@ -22,14 +22,9 @@ Transform Skynet into a fully self-aware, self-improving autonomous development 
 - [x] The project driver automatically stops generating tasks and transitions the mission to DONE when all goals and success criteria are satisfied
 - [x] Pipeline health score incorporates mission-alignment metrics (not just operational health) — tasks that don't advance the mission are flagged
 - [x] A self-improvement feedback loop exists: pipeline failures automatically generate infrastructure improvement tasks in the backlog
-- [ ] Admin dashboard displays per-mission performance metrics including velocity, worker efficiency, goal progress, and estimated time to completion
+- [x] Admin dashboard displays per-mission performance metrics including velocity, worker efficiency, goal progress, and estimated time to completion
 - [x] Worker reassignment happens automatically when a mission reaches DONE state — idle workers pick up the next highest-priority active mission
 - [x] The system can explain its own state: any API consumer can query why the pipeline is in its current state, what's blocking progress, and what would accelerate completion
 
 ## Current Focus
-Phase 5: Mission completion — 1 unchecked goal and 1 unchecked success criterion remain. Goal 8 (adaptive driver) completed 2026-03-05 with all three wirings merged.
-
-Remaining:
-(a) Goal 10 — worker performance profiles: `tagBreakdown` type + handler population landed. Still need: `db_get_worker_tag_breakdown()` DB query (pending), tag affinity visualization in component (claimed). Once both land, Goal 10 is done.
-(b) Success Criterion 6 — Per-goal ETA exists in MissionGoalProgress. Missing: `overallMissionEta` computation in burndown handler (claimed) and display in component header (claimed). Once both land, SC6 is done.
-(c) When Goal 10 + SC6 are met, all 10 goals and 8 success criteria are satisfied → mission transitions to DONE automatically via mission-state.sh.
+MISSION COMPLETE — All 10 goals and all 8 success criteria are satisfied as of 2026-03-05. Goal 10 (worker performance profiles with tag breakdown and affinity visualization) and SC6 (overall mission ETA display in MissionGoalProgress) were the final items, both merged to main. The mission-state.sh engine will transition state to DONE on the next watchdog cycle.
