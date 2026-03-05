@@ -1478,13 +1478,15 @@ _archive_old_completions
 # Ensures git branch -r sees up-to-date remote state (prunes deleted refs).
 git -C "$PROJECT_DIR" fetch --prune origin 2>/dev/null || true
 
-# --- Cleanup merged dev/* branches older than 7 days ---
+# --- Cleanup merged dev/* branches older than 1 day ---
 # Periodically removes dev/* branches that have been fully merged into the main
-# branch and are older than 7 days. Uses `git branch -d` (not -D) for safety —
+# branch and are older than 1 day. Uses `git branch -d` (not -D) for safety —
 # only deletes branches whose tips are reachable from SKYNET_MAIN_BRANCH.
+# Note: _merge.sh deletes remote branches immediately after merge; this is a
+# fallback for any that were missed (e.g., network failure during cleanup).
 _cleanup_merged_dev_branches() {
   local cutoff_epoch merged_branches deleted=0
-  cutoff_epoch=$(( $(date +%s) - 7 * 86400 ))  # 7 days ago
+  cutoff_epoch=$(( $(date +%s) - 1 * 86400 ))  # 1 day ago
 
   # List local branches fully merged into the main branch, filter to dev/*
   merged_branches=$(git -C "$PROJECT_DIR" branch --merged "$SKYNET_MAIN_BRANCH" 2>/dev/null \
@@ -1508,7 +1510,7 @@ _cleanup_merged_dev_branches() {
 
     if [ "$branch_epoch" -lt "$cutoff_epoch" ] 2>/dev/null; then
       if git -C "$PROJECT_DIR" branch -d "$branch" 2>/dev/null; then
-        log "Deleted merged dev branch: $branch (older than 7 days)"
+        log "Deleted merged dev branch: $branch (older than 1 day)"
         emit_event "merged_branch_cleaned" "Cleaned merged $branch"
         deleted=$((deleted + 1))
       fi

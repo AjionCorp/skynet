@@ -600,5 +600,13 @@ do_merge_to_main() {
   fi
 
   _release_merge_lock_with_duration
+
+  # --- Clean up remote branch after lock release (fire-and-forget) ---
+  # Minimizes stale remote dev/* branches from completed tasks. Failure is
+  # harmless — the watchdog's orphaned branch cleanup will catch it later.
+  if git -C "$PROJECT_DIR" show-ref --verify --quiet "refs/remotes/origin/$branch_name" 2>/dev/null; then
+    git -C "$PROJECT_DIR" push origin --delete "$branch_name" 2>/dev/null || true
+  fi
+
   return 0
 }
