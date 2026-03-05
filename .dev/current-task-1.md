@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Supersede 3 blocked failed-task rows with fresh canonical approaches
+## [INFRA] Wire `_adaptive_reweight_pending()` call into watchdog.sh reconciliation cycle
 **Status:** completed
-**Started:** 2026-03-04 11:26
-**Completed:** 2026-03-04
-**Branch:** dev/supersede-3-blocked-failed-task-rows-wit
+**Started:** 2026-03-05 08:54
+**Completed:** 2026-03-05
+**Branch:** dev/wire-adaptivereweightpending-call-into-w
 **Worker:** 1
 
 ### Changes
