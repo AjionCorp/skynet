@@ -1004,6 +1004,11 @@ find /tmp -maxdepth 1 -name "skynet-${SKYNET_PROJECT_NAME}-*" -mtime +7 -type f 
 # Clean up old .dev sentinel files (>7 days) to prevent accumulation in devDir
 find "$DEV_DIR" -maxdepth 1 -name '.db-*-sentinel-*' -mtime +7 -delete 2>/dev/null || true
 
+# Clean up old mission-complete sentinel files (>30 days) to prevent accumulation
+# These are created by project-driver.sh when a mission completes; old ones from
+# previous missions are no longer needed once the active mission has changed.
+find "$DEV_DIR" -maxdepth 1 -name 'mission-complete-*' -mtime +30 -delete 2>/dev/null || true
+
 # --- Validate backlog health (duplicates, orphaned claims, bad refs) ---
 validate_backlog
 
