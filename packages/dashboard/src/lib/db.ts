@@ -702,6 +702,44 @@ export class SkynetDB {
     return result;
   }
 
+  /** Per-worker task-type affinity: success rates broken down by tag. */
+  getWorkerTaskTypeAffinity(maxWorkers: number): Record<string, { tag: string; completed: number; failed: number; successRate: number }[]> {
+    const rows = this.db
+      .prepare(
+        `SELECT
+           worker_id,
+           tag,
+           SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) as completed,
+           SUM(CASE WHEN status IN ('failed','blocked','superseded') OR status LIKE 'fixing-%' THEN 1 ELSE 0 END) as failed
+         FROM tasks
+         WHERE worker_id IS NOT NULL AND worker_id <= ? AND tag != ''
+         GROUP BY worker_id, tag`
+      )
+      .all(maxWorkers) as { worker_id: number; tag: string; completed: number; failed: number }[];
+
+    const result: Record<string, { tag: string; completed: number; failed: number; successRate: number }[]> = {};
+    for (let wid = 1; wid <= maxWorkers; wid++) {
+      result[`worker-${wid}`] = [];
+    }
+
+    for (const r of rows) {
+      const total = r.completed + r.failed;
+      result[`worker-${r.worker_id}`]?.push({
+        tag: r.tag,
+        completed: r.completed,
+        failed: r.failed,
+        successRate: total > 0 ? Math.round((r.completed / total) * 100) : 0,
+      });
+    }
+
+    // Sort each worker's affinities by total tasks descending
+    for (const key of Object.keys(result)) {
+      result[key].sort((a, b) => (b.completed + b.failed) - (a.completed + a.failed));
+    }
+
+    return result;
+  }
+
   /** Per-worker contribution breakdown: completed/failed counts, avg duration, recent task titles. */
   getWorkerContributions(maxWorkers: number): { workerId: number; completed: number; failed: number; avgSecs: number | null; recentTasks: string[] }[] {
     const statsRows = this.db

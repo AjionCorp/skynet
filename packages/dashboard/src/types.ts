@@ -336,12 +336,20 @@ export interface MissionCreatorResult {
 
 // ===== Worker Performance Stats =====
 
+export interface TaskTypeAffinity {
+  tag: string;
+  completed: number;
+  failed: number;
+  successRate: number;
+}
+
 export interface WorkerPerformanceStats {
   completedCount: number;
   failedCount: number;
   avgDuration: string | null;
   successRate: number;
   tagBreakdown: Record<string, number>;
+  taskTypeAffinity: TaskTypeAffinity[];
 }
 
 // ===== Self-Correction Stats =====

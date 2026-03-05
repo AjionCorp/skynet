@@ -4,10 +4,10 @@ import {
   CheckCircle2,
   XCircle,
   Timer,
-  Target,
   ChevronDown,
   ChevronRight,
   Users,
+  Zap,
 } from "lucide-react";
 import { useState } from "react";
 import type { WorkerPerformanceStats } from "../types";
@@ -202,6 +202,43 @@ export function WorkerPerformanceProfiles({
                           <p className="text-[10px] text-zinc-600">Avg Time</p>
                         </div>
                       </div>
+                      {stats.taskTypeAffinity.length > 0 && (
+                        <div className="mt-3 border-t border-zinc-800 pt-3">
+                          <div className="flex items-center gap-1 mb-2">
+                            <Zap className="h-3 w-3 text-amber-400/60" />
+                            <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-500">
+                              Task Type Affinity
+                            </span>
+                          </div>
+                          <div className="space-y-1.5">
+                            {stats.taskTypeAffinity.slice(0, 5).map((aff) => {
+                              const affTotal = aff.completed + aff.failed;
+                              const barColor =
+                                aff.successRate >= 80
+                                  ? "bg-emerald-500"
+                                  : aff.successRate >= 60
+                                    ? "bg-amber-500"
+                                    : "bg-red-500";
+                              return (
+                                <div key={aff.tag} className="flex items-center gap-2">
+                                  <span className="w-12 shrink-0 truncate text-[10px] font-medium text-zinc-400">
+                                    {aff.tag}
+                                  </span>
+                                  <div className="flex-1 h-1.5 rounded-full bg-zinc-800">
+                                    <div
+                                      className={`h-1.5 rounded-full ${barColor} transition-all`}
+                                      style={{ width: `${aff.successRate}%` }}
+                                    />
+                                  </div>
+                                  <span className="w-16 shrink-0 text-right text-[10px] text-zinc-500">
+                                    {aff.successRate}% ({affTotal})
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </>
                   ) : (
                     <p className="mt-2 text-xs text-zinc-600">No tasks yet</p>

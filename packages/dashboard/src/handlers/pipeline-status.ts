@@ -712,14 +712,18 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         missionSlug: requestedMission || activeMission,
       });
 
-      // Per-worker performance stats
-      let workerStats: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number; tagBreakdown: Record<string, number> }> = {};
+      // Per-worker performance stats with task-type affinity
+      let workerStats: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number; tagBreakdown: Record<string, number>; taskTypeAffinity: { tag: string; completed: number; failed: number; successRate: number }[] }> = {};
       if (usingSqlite && db) {
-        workerStats = db.getWorkerPerformanceStats(maxW);
+        const baseStats = db.getWorkerPerformanceStats(maxW);
+        const affinityData = db.getWorkerTaskTypeAffinity(maxW);
+        for (const key of Object.keys(baseStats)) {
+          workerStats[key] = { ...baseStats[key], taskTypeAffinity: affinityData[key] || [] };
+        }
       } else {
         // File fallback: completed.md lacks worker_id — return empty stats
         for (let wid = 1; wid <= maxW; wid++) {
-          workerStats[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0, tagBreakdown: {} };
+          workerStats[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0, tagBreakdown: {}, taskTypeAffinity: [] };
         }
       }
 
