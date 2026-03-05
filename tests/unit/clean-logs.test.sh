@@ -53,6 +53,7 @@ mkdir -p "$MOCK_SCRIPTS_DIR" "$MOCK_DEV_DIR"
 cat > "$MOCK_SCRIPTS_DIR/_config.sh" << STUB
 # Stub _config.sh — provides only what clean-logs.sh needs
 SCRIPTS_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="\$SCRIPTS_DIR"
 DEV_DIR="\$(dirname "\$SCRIPTS_DIR")/.dev"
 
 # Source real _compat.sh for file_size and date_24h_ago

@@ -69,6 +69,7 @@ trap cleanup EXIT
 # Create a minimal _config.sh stub — provides only what start-dev.sh needs
 cat > "$MOCK_SCRIPTS_DIR/_config.sh" << STUB
 SCRIPTS_DIR="$MOCK_SCRIPTS_DIR"
+LOG_DIR="$MOCK_SCRIPTS_DIR"
 PROJECT_DIR="$MOCK_PROJECT_DIR"
 STUB
 

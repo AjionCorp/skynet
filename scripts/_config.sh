@@ -191,8 +191,19 @@ export SKYNET_CANARY_TIMEOUT_MINUTES="${SKYNET_CANARY_TIMEOUT_MINUTES:-30}"
 # shellcheck disable=SC2034
 PROJECT_DIR="$SKYNET_PROJECT_DIR"
 DEV_DIR="$SKYNET_DEV_DIR"
+# When running inside the pipeline repo itself (scripts/ at project root),
+# use the canonical scripts directory directly instead of .dev/scripts/ copies.
+if [ -f "$SKYNET_PROJECT_DIR/scripts/_config.sh" ]; then
+  # shellcheck disable=SC2034
+  SCRIPTS_DIR="$SKYNET_PROJECT_DIR/scripts"
+else
+  # shellcheck disable=SC2034
+  SCRIPTS_DIR="$SKYNET_DEV_DIR/scripts"
+fi
+# Logs and PID files always go to .dev/scripts/ (never into tracked scripts/)
 # shellcheck disable=SC2034
-SCRIPTS_DIR="$SKYNET_DEV_DIR/scripts"
+LOG_DIR="$SKYNET_DEV_DIR/scripts"
+mkdir -p "$LOG_DIR" 2>/dev/null || true
 # shellcheck disable=SC2034
 BACKLOG="$DEV_DIR/backlog.md"
 # shellcheck disable=SC2034
@@ -270,8 +281,8 @@ _validate_config_numerics() {
       # SH-P1-5: Also log to main log file so operators see clamping in persistent logs
       if declare -f log >/dev/null 2>&1; then
         log "$_msg"
-      elif [ -n "${SCRIPTS_DIR:-}" ] && [ -d "${SCRIPTS_DIR:-}" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${SCRIPTS_DIR}/watchdog.log" 2>/dev/null || true
+      elif [ -n "${LOG_DIR:-}" ] && [ -d "${LOG_DIR:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${LOG_DIR}/watchdog.log" 2>/dev/null || true
       fi
       eval "export ${var_name}=${min}"
     elif [ "$val" -gt "$max" ]; then
@@ -280,8 +291,8 @@ _validate_config_numerics() {
       # SH-P1-5: Also log to main log file so operators see clamping in persistent logs
       if declare -f log >/dev/null 2>&1; then
         log "$_msg"
-      elif [ -n "${SCRIPTS_DIR:-}" ] && [ -d "${SCRIPTS_DIR:-}" ]; then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${SCRIPTS_DIR}/watchdog.log" 2>/dev/null || true
+      elif [ -n "${LOG_DIR:-}" ] && [ -d "${LOG_DIR:-}" ]; then
+        echo "[$(date '+%Y-%m-%d %H:%M:%S')] [CONFIG] $_msg" >> "${LOG_DIR}/watchdog.log" 2>/dev/null || true
       fi
       eval "export ${var_name}=${max}"
     fi
@@ -373,11 +384,13 @@ _get_mission_llm_config() {
   echo "${model:-}"
 }
 
-# Keep runtime script mirrors in sync only when executing from the canonical
-# runtime mirror directory ($SKYNET_DEV_DIR/scripts).
-# This prevents accidental copies into unrelated directories if _config.sh is
-# sourced from an unexpected location.
-if [ "$SKYNET_SCRIPTS_DIR" = "$SKYNET_DEV_DIR/scripts" ] && [ -d "$SKYNET_PROJECT_DIR/scripts" ]; then
+# Keep runtime script mirrors in sync only when executing from the
+# .dev/scripts/ mirror AND the canonical scripts/ dir exists elsewhere.
+# When SCRIPTS_DIR already points to the canonical scripts/, skip the sync
+# entirely — there is nothing to copy.
+if [ "$SKYNET_SCRIPTS_DIR" = "$SKYNET_DEV_DIR/scripts" ] && \
+   [ "$SCRIPTS_DIR" != "$SKYNET_PROJECT_DIR/scripts" ] && \
+   [ -d "$SKYNET_PROJECT_DIR/scripts" ]; then
   _sync_script_dir() {
     local _src_dir="$1"
     local _dst_dir="$2"

@@ -14,7 +14,7 @@ source "$SCRIPTS_DIR/mission-state.sh"
 # even if individual checks fail. Each cleanup step has its own error handling.
 set +e
 
-LOG="$SCRIPTS_DIR/watchdog.log"
+LOG="$LOG_DIR/watchdog.log"
 WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
@@ -61,7 +61,7 @@ _DRAINING=false
 
 _watchdog_cleanup() {
   # Stop admin dev server if we started it
-  _dev_pidfile="$SCRIPTS_DIR/next-dev.pid"
+  _dev_pidfile="$LOG_DIR/next-dev.pid"
   if [ -f "$_dev_pidfile" ]; then
     _dev_pid=$(cat "$_dev_pidfile" 2>/dev/null || echo "")
     if [ -n "$_dev_pid" ] && kill -0 "$_dev_pid" 2>/dev/null; then
@@ -2362,7 +2362,7 @@ elif $agent_auth_ok && ! $pipeline_paused; then
       if [ "${SKYNET_DRY_RUN:-false}" = "true" ]; then
         log "DRY-RUN: Would kick off dev-worker $_wid"
       else
-        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/dev-worker.sh" "$_wid" >> "$SCRIPTS_DIR/dev-worker-${_wid}.log" 2>&1 &
+        SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/dev-worker.sh" "$_wid" >> "$LOG_DIR/dev-worker-${_wid}.log" 2>&1 &
       fi
     fi
   done
@@ -2393,10 +2393,10 @@ elif $agent_auth_ok && ! $pipeline_paused; then
         _fixer_log=""
         if [ "$_fid" = "1" ]; then
           _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer.lock"
-          _fixer_log="$SCRIPTS_DIR/task-fixer.log"
+          _fixer_log="$LOG_DIR/task-fixer.log"
         else
           _fixer_lock="${SKYNET_LOCK_PREFIX}-task-fixer-${_fid}.lock"
-          _fixer_log="$SCRIPTS_DIR/task-fixer-${_fid}.log"
+          _fixer_log="$LOG_DIR/task-fixer-${_fid}.log"
         fi
         if ! is_running "$_fixer_lock"; then
           log "Failed tasks pending ($failed_pending, >=$_fid), task-fixer $_fid idle. Kicking off."
@@ -2439,9 +2439,9 @@ elif $agent_auth_ok && ! $pipeline_paused; then
         log "DRY-RUN: Would kick off project-driver"
       else
         if [ -n "$_active_mission_slug" ]; then
-          SKYNET_DEV_DIR="$DEV_DIR" SKYNET_MISSION_SLUG="$_active_mission_slug" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_active_mission_slug}.log" 2>&1 &
+          SKYNET_DEV_DIR="$DEV_DIR" SKYNET_MISSION_SLUG="$_active_mission_slug" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$LOG_DIR/project-driver-${_active_mission_slug}.log" 2>&1 &
         else
-          SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-global.log" 2>&1 &
+          SKYNET_DEV_DIR="$DEV_DIR" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$LOG_DIR/project-driver-global.log" 2>&1 &
         fi
       fi
     fi

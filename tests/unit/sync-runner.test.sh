@@ -137,6 +137,7 @@ write_config() {
   local endpoints_block="$1"
   cat > "$MOCK_SCRIPTS_DIR/_config.sh" << STUB
 SCRIPTS_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="\$SCRIPTS_DIR"
 PROJECT_DIR="$MOCK_PROJECT_DIR"
 SYNC_HEALTH="$MOCK_SYNC_HEALTH"
 BLOCKERS="$MOCK_BLOCKERS"

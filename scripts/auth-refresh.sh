@@ -11,7 +11,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/auth-refresh.log"
+LOG="$LOG_DIR/auth-refresh.log"
 TOKEN_CACHE="$SKYNET_AUTH_TOKEN_CACHE"
 KEYCHAIN_SERVICE="Claude Code-credentials"
 KEYCHAIN_ACCOUNT="$SKYNET_AUTH_KEYCHAIN_ACCOUNT"

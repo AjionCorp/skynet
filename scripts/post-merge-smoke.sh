@@ -8,7 +8,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 BASE_URL="${1:-${SKYNET_DEV_SERVER_URL:-http://localhost:3000}}"
 TIMEOUT="${SKYNET_SMOKE_TIMEOUT:-10}"
-LOG="$SCRIPTS_DIR/post-merge-smoke.log"
+LOG="$LOG_DIR/post-merge-smoke.log"
 TMPFILE=$(mktemp "/tmp/skynet-${SKYNET_PROJECT_NAME}-smoke-XXXXXX")
 trap 'rm -f "$TMPFILE"' EXIT
 

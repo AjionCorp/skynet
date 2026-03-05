@@ -30,7 +30,7 @@ WORKER_PORT=$((SKYNET_DEV_PORT + WORKER_ID - 1))
 export PORT="$WORKER_PORT"
 WORKER_DEV_URL="http://localhost:${WORKER_PORT}"
 
-LOG="$SCRIPTS_DIR/dev-worker-${WORKER_ID}.log"
+LOG="$LOG_DIR/dev-worker-${WORKER_ID}.log"
 STALE_MINUTES="$SKYNET_STALE_MINUTES"
 MAX_TASKS_PER_RUN="$SKYNET_MAX_TASKS_PER_RUN"
 
@@ -336,8 +336,8 @@ if ! check_any_auth; then
 fi
 
 # --- Ensure dev server is running with log capture ---
-SERVER_LOG="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.log"
-SERVER_PID_FILE="$SCRIPTS_DIR/next-dev-w${WORKER_ID}.pid"
+SERVER_LOG="$LOG_DIR/next-dev-w${WORKER_ID}.log"
+SERVER_PID_FILE="$LOG_DIR/next-dev-w${WORKER_ID}.pid"
 log "Worker port: $WORKER_PORT (base $SKYNET_DEV_PORT + worker $WORKER_ID - 1)"
 if curl -sf "$WORKER_DEV_URL" > /dev/null 2>&1; then
   # Dev server is up on this worker's port — ensure we're tracking its PID
@@ -576,9 +576,9 @@ EOF
     _pd_suffix="${_worker_mission_hash:-global}"
     if ! ([ -f "${SKYNET_LOCK_PREFIX}-project-driver-${_pd_suffix}.lock/pid" ] && kill -0 "$(cat "${SKYNET_LOCK_PREFIX}-project-driver-${_pd_suffix}.lock/pid")" 2>/dev/null); then
       if [ -n "$_worker_mission_hash" ]; then
-        SKYNET_MISSION_SLUG="$_worker_mission_hash" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
+        SKYNET_MISSION_SLUG="$_worker_mission_hash" nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$LOG_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
       else
-        nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$SCRIPTS_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
+        nohup bash "$SCRIPTS_DIR/project-driver.sh" >> "$LOG_DIR/project-driver-${_pd_suffix}.log" 2>&1 &
       fi
       log "Project-driver launched (PID $!)${_worker_mission_hash:+ for mission $_worker_mission_hash}."
       tg "📋 *WATCHDOG*: Backlog empty — project-driver kicked off to replenish${_worker_mission_hash:+ (mission: $_worker_mission_hash)}"
@@ -932,7 +932,7 @@ EOF
   # --- Non-blocking: Check server logs for runtime errors ---
   if [ -f "$SERVER_LOG" ]; then
     log "Checking server logs for runtime errors..."
-    bash "$SCRIPTS_DIR/check-server-errors.sh" "$SCRIPTS_DIR/next-dev-w${WORKER_ID}.log" >> "$LOG" 2>&1 || \
+    bash "$SCRIPTS_DIR/check-server-errors.sh" "$LOG_DIR/next-dev-w${WORKER_ID}.log" >> "$LOG" 2>&1 || \
       log "Server errors found -- written to blockers.md (non-blocking for merge)"
   fi
 

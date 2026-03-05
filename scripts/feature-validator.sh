@@ -5,7 +5,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/feature-validator.log"
+LOG="$LOG_DIR/feature-validator.log"
 BASE_URL="$SKYNET_DEV_SERVER_URL"
 
 if [ -z "${SKYNET_PLAYWRIGHT_DIR:-}" ]; then

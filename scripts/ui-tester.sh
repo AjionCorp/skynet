@@ -4,7 +4,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/ui-tester.log"
+LOG="$LOG_DIR/ui-tester.log"
 BASE_URL="$SKYNET_DEV_SERVER_URL"
 
 if [ -z "${SKYNET_PLAYWRIGHT_DIR:-}" ]; then
@@ -52,7 +52,7 @@ if [ "$test_exit" -eq 0 ]; then
   log "All smoke tests passed."
   tg "🧪 *$SKYNET_PROJECT_NAME_UPPER TESTS*: All Playwright smoke tests passed"
   # Still check server logs for runtime errors even if tests passed
-  if [ -f "$SCRIPTS_DIR/next-dev.log" ]; then
+  if [ -f "$LOG_DIR/next-dev.log" ]; then
     log "Checking server logs for runtime errors..."
     bash "$SCRIPTS_DIR/check-server-errors.sh" >> "$LOG" 2>&1 || \
       log "Server errors found — written to blockers.md"

@@ -6,8 +6,8 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-SERVER_LOG="${1:-$SCRIPTS_DIR/next-dev.log}"
-LOG="$SCRIPTS_DIR/server-errors.log"
+SERVER_LOG="${1:-$LOG_DIR/next-dev.log}"
+LOG="$LOG_DIR/server-errors.log"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 if [ ! -f "$SERVER_LOG" ]; then

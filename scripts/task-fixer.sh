@@ -25,9 +25,9 @@ esac
 
 # Instance-specific log: fixer 1 → task-fixer.log, fixer 2+ → task-fixer-N.log
 if [ "$FIXER_ID" = "1" ]; then
-  LOG="$SCRIPTS_DIR/task-fixer.log"
+  LOG="$LOG_DIR/task-fixer.log"
 else
-  LOG="$SCRIPTS_DIR/task-fixer-${FIXER_ID}.log"
+  LOG="$LOG_DIR/task-fixer-${FIXER_ID}.log"
 fi
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
 FIXER_COOLDOWN="$DEV_DIR/fixer-cooldown"
@@ -345,7 +345,7 @@ worker_log=""
 for _wid in $(seq 1 "${SKYNET_MAX_WORKERS:-4}"); do
   _task_file="$DEV_DIR/current-task-${_wid}.md"
   if [ -f "$_task_file" ] && grep -qF "$branch_name" "$_task_file" 2>/dev/null; then
-    worker_log="$SCRIPTS_DIR/dev-worker-${_wid}.log"
+    worker_log="$LOG_DIR/dev-worker-${_wid}.log"
     log "Matched failed task to worker $_wid via current-task-${_wid}.md"
     break
   fi
@@ -353,7 +353,7 @@ done
 
 # Method 2: Search worker logs for the branch name (works after task-file reset)
 if [ -z "$worker_log" ]; then
-  for _wlog in "$SCRIPTS_DIR"/dev-worker-*.log; do
+  for _wlog in "$LOG_DIR"/dev-worker-*.log; do
     [ -f "$_wlog" ] || continue
     if grep -qF "$branch_name" "$_wlog" 2>/dev/null; then
       worker_log="$_wlog"
@@ -365,7 +365,7 @@ fi
 
 # Method 3: Fall back to most recently modified worker log
 if [ -z "$worker_log" ] || [ ! -f "$worker_log" ]; then
-  worker_log=$(ls -t "$SCRIPTS_DIR"/dev-worker-*.log 2>/dev/null | head -1 || true)
+  worker_log=$(ls -t "$LOG_DIR"/dev-worker-*.log 2>/dev/null | head -1 || true)
   [ -n "$worker_log" ] && log "Falling back to most recent worker log: $worker_log"
 fi
 

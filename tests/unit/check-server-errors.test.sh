@@ -65,6 +65,7 @@ MOCK_BLOCKERS="$MOCK_DEV_DIR/blockers.md"
 cat > "$MOCK_SCRIPTS_DIR/_config.sh" << STUB
 # Stub _config.sh — provides only what check-server-errors.sh needs
 SCRIPTS_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+LOG_DIR="\$SCRIPTS_DIR"
 BLOCKERS="$MOCK_BLOCKERS"
 # SKYNET_ERROR_ENV_KEYS passed via environment
 STUB

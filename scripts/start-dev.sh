@@ -8,11 +8,11 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 if [ -n "${1:-}" ]; then
-  LOG="$SCRIPTS_DIR/next-dev-w${1}.log"
-  PIDFILE="$SCRIPTS_DIR/next-dev-w${1}.pid"
+  LOG="$LOG_DIR/next-dev-w${1}.log"
+  PIDFILE="$LOG_DIR/next-dev-w${1}.pid"
 else
-  LOG="$SCRIPTS_DIR/next-dev.log"
-  PIDFILE="$SCRIPTS_DIR/next-dev.pid"
+  LOG="$LOG_DIR/next-dev.log"
+  PIDFILE="$LOG_DIR/next-dev.pid"
 fi
 
 cd "$PROJECT_DIR"

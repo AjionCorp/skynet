@@ -68,6 +68,7 @@ cp "$REPO_ROOT/scripts/codex-auth-refresh.sh" "$MOCK_SCRIPTS_DIR/codex-auth-refr
 # Write _config.sh stub — provides vars that codex-auth-refresh.sh needs
 cat > "$MOCK_SCRIPTS_DIR/_config.sh" << STUB
 SCRIPTS_DIR="$MOCK_DEV_DIR/scripts"
+LOG_DIR="\$SCRIPTS_DIR"
 export SKYNET_CODEX_AUTH_FILE="\${SKYNET_CODEX_AUTH_FILE:-$AUTH_FILE}"
 export SKYNET_CODEX_REFRESH_BUFFER_SECS="\${SKYNET_CODEX_REFRESH_BUFFER_SECS:-900}"
 export SKYNET_CODEX_OAUTH_ISSUER="\${SKYNET_CODEX_OAUTH_ISSUER:-}"

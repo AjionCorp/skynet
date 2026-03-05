@@ -31,7 +31,7 @@ if [ -z "$_mission_hash" ]; then
 fi
 
 _log_suffix="${_mission_hash:-global}"
-LOG="$SCRIPTS_DIR/project-driver-${_log_suffix}.log"
+LOG="$LOG_DIR/project-driver-${_log_suffix}.log"
 BACKLOG_LOCK="${SKYNET_LOCK_PREFIX}-backlog.lock"
 
 cd "$PROJECT_DIR"

@@ -5,7 +5,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/sync-runner.log"
+LOG="$LOG_DIR/sync-runner.log"
 BASE_URL="$SKYNET_DEV_SERVER_URL"
 
 # Ensure directories exist

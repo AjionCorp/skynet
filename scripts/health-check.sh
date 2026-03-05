@@ -4,7 +4,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/health-check.log"
+LOG="$LOG_DIR/health-check.log"
 MAX_FIX_ATTEMPTS="$SKYNET_MAX_FIX_ATTEMPTS"
 
 cd "$PROJECT_DIR"

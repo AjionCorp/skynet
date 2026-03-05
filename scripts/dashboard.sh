@@ -157,7 +157,7 @@ render() {
       row "  ${GREEN}●${RESET} ${BOLD}$(printf '%-17s' "$lbl")${RESET} ${GREEN}RUNNING${RESET}  PID ${DIM}$pid${RESET}  ${DIM}(${age_s})${RESET}"
     else
       local last=""
-      [ -f "$SCRIPTS_DIR/${w}.log" ] && last=$(tail -1 "$SCRIPTS_DIR/${w}.log" 2>/dev/null | grep -o '\[.*\]' | head -1 || true)
+      [ -f "$LOG_DIR/${w}.log" ] && last=$(tail -1 "$LOG_DIR/${w}.log" 2>/dev/null | grep -o '\[.*\]' | head -1 || true)
       if [ -n "$last" ]; then
         row "  ${GRAY}○${RESET} ${DIM}$(printf '%-17s' "$lbl") idle  $sch  $last${RESET}"
       else

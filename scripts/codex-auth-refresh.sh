@@ -8,7 +8,7 @@ set -euo pipefail
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/codex-auth-refresh.log"
+LOG="$LOG_DIR/codex-auth-refresh.log"
 AUTH_FILE="$SKYNET_CODEX_AUTH_FILE"
 REFRESH_BUFFER_SECS="${SKYNET_CODEX_REFRESH_BUFFER_SECS:-900}"
 ISSUER_OVERRIDE="${SKYNET_CODEX_OAUTH_ISSUER:-}"

@@ -10,7 +10,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 CUTOFF=$(date_24h_ago)
 
-for logfile in "$SCRIPTS_DIR"/*.log; do
+for logfile in "$LOG_DIR"/*.log; do
   [ -f "$logfile" ] || continue
 
   # Skip tiny files (< 50KB)
@@ -50,5 +50,5 @@ if [ -f "$_events_log" ]; then
 fi
 
 # Clean up rotated log backups older than 24h
-find "$SCRIPTS_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -exec rm -f {} + 2>/dev/null || true
+find "$LOG_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -exec rm -f {} + 2>/dev/null || true
 find "$DEV_DIR" -maxdepth 1 -name "*.log.[12]" -mtime +1 -exec rm -f {} + 2>/dev/null || true

@@ -9,7 +9,7 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
-LOG="$SCRIPTS_DIR/failure-analyzer.log"
+LOG="$LOG_DIR/failure-analyzer.log"
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG"; }
 
 # --- Parse arguments ---
