@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Archive resolved blockers older than 14 days from `.dev/blockers.md`
+## [INFRA] Add watchdog auto-prune for worker-intents.md
 **Status:** completed
-**Started:** 2026-03-05 09:24
+**Started:** 2026-03-05 10:02
 **Completed:** 2026-03-05
-**Branch:** dev/archive-resolved-blockers-older-than-14-
+**Branch:** dev/add-watchdog-auto-prune-for-worker-inten
 **Worker:** 4
 
 ### Changes

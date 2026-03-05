@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [INFRA] Add watchdog auto-prune for worker-intents.md | merged to main | 2m | success |
 | 2026-03-05 | [TEST] Add component test for MissionGoalProgress | merged to main | 1m | success |
 | 2026-03-05 | [INFRA] Reconcile phantom completed entries in completed.md | merged to main | 6m | success |
 | 2026-03-05 | [TEST] Re-add handler test for /api/admin/pipeline/explain route | merged to main | 0m | success |
