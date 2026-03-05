@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add shell regression for failure-analyzer threshold detection and INFRA task generation
+## [TEST] Add regression for mission DONE transition when all checkboxes are checked
 **Status:** completed
-**Started:** 2026-03-05 09:23
+**Started:** 2026-03-05 09:26
 **Completed:** 2026-03-05
-**Branch:** dev/add-shell-regression-for-failure-analyze
+**Branch:** dev/add-regression-for-mission-done-transiti
 **Worker:** 1
 
 ### Changes
