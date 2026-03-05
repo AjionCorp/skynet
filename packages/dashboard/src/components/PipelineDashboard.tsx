@@ -33,6 +33,7 @@ import { TaskVelocityChart } from "./TaskVelocityChart";
 import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 import { MissionGoalProgress } from "./MissionGoalProgress";
 import { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
+import { FailureAnalysisPanel } from "./FailureAnalysisPanel";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -398,6 +399,9 @@ export function PipelineDashboard() {
         missionProgress={status.missionProgress}
         alignmentScore={status.missionAlignmentScore}
       />
+
+      {/* Failure Analysis */}
+      <FailureAnalysisPanel />
 
       {/* Error banner */}
       {error && (

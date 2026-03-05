@@ -36,3 +36,5 @@ export { MissionGoalProgress } from "./MissionGoalProgress";
 export type { MissionGoalProgressProps } from "./MissionGoalProgress";
 export { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
 export type { VelocityEfficiencyPanelProps } from "./VelocityEfficiencyPanel";
+export { FailureAnalysisPanel } from "./FailureAnalysisPanel";
+export type { FailureAnalysisPanelProps } from "./FailureAnalysisPanel";
