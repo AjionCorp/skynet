@@ -713,13 +713,13 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       });
 
       // Per-worker performance stats
-      let workerStats: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> = {};
+      let workerStats: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number; tagBreakdown: Record<string, number> }> = {};
       if (usingSqlite && db) {
         workerStats = db.getWorkerPerformanceStats(maxW);
       } else {
         // File fallback: completed.md lacks worker_id — return empty stats
         for (let wid = 1; wid <= maxW; wid++) {
-          workerStats[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0 };
+          workerStats[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0, tagBreakdown: {} };
         }
       }
 

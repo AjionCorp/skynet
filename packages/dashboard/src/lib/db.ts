@@ -637,8 +637,8 @@ export class SkynetDB {
 
   // ── Worker Performance Stats ────────────────────────────────────────
 
-  /** Per-worker performance stats (completed, failed, avg duration, success rate). */
-  getWorkerPerformanceStats(maxWorkers: number): Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> {
+  /** Per-worker performance stats (completed, failed, avg duration, success rate, tag breakdown). */
+  getWorkerPerformanceStats(maxWorkers: number): Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number; tagBreakdown: Record<string, number> }> {
     const rows = this.db
       .prepare(
         `SELECT
@@ -652,11 +652,29 @@ export class SkynetDB {
       )
       .all(maxWorkers) as { worker_id: number; completed: number; failed: number; avg_secs: number | null }[];
 
-    const result: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number }> = {};
+    // Per-worker tag breakdown (completed + fixed tasks only)
+    const tagRows = this.db
+      .prepare(
+        `SELECT worker_id, tag, COUNT(*) as cnt
+         FROM tasks
+         WHERE worker_id IS NOT NULL AND worker_id <= ?
+           AND status IN ('completed','fixed')
+           AND tag IS NOT NULL
+         GROUP BY worker_id, tag`
+      )
+      .all(maxWorkers) as { worker_id: number; tag: string; cnt: number }[];
+
+    const tagMap: Record<number, Record<string, number>> = {};
+    for (const t of tagRows) {
+      if (!tagMap[t.worker_id]) tagMap[t.worker_id] = {};
+      tagMap[t.worker_id][t.tag] = t.cnt;
+    }
+
+    const result: Record<string, { completedCount: number; failedCount: number; avgDuration: string | null; successRate: number; tagBreakdown: Record<string, number> }> = {};
 
     // Initialize all workers with zeros
     for (let wid = 1; wid <= maxWorkers; wid++) {
-      result[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0 };
+      result[`worker-${wid}`] = { completedCount: 0, failedCount: 0, avgDuration: null, successRate: 0, tagBreakdown: {} };
     }
 
     for (const r of rows) {
@@ -677,6 +695,7 @@ export class SkynetDB {
         failedCount: r.failed,
         avgDuration,
         successRate: total > 0 ? Math.round((r.completed / total) * 100) : 0,
+        tagBreakdown: tagMap[r.worker_id] || {},
       };
     }
 

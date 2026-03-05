@@ -341,6 +341,7 @@ export interface WorkerPerformanceStats {
   failedCount: number;
   avgDuration: string | null;
   successRate: number;
+  tagBreakdown: Record<string, number>;
 }
 
 // ===== Self-Correction Stats =====
