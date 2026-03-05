@@ -1169,6 +1169,24 @@ db_get_worker_performance() {
   "
 }
 
+# Output: worker_id|tag|completed|failed|total
+# Per-worker task counts broken down by tag (e.g. INFRA, DATA, FEAT).
+db_get_worker_tag_breakdown() {
+  _db_sep "
+    SELECT
+      worker_id,
+      tag,
+      SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) AS completed,
+      SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed,
+      COUNT(*) AS total
+    FROM tasks
+    WHERE worker_id IS NOT NULL
+      AND status IN ('completed','fixed','failed')
+    GROUP BY worker_id, tag
+    ORDER BY worker_id, total DESC;
+  "
+}
+
 # ============================================================
 # BLOCKERS
 # ============================================================
