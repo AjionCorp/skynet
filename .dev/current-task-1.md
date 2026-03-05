@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler test for /api/admin/pipeline/explain route
+## [TEST] Add handler test for /api/admin/mission/goal-burndown route
 **Status:** completed
-**Started:** 2026-03-05 09:36
+**Started:** 2026-03-05 09:37
 **Completed:** 2026-03-05
-**Branch:** dev/add-handler-test-for-apiadminpipelineexp
+**Branch:** dev/add-handler-test-for-apiadminmissiongoal
 **Worker:** 1
 
 ### Changes

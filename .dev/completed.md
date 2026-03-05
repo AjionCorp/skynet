@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [TEST] Add handler test for /api/admin/mission/goal-burndown route | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add handler test for /api/admin/pipeline/explain route | merged to main | 0m | success |
 | 2026-03-05 | [TEST] Add unit test for `_adaptive_order_clause()` priority weighting | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add unit test for worker intent overlap detection | merged to main | 4m | success |
