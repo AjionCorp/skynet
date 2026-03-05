@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [TEST] Re-add handler test for /api/admin/workers/intents route | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Re-add handler test for /api/admin/pipeline/failure-analysis route | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add unit test for mission_write_completion_summary | merged to main | 2m | success |
 | 2026-03-05 | [INFRA] Add watchdog heartbeat staleness unit test | merged to main | 4m | success |
