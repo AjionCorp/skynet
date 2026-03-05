@@ -1474,6 +1474,155 @@ _archive_old_completions() {
 # --- Run archival before branch cleanup ---
 _archive_old_completions
 
+# --- Archive resolved blockers older than 14 days ---
+# Moves resolved blocker entries older than 14 days from blockers.md to
+# blockers-archive.md, keeping the active file focused on recent history.
+_archive_old_blockers() {
+  [ -f "$BLOCKERS" ] || return 0
+
+  local max_age_days=14
+  local archive="$DEV_DIR/blockers-archive.md"
+
+  # Compute cutoff date (macOS + Linux compatible)
+  local cutoff_date
+  if date -v-1d '+%Y-%m-%d' >/dev/null 2>&1; then
+    cutoff_date=$(date -v-${max_age_days}d '+%Y-%m-%d')
+  else
+    cutoff_date=$(date -d "${max_age_days} days ago" '+%Y-%m-%d')
+  fi
+
+  # Extract the "## Resolved" section lines (between first ## Resolved and next ##)
+  local in_resolved=0
+  local keep_resolved=""
+  local archive_resolved=""
+  local archived_count=0
+  local current_entry=""
+  local current_date=""
+
+  while IFS= read -r line; do
+    # Detect section boundaries
+    if echo "$line" | grep -q '^## Resolved$'; then
+      in_resolved=1
+      continue
+    fi
+    if [ "$in_resolved" -eq 1 ] && echo "$line" | grep -q '^## '; then
+      in_resolved=0
+      # Flush any pending entry
+      if [ -n "$current_entry" ]; then
+        if [ -n "$current_date" ] && [ "$current_date" \< "$cutoff_date" ]; then
+          archive_resolved="${archive_resolved}${current_entry}"
+          archived_count=$((archived_count + 1))
+        else
+          keep_resolved="${keep_resolved}${current_entry}"
+        fi
+        current_entry=""
+        current_date=""
+      fi
+      continue
+    fi
+    if [ "$in_resolved" -eq 0 ]; then
+      continue
+    fi
+
+    # Inside Resolved section — collect entries
+    # New entry starts with "- **"
+    if echo "$line" | grep -q '^- \*\*'; then
+      # Flush previous entry
+      if [ -n "$current_entry" ]; then
+        if [ -n "$current_date" ] && [ "$current_date" \< "$cutoff_date" ]; then
+          archive_resolved="${archive_resolved}${current_entry}"
+          archived_count=$((archived_count + 1))
+        else
+          keep_resolved="${keep_resolved}${current_entry}"
+        fi
+      fi
+      # Extract date from "- **YYYY-MM-DD..." pattern
+      current_date=$(echo "$line" | sed -n 's/^- \*\*\([0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}\).*/\1/p')
+      current_entry="${line}
+"
+    elif [ -n "$current_entry" ]; then
+      # Continuation line of current entry
+      current_entry="${current_entry}${line}
+"
+    else
+      # Blank line or non-entry line before first entry
+      keep_resolved="${keep_resolved}${line}
+"
+    fi
+  done < "$BLOCKERS"
+
+  # Flush last entry
+  if [ -n "$current_entry" ]; then
+    if [ -n "$current_date" ] && [ "$current_date" \< "$cutoff_date" ]; then
+      archive_resolved="${archive_resolved}${current_entry}"
+      archived_count=$((archived_count + 1))
+    else
+      keep_resolved="${keep_resolved}${current_entry}"
+    fi
+  fi
+
+  [ "$archived_count" -eq 0 ] && return 0
+
+  # Build archive file
+  local archive_tmp="${archive}.tmp.$$"
+  if [ -f "$archive" ]; then
+    cp "$archive" "$archive_tmp"
+  else
+    printf '# Blockers Archive\n\n## Resolved (Archived)\n\n' > "$archive_tmp"
+  fi
+
+  # Deduplicate: only append lines not already present in the archive
+  while IFS= read -r _aline; do
+    [ -z "$_aline" ] && continue
+    if ! grep -qF "$_aline" "$archive_tmp" 2>/dev/null; then
+      printf '%s\n' "$_aline" >> "$archive_tmp"
+    fi
+  done <<< "$archive_resolved"
+
+  # Rebuild blockers.md: everything before ## Resolved, then trimmed Resolved, then rest
+  local blockers_tmp="$BLOCKERS.tmp.$$"
+  local section=""
+  local past_resolved=0
+  local wrote_resolved=0
+
+  while IFS= read -r line; do
+    if echo "$line" | grep -q '^## Resolved$'; then
+      section="resolved"
+      printf '%s\n' "$line" >> "$blockers_tmp"
+      printf '\n' >> "$blockers_tmp"
+      printf '%s' "$keep_resolved" >> "$blockers_tmp"
+      wrote_resolved=1
+      continue
+    fi
+    if [ "$section" = "resolved" ]; then
+      if echo "$line" | grep -q '^## '; then
+        section=""
+        past_resolved=1
+        printf '%s\n' "$line" >> "$blockers_tmp"
+      fi
+      # Skip lines in old Resolved section (already replaced above)
+      continue
+    fi
+    printf '%s\n' "$line" >> "$blockers_tmp"
+  done < "$BLOCKERS"
+
+  # Rename: archive first (safe), then blockers.md
+  mv "$archive_tmp" "$archive"
+  mv "$blockers_tmp" "$BLOCKERS"
+
+  # Cap archive at 500 lines
+  local _archive_lines
+  _archive_lines=$(wc -l < "$archive" 2>/dev/null || echo 0)
+  if [ "${_archive_lines:-0}" -gt 500 ]; then
+    local _cap_tmp="${archive}.cap-tmp.$$"
+    tail -500 "$archive" > "$_cap_tmp" && mv "$_cap_tmp" "$archive"
+    log "Truncated blockers-archive.md from $_archive_lines to 500 lines"
+  fi
+
+  log "Archived $archived_count resolved blockers older than $max_age_days days"
+}
+_archive_old_blockers
+
 # --- Refresh remote tracking refs before branch cleanup ---
 # Ensures git branch -r sees up-to-date remote state (prunes deleted refs).
 git -C "$PROJECT_DIR" fetch --prune origin 2>/dev/null || true
