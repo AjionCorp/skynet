@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [INFRA] Use `_adaptive_order_clause()` in dev-worker.sh affinity task scoring | merged to main | 1m | success |
 | 2026-03-05 | [INFRA] Wire `_adaptive_reweight_pending()` call into watchdog.sh reconciliation cycle | merged to main | 1m | success |
 | 2026-03-04 | [INFRA] Supersede 3 blocked failed-task rows with fresh canonical approaches | merged to main | 1m | success |
 | 2026-03-04 | [TEST] Add unit tests for task-type affinity scoring | merged to main | 3m | success |
@@ -51,4 +52,3 @@
 | 2026-03-04 | [INFRA] Create `scripts/mission-state.sh` state machine function library | merged to main | 3m | success |
 | 2026-03-04 | [TEST] Add shell regression for mission LLM override/default execution in canonical harness | merged to main | 4m | success |
 | 2026-03-04 | [INFRA] Prevent stale `scripts/tests/*` references in generated shell test tasks | merged to main | 2m | success |
-| 2026-03-04 | [DATA] Default `activeMission.llmConfig` when mission override is missing or partial | merged to main | 3m | success |
