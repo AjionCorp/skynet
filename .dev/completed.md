@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [TEST] Add unit test for `_adaptive_order_clause()` priority weighting | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add unit test for worker intent overlap detection | merged to main | 4m | success |
 | 2026-03-05 | [TEST] Add regression for mission DONE transition when all checkboxes are checked | merged to main | 3m | success |
 | 2026-03-05 | [INFRA] Archive resolved blockers older than 14 days from `.dev/blockers.md` | merged to main | 1m | success |
