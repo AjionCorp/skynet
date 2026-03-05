@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "fs";
 import { resolve } from "path";
-import type { SkynetConfig, MissionCriterion, MissionConfig, GoalBurndownEntry, GoalBurndownPoint } from "../types";
+import type { SkynetConfig, MissionCriterion, MissionConfig, GoalBurndownEntry, GoalBurndownPoint, GoalBurndownResponse } from "../types";
 import { readDevFile } from "../lib/file-reader";
 import { getSkynetDB } from "../lib/db";
 import { logHandlerError } from "../lib/handler-error";
@@ -201,6 +201,45 @@ function buildGoalBurndown(
 }
 
 /**
+ * Compute the overall mission ETA from per-goal ETAs.
+ * The mission completes when ALL goals complete, so the overall ETA is the latest per-goal ETA.
+ */
+function computeOverallMissionEta(goals: GoalBurndownEntry[]): GoalBurndownResponse["overallMissionEta"] {
+  if (goals.length === 0) return { etaDate: null, etaDays: null, confidence: "none" };
+
+  const goalsWithRemaining = goals.filter((g) => g.relatedRemaining > 0);
+
+  // If every goal is done (no remaining tasks and has completions), mission is done
+  if (goalsWithRemaining.length === 0 && goals.some((g) => g.relatedCompleted > 0)) {
+    const now = new Date();
+    return { etaDate: now.toISOString().slice(0, 10), etaDays: 0, confidence: "high" };
+  }
+
+  // Find the latest ETA across goals
+  let maxEtaDays: number | null = null;
+  let maxEtaDate: string | null = null;
+
+  for (const goal of goals) {
+    if (goal.etaDays !== null && (maxEtaDays === null || goal.etaDays > maxEtaDays)) {
+      maxEtaDays = goal.etaDays;
+      maxEtaDate = goal.etaDate;
+    }
+  }
+
+  // Confidence: high if all goals with remaining tasks have ETA, low if some do, none if none
+  const goalsNeedingEta = goalsWithRemaining.length;
+  const goalsHavingEta = goalsWithRemaining.filter((g) => g.etaDays !== null).length;
+  let confidence: "high" | "low" | "none" = "none";
+  if (goalsNeedingEta > 0 && goalsHavingEta === goalsNeedingEta) {
+    confidence = "high";
+  } else if (goalsHavingEta > 0) {
+    confidence = "low";
+  }
+
+  return { etaDate: maxEtaDate, etaDays: maxEtaDays, confidence };
+}
+
+/**
  * Create a GET handler for the /api/admin/mission/goal-burndown endpoint.
  * Returns per-goal burndown data with ETA projections.
  */
@@ -235,7 +274,7 @@ export function createGoalBurndownHandler(config: SkynetConfig) {
       }
 
       if (!raw) {
-        return Response.json({ data: [], error: null });
+        return Response.json({ data: { goals: [], overallMissionEta: { etaDate: null, etaDays: null, confidence: "none" as const } }, error: null });
       }
 
       // Parse goals
@@ -243,7 +282,7 @@ export function createGoalBurndownHandler(config: SkynetConfig) {
       const goals = parseCriteria(goalsSection);
 
       if (goals.length === 0) {
-        return Response.json({ data: [], error: null });
+        return Response.json({ data: { goals: [], overallMissionEta: { etaDate: null, etaDays: null, confidence: "none" as const } }, error: null });
       }
 
       // Get completed tasks with dates and pending tasks
@@ -251,8 +290,9 @@ export function createGoalBurndownHandler(config: SkynetConfig) {
       const pendingTitles = getPendingTaskTitles(devDir);
 
       const burndownData = buildGoalBurndown(goals, completedTasks, pendingTitles);
+      const overallMissionEta = computeOverallMissionEta(burndownData);
 
-      return Response.json({ data: burndownData, error: null });
+      return Response.json({ data: { goals: burndownData, overallMissionEta }, error: null });
     } catch (err) {
       logHandlerError(devDir, "goal-burndown", err);
       return Response.json(

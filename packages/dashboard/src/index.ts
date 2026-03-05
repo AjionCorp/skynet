@@ -40,6 +40,7 @@ export type {
   MissionCreatorResult,
   GoalBurndownEntry,
   GoalBurndownPoint,
+  GoalBurndownResponse,
 } from "./types";
 
 // Config helpers

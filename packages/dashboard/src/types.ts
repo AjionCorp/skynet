@@ -511,6 +511,15 @@ export interface GoalBurndownEntry {
   etaDays: number | null; // days until projected completion
 }
 
+export interface GoalBurndownResponse {
+  goals: GoalBurndownEntry[];
+  overallMissionEta: {
+    etaDate: string | null; // latest projected completion date across all goals
+    etaDays: number | null; // days until latest goal completes
+    confidence: "high" | "low" | "none"; // based on how many goals have velocity data
+  };
+}
+
 // ===== Pipeline Explain Types =====
 
 export interface PipelineExplainState {

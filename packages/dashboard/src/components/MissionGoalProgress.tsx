@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useSkynet } from "./SkynetProvider";
-import type { MissionProgress, GoalBurndownEntry, GoalBurndownPoint } from "../types";
+import type { MissionProgress, GoalBurndownEntry, GoalBurndownPoint, GoalBurndownResponse } from "../types";
 
 export interface MissionGoalProgressProps {
   missionProgress: MissionProgress[];
@@ -88,13 +88,17 @@ export function MissionGoalProgress({
   const { apiPrefix } = useSkynet();
   const [expanded, setExpanded] = useState(true);
   const [burndownData, setBurndownData] = useState<GoalBurndownEntry[]>([]);
+  const [overallEta, setOverallEta] = useState<GoalBurndownResponse["overallMissionEta"] | null>(null);
 
   const fetchBurndown = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/mission/goal-burndown`);
       if (!res.ok) return;
-      const json = await res.json() as { data: GoalBurndownEntry[] | null };
-      if (json.data) setBurndownData(json.data);
+      const json = await res.json() as { data: GoalBurndownResponse | null };
+      if (json.data) {
+        setBurndownData(json.data.goals);
+        setOverallEta(json.data.overallMissionEta);
+      }
     } catch { /* ignore fetch errors */ }
   }, [apiPrefix]);
 
@@ -136,6 +140,17 @@ export function MissionGoalProgress({
           )}
         </div>
         <div className="flex items-center gap-3">
+          {overallEta && overallEta.confidence !== "none" && overallEta.etaDays !== null && (
+            <span className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-medium ${
+              overallEta.etaDays === 0
+                ? "bg-emerald-500/10 text-emerald-400"
+                : "bg-blue-500/10 text-blue-400"
+            }`}>
+              <Clock className="h-3 w-3" />
+              {overallEta.etaDays === 0 ? "Complete" : `ETA: ${formatEta(overallEta.etaDays, overallEta.etaDate)}`}
+              {overallEta.confidence === "low" && " *"}
+            </span>
+          )}
           <span className={`text-xs font-medium text-${alignLevel}-400`}>
             {alignmentScore}% aligned
           </span>
