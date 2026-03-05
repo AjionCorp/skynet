@@ -448,6 +448,115 @@ assert_contains "$_content" "| Avg task duration | 5m |" "duration: averages onl
 # Test 39: Failed task durations excluded from average
 assert_not_contains "$_content" "| Avg task duration | 10m |" "duration: failed task durations excluded"
 
+# ── 10. Default output_dir uses DEV_DIR ────────────────────────────
+
+echo ""
+log "=== Default output_dir ==="
+
+_clear_tasks
+_seed_task "FEAT" "Task" "completed" "5m"
+
+_mission_file="$TMPDIR_ROOT/devdir-test.md"
+cat > "$_mission_file" << 'MFILE'
+# DevDir Test
+## Success Criteria
+- [x] Done
+MFILE
+
+# Test 40: When 3rd arg is omitted, output goes to DEV_DIR
+_orig_dev="${DEV_DIR:-}"
+export DEV_DIR="$TMPDIR_ROOT/custom-dev"
+mkdir -p "$DEV_DIR"
+mission_write_completion_summary "$_mission_file" "devdir" 2>/dev/null
+assert_file_exists "$TMPDIR_ROOT/custom-dev/mission-summary-devdir.md" "default: uses DEV_DIR when output_dir omitted"
+if [ -n "$_orig_dev" ]; then DEV_DIR="$_orig_dev"; else unset DEV_DIR; fi
+
+# ── 11. emit_event callback ───────────────────────────────────────
+
+echo ""
+log "=== emit_event integration ==="
+
+_clear_tasks
+_seed_task "FEAT" "Emitted" "completed" "5m"
+_seed_task "FIX"  "Failed" "failed" ""
+
+_mission_file="$TMPDIR_ROOT/event-test.md"
+cat > "$_mission_file" << 'MFILE'
+# Event Test
+## Success Criteria
+- [x] Done
+MFILE
+
+# Define a stub emit_event that captures calls
+_event_name=""
+_event_detail=""
+emit_event() { _event_name="$1"; _event_detail="$2"; }
+
+mission_write_completion_summary "$_mission_file" "event-test" "$TMPDIR_ROOT" 2>/dev/null
+
+# Test 41: emit_event is called with correct event name
+assert_eq "$_event_name" "mission_summary_written" "event: emit_event called with correct event name"
+
+# Test 42: emit_event detail contains slug
+assert_contains "$_event_detail" "event-test" "event: emit_event detail contains slug"
+
+# Test 43: emit_event detail contains stats
+assert_contains "$_event_detail" "fix_rate=" "event: emit_event detail contains fix_rate"
+
+# Unset stub
+unset -f emit_event
+
+# ── 12. NULL/empty tags excluded from breakdown ──────────────────
+
+echo ""
+log "=== NULL/empty tag handling ==="
+
+_clear_tasks
+_seed_task "" "No tag task" "completed" "5m"
+_seed_task "API" "Tagged task" "completed" "3m"
+
+_mission_file="$TMPDIR_ROOT/null-tag.md"
+cat > "$_mission_file" << 'MFILE'
+# Null Tag Test
+## Success Criteria
+- [x] Done
+MFILE
+mission_write_completion_summary "$_mission_file" "null-tag" "$TMPDIR_ROOT" 2>/dev/null
+_content=$(cat "$TMPDIR_ROOT/mission-summary-null_tag.md")
+
+# Test 44: Total tasks includes untagged
+assert_contains "$_content" "| Total tasks | 2 |" "null-tag: total includes untagged tasks"
+
+# Test 45: Only tagged tasks appear in breakdown
+assert_contains "$_content" "| [API] |" "null-tag: tagged task in breakdown"
+assert_not_contains "$_content" "| [] |" "null-tag: empty tag excluded from breakdown"
+
+# ── 13. Multiple # headings (only first used) ────────────────────
+
+echo ""
+log "=== Multiple headings ==="
+
+_clear_tasks
+_seed_task "FEAT" "Task" "completed" "5m"
+
+_mission_file="$TMPDIR_ROOT/multi-heading.md"
+cat > "$_mission_file" << 'MFILE'
+# First Heading
+Some content
+# Second Heading
+More content
+## Success Criteria
+- [x] Done
+MFILE
+mission_write_completion_summary "$_mission_file" "multi-heading" "$TMPDIR_ROOT" 2>/dev/null
+_content=$(cat "$TMPDIR_ROOT/mission-summary-multi_heading.md")
+
+# Test 46: Uses first heading as title
+assert_contains "$_content" "First Heading" "headings: uses first # heading as title"
+# Ensure the second heading doesn't appear in the mission title line
+_title_line=$(echo "$_content" | grep "^\*\*Mission\*\*")
+assert_not_contains "$_title_line" "Second Heading" "headings: ignores second # heading"
+
 # ── Summary ─────────────────────────────────────────────────────────
 
 echo ""
