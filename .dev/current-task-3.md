@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add unit tests for adaptive goal weighting wiring in watchdog and dev-worker
+## [TEST] Add handler test for `/api/admin/pipeline/explain` state explainability
 **Status:** completed
-**Started:** 2026-03-05 09:10
+**Started:** 2026-03-05 09:17
 **Completed:** 2026-03-05
-**Branch:** dev/add-unit-tests-for-adaptive-goal-weighti
+**Branch:** dev/add-handler-test-for-apiadminpipelineexp
 **Worker:** 3
 
 ### Changes
