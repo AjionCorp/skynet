@@ -1,9 +1,9 @@
 # Current Task
-## [INFRA] Trigger mission DONE state transition and write completion summary
+## [INFRA] Archive resolved blockers older than 14 days from `.dev/blockers.md`
 **Status:** completed
-**Started:** 2026-03-05 09:18
+**Started:** 2026-03-05 09:24
 **Completed:** 2026-03-05
-**Branch:** dev/trigger-mission-done-state-transition-an
+**Branch:** dev/archive-resolved-blockers-older-than-14-
 **Worker:** 4
 
 ### Changes
