@@ -3,7 +3,6 @@
 <!-- Priority: top = highest. Format: - [ ] [TAG] Task title — description -->
 <!-- Markers: [ ] = pending, [>] = claimed by worker, [x] = done -->
 
-- [ ] [DATA] Add `db_get_worker_tag_breakdown()` query to `scripts/_db.sh` — add a new function that queries `SELECT worker_id, tag, SUM(CASE WHEN status IN ('completed','fixed') THEN 1 ELSE 0 END) AS completed, SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed FROM tasks WHERE worker_id IS NOT NULL GROUP BY worker_id, tag ORDER BY worker_id, tag` so downstream handlers can compute per-worker tag strengths. Touch ONLY `scripts/_db.sh`. Mission: Goal 10 — worker performance profiles.
 - [ ] [TEST] Add unit tests for adaptive goal weighting wiring in watchdog and dev-worker — in `tests/unit/`, create a test that sources `_adaptive.sh`, verifies `_adaptive_reweight_pending()` modifies task priorities in a test DB, and verifies `_adaptive_order_clause()` returns the expected ORDER BY fragment when the adaptive_offset column exists vs doesn't. Mission: Goal 8 quality gates.
 - [ ] [TEST] Add handler test for worker tag breakdown in pipeline-status response — in `packages/dashboard/src/handlers/pipeline-status.test.ts`, add a test case that verifies `workerStats` entries contain `tagBreakdown` with per-tag completed/failed/successRate when task data includes multiple tags per worker. Mission: Goal 10 quality gates.
 
