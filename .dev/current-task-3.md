@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Re-add handler test for /api/admin/pipeline/explain route
+## [TEST] Add shell unit test for _locks.sh mutex operations
 **Status:** completed
-**Started:** 2026-03-05 09:51
+**Started:** 2026-03-05 10:53
 **Completed:** 2026-03-05
-**Branch:** dev/re-add-handler-test-for-apiadminpipeline
+**Branch:** dev/add-shell-unit-test-for-lockssh-mutex-op
 **Worker:** 3
 
 ### Changes
