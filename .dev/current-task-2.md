@@ -1,9 +1,9 @@
 # Current Task
-## [DATA] Add `tagBreakdown` to `WorkerPerformanceStats` type and populate in pipeline-status handler
+## [DATA] Compute `overallMissionEta` from per-goal ETAs in goal-burndown handler
 **Status:** completed
-**Started:** 2026-03-05 08:57
+**Started:** 2026-03-05 09:02
 **Completed:** 2026-03-05
-**Branch:** dev/add-tagbreakdown-to-workerperformancesta
+**Branch:** dev/compute-overallmissioneta-from-per-goal-
 **Worker:** 2
 
 ### Changes
