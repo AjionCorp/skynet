@@ -1,10 +1,3 @@
 # Current Task
-## [DATA] Compute `overallMissionEta` from per-goal ETAs in goal-burndown handler
-**Status:** completed
-**Started:** 2026-03-05 09:02
-**Completed:** 2026-03-05
-**Branch:** dev/compute-overallmissioneta-from-per-goal-
-**Worker:** 2
-
-### Changes
--- See git log for details
+**Status:** idle
+**Last failure:** 2026-03-05 09:44 -- [INFRA] Add watchdog heartbeat staleness unit test (dead worker recovered by watchdog)

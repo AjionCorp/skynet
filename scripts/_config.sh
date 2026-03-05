@@ -373,10 +373,11 @@ _get_mission_llm_config() {
   echo "${model:-}"
 }
 
-# Keep runtime script mirrors in sync when running from .dev/scripts.
-# This prevents missing helper regressions when new script files are added
-# under project scripts/ but runtime workers still execute from .dev/scripts.
-if [ "$SKYNET_SCRIPTS_DIR" != "$SKYNET_PROJECT_DIR/scripts" ] && [ -d "$SKYNET_PROJECT_DIR/scripts" ]; then
+# Keep runtime script mirrors in sync only when executing from the canonical
+# runtime mirror directory ($SKYNET_DEV_DIR/scripts).
+# This prevents accidental copies into unrelated directories if _config.sh is
+# sourced from an unexpected location.
+if [ "$SKYNET_SCRIPTS_DIR" = "$SKYNET_DEV_DIR/scripts" ] && [ -d "$SKYNET_PROJECT_DIR/scripts" ]; then
   _sync_script_dir() {
     local _src_dir="$1"
     local _dst_dir="$2"
