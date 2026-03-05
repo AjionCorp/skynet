@@ -195,12 +195,13 @@ _compute_task_affinity() {
   fi
 
   # Get pending unblocked tasks (lightweight check — mirrors claim CTE logic)
-  local _pending
+  local _pending _aoc
+  _aoc=$(_adaptive_order_clause 2>/dev/null) || _aoc="priority ASC"
   _pending=$(_db_sep "
     SELECT id, tag, priority FROM tasks
     WHERE status = 'pending'
       AND (blocked_by = '' OR blocked_by IS NULL)
-    ORDER BY priority ASC;
+    ORDER BY ${_aoc};
   " 2>/dev/null) || { rm -f "$_affinity_map"; return 0; }
 
   [ -z "$_pending" ] && { rm -f "$_affinity_map"; return 0; }
