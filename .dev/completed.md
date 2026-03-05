@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [INFRA] Add watchdog pruning for mission-complete sentinel files | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add component test for FailureAnalysis | merged to main | 1m | success |
 | 2026-03-05 | [INFRA] Clean up 30+ untracked root-level script copies | merged to main | 11m | success |
 | 2026-03-05 | [TEST] Add shell unit test for failure-analyzer.sh pattern matching | merged to main | 2m | success |
