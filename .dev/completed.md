@@ -2,6 +2,7 @@
 
 | Date | Task | Branch | Duration | Notes |
 |------|------|--------|----------|-------|
+| 2026-03-05 | [INFRA] Add watchdog heartbeat staleness unit test | merged to main | 4m | success |
 | 2026-03-05 | [TEST] Add handler test for /api/admin/workers/intents route | merged to main | 1m | success |
 | 2026-03-05 | [TEST] Add handler test for /api/admin/pipeline/failure-analysis route | merged to main | 0m | success |
 | 2026-03-05 | [TEST] Add handler test for /api/admin/mission/goal-burndown route | merged to main | 1m | success |
