@@ -1,9 +1,9 @@
 # Current Task
-## [TEST] Add handler test for `overallMissionEta` in goal-burndown response
+## [TEST] Add shell regression for failure-analyzer threshold detection and INFRA task generation
 **Status:** completed
-**Started:** 2026-03-05 09:15
+**Started:** 2026-03-05 09:23
 **Completed:** 2026-03-05
-**Branch:** dev/add-handler-test-for-overallmissioneta-i
+**Branch:** dev/add-shell-regression-for-failure-analyze
 **Worker:** 1
 
 ### Changes
