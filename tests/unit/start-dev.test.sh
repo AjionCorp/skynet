@@ -76,11 +76,14 @@ STUB
 # Copy the script under test into the mock scripts dir
 cp "$REPO_ROOT/scripts/start-dev.sh" "$MOCK_SCRIPTS_DIR/start-dev.sh"
 
-# Create mock curl that succeeds (bin-ok) and fails (bin-fail)
-mkdir -p "$TMPDIR_ROOT/bin-ok" "$TMPDIR_ROOT/bin-fail"
+# Create mock curl that succeeds (bin-ok), validates URL (bin-record), and fails (bin-fail)
+mkdir -p "$TMPDIR_ROOT/bin-ok" "$TMPDIR_ROOT/bin-record" "$TMPDIR_ROOT/bin-fail"
 
 printf '#!/usr/bin/env bash\nexit 0\n' > "$TMPDIR_ROOT/bin-ok/curl"
 chmod +x "$TMPDIR_ROOT/bin-ok/curl"
+
+printf '#!/usr/bin/env bash\n_last=""\nfor arg in "$@"; do _last="$arg"; done\n[ "$_last" = "${EXPECTED_CURL_URL:?}" ]\n' > "$TMPDIR_ROOT/bin-record/curl"
+chmod +x "$TMPDIR_ROOT/bin-record/curl"
 
 printf '#!/usr/bin/env bash\nexit 1\n' > "$TMPDIR_ROOT/bin-fail/curl"
 chmod +x "$TMPDIR_ROOT/bin-fail/curl"
@@ -106,7 +109,10 @@ run_start_dev() {
   (
     export SKYNET_DEV_SERVER_CMD="$dev_cmd"
     export SKYNET_DEV_SERVER_URL="http://localhost:0"
-    [ -n "$extra_path" ] && export PATH="$extra_path:$PATH"
+    if [ -n "$extra_path" ]; then
+      export PATH="$extra_path:$PATH"
+      hash -r
+    fi
     if [ -n "$worker_id" ]; then
       bash "$MOCK_SCRIPTS_DIR/start-dev.sh" "$worker_id"
     else
@@ -151,6 +157,23 @@ else
   fail "worker-id: log file not created at next-dev-w3.log"
 fi
 
+kill_server "$MOCK_SCRIPTS_DIR/next-dev-w3.pid"
+
+# ── Test: worker health check uses explicit PORT, not SKYNET_DEV_SERVER_URL ──
+
+echo ""
+log "=== WORKER_HEALTH_URL: worker startup probes the worker port ==="
+
+rm -f "$MOCK_SCRIPTS_DIR"/next-dev*
+export PORT="4312"
+export EXPECTED_CURL_URL="http://localhost:4312/api/admin/pipeline/status"
+
+run_start_dev "3" "sleep 300" "$TMPDIR_ROOT/bin-record"
+assert_eq "$_rc" "0" "worker health url: exit code 0"
+assert_not_contains "$_output" "WARNING" "worker health url: probes explicit worker port"
+
+unset PORT
+unset EXPECTED_CURL_URL
 kill_server "$MOCK_SCRIPTS_DIR/next-dev-w3.pid"
 
 # ── Test: no worker-id uses default file names ──────────────────────

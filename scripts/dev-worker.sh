@@ -305,7 +305,7 @@ cleanup_on_exit() {
     emit_event "worker_idle" "Worker $WORKER_ID: unexpected exit — $_CURRENT_TASK_TITLE"
     log "Unexpected exit — unclaimed task: $_CURRENT_TASK_TITLE"
   fi
-  rm -rf "$LOCKFILE"
+  release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
 }
 trap cleanup_on_exit EXIT
 # NOTE: $LINENO in ERR trap may be relative to function/subshell scope, not the file.

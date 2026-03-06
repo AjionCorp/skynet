@@ -129,7 +129,7 @@ cleanup_on_exit() {
   db_set_worker_idle "$FIXER_ID" "Fixer session ended (exit handler)" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale fixer status"
   emit_event "fixer_idle" "Fixer $FIXER_ID: exit handler (code $exit_code)" 2>/dev/null || true
   # Release PID lock
-  rm -rf "$LOCKFILE"
+  release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
   # Log crash event (only on abnormal exit)
   if [ "$exit_code" -ne 0 ]; then
     log "task-fixer crashed (exit $exit_code). Cleanup complete."
