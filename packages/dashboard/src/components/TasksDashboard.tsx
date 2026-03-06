@@ -15,6 +15,8 @@ import {
 import type { TaskBacklogData, MissionSummary } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
+const DEFAULT_TAGS = ["FEAT", "FIX", "DATA", "INFRA", "TEST", "NMI"] as const;
+
 const DEFAULT_TAG_COLORS: Record<string, string> = {
   FEAT: "bg-cyan-500/15 text-cyan-400 border-cyan-500/25",
   FIX: "bg-red-500/15 text-red-400 border-red-500/25",
@@ -34,7 +36,7 @@ export interface TasksDashboardProps {
 export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
-  const tags = taskTags ?? ["FEAT", "FIX", "DATA", "INFRA", "TEST", "NMI"];
+  const tags = taskTags && taskTags.length > 0 ? taskTags : [...DEFAULT_TAGS];
   const mergedTagColors = { ...DEFAULT_TAG_COLORS, ...tagColors };
 
   // Mission state
@@ -53,30 +55,44 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const [submitting, setSubmitting] = useState(false);
   const [submitResult, setSubmitResult] = useState<{ ok: boolean; message: string } | null>(null);
 
+  useEffect(() => {
+    if (!tags.includes(selectedTag)) {
+      setSelectedTag(tags[0] ?? "FEAT");
+    }
+  }, [selectedTag, tags]);
+
   const fetchMissions = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/missions`);
       const json = await res.json();
-      if (json.data) {
-        setMissions(json.data.missions);
-        if (!selectedSlug && json.data.config.activeMission) {
+      const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
+      if (missionList) {
+        setMissions(missionList);
+        if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
           setSelectedSlug(json.data.config.activeMission);
         }
-      }
+        return missionList[0]?.slug ?? null;
+      });
     } catch { /* ignore */ }
-  }, [apiPrefix, selectedSlug]);
+  }, [apiPrefix]);
 
   const fetchBacklog = useCallback(async () => {
     try {
       setLoading(true);
       const slugParam = selectedSlug ? `?slug=${encodeURIComponent(selectedSlug)}` : "";
       const res = await fetch(`${apiPrefix}/tasks${slugParam}`);
-      const json = await res.json();
+      const json = await res.json() as { data?: TaskBacklogData; error?: string | null };
       if (json.error) {
         setError(json.error);
       } else {
-        setBacklog(json.data);
-        setError(null);
+        const data = json.data;
+        if (data && Array.isArray(data.items)) {
+          setBacklog(data);
+          setError(null);
+        } else {
+          setBacklog({ items: [], pendingCount: 0, claimedCount: 0, manualDoneCount: 0 });
+          setError("Invalid backlog payload");
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch backlog");
@@ -109,7 +125,10 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tag: selectedTag, title: title.trim(), description: description.trim() || undefined, blockedBy: blockedByInput.trim() || undefined, position }),
       });
-      const json = await res.json();
+      const json = await res.json() as {
+        data?: { position?: "top" | "bottom" };
+        error?: string | null;
+      };
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
@@ -139,19 +158,25 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           <Target className="h-3.5 w-3.5" />
           Scope:
         </span>
-        {missions.map((m) => (
-          <button
-            key={m.slug}
-            onClick={() => setSelectedSlug(m.slug)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-              selectedSlug === m.slug
-                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
-                : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
-            }`}
-          >
-            {m.name}
-          </button>
-        ))}
+        {missions.length > 0 ? (
+          missions.map((m) => (
+            <button
+              key={m.slug}
+              onClick={() => setSelectedSlug(m.slug)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                selectedSlug === m.slug
+                  ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+                  : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+              }`}
+            >
+              {m.name}
+            </button>
+          ))
+        ) : (
+          <span className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-500">
+            Global backlog
+          </span>
+        )}
       </div>
 
       {/* Summary cards */}

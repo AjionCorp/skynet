@@ -18,10 +18,39 @@ LOG="$LOG_DIR/watchdog.log"
 WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
+WATCHDOG_LOCK_STALE_SECONDS="${SKYNET_WATCHDOG_LOCK_STALE_SECONDS:-60}"
+BOOT_TO_PAUSE_SENTINEL="$DEV_DIR/.boot-to-pause-initialized"
 
 cd "$PROJECT_DIR"
 
 log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
+
+_initialize_boot_pause() {
+  local pause_file="$DEV_DIR/pipeline-paused"
+  local bootstrap_sentinel="$DEV_DIR/.watchdog-bootstrapped"
+
+  if [ ! -f "$bootstrap_sentinel" ]; then
+    if [ ! -f "$pause_file" ]; then
+      local pause_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
+      (
+        umask 077
+        printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$pause_tmp"
+      )
+      mv "$pause_tmp" "$pause_file" 2>/dev/null || true
+      log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+    else
+      log "Pipeline already paused (preserving existing pause state)."
+    fi
+    (umask 077; : > "$bootstrap_sentinel") 2>/dev/null || true
+    return 0
+  fi
+
+  if [ -f "$pause_file" ]; then
+    log "Pipeline remains paused (preserving existing pause state)."
+  else
+    log "Boot pause already acknowledged; preserving current running state."
+  fi
+}
 
 # --- Singleton enforcement via mkdir-based atomic lock ---
 if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
@@ -32,24 +61,47 @@ if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
   fi
 else
   # Lock dir exists — check for stale lock (owner PID no longer running)
-  if [ -d "$WATCHDOG_LOCK_DIR" ] && [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
-    _existing_pid=$(cat "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null || echo "")
-    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      log "Watchdog already running (PID $_existing_pid). Exiting."
-      exit 0
-    fi
-    # Stale lock — reclaim atomically
-    mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
-    rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
-    if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-      if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
-        rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
-        log "PID write failed. Exiting."
-        exit 1
+  if [ -d "$WATCHDOG_LOCK_DIR" ]; then
+    if [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
+      _existing_pid=$(cat "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null || echo "")
+      if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+        log "Watchdog already running (PID $_existing_pid). Exiting."
+        exit 0
+      fi
+      # Stale lock — reclaim atomically
+      mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+        if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+          rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+          log "PID write failed. Exiting."
+          exit 1
+        fi
+      else
+        log "Watchdog lock contention. Exiting."
+        exit 0
       fi
     else
-      log "Watchdog lock contention. Exiting."
-      exit 0
+      _now_epoch=$(date +%s 2>/dev/null || echo 0)
+      _lock_mtime=$(file_mtime "$WATCHDOG_LOCK_DIR")
+      _lock_age=$((_now_epoch - _lock_mtime))
+      if [ "$_lock_age" -lt "$WATCHDOG_LOCK_STALE_SECONDS" ]; then
+        log "Watchdog lock exists without PID (age ${_lock_age}s < ${WATCHDOG_LOCK_STALE_SECONDS}s). Exiting."
+        exit 0
+      fi
+      mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+        if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+          rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+          log "PID write failed. Exiting."
+          exit 1
+        fi
+        log "Recovered stale watchdog lock without PID (age ${_lock_age}s)."
+      else
+        log "Watchdog lock contention. Exiting."
+        exit 0
+      fi
     fi
   else
     log "Watchdog lock contention. Exiting."
@@ -70,7 +122,7 @@ _watchdog_cleanup() {
     fi
     rm -f "$_dev_pidfile"
   fi
-  rm -rf "$WATCHDOG_LOCK_DIR"
+  release_lock_if_owned "$WATCHDOG_LOCK_DIR" "$$" 2>/dev/null || true
 }
 
 _watchdog_drain() {
@@ -106,17 +158,26 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
 # --- Initial Pause (Boot-to-Pause) ---
 # Pause on first boot only so operators can review state before workers run.
+# Subsequent watchdog restarts preserve the current pause/running state.
+_initialize_boot_pause
 # If already unpaused (operator resumed), don't re-pause on watchdog restart.
-if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
-  _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
-  (
-    umask 077
-    printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
-  )
-  mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
-  log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+if [ ! -f "$BOOT_TO_PAUSE_SENTINEL" ]; then
+  if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
+    _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
+    (
+      umask 077
+      printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
+    )
+    mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
+    log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+  else
+    log "Pipeline already paused (preserving existing pause state)."
+  fi
+  _boot_to_pause_tmp="${BOOT_TO_PAUSE_SENTINEL}.tmp.$$"
+  (umask 077; printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_boot_to_pause_tmp")
+  mv "$_boot_to_pause_tmp" "$BOOT_TO_PAUSE_SENTINEL" 2>/dev/null || true
 else
-  log "Pipeline already paused (preserving existing pause state)."
+  log "Boot-to-pause already initialized; preserving current pause state."
 fi
 
 # --- Auto-start Admin Server ---
@@ -323,8 +384,11 @@ _cr_phase1_stale_locks() {
         # Dev workers write heartbeat files; if the heartbeat is recent,
         # the worker is legitimately busy on a long task — skip it.
         local wid=""
+        local fixer_id=""
         case "$lockfile" in
           *-dev-worker-*.lock) wid="${lockfile##*-dev-worker-}"; wid="${wid%.lock}" ;;
+          *-task-fixer.lock) fixer_id="1" ;;
+          *-task-fixer-*.lock) fixer_id="${lockfile##*-task-fixer-}"; fixer_id="${fixer_id%.lock}" ;;
         esac
         if [ -n "$wid" ]; then
           local hb_file="$DEV_DIR/worker-${wid}.heartbeat"
@@ -337,6 +401,12 @@ _cr_phase1_stale_locks() {
               continue
             fi
           fi
+        elif [ -n "$fixer_id" ]; then
+          local fixer_timeout_secs=$(( ${SKYNET_AGENT_TIMEOUT_MINUTES:-45} * 60 ))
+          if [ "$lock_age_secs" -le "$fixer_timeout_secs" ]; then
+            log "Task-fixer $fixer_id lock is old (${lock_age_secs}s) but still within agent timeout (${fixer_timeout_secs}s) — skipping"
+            continue
+          fi
         fi
         stale=true
         log "Zombie worker: $lockfile (PID $lock_pid, ${lock_age_secs}s old > ${stale_secs}s limit)"
@@ -348,6 +418,16 @@ _cr_phase1_stale_locks() {
     fi
 
     if $stale; then
+      local current_lock_pid
+      current_lock_pid=$(read_lock_pid "$lockfile")
+      if [ -n "$current_lock_pid" ] && [ "$current_lock_pid" != "$lock_pid" ]; then
+        log "Skipping stale lock cleanup for $lockfile — ownership changed to PID $current_lock_pid"
+        continue
+      fi
+      if [ -n "$current_lock_pid" ] && kill -0 "$current_lock_pid" 2>/dev/null; then
+        log "Skipping stale lock cleanup for $lockfile — PID $current_lock_pid is now alive"
+        continue
+      fi
       rm -rf "$lockfile"
       recovered=$((recovered + 1))
       _cr_stale_pids=$((_cr_stale_pids + 1))
@@ -1249,7 +1329,14 @@ _handle_stale_worker() {
       kill -9 "$wpid" 2>/dev/null || true
       log "Killed worker $wid (PID $wpid)"
     fi
-    rm -rf "$lockfile"
+    current_wpid=$(read_lock_pid "$lockfile")
+    if [ -n "$current_wpid" ] && [ "$current_wpid" != "$wpid" ]; then
+      log "Preserving worker $wid lock — ownership changed to PID $current_wpid"
+    elif [ -n "$current_wpid" ] && kill -0 "$current_wpid" 2>/dev/null; then
+      log "Preserving worker $wid lock — PID $current_wpid is still alive"
+    else
+      rm -rf "$lockfile"
+    fi
 
     # Unclaim its task in backlog
     local task_title=""

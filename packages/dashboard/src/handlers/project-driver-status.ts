@@ -59,7 +59,14 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       }
 
       return Response.json({
-        data: { running, pid, ageMs, lastLog, lastLogTime, telemetry },
+        data: {
+          running: statuses.some((status) => status.running),
+          pid: activeStatus.pid,
+          ageMs: activeStatus.ageMs,
+          lastLog,
+          lastLogTime,
+          telemetry,
+        },
         error: null,
       });
     } catch (err) {

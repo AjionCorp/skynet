@@ -123,6 +123,22 @@ interface SyncEndpointDef {
   description: string;
 }
 
+type SyncHealthEntry = {
+  endpoint?: string;
+  status?: string;
+  records?: string;
+  notes?: string;
+  lastRun?: string | null;
+};
+
+function normalizeApiName(endpoint: string): string {
+  return endpoint
+    .toLowerCase()
+    .replace(/^\/+api\/+/, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export interface SyncDashboardProps {
   /** Define the sync endpoints to display. Each must have an apiName matching the sync-health data. */
   endpoints?: SyncEndpointDef[];

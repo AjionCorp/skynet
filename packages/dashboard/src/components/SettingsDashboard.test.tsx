@@ -152,6 +152,39 @@ describe("SettingsDashboard", () => {
     });
   });
 
+  it("surfaces save warnings returned by the API", async () => {
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { entries: MOCK_ENTRIES, configPath: "" }, error: null }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          data: {
+            entries: MOCK_ENTRIES,
+            warning: "Keys not found in config file (not updated): MISSING_KEY",
+          },
+          error: null,
+        }))
+      ));
+
+    renderWithProvider(<SettingsDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("MAX_WORKERS")).toBeDefined();
+    });
+
+    const inputs = document.querySelectorAll<HTMLInputElement>("input[type='text']");
+    const maxWorkersInput = Array.from(inputs).find((i) => i.value === "4");
+    fireEvent.change(maxWorkersInput!, { target: { value: "8" } });
+    fireEvent.click(screen.getByText("Save Changes"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Keys not found in config file (not updated): MISSING_KEY")
+      ).toBeDefined();
+    });
+  });
+
   it("shows loading state initially", () => {
     vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {}))); // never resolves
     renderWithProvider(<SettingsDashboard />);

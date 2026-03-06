@@ -10,7 +10,7 @@ const MOCK_MISSIONS: MissionSummary[] = [
     slug: "mission-alpha",
     name: "Alpha Mission",
     isActive: true,
-    assignedWorkers: ["dev-worker-1", "dev-worker-2"],
+    assignedWorkers: ["dev-worker-1", "dev-worker-2", "task-fixer"],
     completionPercentage: 65,
   },
   {
@@ -34,7 +34,18 @@ const MOCK_PIPELINE: PipelineStatus = {
   completed: [],
   completedCount: 10,
   averageTaskDuration: "12m",
-  failed: [],
+  failed: [
+    {
+      date: "2024-11-14T22:05:00Z",
+      task: "Repair flaky tests",
+      branch: "fix/flaky-tests",
+      error: "Vitest timeout",
+      attempts: "1",
+      status: "fixing-1",
+      outcomeReason: "",
+      filesTouched: "",
+    },
+  ],
   failedPendingCount: 1,
   hasBlockers: false,
   blockerLines: [],
@@ -131,7 +142,7 @@ describe("MissionSidebar", () => {
     mockFetch(MOCK_MISSIONS, MOCK_PIPELINE);
     renderWithProvider(<MissionSidebar />);
     await waitFor(() => {
-      expect(screen.getByText("Assigned: 2")).toBeDefined();
+      expect(screen.getByText("Assigned: 3")).toBeDefined();
     });
   });
 
@@ -141,17 +152,19 @@ describe("MissionSidebar", () => {
     await waitFor(() => {
       expect(screen.getByText("Implement login")).toBeDefined();
     });
+    expect(screen.getByText("Repair flaky tests")).toBeDefined();
     // Worker 2 is idle
     expect(screen.getByText("Idle")).toBeDefined();
   });
 
-  it("displays worker short names (W1, W2)", async () => {
+  it("displays worker short names for workers and fixers", async () => {
     mockFetch(MOCK_MISSIONS, MOCK_PIPELINE);
     renderWithProvider(<MissionSidebar />);
     await waitFor(() => {
       expect(screen.getByText("W1")).toBeDefined();
     });
     expect(screen.getByText("W2")).toBeDefined();
+    expect(screen.getByText("F1")).toBeDefined();
   });
 
   it("shows WORKING status when watchdog is running and not paused", async () => {

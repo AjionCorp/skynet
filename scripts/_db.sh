@@ -1434,7 +1434,8 @@ db_export_all_tasks() {
 db_export_backlog() {
   [ ! -f "$DB_PATH" ] && return 0
   local output="$1"
-  local tmpfile="${output}.export-tmp"
+  local tmpfile
+  tmpfile=$(mktemp "${output}.export-tmp.XXXXXX") || return 1
   {
     echo "# Backlog"
     echo ""
@@ -1474,14 +1475,15 @@ db_export_backlog() {
       done
     fi
   } > "$tmpfile"
-  mv "$tmpfile" "$output"
+  mv "$tmpfile" "$output" || { rm -f "$tmpfile"; return 1; }
 }
 
 # Generate completed.md from tasks table.
 db_export_completed() {
   [ ! -f "$DB_PATH" ] && return 0
   local output="$1"
-  local tmpfile="${output}.export-tmp"
+  local tmpfile
+  tmpfile=$(mktemp "${output}.export-tmp.XXXXXX") || return 1
   {
     echo "# Completed Tasks"
     echo ""
@@ -1502,14 +1504,15 @@ db_export_completed() {
       echo "| ${_datestr} | ${_task} | ${_branch:-merged to main} | ${_dur:-0m} | ${_notes:-success} |"
     done
   } > "$tmpfile"
-  mv "$tmpfile" "$output"
+  mv "$tmpfile" "$output" || { rm -f "$tmpfile"; return 1; }
 }
 
 # Generate failed-tasks.md from tasks table.
 db_export_failed() {
   [ ! -f "$DB_PATH" ] && return 0
   local output="$1"
-  local tmpfile="${output}.export-tmp"
+  local tmpfile
+  tmpfile=$(mktemp "${output}.export-tmp.XXXXXX") || return 1
   {
     echo "# Failed Tasks"
     echo ""
@@ -1536,7 +1539,7 @@ db_export_failed() {
       echo "| ${_datestr} | ${_task} | ${_branch} | ${_error} | ${_reason} | ${_attempts:-0} | ${_status} |"
     done
   } > "$tmpfile"
-  mv "$tmpfile" "$output"
+  mv "$tmpfile" "$output" || { rm -f "$tmpfile"; return 1; }
 }
 
 # Regenerate all state markdown files from SQLite.

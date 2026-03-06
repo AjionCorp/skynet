@@ -58,6 +58,7 @@ describe("TasksDashboard", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("shows loading spinner initially", () => {
