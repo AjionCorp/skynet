@@ -25,7 +25,7 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(async () =>
     new Response(JSON.stringify({ data, error }))
   ));
 }

@@ -5,6 +5,7 @@ vi.mock("fs", () => ({
   existsSync: vi.fn(() => false),
   writeFileSync: vi.fn(),
   unlinkSync: vi.fn(),
+  mkdirSync: vi.fn(),
   openSync: vi.fn(() => 42),
   closeSync: vi.fn(),
   rmSync: vi.fn(),
@@ -23,7 +24,7 @@ vi.mock("../lib/process-locks", () => ({
   listProjectDriverLocks: vi.fn(() => []),
 }));
 
-import { existsSync, writeFileSync, unlinkSync, openSync, closeSync } from "fs";
+import { existsSync, writeFileSync, unlinkSync, mkdirSync, openSync, closeSync } from "fs";
 import { spawn } from "child_process";
 import { parseBody } from "../lib/parse-body";
 import { readPid, isProcessAlive, killByLock, listProjectDriverLocks } from "../lib/process-locks";
@@ -32,6 +33,7 @@ import { createPipelineControlHandler } from "./pipeline-control";
 const mockExistsSync = vi.mocked(existsSync);
 const mockWriteFileSync = vi.mocked(writeFileSync);
 const mockUnlinkSync = vi.mocked(unlinkSync);
+const mockMkdirSync = vi.mocked(mkdirSync);
 const mockOpenSync = vi.mocked(openSync);
 const mockCloseSync = vi.mocked(closeSync);
 const mockSpawn = vi.mocked(spawn);
@@ -189,6 +191,7 @@ describe("createPipelineControlHandler", () => {
       expect(body.error).toBeNull();
       expect(mockUnlinkSync).toHaveBeenCalledOnce(); // pause file removed
       expect(mockSpawn).toHaveBeenCalledOnce();
+      expect(mockMkdirSync).toHaveBeenCalledWith("/tmp/test/.dev/scripts", { recursive: true });
       expect(mockOpenSync).toHaveBeenCalledOnce();
       expect(mockCloseSync).toHaveBeenCalledOnce();
     });
@@ -346,6 +349,19 @@ describe("createPipelineControlHandler", () => {
     const body = await res.json();
     expect(res.status).toBe(400);
     expect(body.error).toContain("Unknown action");
+  });
+
+  it("accepts action with mixed case and extra whitespace", async () => {
+    mockParseBody.mockResolvedValue({ data: { action: "  StArT  " }, error: null });
+    mockExistsSync.mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true);
+    const { POST } = createPipelineControlHandler(makeConfig());
+    const res = await POST(makeRequest());
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data.started).toBe(true);
+    expect(mockSpawn).toHaveBeenCalledOnce();
   });
 
   // --- Internal error ---
