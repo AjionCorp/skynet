@@ -122,7 +122,7 @@ _watchdog_cleanup() {
     fi
     rm -f "$_dev_pidfile"
   fi
-  rm -rf "$WATCHDOG_LOCK_DIR"
+  release_lock_if_owned "$WATCHDOG_LOCK_DIR" "$$" 2>/dev/null || true
 }
 
 _watchdog_drain() {
@@ -418,6 +418,16 @@ _cr_phase1_stale_locks() {
     fi
 
     if $stale; then
+      local current_lock_pid
+      current_lock_pid=$(read_lock_pid "$lockfile")
+      if [ -n "$current_lock_pid" ] && [ "$current_lock_pid" != "$lock_pid" ]; then
+        log "Skipping stale lock cleanup for $lockfile — ownership changed to PID $current_lock_pid"
+        continue
+      fi
+      if [ -n "$current_lock_pid" ] && kill -0 "$current_lock_pid" 2>/dev/null; then
+        log "Skipping stale lock cleanup for $lockfile — PID $current_lock_pid is now alive"
+        continue
+      fi
       rm -rf "$lockfile"
       recovered=$((recovered + 1))
       _cr_stale_pids=$((_cr_stale_pids + 1))
@@ -1319,7 +1329,14 @@ _handle_stale_worker() {
       kill -9 "$wpid" 2>/dev/null || true
       log "Killed worker $wid (PID $wpid)"
     fi
-    rm -rf "$lockfile"
+    current_wpid=$(read_lock_pid "$lockfile")
+    if [ -n "$current_wpid" ] && [ "$current_wpid" != "$wpid" ]; then
+      log "Preserving worker $wid lock — ownership changed to PID $current_wpid"
+    elif [ -n "$current_wpid" ] && kill -0 "$current_wpid" 2>/dev/null; then
+      log "Preserving worker $wid lock — PID $current_wpid is still alive"
+    else
+      rm -rf "$lockfile"
+    fi
 
     # Unclaim its task in backlog
     local task_title=""

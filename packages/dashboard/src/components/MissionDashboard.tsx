@@ -193,7 +193,6 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         setError(statusJson.error);
       } else {
         setMission(statusJson.data);
-        setError(null);
       }
 
       if (pipelineJson.data?.missionProgress) {
@@ -215,6 +214,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
 
   // Combined fetch
   const fetchAll = useCallback(async () => {
+    setError(null);
     await Promise.all([fetchMissions(), fetchMissionDetail()]);
   }, [fetchMissions, fetchMissionDetail]);
 

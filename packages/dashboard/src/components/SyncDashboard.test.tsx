@@ -20,7 +20,10 @@ const MOCK_PIPELINE_STATUS = {
 };
 
 const MOCK_EMPTY_STATUS = {
-  syncHealth: { lastRun: null, endpoints: [] },
+  syncHealth: {
+    lastRun: null,
+    endpoints: [],
+  },
 };
 
 function renderWithProvider(ui: React.ReactElement) {

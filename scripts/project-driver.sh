@@ -92,7 +92,11 @@ fi
 #   _pd_prev_trap="$(trap -p EXIT | sed "s/trap -- '//;s/' EXIT//")"
 #   _pd_cleanup() { rm -rf "$LOCKFILE"; eval "$_pd_prev_trap"; }
 #   trap '_pd_cleanup' EXIT
-trap 'rm -rf "$LOCKFILE"' EXIT
+_project_driver_cleanup() {
+  release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
+  rm -f "${_dedup_snapshot:-}" "${_dedup_normalized:-}" "${_dedup_cleaned:-}" 2>/dev/null || true
+}
+trap _project_driver_cleanup EXIT
 trap 'log "Caught SIGTERM — shutting down"; exit 143' TERM
 trap 'log "Caught SIGINT — shutting down"; exit 130' INT
 
@@ -387,7 +391,6 @@ Tags: \`[FEAT]\` features, \`[FIX]\` bugs, \`[INFRA]\` infrastructure, \`[TEST]\
 _dedup_snapshot=$(mktemp /tmp/skynet-dedup-snapshot-XXXXXX)
 _dedup_normalized=$(mktemp /tmp/skynet-dedup-normalized-XXXXXX)
 chmod 600 "$_dedup_snapshot" "$_dedup_normalized"
-trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized"' EXIT
 
 # SQLite-based dedup snapshot (primary — covers all task states)
 _db_all_titles=$(_db "SELECT title FROM tasks WHERE status NOT IN ('superseded');" 2>/dev/null || true)
@@ -441,7 +444,6 @@ if run_agent "$PROMPT" "$LOG"; then
     echo $$ > "$BACKLOG_LOCK/pid" 2>/dev/null || true
     _dedup_cleaned=$(mktemp /tmp/skynet-dedup-cleaned-XXXXXX)
     chmod 600 "$_dedup_cleaned"
-    trap 'rm -rf "$LOCKFILE"; rm -f "$_dedup_snapshot" "$_dedup_normalized" "$_dedup_cleaned"' EXIT
     _dedup_count=0
     while IFS= read -r _line; do
       if echo "$_line" | grep -q '^\- \[ \]'; then

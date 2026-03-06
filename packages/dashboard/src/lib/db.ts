@@ -127,8 +127,8 @@ interface FixerStatRow {
 export class SkynetDB {
   private db: Database;
   private hasMissionHash: boolean;
-  private hasFilesTouched: boolean;
   private hasReasonCode: boolean;
+  private hasFilesTouched: boolean;
 
   constructor(dbPath: string, opts?: { readonly?: boolean }) {
     const Database = loadDriver();
@@ -161,9 +161,10 @@ export class SkynetDB {
 
     // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
-    this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
-    this.hasFilesTouched = cols.some((c) => c.name === "files_touched");
-    this.hasReasonCode = cols.some((c) => c.name === "reason_code");
+    const taskColumns = new Set(cols.map((c) => c.name));
+    this.hasMissionHash = taskColumns.has("mission_hash");
+    this.hasReasonCode = taskColumns.has("reason_code");
+    this.hasFilesTouched = taskColumns.has("files_touched");
   }
 
   close(): void {
@@ -255,9 +256,7 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const filesTouchedSelect = this.hasFilesTouched
-      ? "files_touched"
-      : "'' AS files_touched";
+    const filesTouchedSelect = this.hasFilesTouched ? "files_touched" : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT completed_at, title, branch, duration, notes, ${filesTouchedSelect}
@@ -315,12 +314,8 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const reasonCodeSelect = this.hasReasonCode
-      ? "reason_code"
-      : "'' AS reason_code";
-    const filesTouchedSelect = this.hasFilesTouched
-      ? "files_touched"
-      : "'' AS files_touched";
+    const reasonCodeSelect = this.hasReasonCode ? "reason_code" : "'' AS reason_code";
+    const filesTouchedSelect = this.hasFilesTouched ? "files_touched" : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT failed_at, title, branch, error, attempts, status, ${reasonCodeSelect}, ${filesTouchedSelect}

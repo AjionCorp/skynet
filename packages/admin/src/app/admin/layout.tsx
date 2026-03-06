@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AdminLayout } from "@ajioncorp/skynet/components";
-import { Activity, Monitor, ListTodo, Database, FileText, Target, Users, ScrollText, ListOrdered, Settings, GitBranch } from "lucide-react";
+import { Activity, Monitor, ListTodo, Database, FileText, Target, Users, ScrollText, ListOrdered, Settings, Wrench } from "lucide-react";
 
 const pages = [
   { href: "/admin/pipeline", label: "Pipeline", icon: Activity },
@@ -12,7 +12,7 @@ const pages = [
   { href: "/admin/sync", label: "Sync", icon: Database },
   { href: "/admin/prompts", label: "Prompts", icon: FileText },
   { href: "/admin/workers", label: "Workers", icon: Users },
-  { href: "/admin/project-driver", label: "Project Driver", icon: GitBranch },
+  { href: "/admin/project-driver", label: "Project Driver", icon: Wrench },
   { href: "/admin/logs", label: "Logs", icon: ScrollText },
   { href: "/admin/mission", label: "Mission", icon: Target },
   { href: "/admin/events", label: "Events", icon: ListOrdered },

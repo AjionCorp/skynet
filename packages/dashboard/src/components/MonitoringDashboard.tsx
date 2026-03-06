@@ -470,6 +470,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Stream status via SSE (same stream endpoint as PipelineDashboard)
   useEffect(() => {
+    void fetchStatus();
     const es = new EventSource(`${apiPrefix}/pipeline/stream`);
 
     es.onopen = () => setConnected(true);
@@ -496,7 +497,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     };
 
     return () => es.close();
-  }, [apiPrefix]);
+  }, [apiPrefix, fetchStatus]);
 
   // Poll logs every 3s when on logs tab
   useEffect(() => {

@@ -20,21 +20,22 @@ const MOCK_BACKLOG: TaskBacklogData = {
   manualDoneCount: 10,
 };
 
+const MOCK_MISSIONS = {
+  missions: [],
+  config: { activeMission: null },
+};
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL) => {
-    const url = String(input);
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     if (url.endsWith("/missions")) {
-      return Promise.resolve(
-        new Response(JSON.stringify({ data: { missions: [], config: {} }, error: null }))
-      );
+      return new Response(JSON.stringify({ data: MOCK_MISSIONS, error: null }));
     }
-    return Promise.resolve(
-      new Response(JSON.stringify({ data, error }))
-    );
+    return new Response(JSON.stringify({ data, error }));
   }));
 }
 
