@@ -863,6 +863,19 @@ unset SKYNET_DRY_RUN
 _dry_default="${SKYNET_DRY_RUN:-false}"
 assert_eq "$_dry_default" "false" "dry-run: defaults to false when unset"
 
+# ============================================================
+# TEST 12: Claim tracker rotation safety
+# ============================================================
+
+echo ""
+_tlog "=== Test 12: Claim tracker rotation safety ==="
+
+if grep -q "local _tracker_size" "$REPO_ROOT/scripts/dev-worker.sh"; then
+  fail "claim-tracker: top-level code must not use 'local _tracker_size'"
+else
+  pass "claim-tracker: no invalid top-level 'local _tracker_size'"
+fi
+
 # ── Summary ──────────────────────────────────────────────────────
 
 echo ""

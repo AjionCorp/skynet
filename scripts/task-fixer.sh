@@ -262,6 +262,10 @@ if [ -z "$_db_task_id" ]; then
   exit 0
 fi
 
+if ! echo "$fix_attempts" | grep -Eq '^[0-9]+$'; then
+  fix_attempts=0
+fi
+
 # Defensive max-attempts guard. The claiming loop above already skips tasks
 # at max attempts and blocks them, so this should never fire. Kept as a
 # safety net in case db_get_pending_failures returns stale data.
