@@ -239,6 +239,24 @@ result=$(_compute_task_affinity 1)
 assert_empty "$result" "returns empty when history has only empty tags"
 
 echo ""
+echo "=== _compute_task_affinity: tags are matched literally (no regex expansion) ==="
+
+_db_no_out "DELETE FROM tasks;"
+
+# Worker 1 is strong on literal "FEAT.*" and weak on "FEAT"
+_db_no_out "INSERT INTO tasks (title, tag, status, worker_id) VALUES ('h1', 'FEAT.*', 'completed', 1);"
+_db_no_out "INSERT INTO tasks (title, tag, status, worker_id) VALUES ('h2', 'FEAT.*', 'completed', 1);"
+_db_no_out "INSERT INTO tasks (title, tag, status, worker_id) VALUES ('h3', 'FEAT', 'failed', 1);"
+_db_no_out "INSERT INTO tasks (title, tag, status, worker_id) VALUES ('h4', 'FEAT', 'failed', 1);"
+
+_db_no_out "INSERT INTO tasks (title, tag, status, priority) VALUES ('Pending regex-literal', 'FEAT.*', 'pending', 50);"
+_db_no_out "INSERT INTO tasks (title, tag, status, priority) VALUES ('Pending plain', 'FEAT', 'pending', 50);"
+
+result=$(_compute_task_affinity 1)
+literal_id=$(_db "SELECT id FROM tasks WHERE title = 'Pending regex-literal';")
+assert_eq "$result" "$literal_id" "uses exact tag match when tag contains regex metacharacters"
+
+echo ""
 echo "=== _claim_task_by_id: claims a specific task ==="
 
 _db_no_out "DELETE FROM tasks;"

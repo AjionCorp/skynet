@@ -91,6 +91,22 @@ interface SyncEndpointDef {
   description: string;
 }
 
+type SyncHealthEntry = {
+  endpoint?: string;
+  status?: string;
+  records?: string;
+  notes?: string;
+  lastRun?: string | null;
+};
+
+function normalizeApiName(endpoint: string): string {
+  return endpoint
+    .toLowerCase()
+    .replace(/^\/+api\/+/, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
 export interface SyncDashboardProps {
   /** Define the sync endpoints to display. Each must have an apiName matching the sync-health data. */
   endpoints?: SyncEndpointDef[];
@@ -116,6 +132,7 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
         return;
       }
 
+<<<<<<< cursor/system-hardening-and-improvements-43f4
       // Accept both legacy array shape and current object shape:
       // syncHealth: SyncEndpoint[] OR syncHealth: { lastRun, endpoints: SyncEndpoint[] }
       const data = json.data;
@@ -140,6 +157,30 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
           last_synced: entry.lastRun || null,
           records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
           error_message: entry.status === "error" ? (entry.notes || "Sync error") : null,
+=======
+      // Map syncHealth payload from pipeline status to SyncStatus records.
+      // Current contract is syncHealth.endpoints; keep array fallback for compatibility.
+      const data = json.data;
+      const map: Record<string, SyncStatus> = {};
+      const syncHealthEntries: SyncHealthEntry[] = Array.isArray(data?.syncHealth)
+        ? data.syncHealth
+        : (Array.isArray(data?.syncHealth?.endpoints) ? data.syncHealth.endpoints : []);
+
+      for (const entry of syncHealthEntries) {
+        const apiName = normalizeApiName(entry.endpoint ?? "");
+        if (!apiName) continue;
+        let status: SyncStatus["status"] = "pending";
+        if (entry.status === "ok" || entry.status === "success") status = "success";
+        else if (entry.status === "error" || entry.status === "failed") status = "error";
+        else if (entry.status === "syncing" || entry.status === "running") status = "syncing";
+
+        map[apiName] = {
+          api_name: apiName,
+          status,
+          last_synced: entry.lastRun ?? null,
+          records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
+          error_message: status === "error" ? (entry.notes || "Sync error") : null,
+>>>>>>> main
         };
       }
 
