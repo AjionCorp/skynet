@@ -128,8 +128,6 @@ export class SkynetDB {
   private db: Database;
   private taskColumns: Set<string>;
   private hasMissionHash: boolean;
-  private hasReasonCode: boolean;
-  private hasFilesTouched: boolean;
 
   constructor(dbPath: string, opts?: { readonly?: boolean }) {
     const Database = loadDriver();
@@ -162,9 +160,8 @@ export class SkynetDB {
 
     // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+    this.taskColumns = new Set(cols.map((col) => col.name));
     this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
-    this.hasReasonCode = cols.some((c) => c.name === "reason_code");
-    this.hasFilesTouched = cols.some((c) => c.name === "files_touched");
   }
 
   close(): void {
@@ -256,13 +253,10 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const filesTouchedSelect = this.taskColumns.has("files_touched")
-      ? "files_touched"
-      : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT completed_at, title, branch, duration, notes,
-                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
+                ${this.taskColumns.has("files_touched") ? "files_touched" : "'' AS files_touched"}
          FROM tasks
          WHERE status IN ('completed','fixed')
            AND notes NOT LIKE '%phantom%'${missionFilter}
@@ -317,17 +311,11 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const reasonCodeSelect = this.taskColumns.has("reason_code")
-      ? "reason_code"
-      : "'' AS reason_code";
-    const filesTouchedSelect = this.taskColumns.has("files_touched")
-      ? "files_touched"
-      : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT failed_at, title, branch, error, attempts, status,
-                ${this.hasReasonCode ? "reason_code" : "'' AS reason_code"},
-                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
+                ${this.taskColumns.has("reason_code") ? "reason_code" : "'' AS reason_code"},
+                ${this.taskColumns.has("files_touched") ? "files_touched" : "'' AS files_touched"}
          FROM tasks
          WHERE (status IN ('failed','blocked','fixed','superseded')
             OR status LIKE 'fixing-%')${missionFilter}

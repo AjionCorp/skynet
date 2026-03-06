@@ -45,14 +45,21 @@ export function KeyboardShortcutsHelp({ pages, onClose }: KeyboardShortcutsHelpP
             Navigation
           </div>
           <div className="space-y-1">
-            {pages.map((page, i) => (
-              <div key={page.href} className="flex items-center justify-between py-1">
-                <span className="text-sm text-zinc-300">{page.label}</span>
-                <kbd className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-300">
-                  {i === 9 ? "0" : String(i + 1)}
-                </kbd>
-              </div>
-            ))}
+            {pages.map((page, i) => {
+              const shortcut = i < 9 ? String(i + 1) : i === 9 ? "0" : null;
+              return (
+                <div key={page.href} className="flex items-center justify-between py-1">
+                  <span className="text-sm text-zinc-300">{page.label}</span>
+                  {shortcut ? (
+                    <kbd className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-300">
+                      {shortcut}
+                    </kbd>
+                  ) : (
+                    <span className="text-xs text-zinc-500">Click only</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <div className="border-t border-zinc-800 pt-3">

@@ -68,11 +68,11 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
       if (missionList) {
         setMissions(missionList);
-        if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
-          setSelectedSlug(json.data.config.activeMission);
+        if (typeof json.data?.config?.activeMission === "string") {
+          setSelectedSlug((current) => current ?? json.data.config.activeMission);
         }
-        return missionList[0]?.slug ?? null;
-      });
+        return;
+      }
     } catch { /* ignore */ }
   }, [apiPrefix]);
 
