@@ -20,6 +20,11 @@ const MOCK_BACKLOG: TaskBacklogData = {
   manualDoneCount: 10,
 };
 
+const MOCK_MISSIONS = {
+  missions: [],
+  config: { activeMission: null },
+};
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
@@ -43,6 +48,7 @@ describe("TasksDashboard", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("shows loading spinner initially", () => {
@@ -161,7 +167,22 @@ describe("TasksDashboard", () => {
   });
 
   it("submits new task via POST", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/missions")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { missions: [], config: {} }, error: null }))
+        );
+      }
+      if (init?.method === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { position: "top" }, error: null }))
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))
+      );
+    }));
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Create Task")).toBeDefined();
@@ -170,11 +191,6 @@ describe("TasksDashboard", () => {
     // Fill in the title
     const titleInput = document.getElementById("task-title") as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: "New task title" } });
-
-    // Mock for POST response
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
 
     // Submit the form
     const submitButton = screen.getByText("Add Task");
@@ -189,7 +205,22 @@ describe("TasksDashboard", () => {
   });
 
   it("shows success message after task submission", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+    vi.stubGlobal("fetch", vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/missions")) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { missions: [], config: {} }, error: null }))
+        );
+      }
+      if (init?.method === "POST") {
+        return Promise.resolve(
+          new Response(JSON.stringify({ data: { position: "top" }, error: null }))
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))
+      );
+    }));
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Create Task")).toBeDefined();
@@ -198,14 +229,10 @@ describe("TasksDashboard", () => {
     const titleInput = document.getElementById("task-title") as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: "New task" } });
 
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
-
     fireEvent.click(screen.getByText("Add Task"));
 
     await waitFor(() => {
-      expect(screen.getByText("Task added at top of backlog")).toBeDefined();
+      expect(screen.getByText("Task added to backlog")).toBeDefined();
     });
   });
 

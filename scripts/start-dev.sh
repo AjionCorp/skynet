@@ -8,6 +8,12 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 if [ -n "${1:-}" ]; then
+  case "$1" in
+    ''|*[!0-9]*|0)
+      echo "ERROR: worker_id must be a positive integer (got '$1')" >&2
+      exit 1
+      ;;
+  esac
   LOG="$LOG_DIR/next-dev-w${1}.log"
   PIDFILE="$LOG_DIR/next-dev-w${1}.pid"
 else
@@ -51,7 +57,11 @@ echo "Dev server started (PID $_SERVER_PID). Logs: $LOG"
 echo "Stop with: kill \$(cat $PIDFILE)"
 
 # OPS-P2-6: Poll for server health after launch (up to 15 seconds)
-_health_url="${SKYNET_DEV_SERVER_URL:-http://localhost:3100}/api/admin/pipeline/status"
+# Workers launch per-port dev servers, so probe the explicit PORT when set
+# instead of the shared default admin URL.
+_health_base="${SKYNET_DEV_SERVER_URL:-http://localhost:3100}"
+[ -n "${PORT:-}" ] && _health_base="http://localhost:${PORT}"
+_health_url="${_health_base}/api/admin/pipeline/status"
 _ready=false
 for _i in $(seq 1 15); do
   if ! kill -0 "$_SERVER_PID" 2>/dev/null; then

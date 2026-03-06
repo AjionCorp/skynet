@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, ComponentType } from "react";
+import type { ReactNode, ComponentType, ComponentPropsWithoutRef } from "react";
 import { RefreshCw, ArrowLeft, Keyboard } from "lucide-react";
 import { MissionSidebar } from "./MissionSidebar";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
@@ -24,11 +24,16 @@ export interface AdminLayoutProps {
   /** Label for the back arrow link. Defaults to "Dashboard". */
   backLabel?: string;
   /** The Link component to use for navigation (e.g. Next.js Link). Defaults to a plain <a> tag. */
-  linkComponent?: ComponentType<{ href: string; className?: string; children: ReactNode }>;
+  linkComponent?: ComponentType<LinkProps>;
   /** Programmatic navigation callback for keyboard shortcuts (e.g. router.push). Defaults to window.location assignment. */
   onNavigate?: (href: string) => void;
   children: ReactNode;
 }
+
+type LinkProps = {
+  href: string;
+  children: ReactNode;
+} & Omit<ComponentPropsWithoutRef<"a">, "href" | "children">;
 
 export function AdminLayout({
   user,
@@ -41,12 +46,16 @@ export function AdminLayout({
   children,
 }: AdminLayoutProps) {
   // Use the provided Link component or fall back to a plain <a> tag
-  const Link = linkComponent ?? (({ href, className, children: c }: { href: string; className?: string; children: ReactNode }) => (
-    <a href={href} className={className}>{c}</a>
+  const Link = linkComponent ?? (({ href, children: c, ...rest }: LinkProps) => (
+    <a href={href} {...rest}>{c}</a>
   ));
 
   const navigate = onNavigate ?? ((href: string) => { window.location.href = href; });
   const { showHelp, setShowHelp } = useKeyboardShortcuts({ pages, onNavigate: navigate });
+  const isPageActive = (href: string) => {
+    if (!currentPath) return false;
+    return currentPath === href || currentPath.startsWith(`${href}/`);
+  };
 
   return (
     <div className="min-h-screen bg-zinc-950">
@@ -69,16 +78,24 @@ export function AdminLayout({
             <>
               <span className="text-zinc-700">/</span>
               <nav className="flex items-center gap-1">
-                {pages.map((page) => (
-                  <Link
-                    key={page.href}
-                    href={page.href}
-                    className="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs text-zinc-400 transition hover:bg-zinc-800 hover:text-white"
-                  >
-                    {page.icon && <page.icon className="h-3.5 w-3.5" />}
-                    {page.label}
-                  </Link>
-                ))}
+                {pages.map((page) => {
+                  const isActive = isPageActive(page.href);
+                  return (
+                    <Link
+                      key={page.href}
+                      href={page.href}
+                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition ${
+                        isActive
+                          ? "bg-cyan-500/10 text-cyan-300"
+                          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
+                      }`}
+                      aria-current={isActive ? "page" : undefined}
+                    >
+                      {page.icon && <page.icon className="h-3.5 w-3.5" />}
+                      {page.label}
+                    </Link>
+                  );
+                })}
               </nav>
             </>
           )}
@@ -107,7 +124,7 @@ export function AdminLayout({
         <nav className="border-b border-zinc-800 bg-zinc-950/60 px-8 backdrop-blur-sm">
           <div className="mx-auto flex max-w-7xl gap-1">
             {pages.map((page) => {
-              const isActive = currentPath === page.href;
+              const isActive = isPageActive(page.href);
               return (
                 <Link
                   key={page.href}
@@ -117,6 +134,7 @@ export function AdminLayout({
                       ? "border-cyan-400 text-white"
                       : "border-transparent text-zinc-500 hover:border-zinc-600 hover:text-zinc-300"
                   }`}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   {page.icon && <page.icon className="h-3.5 w-3.5" />}
                   {page.label}

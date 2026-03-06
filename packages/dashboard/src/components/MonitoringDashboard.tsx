@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -368,7 +368,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     { value: "sync-runner", label: "Sync Runner" },
     { value: "post-commit-gate", label: "Post-Commit Gate" },
   ];
-  const logScripts = logScriptsProp ?? defaultLogScripts;
+  const staticLogScripts = logScriptsProp ?? defaultLogScripts;
 
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const [activeTaskTab, setActiveTaskTab] = useState<TaskTabId>("backlog");
@@ -379,12 +379,37 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   const [error, setError] = useState<string | null>(null);
   const [triggering, setTriggering] = useState<Record<string, boolean>>({});
   const [triggerMsg, setTriggerMsg] = useState<Record<string, string>>({});
-  const [selectedLog, setSelectedLog] = useState<string>(logScripts[0]?.value ?? "dev-worker-1");
+  const [selectedLog, setSelectedLog] = useState<string>(staticLogScripts[0]?.value ?? "dev-worker-1");
   const [logSearch, setLogSearch] = useState("");
   const [logLines, setLogLines] = useState(200);
   const [logLoading, setLogLoading] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [connected, setConnected] = useState(false);
+
+  // Build log list from static scripts + live worker status so scaled workers/fixers
+  // automatically appear in the log viewer without manual dashboard configuration.
+  const logScripts = useMemo(() => {
+    const merged = new Map<string, string>();
+    for (const script of staticLogScripts) {
+      merged.set(script.value, script.label);
+    }
+    for (const worker of status?.workers ?? []) {
+      const value = worker.logFile || worker.name;
+      if (!value) continue;
+      if (!merged.has(value)) {
+        merged.set(value, worker.label || worker.name);
+      }
+    }
+    return Array.from(merged.entries()).map(([value, label]) => ({ value, label }));
+  }, [staticLogScripts, status?.workers]);
+
+  useEffect(() => {
+    if (logScripts.length === 0) return;
+    const hasSelectedLog = logScripts.some((script) => script.value === selectedLog);
+    if (!hasSelectedLog) {
+      setSelectedLog(logScripts[0].value);
+    }
+  }, [logScripts, selectedLog]);
 
   // Fetch status (used as fallback and for manual refresh)
   const fetchStatus = useCallback(async () => {
@@ -422,7 +447,18 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         if (logSearch) params.set("search", logSearch);
         const res = await fetch(`${apiPrefix}/monitoring/logs?${params}`);
         const json = await res.json();
-        if (json.data) setLogData(json.data);
+        const data = json?.data;
+        if (
+          data &&
+          Array.isArray(data.lines) &&
+          typeof data.script === "string" &&
+          typeof data.totalLines === "number" &&
+          typeof data.fileSizeBytes === "number"
+        ) {
+          setLogData(data as LogData);
+        } else {
+          setLogData(null);
+        }
       } catch {
         setLogData(null);
       } finally {
@@ -434,6 +470,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Stream status via SSE (same stream endpoint as PipelineDashboard)
   useEffect(() => {
+    void fetchStatus();
     const es = new EventSource(`${apiPrefix}/pipeline/stream`);
 
     es.onopen = () => setConnected(true);
@@ -460,7 +497,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     };
 
     return () => es.close();
-  }, [apiPrefix]);
+  }, [apiPrefix, fetchStatus]);
 
   // Poll logs every 3s when on logs tab
   useEffect(() => {

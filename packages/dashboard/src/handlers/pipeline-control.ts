@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, writeFileSync, unlinkSync, mkdirSync } from "fs";
 import { spawn } from "child_process";
 import { openSync, closeSync, constants } from "fs";
 import { resolve } from "path";
@@ -22,15 +22,22 @@ export function createPipelineControlHandler(config: SkynetConfig) {
       if (parseError || !body) {
         return Response.json({ data: null, error: parseError || "Invalid request body" }, { status: 400 });
       }
-      const { action } = body;
       const VALID_ACTIONS = ["pause", "resume", "start", "stop"] as const;
+      const rawAction = typeof body.action === "string" ? body.action.trim().toLowerCase() : "";
 
-      if (typeof action !== "string" || !VALID_ACTIONS.includes(action as typeof VALID_ACTIONS[number])) {
+      if (!rawAction) {
         return Response.json(
           { data: null, error: `Unknown action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }
+      if (!VALID_ACTIONS.includes(rawAction as typeof VALID_ACTIONS[number])) {
+        return Response.json(
+          { data: null, error: `Unknown action '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { status: 400 },
+        );
+      }
+      const action = rawAction as typeof VALID_ACTIONS[number];
 
       if (action === "pause") {
         if (existsSync(pauseFile)) {
@@ -77,6 +84,7 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         }
         const logDir = resolve(devDir, "scripts");
         const logPath = resolve(logDir, "watchdog.log");
+        mkdirSync(logDir, { recursive: true });
         console.log(`[PipelineControl] Starting watchdog: bash ${scriptPath} >> ${logPath}`);
         const logFd = openSync(logPath, constants.O_WRONLY | constants.O_CREAT | constants.O_APPEND);
         try {

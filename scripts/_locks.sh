@@ -28,6 +28,40 @@ _lock_check_disk_space() {
   [ -n "$_avail_mb" ] && [ "$_avail_mb" -gt 10 ] 2>/dev/null
 }
 
+# Read a PID from either a directory-based lock (lockdir/pid) or a legacy file
+# lock. Returns an empty string when the lock has no readable PID yet.
+read_lock_pid() {
+  local lockfile="$1"
+  if [ -d "$lockfile" ] && [ -f "$lockfile/pid" ]; then
+    cat "$lockfile/pid" 2>/dev/null || echo ""
+  elif [ -f "$lockfile" ]; then
+    cat "$lockfile" 2>/dev/null || echo ""
+  else
+    echo ""
+  fi
+}
+
+# Verify that the current lock owner still matches the expected PID before any
+# cleanup removes the lock path. This prevents stale EXIT handlers from deleting
+# a newly reacquired lock after a restart.
+lock_is_owned_by() {
+  local lockfile="$1"
+  local expected_pid="${2:-$$}"
+  [ -n "$expected_pid" ] || return 1
+  [ "$(read_lock_pid "$lockfile")" = "$expected_pid" ]
+}
+
+release_lock_if_owned() {
+  local lockfile="$1"
+  local expected_pid="${2:-$$}"
+  lock_is_owned_by "$lockfile" "$expected_pid" || return 1
+  if [ -d "$lockfile" ]; then
+    rm -rf "$lockfile"
+  else
+    rm -f "$lockfile"
+  fi
+}
+
 # Acquire merge lock.
 # Delegates to the pluggable lock backend (file/redis).
 # Before delegating, checks for stale merge locks older than the TTL

@@ -21,6 +21,7 @@ function makeRequest(body: unknown, headers?: Record<string, string>): Request {
 
 describe("POST /api/auth/login", () => {
   const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  const originalTrustProxy = process.env.SKYNET_TRUST_PROXY;
   // Use unique IPs per test to avoid rate-limit cross-contamination
   let testIpCounter = 0;
   function uniqueIp(): string {
@@ -31,6 +32,7 @@ describe("POST /api/auth/login", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+    delete process.env.SKYNET_TRUST_PROXY;
   });
 
   // TEST-P1-6: Clear rate limit state between tests to prevent leakage between describe blocks.
@@ -44,6 +46,11 @@ describe("POST /api/auth/login", () => {
       process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
     } else {
       delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+    if (originalTrustProxy !== undefined) {
+      process.env.SKYNET_TRUST_PROXY = originalTrustProxy;
+    } else {
+      delete process.env.SKYNET_TRUST_PROXY;
     }
   });
 
@@ -133,6 +140,7 @@ describe("POST /api/auth/login", () => {
     });
 
     it("allows login again after window expires", async () => {
+      process.env.SKYNET_TRUST_PROXY = "true";
       const ip = uniqueIp();
       // Fill up the rate limit
       for (let i = 0; i < 5; i++) {
@@ -154,9 +162,47 @@ describe("POST /api/auth/login", () => {
     });
   });
 
+  describe("proxy trust handling", () => {
+    it("ignores spoofed x-real-ip headers when proxy trust is disabled", async () => {
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(
+          makeRequest(
+            { apiKey: "wrong-key" },
+            { "x-real-ip": `203.0.113.${i + 1}` }
+          )
+        );
+        expect(res.status).toBe(401);
+      }
+
+      const blocked = await POST(
+        makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "203.0.113.99" })
+      );
+      expect(blocked.status).toBe(429);
+      expect(_LOGIN_ATTEMPTS_FOR_TESTING.has("unknown")).toBe(true);
+    });
+
+    it("uses trusted proxy headers when SKYNET_TRUST_PROXY is enabled", async () => {
+      process.env.SKYNET_TRUST_PROXY = "true";
+
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(
+          makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "198.51.100.42" })
+        );
+        expect(res.status).toBe(401);
+      }
+
+      const blocked = await POST(
+        makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "198.51.100.42" })
+      );
+      expect(blocked.status).toBe(429);
+      expect(_LOGIN_ATTEMPTS_FOR_TESTING.has("198.51.100.42")).toBe(true);
+    });
+  });
+
   // ── TEST-P1-4: Concurrent rate limit race test ────────────────────────
   describe("concurrent rate limit checks", () => {
     it("handles concurrent requests to the same IP without counter corruption", async () => {
+      process.env.SKYNET_TRUST_PROXY = "true";
       const ip = uniqueIp();
       // Send 5 concurrent failed login requests from the same IP
       const promises = Array.from({ length: 5 }, () =>
@@ -196,16 +242,44 @@ describe("POST /api/auth/login", () => {
       expect(statuses.filter(s => s === 401).length).toBeGreaterThan(0);
     });
   });
+
+  describe("proxy trust behavior", () => {
+    it("uses shared unknown bucket when SKYNET_TRUST_PROXY is false", async () => {
+      process.env.SKYNET_TRUST_PROXY = "false";
+
+      // Different spoofed x-real-ip values should still count against one shared bucket.
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": `198.51.100.${i + 1}` }));
+        expect(res.status).toBe(401);
+      }
+
+      const blocked = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "203.0.113.99" }));
+      expect(blocked.status).toBe(429);
+    });
+
+    it("uses distinct IP buckets when SKYNET_TRUST_PROXY is true", async () => {
+      process.env.SKYNET_TRUST_PROXY = "true";
+
+      for (let i = 0; i < 5; i++) {
+        const res = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "203.0.113.10" }));
+        expect(res.status).toBe(401);
+      }
+      const differentIp = await POST(makeRequest({ apiKey: "wrong-key" }, { "x-real-ip": "203.0.113.11" }));
+      expect(differentIp.status).toBe(401);
+    });
+  });
 });
 
 
 // TEST-P3-5: CORS headers verification
 describe("CORS headers on API responses", () => {
   const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  const originalTrustProxy = process.env.SKYNET_TRUST_PROXY;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+    process.env.SKYNET_TRUST_PROXY = "true";
   });
 
   afterAll(() => {
@@ -213,6 +287,11 @@ describe("CORS headers on API responses", () => {
       process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
     } else {
       delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+    if (originalTrustProxy !== undefined) {
+      process.env.SKYNET_TRUST_PROXY = originalTrustProxy;
+    } else {
+      delete process.env.SKYNET_TRUST_PROXY;
     }
   });
 
@@ -234,6 +313,7 @@ describe("CORS headers on API responses", () => {
 
 describe("POST /api/auth/login — missing fields", () => {
   const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  const originalTrustProxy = process.env.SKYNET_TRUST_PROXY;
   let testIpCounter = 200;
   function uniqueIp(): string {
     testIpCounter++;
@@ -243,6 +323,7 @@ describe("POST /api/auth/login — missing fields", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+    process.env.SKYNET_TRUST_PROXY = "true";
   });
 
   afterAll(() => {
@@ -250,6 +331,11 @@ describe("POST /api/auth/login — missing fields", () => {
       process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
     } else {
       delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+    if (originalTrustProxy !== undefined) {
+      process.env.SKYNET_TRUST_PROXY = originalTrustProxy;
+    } else {
+      delete process.env.SKYNET_TRUST_PROXY;
     }
   });
 
@@ -281,11 +367,13 @@ describe("POST /api/auth/login — missing fields", () => {
 
 describe("rate limit map cleanup determinism", () => {
   const originalEnv = process.env.SKYNET_DASHBOARD_API_KEY;
+  const originalTrustProxy = process.env.SKYNET_TRUST_PROXY;
   let testIpCounter = 300;
 
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.SKYNET_DASHBOARD_API_KEY = "test-api-key";
+    process.env.SKYNET_TRUST_PROXY = "true";
     // Clear the rate limit map before this test suite
     _LOGIN_ATTEMPTS_FOR_TESTING.clear();
   });
@@ -296,6 +384,11 @@ describe("rate limit map cleanup determinism", () => {
       process.env.SKYNET_DASHBOARD_API_KEY = originalEnv;
     } else {
       delete process.env.SKYNET_DASHBOARD_API_KEY;
+    }
+    if (originalTrustProxy !== undefined) {
+      process.env.SKYNET_TRUST_PROXY = originalTrustProxy;
+    } else {
+      delete process.env.SKYNET_TRUST_PROXY;
     }
   });
 

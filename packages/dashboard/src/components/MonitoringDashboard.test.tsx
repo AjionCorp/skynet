@@ -89,10 +89,20 @@ describe("MonitoringDashboard", () => {
       Object.assign(this, mockES);
       mockES = Object.assign(this, { url });
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
-    // Default fetch mock for sub-components (WorkerScaling, agents, logs)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: { workers: [] }, error: null }))
-    ));
+    // Default fetch mock for bootstrap status fetches and sub-components.
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/monitoring/status")) {
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+      }
+      if (url.includes("/monitoring/agents")) {
+        return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+      }
+      if (url.includes("/monitoring/logs")) {
+        return new Response(JSON.stringify({ data: null, error: null }));
+      }
+      return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+    }));
   });
 
   afterEach(() => {
@@ -103,6 +113,13 @@ describe("MonitoringDashboard", () => {
   it("shows loading state initially", () => {
     renderWithProvider(<MonitoringDashboard />);
     expect(screen.getByText("Loading monitoring data...")).toBeDefined();
+  });
+
+  it("boots from the initial status fetch before SSE emits", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Workers Active")).toBeDefined();
+    });
   });
 
   it("renders agent status cards (Workers Active count) after SSE data", async () => {
@@ -177,6 +194,9 @@ describe("MonitoringDashboard", () => {
 
   it("shows error state when SSE returns error", async () => {
     renderWithProvider(<MonitoringDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Workers Active")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: null, error: "Connection failed" }) });
     });
@@ -240,6 +260,24 @@ describe("MonitoringDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Fixing:")).toBeDefined();
       expect(screen.getByText("Fix billing")).toBeDefined();
+    });
+  });
+
+  it("includes live worker logs in logs dropdown", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Logs")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("Logs"));
+
+    await waitFor(() => {
+      const logSelect = screen.getByDisplayValue("Dev Worker 1") as HTMLSelectElement;
+      const options = Array.from(logSelect.options).map((o) => o.textContent);
+      expect(options).toContain("Task Fixer 2");
     });
   });
 });

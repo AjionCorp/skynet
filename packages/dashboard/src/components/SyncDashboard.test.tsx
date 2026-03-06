@@ -9,15 +9,21 @@ import { SkynetProvider } from "./SkynetProvider";
 // ---------------------------------------------------------------------------
 
 const MOCK_PIPELINE_STATUS = {
-  syncHealth: [
-    { endpoint: "civic_data", status: "ok", records: "1,234", notes: "Full sync", lastRun: "2024-01-01T00:00:00Z" },
-    { endpoint: "voter_rolls", status: "error", records: "0", notes: "Connection timeout", lastRun: "2024-01-01T00:00:00Z" },
-    { endpoint: "ballot_info", status: "ok", records: "567", notes: "Incremental", lastRun: "2024-01-01T00:00:00Z" },
-  ],
+  syncHealth: {
+    lastRun: "2024-01-01T00:00:00Z",
+    endpoints: [
+      { endpoint: "civic_data", status: "ok", records: "1,234", notes: "Full sync", lastRun: "2024-01-01T00:00:00Z" },
+      { endpoint: "voter_rolls", status: "error", records: "0", notes: "Connection timeout", lastRun: "2024-01-01T00:00:00Z" },
+      { endpoint: "ballot_info", status: "ok", records: "567", notes: "Incremental", lastRun: "2024-01-01T00:00:00Z" },
+    ],
+  },
 };
 
 const MOCK_EMPTY_STATUS = {
-  syncHealth: [],
+  syncHealth: {
+    lastRun: null,
+    endpoints: [],
+  },
 };
 
 function renderWithProvider(ui: React.ReactElement) {
@@ -147,5 +153,18 @@ describe("SyncDashboard", () => {
     expect(screen.getByText("Main civic data source")).toBeDefined();
     // Only 1 endpoint configured
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("supports legacy array syncHealth payload shape", async () => {
+    mockFetchWith({
+      syncHealth: [
+        { endpoint: "legacy_endpoint", status: "ok", records: "10", notes: "", lastRun: "2024-01-01T00:00:00Z" },
+      ],
+    });
+    renderWithProvider(<SyncDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Legacy Endpoint")).toBeDefined();
+    });
+    expect(screen.getByText("Success")).toBeDefined();
   });
 });

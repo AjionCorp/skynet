@@ -21,8 +21,11 @@ CREATE TABLE IF NOT EXISTS tasks (
   duration        TEXT DEFAULT '',
   duration_secs   INTEGER,
   notes           TEXT DEFAULT '',
+  files_touched   TEXT DEFAULT '',
+  reason_code     TEXT DEFAULT '',
   priority        INTEGER NOT NULL DEFAULT 0,
   normalized_root TEXT DEFAULT '',
+  mission_hash    TEXT DEFAULT '',
   created_at      TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
   claimed_at      TEXT,
@@ -315,6 +318,26 @@ describe("SkynetDB", () => {
       expect(result.items[1].blocked).toBe(true);
       expect(result.items[1].blockedBy).toEqual(["First task"]);
     });
+
+    it.each(["completed", "fixed", "superseded"] as const)(
+      "treats %s dependencies as resolved",
+      (resolvedStatus) => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const Database = require("better-sqlite3");
+        const rawDb = new Database(join(tmpDir, "skynet.db"));
+        rawDb.exec(
+          `INSERT INTO tasks (title, tag, status, blocked_by, priority)
+           VALUES ('First task', 'FIX', '${resolvedStatus}', '', 0)`
+        );
+        rawDb.exec(
+          "INSERT INTO tasks (title, tag, status, blocked_by, priority) VALUES ('Blocked task', 'FEAT', 'pending', 'First task', 1)"
+        );
+        rawDb.close();
+
+        const result = db.getBacklogItems();
+        expect(result.items[0].blocked).toBe(false);
+      }
+    );
   });
 
   describe("getSelfCorrectionStats", () => {

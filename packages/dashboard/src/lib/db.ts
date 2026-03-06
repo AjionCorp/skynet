@@ -128,6 +128,8 @@ export class SkynetDB {
   private db: Database;
   private taskColumns: Set<string>;
   private hasMissionHash: boolean;
+  private hasReasonCode: boolean;
+  private hasFilesTouched: boolean;
 
   constructor(dbPath: string, opts?: { readonly?: boolean }) {
     const Database = loadDriver();
@@ -158,10 +160,12 @@ export class SkynetDB {
     // Safe to call on every connection — no-op when stats are fresh.
     this.db.pragma("optimize");
 
-    // Detect optional columns (schema migrations add mission_hash).
+    // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
-    this.taskColumns = new Set(cols.map((c) => c.name));
-    this.hasMissionHash = this.taskColumns.has("mission_hash");
+    const taskColumns = new Set(cols.map((c) => c.name));
+    this.hasMissionHash = taskColumns.has("mission_hash");
+    this.hasReasonCode = taskColumns.has("reason_code");
+    this.hasFilesTouched = taskColumns.has("files_touched");
   }
 
   close(): void {
@@ -198,14 +202,18 @@ export class SkynetDB {
       .get(...(missionFilter ? [missionHash] : [])) as { cnt: number } | undefined;
     const manualDoneCount = doneRow?.cnt ?? 0;
 
-    // Build title→status map for blocked resolution (include done items for dependency checks)
+    // Keep blocked-state resolution aligned with db_claim_next_task() in scripts/_db.sh.
+    // Any terminal dependency state should unblock downstream tasks in the dashboard too.
     const titleToStatus = new Map<string, string>();
     for (const r of rows) titleToStatus.set(r.title, r.status);
-    // Also load done titles so blockedBy resolution can find them
-    const doneRows = this.db
-      .prepare(`SELECT title FROM tasks WHERE status='done'${missionFilter}`)
-      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "title">[];
-    for (const r of doneRows) titleToStatus.set(r.title, "done");
+    const resolvedDependencyRows = this.db
+      .prepare(
+        `SELECT title, status
+         FROM tasks
+         WHERE status IN ('completed', 'done', 'fixed', 'superseded')${missionFilter}`
+      )
+      .all(...(missionFilter ? [missionHash] : [])) as Pick<TaskRow, "title" | "status">[];
+    for (const r of resolvedDependencyRows) titleToStatus.set(r.title, r.status);
 
     let pendingCount = 0;
     let claimedCount = 0;
@@ -220,7 +228,13 @@ export class SkynetDB {
         : [];
       const blocked =
         blockedBy.length > 0 &&
-        blockedBy.some((dep) => titleToStatus.get(dep) !== "done");
+        blockedBy.some((dep) => {
+          const depStatus = titleToStatus.get(dep);
+          return depStatus !== "completed"
+            && depStatus !== "done"
+            && depStatus !== "fixed"
+            && depStatus !== "superseded";
+        });
 
       const desc = r.description ? ` \u2014 ${r.description}` : "";
       const blockedSuffix = r.blocked_by ? ` | blockedBy: ${r.blocked_by}` : "";

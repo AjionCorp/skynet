@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Target,
   CheckCircle2,
@@ -108,6 +108,15 @@ function formatWorkerLabel(workerName: string): string {
 
   return workerName;
 }
+const DEFAULT_WORKER_NAMES = [
+  "dev-worker-1",
+  "dev-worker-2",
+  "dev-worker-3",
+  "dev-worker-4",
+  "task-fixer-1",
+  "task-fixer-2",
+  "task-fixer-3",
+];
 
 const LLM_PROVIDERS: { value: LlmConfig["provider"]; label: string; color: string }[] = [
   { value: "auto", label: "Auto", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
@@ -171,6 +180,34 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
 
   // Mission tracking state
   const [tracking, setTracking] = useState<MissionTracking | null>(null);
+
+  const workerNames = useMemo(() => {
+    const names = new Set<string>(DEFAULT_WORKER_NAMES);
+    for (const worker of Object.keys(localAssignments)) {
+      if (worker) names.add(worker);
+    }
+    for (const missionSummary of missions) {
+      for (const worker of missionSummary.assignedWorkers ?? []) {
+        if (worker) names.add(worker);
+      }
+    }
+
+    const sortWeight = (name: string) => {
+      const dev = name.match(/^dev-worker-(\d+)$/);
+      if (dev) return [0, Number(dev[1])] as const;
+      const fixer = name.match(/^task-fixer-(\d+)$/);
+      if (fixer) return [1, Number(fixer[1])] as const;
+      return [2, Number.MAX_SAFE_INTEGER] as const;
+    };
+
+    return Array.from(names).sort((a, b) => {
+      const [aType, aNum] = sortWeight(a);
+      const [bType, bNum] = sortWeight(b);
+      if (aType !== bType) return aType - bType;
+      if (aNum !== bNum) return aNum - bNum;
+      return a.localeCompare(b);
+    });
+  }, [localAssignments, missions]);
 
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
@@ -240,7 +277,6 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         setError(statusJson.error);
       } else {
         setMission(statusJson.data);
-        setError(null);
       }
 
       if (pipelineJson.data?.missionProgress) {
@@ -262,6 +298,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
 
   // Combined fetch
   const fetchAll = useCallback(async () => {
+    setError(null);
     await Promise.all([fetchMissions(), fetchMissionDetail()]);
   }, [fetchMissions, fetchMissionDetail]);
 
