@@ -116,12 +116,13 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
         return;
       }
 
-      // Map syncHealth array from pipeline status to SyncStatus records
+      // Map syncHealth endpoints from pipeline status to SyncStatus records
       const data = json.data;
       const map: Record<string, SyncStatus> = {};
+      const syncEndpoints = data?.syncHealth?.endpoints;
 
-      if (data?.syncHealth && Array.isArray(data.syncHealth)) {
-        for (const entry of data.syncHealth) {
+      if (Array.isArray(syncEndpoints)) {
+        for (const entry of syncEndpoints) {
           const apiName = entry.endpoint?.toLowerCase().replace(/\s+/g, "_") ?? "";
           map[apiName] = {
             api_name: apiName,

@@ -57,11 +57,13 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
     try {
       const res = await fetch(`${apiPrefix}/missions`);
       const json = await res.json();
-      if (json.data) {
-        setMissions(json.data.missions);
-        if (!selectedSlug && json.data.config.activeMission) {
-          setSelectedSlug(json.data.config.activeMission);
-        }
+      const missionList = Array.isArray(json.data?.missions) ? json.data.missions : [];
+      setMissions(missionList);
+      const activeMission = typeof json.data?.config?.activeMission === "string"
+        ? json.data.config.activeMission
+        : null;
+      if (!selectedSlug && activeMission) {
+        setSelectedSlug(activeMission);
       }
     } catch { /* ignore */ }
   }, [apiPrefix, selectedSlug]);
@@ -113,7 +115,12 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        setSubmitResult({ ok: true, message: `Task added to mission '${selectedSlug}'` });
+        setSubmitResult({
+          ok: true,
+          message: selectedSlug
+            ? `Task added to mission '${selectedSlug}'`
+            : "Task added to backlog",
+        });
         setTitle("");
         setDescription("");
         setBlockedByInput("");

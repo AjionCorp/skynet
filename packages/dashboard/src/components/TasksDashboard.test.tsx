@@ -20,14 +20,23 @@ const MOCK_BACKLOG: TaskBacklogData = {
   manualDoneCount: 10,
 };
 
+const MOCK_MISSIONS = {
+  missions: [],
+  config: { activeMission: null },
+};
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ data, error }))
-  ));
+  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    if (url.endsWith("/missions")) {
+      return new Response(JSON.stringify({ data: MOCK_MISSIONS, error: null }));
+    }
+    return new Response(JSON.stringify({ data, error }));
+  }));
 }
 
 describe("TasksDashboard", () => {
@@ -196,7 +205,7 @@ describe("TasksDashboard", () => {
     fireEvent.click(screen.getByText("Add Task"));
 
     await waitFor(() => {
-      expect(screen.getByText("Task added at top of backlog")).toBeDefined();
+      expect(screen.getByText("Task added to backlog")).toBeDefined();
     });
   });
 

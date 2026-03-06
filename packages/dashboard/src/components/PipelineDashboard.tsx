@@ -150,6 +150,7 @@ export function PipelineDashboard() {
       };
     }
 
+    void fetchStatus();
     connect();
 
     // Close SSE when tab is hidden, reopen when visible
@@ -183,7 +184,7 @@ export function PipelineDashboard() {
         esRef.current = null;
       }
     };
-  }, [apiPrefix]);
+  }, [apiPrefix, fetchStatus]);
 
   // Poll logs every 3s when viewer is open
   useEffect(() => {

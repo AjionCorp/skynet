@@ -5,6 +5,34 @@ import { PipelineDashboard } from "./PipelineDashboard";
 import { SkynetProvider } from "./SkynetProvider";
 import type { PipelineStatus } from "../types";
 
+vi.mock("./ActivityFeed", () => ({
+  ActivityFeed: () => <div>Activity Feed</div>,
+}));
+
+vi.mock("./HealthSparkline", () => ({
+  HealthSparkline: () => <div data-testid="HealthSparkline" />,
+}));
+
+vi.mock("./TaskVelocityChart", () => ({
+  TaskVelocityChart: () => <div data-testid="TaskVelocityChart" />,
+}));
+
+vi.mock("./WorkerPerformanceProfiles", () => ({
+  WorkerPerformanceProfiles: () => <div data-testid="WorkerPerformanceProfiles" />,
+}));
+
+vi.mock("./MissionGoalProgress", () => ({
+  MissionGoalProgress: () => <div data-testid="MissionGoalProgress" />,
+}));
+
+vi.mock("./VelocityEfficiencyPanel", () => ({
+  VelocityEfficiencyPanel: () => <div data-testid="VelocityEfficiencyPanel" />,
+}));
+
+vi.mock("./FailureAnalysisPanel", () => ({
+  FailureAnalysisPanel: () => <div data-testid="FailureAnalysisPanel" />,
+}));
+
 // ---------------------------------------------------------------------------
 // Mock data
 // ---------------------------------------------------------------------------
@@ -89,10 +117,17 @@ describe("PipelineDashboard", () => {
       mockES = Object.assign(this, { url });
       EventSourceSpy(url);
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
-    // Default fetch mock for ActivityFeed sub-component and any other fetches
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: [], error: null }))
-    ));
+    // Default fetch mock for bootstrap status fetches and log polling.
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/pipeline/status")) {
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+      }
+      if (url.includes("/pipeline/logs")) {
+        return new Response(JSON.stringify({ data: { lines: [] }, error: null }));
+      }
+      return new Response(JSON.stringify({ data: [], error: null }));
+    }));
   });
 
   afterEach(() => {
@@ -103,6 +138,13 @@ describe("PipelineDashboard", () => {
   it("shows loading state initially", () => {
     renderWithProvider(<PipelineDashboard />);
     expect(screen.getByText("Loading pipeline status...")).toBeDefined();
+  });
+
+  it("boots from the initial status fetch before SSE emits", async () => {
+    renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
   });
 
   it("renders health score badge with correct color for good health", async () => {
@@ -122,6 +164,9 @@ describe("PipelineDashboard", () => {
   it("renders health score badge as Degraded for mid-range health", async () => {
     const degraded = { ...MOCK_STATUS, healthScore: 60 };
     renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: degraded, error: null }) });
     });
@@ -136,6 +181,9 @@ describe("PipelineDashboard", () => {
   it("renders health score badge as Critical for low health", async () => {
     const critical = { ...MOCK_STATUS, healthScore: 30 };
     renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: critical, error: null }) });
     });
@@ -157,6 +205,9 @@ describe("PipelineDashboard", () => {
       ],
     };
     renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: withFailed, error: null }) });
     });
@@ -175,6 +226,9 @@ describe("PipelineDashboard", () => {
       ],
     };
     renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: withFixers, error: null }) });
     });
@@ -270,6 +324,9 @@ describe("PipelineDashboard", () => {
   it("renders blockers alert when hasBlockers is true", async () => {
     const withBlockers = { ...MOCK_STATUS, hasBlockers: true, blockerLines: ["API key expired", "DB connection lost"] };
     renderWithProvider(<PipelineDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Good")).toBeDefined();
+    });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: withBlockers, error: null }) });
     });
