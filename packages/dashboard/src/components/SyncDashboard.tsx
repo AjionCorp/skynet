@@ -132,32 +132,6 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
         return;
       }
 
-<<<<<<< cursor/system-hardening-and-improvements-43f4
-      // Accept both legacy array shape and current object shape:
-      // syncHealth: SyncEndpoint[] OR syncHealth: { lastRun, endpoints: SyncEndpoint[] }
-      const data = json.data;
-      const map: Record<string, SyncStatus> = {};
-      const syncEntries = Array.isArray(data?.syncHealth)
-        ? data.syncHealth
-        : Array.isArray(data?.syncHealth?.endpoints)
-          ? data.syncHealth.endpoints
-          : [];
-
-      for (const entry of syncEntries) {
-        const apiName = entry.endpoint?.toLowerCase().replace(/\s+/g, "_") ?? "";
-        map[apiName] = {
-          api_name: apiName,
-          status: entry.status === "ok"
-            ? "success"
-            : entry.status === "error"
-              ? "error"
-              : entry.status === "syncing"
-                ? "syncing"
-                : "pending",
-          last_synced: entry.lastRun || null,
-          records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
-          error_message: entry.status === "error" ? (entry.notes || "Sync error") : null,
-=======
       // Map syncHealth payload from pipeline status to SyncStatus records.
       // Current contract is syncHealth.endpoints; keep array fallback for compatibility.
       const data = json.data;
@@ -180,7 +154,6 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
           last_synced: entry.lastRun ?? null,
           records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
           error_message: status === "error" ? (entry.notes || "Sync error") : null,
->>>>>>> main
         };
       }
 
