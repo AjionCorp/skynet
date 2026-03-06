@@ -229,10 +229,11 @@ _compute_task_affinity() {
     [ -z "$_ptid" ] && continue
     local _pscore=50  # default for unknown tags
     if [ -n "$_pttag" ]; then
-      local _pmatch
-      _pmatch=$(grep "^${_pttag}|" "$_affinity_map" 2>/dev/null || true)
-      if [ -n "$_pmatch" ]; then
-        _pscore=$(echo "$_pmatch" | cut -d'|' -f2)
+      local _prate
+      # Match tag as a literal first field; avoid regex expansion/injection from tag text.
+      _prate=$(awk -F'|' -v _tag="$_pttag" '$1 == _tag { print $2; exit }' "$_affinity_map" 2>/dev/null || true)
+      if [ -n "$_prate" ]; then
+        _pscore=$_prate
       fi
     fi
     # Higher score wins; on tie, lower priority number wins (higher priority)
