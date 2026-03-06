@@ -20,20 +20,7 @@ const MOCK_PIPELINE_STATUS = {
 };
 
 const MOCK_EMPTY_STATUS = {
-<<<<<<< cursor/system-hardening-and-improvements-43f4
-  syncHealth: {
-    lastRun: null,
-    endpoints: [],
-  },
-};
-
-const MOCK_LEGACY_PIPELINE_STATUS = {
-  syncHealth: [
-    { endpoint: "civic_data", status: "ok", records: "1,234", notes: "Full sync", lastRun: "2024-01-01T00:00:00Z" },
-  ],
-=======
   syncHealth: { lastRun: null, endpoints: [] },
->>>>>>> main
 };
 
 function renderWithProvider(ui: React.ReactElement) {
@@ -165,14 +152,6 @@ describe("SyncDashboard", () => {
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
   });
 
-<<<<<<< cursor/system-hardening-and-improvements-43f4
-  it("supports legacy syncHealth array format", async () => {
-    mockFetchWith(MOCK_LEGACY_PIPELINE_STATUS);
-    renderWithProvider(<SyncDashboard />);
-    await waitFor(() => {
-      expect(screen.getByText("Civic Data")).toBeDefined();
-    });
-=======
   it("supports legacy array syncHealth payload shape", async () => {
     mockFetchWith({
       syncHealth: [
@@ -184,6 +163,5 @@ describe("SyncDashboard", () => {
       expect(screen.getByText("Legacy Endpoint")).toBeDefined();
     });
     expect(screen.getByText("Success")).toBeDefined();
->>>>>>> main
   });
 });
