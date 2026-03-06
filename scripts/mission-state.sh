@@ -31,9 +31,11 @@
 # State constants (plain strings — no associative arrays for bash 3.2)
 MISSION_STATE_DRAFT="draft"
 MISSION_STATE_ACTIVE="active"
+# shellcheck disable=SC2034
 MISSION_STATE_PAUSED="paused"
 MISSION_STATE_REVIEWING="reviewing"
 MISSION_STATE_COMPLETE="complete"
+# shellcheck disable=SC2034
 MISSION_STATE_FAILED="failed"
 
 # ============================================================

@@ -1640,8 +1640,6 @@ _archive_old_blockers() {
   # Rebuild blockers.md: everything before ## Resolved, then trimmed Resolved, then rest
   local blockers_tmp="$BLOCKERS.tmp.$$"
   local section=""
-  local past_resolved=0
-  local wrote_resolved=0
 
   while IFS= read -r line; do
     if echo "$line" | grep -q '^## Resolved$'; then
@@ -1649,13 +1647,11 @@ _archive_old_blockers() {
       printf '%s\n' "$line" >> "$blockers_tmp"
       printf '\n' >> "$blockers_tmp"
       printf '%s' "$keep_resolved" >> "$blockers_tmp"
-      wrote_resolved=1
       continue
     fi
     if [ "$section" = "resolved" ]; then
       if echo "$line" | grep -q '^## '; then
         section=""
-        past_resolved=1
         printf '%s\n' "$line" >> "$blockers_tmp"
       fi
       # Skip lines in old Resolved section (already replaced above)

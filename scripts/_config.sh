@@ -238,6 +238,7 @@ _validate_config() {
   # Validate numeric configs
   for _num_var in SKYNET_MAX_WORKERS SKYNET_MAX_FIXERS SKYNET_STALE_MINUTES SKYNET_AGENT_TIMEOUT_MINUTES; do
     eval "local _num_val=\${${_num_var}:-}"
+    # shellcheck disable=SC2154
     case "$_num_val" in
       ''|*[!0-9]*) echo "WARNING: $_num_var='$_num_val' is not a positive integer" >&2; errors=$((errors + 1)) ;;
     esac
@@ -274,6 +275,7 @@ _validate_config_numerics() {
   _clamp() {
     local var_name="$1" min="$2" max="$3"
     eval "local val=\${${var_name}:-}"
+    # shellcheck disable=SC2154
     case "$val" in ''|*[!0-9]*) return ;; esac  # skip non-numeric
     if [ "$val" -lt "$min" ]; then
       local _msg="ERROR: ${var_name}=${val} below minimum ${min} — clamping to ${min}. Update your config to silence this."

@@ -286,7 +286,7 @@ export async function configSetCommand(key: string, value: string, options: Conf
     "SKYNET_CLAUDE_BIN", "SKYNET_CODEX_BIN", "SKYNET_GEMINI_BIN",
   ]);
   if (EXECUTABLE_KEYS.has(key)) {
-    if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
+    if (!/^[a-zA-Z0-9 ./_:=-]+$/.test(value)) {
       console.error(`\n  Error: Executable config "${key}" contains disallowed characters.\n`);
       process.exit(1);
     }
