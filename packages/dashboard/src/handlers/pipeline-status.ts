@@ -573,14 +573,28 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
               } catch { /* ignore */ }
             }
       
-      // Project-driver status
-      const projectDriverLockFiles = listProjectDriverLocks(lockPrefix);
-      const projectDriverCandidates = projectDriverLockFiles.length > 0
-        ? projectDriverLockFiles
-        : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
-      const projectDriverRunning = projectDriverCandidates.some(
-        (lockFile) => getWorkerStatus(lockFile).running
-      );
+            // Project-driver status
+            let projectDriverRunning = false;
+            try {
+              const lockDir = dirname(lockPrefix);
+              const lockNamePrefix = `${basename(lockPrefix)}-project-driver-`;
+              const pdLocks = readdirSync(lockDir).filter((entry) =>
+                entry.startsWith(lockNamePrefix) && entry.endsWith(".lock")
+              );
+              for (const lockEntry of pdLocks) {
+                const pidPath = resolve(lockDir, lockEntry, "pid");
+                if (existsSync(pidPath)) {
+                  const pid = readFileSync(pidPath, "utf-8").trim();
+                  if (pid) {
+                    const killResult = spawnSync("kill", ["-0", pid]);
+                    if (killResult.status === 0) {
+                      projectDriverRunning = true;
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch { /* ignore */ }
       
             // Git status — run in project root (parent of devDir)
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.

@@ -27,7 +27,7 @@ export function createPipelineControlHandler(config: SkynetConfig) {
 
       if (!rawAction) {
         return Response.json(
-          { data: null, error: `Unknown action (missing). Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Unknown action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }

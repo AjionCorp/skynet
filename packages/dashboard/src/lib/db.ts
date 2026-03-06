@@ -126,6 +126,7 @@ interface FixerStatRow {
  */
 export class SkynetDB {
   private db: Database;
+  private taskColumns: Set<string>;
   private hasMissionHash: boolean;
   private hasReasonCode: boolean;
   private hasFilesTouched: boolean;
@@ -256,7 +257,9 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const filesTouchedSelect = this.hasFilesTouched ? "files_touched" : "'' AS files_touched";
+    const filesTouchedSelect = this.taskColumns.has("files_touched")
+      ? "files_touched"
+      : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT completed_at, title, branch, duration, notes, ${filesTouchedSelect}
@@ -314,8 +317,12 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
-    const reasonCodeSelect = this.hasReasonCode ? "reason_code" : "'' AS reason_code";
-    const filesTouchedSelect = this.hasFilesTouched ? "files_touched" : "'' AS files_touched";
+    const reasonCodeSelect = this.taskColumns.has("reason_code")
+      ? "reason_code"
+      : "'' AS reason_code";
+    const filesTouchedSelect = this.taskColumns.has("files_touched")
+      ? "files_touched"
+      : "'' AS files_touched";
     const rows = this.db
       .prepare(
         `SELECT failed_at, title, branch, error, attempts, status, ${reasonCodeSelect}, ${filesTouchedSelect}

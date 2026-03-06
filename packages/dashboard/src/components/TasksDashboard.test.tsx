@@ -30,12 +30,17 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-    if (url.endsWith("/missions")) {
-      return new Response(JSON.stringify({ data: MOCK_MISSIONS, error: null }));
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.includes("/missions")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        data: {
+          missions: [],
+          config: { activeMission: null },
+        },
+        error: null,
+      })));
     }
-    return new Response(JSON.stringify({ data, error }));
+    return Promise.resolve(new Response(JSON.stringify({ data, error })));
   }));
 }
 

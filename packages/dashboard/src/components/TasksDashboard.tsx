@@ -65,13 +65,11 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
     try {
       const res = await fetch(`${apiPrefix}/missions`);
       const json = await res.json();
-      if (json.data) {
-        const missionList = Array.isArray(json.data.missions) ? json.data.missions : [];
+      const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
+      if (missionList) {
         setMissions(missionList);
-
-        const activeMission = json.data.config?.activeMission;
-        if (!selectedSlug && typeof activeMission === "string" && activeMission) {
-          setSelectedSlug(activeMission);
+        if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
+          setSelectedSlug(json.data.config.activeMission);
         }
         return missionList[0]?.slug ?? null;
       });
@@ -134,12 +132,9 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        setSubmitResult({
-          ok: true,
-          message: selectedSlug
-            ? `Task added to mission '${selectedSlug}'`
-            : "Task added to backlog",
-        });
+        const insertedPosition = json.data?.position === "bottom" ? "bottom of backlog" : "top of backlog";
+        const missionSuffix = selectedSlug ? ` for mission '${selectedSlug}'` : "";
+        setSubmitResult({ ok: true, message: `Task added at ${insertedPosition}${missionSuffix}` });
         setTitle("");
         setDescription("");
         setBlockedByInput("");

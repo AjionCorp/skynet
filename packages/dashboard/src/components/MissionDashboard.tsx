@@ -52,6 +52,62 @@ Describe the mission purpose here.
 What the team is currently focused on.
 `;
 
+const DEFAULT_MAX_WORKERS = 4;
+const DEFAULT_MAX_FIXERS = 3;
+
+function getAssignableWorkerNames(maxWorkers: number, maxFixers: number): string[] {
+  const workers: string[] = [];
+  for (let i = 1; i <= maxWorkers; i += 1) {
+    workers.push(`dev-worker-${i}`);
+  }
+  for (let i = 1; i <= maxFixers; i += 1) {
+    workers.push(i === 1 ? "task-fixer" : `task-fixer-${i}`);
+  }
+  return workers;
+}
+
+function compareWorkerNames(left: string, right: string): number {
+  const parseWorker = (name: string): { group: number; slot: number; raw: string } => {
+    const devMatch = name.match(/^dev-worker-(\d+)$/);
+    if (devMatch) {
+      return { group: 0, slot: Number(devMatch[1]), raw: name };
+    }
+
+    const fixerMatch = name.match(/^task-fixer(?:-(\d+))?$/);
+    if (fixerMatch) {
+      return { group: 1, slot: Number(fixerMatch[1] ?? "1"), raw: name };
+    }
+
+    return { group: 2, slot: Number.MAX_SAFE_INTEGER, raw: name };
+  };
+
+  const a = parseWorker(left);
+  const b = parseWorker(right);
+  if (a.group !== b.group) return a.group - b.group;
+  if (a.slot !== b.slot) return a.slot - b.slot;
+  return a.raw.localeCompare(b.raw);
+}
+
+function mergeAssignableWorkers(
+  defaults: string[],
+  assignments: Record<string, string | null>,
+): string[] {
+  return Array.from(new Set([...defaults, ...Object.keys(assignments)])).sort(compareWorkerNames);
+}
+
+function formatWorkerLabel(workerName: string): string {
+  const devMatch = workerName.match(/^dev-worker-(\d+)$/);
+  if (devMatch) {
+    return `Worker ${devMatch[1]}`;
+  }
+
+  const fixerMatch = workerName.match(/^task-fixer(?:-(\d+))?$/);
+  if (fixerMatch) {
+    return `Fixer ${fixerMatch[1] ?? "1"}`;
+  }
+
+  return workerName;
+}
 const DEFAULT_WORKER_NAMES = [
   "dev-worker-1",
   "dev-worker-2",
@@ -87,6 +143,9 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [missionConfig, setMissionConfig] = useState<MissionConfig>({ activeMission: "main", assignments: {} });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [workerNames, setWorkerNames] = useState<string[]>(() =>
+    getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS),
+  );
 
   // Selected mission detail state
   const [mission, setMission] = useState<MissionStatus | null>(null);
@@ -159,9 +218,34 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const res = await fetch(`${apiPrefix}/missions`);
       const json = await res.json();
       if (json.data) {
+        let maxWorkers = DEFAULT_MAX_WORKERS;
+        let maxFixers = DEFAULT_MAX_FIXERS;
+        try {
+          const configRes = await fetch(`${apiPrefix}/config`);
+          const configJson = await configRes.json();
+          const entries: { key: string; value: string }[] = configJson.data?.entries ?? [];
+          for (const entry of entries) {
+            if (entry.key === "SKYNET_MAX_WORKERS") {
+              const parsed = Number(entry.value);
+              if (Number.isInteger(parsed) && parsed >= 1) maxWorkers = parsed;
+            }
+            if (entry.key === "SKYNET_MAX_FIXERS") {
+              const parsed = Number(entry.value);
+              if (Number.isInteger(parsed) && parsed >= 1) maxFixers = parsed;
+            }
+          }
+        } catch {
+          // Keep defaults when config is unavailable.
+        }
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
         setLocalAssignments(json.data.config.assignments);
+        setWorkerNames(
+          mergeAssignableWorkers(
+            getAssignableWorkerNames(maxWorkers, maxFixers),
+            json.data.config.assignments ?? {},
+          ),
+        );
         setAssignmentsDirty(false);
         setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
         setLlmConfigDirty(false);
@@ -971,7 +1055,10 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {workerNames.map((worker) => (
               <div key={worker} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
-                <span className="text-sm font-medium text-zinc-300">{worker}</span>
+                <div className="min-w-0">
+                  <span className="block text-sm font-medium text-zinc-300">{formatWorkerLabel(worker)}</span>
+                  <span className="block truncate text-xs text-zinc-500">{worker}</span>
+                </div>
                 <select
                   value={localAssignments[worker] ?? ""}
                   onChange={(e) => {

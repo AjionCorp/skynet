@@ -43,6 +43,7 @@ describe("createTasksHandlers", () => {
     process.env.NODE_ENV = "development";
     _resetRateLimits();
     vi.resetAllMocks();
+    _resetRateLimits();
     mockReadFileSync.mockReturnValue(SAMPLE_BACKLOG as never);
     mockWriteFileSync.mockReturnValue(undefined as never);
     mockMkdirSync.mockReturnValue(undefined as never);

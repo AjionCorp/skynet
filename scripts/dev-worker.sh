@@ -609,10 +609,16 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
-  _CURRENT_TASK_ID="${_db_task_id:-}"
-  # shellcheck disable=SC2034
-  task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
-  branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 40)"
+  _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
+  # Avoid grep here because set -e + pipefail would crash the worker when no [TAG] exists.
+  task_type=""
+  case "$task_title" in
+    \[*\]*)
+      task_type="${task_title#\[}"
+      task_type="${task_type%%]*}"
+      ;;
+  esac
+  branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[[^]]*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 40)"
 
   # Load skills matching this task's tag
   SKILL_CONTENT="$(get_skills_for_tag "${task_type:-}")"
