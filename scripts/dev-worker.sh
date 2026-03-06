@@ -528,7 +528,6 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
           # OPS-P1-1: Prevent claim tracker from growing unbounded.
           # Rotate to .1 backup instead of truncating to preserve data for debugging.
           if [ -f "$_claim_tracker" ]; then
-            local _tracker_size
             _tracker_size=$(wc -c < "$_claim_tracker" 2>/dev/null || echo 0)
             if [ "$_tracker_size" -gt 10240 ]; then
               mv "$_claim_tracker" "${_claim_tracker}.1" 2>/dev/null || true
