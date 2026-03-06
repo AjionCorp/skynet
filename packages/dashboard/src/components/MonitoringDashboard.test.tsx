@@ -242,4 +242,22 @@ describe("MonitoringDashboard", () => {
       expect(screen.getByText("Fix billing")).toBeDefined();
     });
   });
+
+  it("includes live worker logs in logs dropdown", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
+    });
+    await waitFor(() => {
+      expect(screen.getByText("Logs")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("Logs"));
+
+    await waitFor(() => {
+      const logSelect = screen.getByDisplayValue("Dev Worker 1") as HTMLSelectElement;
+      const options = Array.from(logSelect.options).map((o) => o.textContent);
+      expect(options).toContain("Task Fixer 2");
+    });
+  });
 });

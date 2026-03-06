@@ -153,6 +153,17 @@ fi
 
 kill_server "$MOCK_SCRIPTS_DIR/next-dev-w3.pid"
 
+# ── Test: invalid worker-id is rejected ──────────────────────────────
+
+echo ""
+log "=== INVALID_WORKER_ID: rejects non-numeric worker id ==="
+
+rm -f "$MOCK_SCRIPTS_DIR"/next-dev*
+
+run_start_dev "abc" "sleep 300" "$TMPDIR_ROOT/bin-ok"
+assert_eq "$_rc" "1" "invalid worker-id: exit code 1"
+assert_contains "$_output" "worker_id must be a positive integer" "invalid worker-id: error message"
+
 # ── Test: no worker-id uses default file names ──────────────────────
 
 echo ""
