@@ -20,14 +20,38 @@ const MOCK_BACKLOG: TaskBacklogData = {
   manualDoneCount: 10,
 };
 
+const MOCK_MISSIONS_RESPONSE = {
+  missions: [
+    {
+      slug: "mission-alpha",
+      name: "Mission Alpha",
+      isActive: true,
+      assignedWorkers: [],
+      completionPercentage: 0,
+    },
+  ],
+  config: {
+    activeMission: "mission-alpha",
+  },
+};
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
 
-function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ data, error }))
-  ));
+function mockFetchWith(data: TaskBacklogData | null, error: string | null = null, postData: Record<string, unknown> | null = { position: "top" }) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("/missions")) {
+      return new Response(JSON.stringify({ data: MOCK_MISSIONS_RESPONSE, error: null }));
+    }
+    if (init?.method === "POST") {
+      return new Response(JSON.stringify({ data: postData, error: null }));
+    }
+    return new Response(JSON.stringify({ data, error }));
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
 }
 
 describe("TasksDashboard", () => {
@@ -112,10 +136,12 @@ describe("TasksDashboard", () => {
   });
 
   it("fetches from correct API endpoint", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+    const fetchMock = mockFetchWith(MOCK_BACKLOG);
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith("/api/admin/tasks");
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url).startsWith("/api/admin/tasks"))
+      ).toBe(true);
     });
   });
 
@@ -152,51 +178,44 @@ describe("TasksDashboard", () => {
   });
 
   it("submits new task via POST", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+    const fetchMock = mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Create Task")).toBeDefined();
     });
 
-    // Fill in the title
-    const titleInput = document.getElementById("task-title") as HTMLInputElement;
+    const titleInput = screen.getByPlaceholderText(
+      "e.g. Add dark mode toggle to settings page"
+    ) as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: "New task title" } });
 
-    // Mock for POST response
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
-
     // Submit the form
-    const submitButton = screen.getByText("Add Task");
+    const submitButton = screen.getByRole("button", { name: "Add Task" });
     fireEvent.click(submitButton);
 
     await waitFor(() => {
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/admin/tasks",
-        expect.objectContaining({ method: "POST" })
-      );
+      const postCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+      expect(postCall).toBeDefined();
+      expect(String(postCall?.[0])).toContain("/api/admin/tasks");
     });
   });
 
   it("shows success message after task submission", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+    mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Create Task")).toBeDefined();
     });
 
-    const titleInput = document.getElementById("task-title") as HTMLInputElement;
+    const titleInput = screen.getByPlaceholderText(
+      "e.g. Add dark mode toggle to settings page"
+    ) as HTMLInputElement;
     fireEvent.change(titleInput, { target: { value: "New task" } });
 
-    vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { position: "top" }, error: null })))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ data: MOCK_BACKLOG, error: null }))));
-
-    fireEvent.click(screen.getByText("Add Task"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
 
     await waitFor(() => {
-      expect(screen.getByText("Task added at top of backlog")).toBeDefined();
+      expect(screen.getByText("Task added to mission 'mission-alpha'")).toBeDefined();
     });
   });
 

@@ -275,16 +275,16 @@ export SKYNET_INTENTS_DIR="$_saved_intents_dir"
 # Use our own PID as a "still alive" worker
 _our_pid=$$
 printf "stale|0" > "$SKYNET_INTENTS_DIR/worker-53"
-# Create a fake PID lock file with our PID
-mkdir -p "$(dirname "${SKYNET_LOCK_PREFIX}-dev-53.lock")" 2>/dev/null || true
-echo "$_our_pid" > "${SKYNET_LOCK_PREFIX}-dev-53.lock"
+# Create a fake dir-based worker lock with our PID
+mkdir -p "${SKYNET_LOCK_PREFIX}-dev-worker-53.lock" 2>/dev/null || true
+echo "$_our_pid" > "${SKYNET_LOCK_PREFIX}-dev-worker-53.lock/pid"
 _intent_prune 0
 if [ -f "$SKYNET_INTENTS_DIR/worker-53" ]; then
   pass "_intent_prune: keeps stale intent if worker PID is alive"
 else
   fail "_intent_prune: keeps stale intent if worker PID is alive"
 fi
-rm -f "${SKYNET_LOCK_PREFIX}-dev-53.lock" 2>/dev/null
+rm -rf "${SKYNET_LOCK_PREFIX}-dev-worker-53.lock" 2>/dev/null
 rm -f "$SKYNET_INTENTS_DIR/worker-53" 2>/dev/null
 
 # Test 24: respects max_age_minutes parameter

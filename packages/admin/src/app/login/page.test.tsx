@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
+const pushSpy = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushSpy }),
 }));
 
 import LoginPage from "./page";
 
 describe("LoginPage", () => {
+  beforeEach(() => {
+    pushSpy.mockReset();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -44,5 +50,19 @@ describe("LoginPage", () => {
     render(<LoginPage />);
     const button = screen.getByRole("button", { name: /log in/i });
     expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("redirects to the pipeline dashboard after a successful login", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
+
+    render(<LoginPage />);
+    fireEvent.change(screen.getByPlaceholderText("API key"), {
+      target: { value: "skynet-test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(pushSpy).toHaveBeenCalledWith("/admin/pipeline");
+    });
   });
 });

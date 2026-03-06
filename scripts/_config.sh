@@ -832,9 +832,13 @@ _intent_prune() {
     age_secs=$((now - epoch))
     if [ "$age_secs" -gt "$max_age_secs" ]; then
       # Check if the worker's PID lock still exists and is alive
-      local pid_file="${SKYNET_LOCK_PREFIX}-dev-${wid}.lock"
+      local pid_file="${SKYNET_LOCK_PREFIX}-dev-worker-${wid}.lock"
       local worker_pid=""
-      [ -f "$pid_file" ] && worker_pid=$(cat "$pid_file" 2>/dev/null)
+      if [ -f "$pid_file" ]; then
+        worker_pid=$(cat "$pid_file" 2>/dev/null)
+      elif [ -f "$pid_file/pid" ]; then
+        worker_pid=$(cat "$pid_file/pid" 2>/dev/null)
+      fi
       if [ -z "$worker_pid" ] || ! kill -0 "$worker_pid" 2>/dev/null; then
         rm -f "$f" 2>/dev/null || true
       fi

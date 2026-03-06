@@ -11,6 +11,7 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
+import { listProjectDriverLocks, readPid, isProcessAlive } from "../lib/process-locks";
 
 /**
  * Extract significant keywords from the mission Goals section.
@@ -564,26 +565,21 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
               } catch { /* ignore */ }
             }
       
-            // Project-driver status
-            let projectDriverRunning = false;
-            try {
-              const scriptsDir = resolve(devDir, "scripts");
-              // We look for any project-driver lock file
-              const pdLocks = readdirSync(devDir).filter(f => f.startsWith(`${lockPrefix}-project-driver-`) && f.endsWith(".lock"));
-              for (const lockDir of pdLocks) {
-                const pidPath = resolve(devDir, lockDir, "pid");
-                if (existsSync(pidPath)) {
-                  const pid = readFileSync(pidPath, "utf-8").trim();
-                  if (pid) {
-                    const killResult = spawnSync("kill", ["-0", pid]);
-                    if (killResult.status === 0) {
-                      projectDriverRunning = true;
-                      break;
-                    }
-                  }
-                }
-              }
-            } catch { /* ignore */ }
+      // Project-driver status
+      let projectDriverRunning = false;
+      try {
+        const projectDriverLocks = listProjectDriverLocks(lockPrefix);
+        const lockCandidates = projectDriverLocks.length > 0
+          ? projectDriverLocks
+          : [`${lockPrefix}-project-driver.lock`];
+
+        projectDriverRunning = lockCandidates.some((lockPath) => {
+          const pid = readPid(lockPath);
+          return pid !== null && isProcessAlive(pid);
+        });
+      } catch {
+        /* ignore */
+      }
       
             // Git status — run in project root (parent of devDir)
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.

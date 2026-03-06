@@ -34,6 +34,7 @@ import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 import { MissionGoalProgress } from "./MissionGoalProgress";
 import { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
 import { FailureAnalysisPanel } from "./FailureAnalysisPanel";
+import { getWorkerTriggerSpec } from "../lib/worker-triggers";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -194,13 +195,20 @@ export function PipelineDashboard() {
   }, [logViewer, fetchLogs]);
 
   async function triggerScript(script: string) {
+    const triggerSpec = getWorkerTriggerSpec(script);
+    if (!triggerSpec) {
+      setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
+      setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
+      return;
+    }
+
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));
     try {
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script }),
+        body: JSON.stringify(triggerSpec),
       });
       const json = await res.json();
       if (json.error) {
@@ -509,68 +517,71 @@ export function PipelineDashboard() {
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {status.workers.map((w) => (
-            <div
-              key={w.name}
-              className={`rounded-xl border p-4 transition ${
-                w.running
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
-                  <span className="text-sm font-semibold text-white">{w.label}</span>
+          {status.workers.map((w) => {
+            const triggerSpec = getWorkerTriggerSpec(w.name);
+            return (
+              <div
+                key={w.name}
+                className={`rounded-xl border p-4 transition ${
+                  w.running
+                    ? "border-emerald-500/30 bg-emerald-500/5"
+                    : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
+                    <span className="text-sm font-semibold text-white">{w.label}</span>
+                  </div>
+                  {w.running && (
+                    <span className="text-xs text-emerald-400">{formatAge(w.ageMs)}</span>
+                  )}
                 </div>
-                {w.running && (
-                  <span className="text-xs text-emerald-400">{formatAge(w.ageMs)}</span>
+                <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
+                <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
+                {w.running && w.pid && (
+                  <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
                 )}
-              </div>
-              <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
-              <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
-              {w.running && w.pid && (
-                <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
-              )}
-              {!w.running && w.lastLog && (
-                <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
-                  Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
-                </p>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                {w.name !== "watchdog" && (
+                {!w.running && w.lastLog && (
+                  <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
+                    Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
+                  </p>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  {triggerSpec && (
+                    <button
+                      onClick={() => triggerScript(w.name)}
+                      disabled={triggering[w.name]}
+                      className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      {triggering[w.name] ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      Run
+                    </button>
+                  )}
                   <button
-                    onClick={() => triggerScript(w.name)}
-                    disabled={triggering[w.name]}
-                    className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    onClick={() => setLogViewer(logViewer === w.logFile ? null : w.logFile)}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                      logViewer === w.logFile
+                        ? "bg-amber-500/20 text-amber-400"
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                    }`}
                   >
-                    {triggering[w.name] ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                    Run
+                    <Terminal className="h-3 w-3" />
+                    Logs
                   </button>
+                </div>
+                {triggerMsg[w.name] && (
+                  <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+                    {triggerMsg[w.name]}
+                  </p>
                 )}
-                <button
-                  onClick={() => setLogViewer(logViewer === w.name ? null : w.name)}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    logViewer === w.name
-                      ? "bg-amber-500/20 text-amber-400"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-                  }`}
-                >
-                  <Terminal className="h-3 w-3" />
-                  Logs
-                </button>
               </div>
-              {triggerMsg[w.name] && (
-                <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
-                  {triggerMsg[w.name]}
-                </p>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

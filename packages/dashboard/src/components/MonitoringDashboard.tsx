@@ -33,6 +33,7 @@ import type {
 } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { WorkerScaling } from "./WorkerScaling";
+import { getWorkerTriggerSpec } from "../lib/worker-triggers";
 
 // ===== Constants =====
 
@@ -245,12 +246,14 @@ function PipelineFlow({ workers }: { workers: WorkerInfo[] }) {
 function WorkerCard({
   worker,
   heartbeat,
+  canTrigger,
   onTrigger,
   onViewLogs,
   triggering,
 }: {
   worker: WorkerInfo;
   heartbeat?: WorkerHeartbeat;
+  canTrigger: boolean;
   onTrigger: () => void;
   onViewLogs: () => void;
   triggering: boolean;
@@ -289,7 +292,7 @@ function WorkerCard({
         <p className="mt-1.5 text-xs text-zinc-600">Last: {worker.lastLogTime}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
-        {worker.name !== "watchdog" && worker.name !== "auth-refresh" && (
+        {canTrigger && (
           <button
             onClick={onTrigger}
             disabled={triggering}
@@ -434,9 +437,26 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Stream status via SSE (same stream endpoint as PipelineDashboard)
   useEffect(() => {
+    let fallbackPoll: ReturnType<typeof setInterval> | null = null;
+    const startFallbackPoll = () => {
+      if (!fallbackPoll) {
+        fallbackPoll = setInterval(fetchStatus, 15000);
+      }
+    };
+    const stopFallbackPoll = () => {
+      if (fallbackPoll) {
+        clearInterval(fallbackPoll);
+        fallbackPoll = null;
+      }
+    };
+
+    fetchStatus();
     const es = new EventSource(`${apiPrefix}/pipeline/stream`);
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => {
+      setConnected(true);
+      stopFallbackPoll();
+    };
 
     es.onmessage = (event) => {
       try {
@@ -447,6 +467,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         }
         setStatus(json.data);
         setError(null);
+        stopFallbackPoll();
       } catch (err) {
         console.error('[SSE] Failed to parse event data:', err, 'raw:', event.data?.substring(0, 200));
       } finally {
@@ -456,11 +477,15 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
     es.onerror = () => {
       setConnected(false);
-      // EventSource auto-reconnects
+      fetchStatus();
+      startFallbackPoll();
     };
 
-    return () => es.close();
-  }, [apiPrefix]);
+    return () => {
+      stopFallbackPoll();
+      es.close();
+    };
+  }, [apiPrefix, fetchStatus]);
 
   // Poll logs every 3s when on logs tab
   useEffect(() => {
@@ -479,11 +504,12 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   }, [activeTab, fetchAgents]);
 
   async function triggerScript(script: string) {
-    // Map worker names to script names + optional args for the trigger endpoint
-    // e.g. "dev-worker-3" → { name: "dev-worker", args: ["3"] }
-    const match = script.match(/^(dev-worker|task-fixer)-(\d+)$/);
-    const triggerName = match ? match[1] : script;
-    const triggerArgs = match ? [match[2]] : [];
+    const triggerSpec = getWorkerTriggerSpec(script);
+    if (!triggerSpec) {
+      setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
+      setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
+      return;
+    }
 
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));
@@ -491,7 +517,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script: triggerName, args: triggerArgs }),
+        body: JSON.stringify(triggerSpec),
       });
       const json = await res.json();
       if (json.error) {
@@ -755,6 +781,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {categoryWorkers.map((w) => {
+                    const triggerSpec = getWorkerTriggerSpec(w.name);
                     // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
                     const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
                     const fixerMatch = w.name.match(/task-fixer-?(\d+)?/);
@@ -767,6 +794,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                       <WorkerCard
                         worker={w}
                         heartbeat={hbKey ? status.heartbeats?.[hbKey] : undefined}
+                        canTrigger={triggerSpec !== null}
                         onTrigger={() => triggerScript(w.name)}
                         onViewLogs={() => switchToLogs(w.logFile)}
                         triggering={!!triggering[w.name]}

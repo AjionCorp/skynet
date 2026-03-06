@@ -89,10 +89,30 @@ describe("MonitoringDashboard", () => {
       Object.assign(this, mockES);
       mockES = Object.assign(this, { url });
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
-    // Default fetch mock for sub-components (WorkerScaling, agents, logs)
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: { workers: [] }, error: null }))
-    ));
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/monitoring/status")) {
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+      }
+      if (url.includes("/monitoring/agents")) {
+        return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+      }
+      if (url.includes("/monitoring/logs")) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              script: "dev-worker-1",
+              lines: [],
+              totalLines: 0,
+              fileSizeBytes: 0,
+              count: 0,
+            },
+            error: null,
+          })
+        );
+      }
+      return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+    }));
   });
 
   afterEach(() => {
@@ -116,6 +136,14 @@ describe("MonitoringDashboard", () => {
     // 3 running out of 4 total — number may appear in multiple DOM locations
     const runningCount = MOCK_STATUS.workers.filter((w) => w.running).length;
     expect(screen.getAllByText(String(runningCount)).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("falls back to the monitoring status endpoint before SSE delivers data", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Workers Active")).toBeDefined();
+    });
+    expect(fetch).toHaveBeenCalledWith("/api/admin/monitoring/status");
   });
 
   it("shows Running indicators for active workers in Pipeline Flow", async () => {
@@ -176,6 +204,13 @@ describe("MonitoringDashboard", () => {
   });
 
   it("shows error state when SSE returns error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/monitoring/status")) {
+        return new Response(JSON.stringify({ data: null, error: "Connection failed" }));
+      }
+      return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+    }));
     renderWithProvider(<MonitoringDashboard />);
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: null, error: "Connection failed" }) });

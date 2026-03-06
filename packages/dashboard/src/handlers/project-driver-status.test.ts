@@ -10,14 +10,19 @@ vi.mock("../lib/file-reader", () => ({
 vi.mock("../lib/worker-status", () => ({
   getWorkerStatus: vi.fn(() => ({ running: false, pid: null, ageMs: null })),
 }));
+vi.mock("../lib/process-locks", () => ({
+  listProjectDriverLocks: vi.fn(() => []),
+}));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
+import { listProjectDriverLocks } from "../lib/process-locks";
 
 const mockReadDevFile = vi.mocked(readDevFile);
 const mockGetLastLogLine = vi.mocked(getLastLogLine);
 const mockExtractTimestamp = vi.mocked(extractTimestamp);
 const mockGetWorkerStatus = vi.mocked(getWorkerStatus);
+const mockListProjectDriverLocks = vi.mocked(listProjectDriverLocks);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -37,6 +42,7 @@ describe("createProjectDriverStatusHandler", () => {
     mockGetLastLogLine.mockReturnValue(null);
     mockExtractTimestamp.mockReturnValue(null);
     mockGetWorkerStatus.mockReturnValue({ running: false, pid: null, ageMs: null });
+    mockListProjectDriverLocks.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -68,6 +74,18 @@ describe("createProjectDriverStatusHandler", () => {
     const handler = createProjectDriverStatusHandler(makeConfig({ lockPrefix: "/tmp/skynet-myproj-" }));
     await handler();
     expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-myproj--project-driver.lock");
+  });
+
+  it("prefers numbered project-driver locks when present", async () => {
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-global.lock",
+    ]);
+
+    const handler = createProjectDriverStatusHandler(makeConfig());
+    await handler();
+
+    expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-test--project-driver-global.lock");
+    expect(mockGetLastLogLine).toHaveBeenCalledWith("/tmp/test/.dev", "project-driver-global");
   });
 
   it("returns running state when worker is active", async () => {

@@ -2,6 +2,21 @@ import type { SkynetConfig, ProjectDriverTelemetry } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { logHandlerError } from "../lib/handler-error";
+import { listProjectDriverLocks } from "../lib/process-locks";
+
+function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
+  const legacyLock = `${lockPrefix}-project-driver.lock`;
+  if (lockPath === legacyLock) {
+    return "project-driver";
+  }
+
+  const prefix = `${lockPrefix}-project-driver-`;
+  if (!lockPath.startsWith(prefix) || !lockPath.endsWith(".lock")) {
+    return "project-driver";
+  }
+
+  return `project-driver-${lockPath.slice(prefix.length, -".lock".length)}`;
+}
 
 /**
  * Create a GET handler for the project-driver/status endpoint.
@@ -13,11 +28,23 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
   return async function GET(): Promise<Response> {
     try {
       // Running status via PID lock
-      const lockFile = `${lockPrefix}-project-driver.lock`;
-      const { running, pid, ageMs } = getWorkerStatus(lockFile);
+      const discoveredLocks = listProjectDriverLocks(lockPrefix);
+      const lockCandidates =
+        discoveredLocks.length > 0
+          ? discoveredLocks
+          : [`${lockPrefix}-project-driver.lock`];
+      const statuses = lockCandidates.map((lockFile) => ({
+        lockFile,
+        ...getWorkerStatus(lockFile),
+      }));
+      const activeLock = statuses.find((status) => status.running) ?? statuses[0];
+      const { running, pid, ageMs } = activeLock;
 
       // Last log line
-      const lastLog = getLastLogLine(devDir, "project-driver");
+      const logScript = getProjectDriverLogName(lockPrefix, activeLock.lockFile);
+      const lastLog =
+        getLastLogLine(devDir, logScript) ??
+        (logScript !== "project-driver" ? getLastLogLine(devDir, "project-driver") : null);
       const lastLogTime = extractTimestamp(lastLog);
 
       // Telemetry snapshot (may not exist)

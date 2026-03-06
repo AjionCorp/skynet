@@ -113,7 +113,12 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        setSubmitResult({ ok: true, message: `Task added to mission '${selectedSlug}'` });
+        setSubmitResult({
+          ok: true,
+          message: selectedSlug
+            ? `Task added to mission '${selectedSlug}'`
+            : "Task added to backlog",
+        });
         setTitle("");
         setDescription("");
         setBlockedByInput("");

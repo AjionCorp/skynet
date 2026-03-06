@@ -10,7 +10,7 @@ import {
   AlertTriangle,
   Database,
 } from "lucide-react";
-import type { SyncStatus } from "../types";
+import type { SyncEndpoint, SyncStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
 
 // ===== Helpers =====
@@ -83,6 +83,38 @@ function formatRecordCount(n: number): string {
   return String(n);
 }
 
+function normalizeEndpointKey(endpoint: string): string {
+  return endpoint
+    .trim()
+    .toLowerCase()
+    .replace(/^\/+/, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function formatEndpointLabel(endpoint: string): string {
+  const trimmed = endpoint.trim();
+  if (!trimmed) return "Unknown Endpoint";
+
+  const withoutPrefix = trimmed.replace(/^\/+/, "");
+  if (withoutPrefix.startsWith("api/")) {
+    return withoutPrefix
+      .replace(/^api\//, "")
+      .split("/")
+      .filter(Boolean)
+      .map((segment) =>
+        segment
+          .replace(/[-_]/g, " ")
+          .replace(/\b\w/g, (char) => char.toUpperCase())
+      )
+      .join(" / ");
+  }
+
+  return trimmed
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 // ===== Types =====
 
 interface SyncEndpointDef {
@@ -102,6 +134,8 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
   const { apiPrefix } = useSkynet();
 
   const [statusMap, setStatusMap] = useState<Record<string, SyncStatus>>({});
+  const [discoveredEndpoints, setDiscoveredEndpoints] = useState<SyncEndpointDef[]>([]);
+  const [lastPipelineRun, setLastPipelineRun] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -116,24 +150,41 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
         return;
       }
 
-      // Map syncHealth array from pipeline status to SyncStatus records
       const data = json.data;
-      const map: Record<string, SyncStatus> = {};
+      const rawSyncHealth = data?.syncHealth;
+      const syncEntries: SyncEndpoint[] = Array.isArray(rawSyncHealth)
+        ? rawSyncHealth
+        : Array.isArray(rawSyncHealth?.endpoints)
+          ? rawSyncHealth.endpoints
+          : [];
 
-      if (data?.syncHealth && Array.isArray(data.syncHealth)) {
-        for (const entry of data.syncHealth) {
-          const apiName = entry.endpoint?.toLowerCase().replace(/\s+/g, "_") ?? "";
-          map[apiName] = {
-            api_name: apiName,
-            status: entry.status === "ok" ? "success" : entry.status === "error" ? "error" : "pending",
-            last_synced: entry.lastRun || null,
-            records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
-            error_message: entry.status === "error" ? (entry.notes || "Sync error") : null,
-          };
+      setLastPipelineRun(
+        rawSyncHealth && !Array.isArray(rawSyncHealth) ? rawSyncHealth.lastRun ?? null : null
+      );
+      const map: Record<string, SyncStatus> = {};
+      const derivedEndpoints: SyncEndpointDef[] = [];
+
+      for (const entry of syncEntries) {
+        const apiName = normalizeEndpointKey(entry.endpoint ?? "");
+        if (!apiName) {
+          continue;
         }
+        derivedEndpoints.push({
+          apiName,
+          label: formatEndpointLabel(entry.endpoint ?? ""),
+          description: entry.notes && entry.notes !== "-" ? entry.notes : "",
+        });
+        map[apiName] = {
+          api_name: apiName,
+          status: entry.status === "ok" ? "success" : entry.status === "error" ? "error" : "pending",
+          last_synced: entry.lastRun || null,
+          records_count: entry.records ? parseInt(entry.records.replace(/[^\d]/g, ""), 10) || null : null,
+          error_message: entry.status === "error" ? (entry.notes || "Sync error") : null,
+        };
       }
 
       setStatusMap(map);
+      setDiscoveredEndpoints(derivedEndpoints);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch status");
@@ -149,11 +200,8 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
   }, [fetchStatus]);
 
   // If endpoints prop is provided, use those; otherwise derive from statusMap
-  const displayEndpoints: SyncEndpointDef[] = endpoints ?? Object.keys(statusMap).map((key) => ({
-    apiName: key,
-    label: key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    description: "",
-  }));
+  const displayEndpoints: SyncEndpointDef[] =
+    endpoints ?? discoveredEndpoints;
 
   // Summary counts
   const totalEndpoints = displayEndpoints.length;
@@ -215,10 +263,18 @@ export function SyncDashboard({ endpoints }: SyncDashboardProps = {}) {
       )}
 
       {/* Refresh button */}
-      <div className="flex justify-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">
+            Last Pipeline Sync Run
+          </p>
+          <p className="mt-1 text-sm text-zinc-300">
+            {formatLastSynced(lastPipelineRun)}
+          </p>
+        </div>
         <button
           onClick={fetchStatus}
-          className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+          className="flex items-center gap-2 self-start rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Refresh
