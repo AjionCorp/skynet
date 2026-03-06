@@ -338,7 +338,7 @@ describe("createPipelineControlHandler", () => {
     const res = await POST(makeRequest());
     const body = await res.json();
     expect(res.status).toBe(400);
-    expect(body.error).toContain("Invalid or missing action");
+    expect(body.error).toContain("Unknown action");
     expect(body.data).toBeNull();
   });
 
@@ -348,7 +348,7 @@ describe("createPipelineControlHandler", () => {
     const res = await POST(makeRequest());
     const body = await res.json();
     expect(res.status).toBe(400);
-    expect(body.error).toContain("Invalid or missing action");
+    expect(body.error).toContain("Unknown action");
   });
 
   it("accepts action with mixed case and extra whitespace", async () => {

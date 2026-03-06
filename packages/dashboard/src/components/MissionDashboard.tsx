@@ -181,8 +181,8 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   // Mission tracking state
   const [tracking, setTracking] = useState<MissionTracking | null>(null);
 
-  const workerNames = useMemo(() => {
-    const names = new Set<string>(DEFAULT_WORKER_NAMES);
+  const availableWorkerNames = useMemo(() => {
+    const names = new Set<string>(workerNames);
     for (const worker of Object.keys(localAssignments)) {
       if (worker) names.add(worker);
     }
@@ -207,7 +207,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       if (aNum !== bNum) return aNum - bNum;
       return a.localeCompare(b);
     });
-  }, [localAssignments, missions]);
+  }, [localAssignments, missions, workerNames]);
 
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
@@ -1053,7 +1053,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {workerNames.map((worker) => (
+            {availableWorkerNames.map((worker) => (
               <div key={worker} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
                 <div className="min-w-0">
                   <span className="block text-sm font-medium text-zinc-300">{formatWorkerLabel(worker)}</span>

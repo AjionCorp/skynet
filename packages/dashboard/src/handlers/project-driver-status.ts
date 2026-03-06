@@ -5,7 +5,11 @@ import { logHandlerError } from "../lib/handler-error";
 import { listProjectDriverLocks } from "../lib/process-locks";
 
 function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
+  const defaultLock = `${lockPrefix}-project-driver-global.lock`;
   const legacyLock = `${lockPrefix}-project-driver.lock`;
+  if (lockPath === defaultLock) {
+    return "project-driver-global";
+  }
   if (lockPath === legacyLock) {
     return "project-driver";
   }
@@ -32,13 +36,12 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       const lockCandidates =
         discoveredLocks.length > 0
           ? discoveredLocks
-          : [`${lockPrefix}-project-driver.lock`];
+          : [`${lockPrefix}-project-driver-global.lock`];
       const statuses = lockCandidates.map((lockFile) => ({
         lockFile,
         ...getWorkerStatus(lockFile),
       }));
       const activeLock = statuses.find((status) => status.running) ?? statuses[0];
-      const { running, pid, ageMs } = activeLock;
 
       // Last log line
       const logScript = getProjectDriverLogName(lockPrefix, activeLock.lockFile);
@@ -61,8 +64,8 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       return Response.json({
         data: {
           running: statuses.some((status) => status.running),
-          pid: activeStatus.pid,
-          ageMs: activeStatus.ageMs,
+          pid: activeLock.pid,
+          ageMs: activeLock.ageMs,
           lastLog,
           lastLogTime,
           telemetry,
