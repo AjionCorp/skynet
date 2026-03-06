@@ -355,13 +355,17 @@ _resolve_active_mission() {
 }
 
 # Read the ## State: <value> line from a mission file.
-# Returns the state string (e.g. "ACTIVE", "PAUSED", "COMPLETE") or empty if not found.
+# Returns the normalized lowercase state string (e.g. "active", "paused", "complete")
+# or empty if not found.
 # Usage: state=$(_get_mission_state "/path/to/mission.md")
 _get_mission_state() {
   local file="${1:-}"
   [ -n "$file" ] && [ -f "$file" ] || { echo ""; return; }
   local state
-  state=$(sed -n 's/^## State: *\(.*\)/\1/p' "$file" | head -1)
+  state=$(sed -n \
+    -e 's/^## [Ss]tate:[[:space:]]*\(.*\)[[:space:]]*$/\1/p' \
+    -e 's/^[Ss]tate:[[:space:]]*\(.*\)[[:space:]]*$/\1/p' \
+    "$file" | head -1 | tr '[:upper:]' '[:lower:]')
   echo "${state:-}"
 }
 
