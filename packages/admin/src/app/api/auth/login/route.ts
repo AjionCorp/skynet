@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     // TS-P1-1: Only trust x-forwarded-for when SKYNET_TRUST_PROXY is explicitly set to "true".
     // Without a trusted reverse proxy, x-forwarded-for can be spoofed by the client to bypass
     // per-IP rate limiting. x-real-ip is set by the reverse proxy itself and is harder to spoof,
-    // but still requires proxy trust. When neither proxy header is available, rate limiting uses
+    // but still requires explicit proxy trust. When neither trusted proxy header is available, rate limiting uses
     // a shared "unknown" bucket (less precise but safe from IP spoofing).
     const forwardedIp = trustProxy
       ? (request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "")

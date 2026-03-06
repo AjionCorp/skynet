@@ -275,6 +275,34 @@ describe("createPipelineStatusHandler", () => {
     expect(data.backlogLocked).toBe(true);
   });
 
+  it("detects project-driver as running from lock dir pid", async () => {
+    mockReaddirSync.mockImplementation((p) => {
+      if (p === "/tmp") {
+        return ["skynet-test--project-driver-abcd1234.lock"] as unknown as ReturnType<typeof readdirSync>;
+      }
+      return [] as unknown as ReturnType<typeof readdirSync>;
+    });
+    mockExistsSync.mockImplementation((p) => {
+      return typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid");
+    });
+    mockReadFileSync.mockImplementation((p) => {
+      if (typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid")) return "4242";
+      return "";
+    });
+    mockSpawnSync.mockImplementation((cmd, args) => {
+      const a = (args as string[]) || [];
+      if (cmd === "kill" && a[0] === "-0" && a[1] === "4242") {
+        return { stdout: "", stderr: "", status: 0 } as never;
+      }
+      return { stdout: "", stderr: "", status: 0 } as never;
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.projectDriverRunning).toBe(true);
+  });
+
   it("parses post-commit gate log for pass result", async () => {
     mockGetLastLogLine.mockImplementation((_dir, script) => {
       if (script === "post-commit-gate") return "[2025-01-15 12:00:00] PASS abc1234 all checks green";

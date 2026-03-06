@@ -20,6 +20,7 @@ vi.mock("@ajioncorp/skynet/components", () => ({
   TasksDashboard: () => { maybeFail("TasksDashboard"); return <div data-testid="TasksDashboard">Tasks</div>; },
   MonitoringDashboard: () => { maybeFail("MonitoringDashboard"); return <div data-testid="MonitoringDashboard">Monitoring</div>; },
   WorkerScaling: () => { maybeFail("WorkerScaling"); return <div data-testid="WorkerScaling">Workers</div>; },
+  WorkerIntents: () => { maybeFail("WorkerIntents"); return <div data-testid="WorkerIntents">WorkerIntents</div>; },
   MissionDashboard: () => { maybeFail("MissionDashboard"); return <div data-testid="MissionDashboard">Mission</div>; },
   SettingsDashboard: () => { maybeFail("SettingsDashboard"); return <div data-testid="SettingsDashboard">Settings</div>; },
   ProjectDriverDashboard: () => { maybeFail("ProjectDriverDashboard"); return <div data-testid="ProjectDriverDashboard">ProjectDriver</div>; },
