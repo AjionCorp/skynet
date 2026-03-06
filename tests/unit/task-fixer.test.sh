@@ -249,6 +249,28 @@ db_unclaim_failure "$T1" 1
 STATUS=$(sqlite3 "$DB_PATH" "SELECT status FROM tasks WHERE id=$T1;")
 assert_eq "$STATUS" "failed" "claim: unclaim reverts to failed"
 
+# Regression: fields containing "|" should not break fixer extraction.
+T1_PIPE=$(db_add_task "Fix parser | edge case" "FIX" "" "top")
+sqlite3 "$DB_PATH" "UPDATE tasks SET status='claimed', worker_id=1 WHERE id=$T1_PIPE;"
+db_fail_task "$T1_PIPE" "dev/fix-parser-edge-case" "typecheck failed | extra context"
+FAILURES_PIPE=$(db_get_pending_failures)
+_picked_title=""
+_picked_branch=""
+_picked_error=""
+_picked_attempts=""
+while IFS=$'\x1f' read -r _fid _ftitle _fbranch _ferror _fattempts _fstatus; do
+  [ "$_fid" = "$T1_PIPE" ] || continue
+  _picked_title="$_ftitle"
+  _picked_branch="$_fbranch"
+  _picked_error="$_ferror"
+  _picked_attempts="$_fattempts"
+  break
+done <<< "$FAILURES_PIPE"
+assert_eq "$_picked_title" "Fix parser | edge case" "claim: title with pipe survives DB row parsing"
+assert_eq "$_picked_branch" "dev/fix-parser-edge-case" "claim: branch parsed correctly with pipe fields"
+assert_contains "$_picked_error" "extra context" "claim: error with pipe survives DB row parsing"
+assert_eq "$_picked_attempts" "0" "claim: attempts parsed correctly with pipe fields"
+
 # ============================================================
 # TEST 2: Fix attempt counting
 # ============================================================

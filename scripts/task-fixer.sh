@@ -219,8 +219,11 @@ fi
 
 # --- Pre-flight: atomically claim next pending failed task ---
 
-pending_failure=""
 _db_task_id=""
+task_title=""
+branch_name=""
+error_summary=""
+fix_attempts=0
 
 # Try SQLite first for atomic claim
 _db_failures=$(db_get_pending_failures 2>/dev/null || true)
@@ -238,23 +241,21 @@ if [ -n "$_db_failures" ]; then
     fi
     if db_claim_failure "$_fid" "$FIXER_ID" 2>/dev/null; then
       _db_task_id="$_fid"
-      pending_failure="| $(date '+%Y-%m-%d') | $_ftitle | $_fbranch | $_ferror | $_fattempts | pending |"
+      task_title="$_ftitle"
+      branch_name="$_fbranch"
+      error_summary="$_ferror"
+      fix_attempts="$_fattempts"
       break
     fi
   done <<< "$_db_failures"
 fi
 
-if [ -z "$pending_failure" ]; then
+if [ -z "$_db_task_id" ]; then
   log "No pending failed tasks. Nothing to fix."
   emit_event "fixer_idle" "Fixer $FIXER_ID: no pending failures"
   exit 0
 fi
 
-# Extract failed task details
-task_title=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3}')
-branch_name=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4}')
-error_summary=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $5); print $5}')
-fix_attempts=$(echo "$pending_failure" | awk -F'|' '{gsub(/^[ \t]+|[ \t]+$/, "", $6); print $6}')
 if ! echo "$fix_attempts" | grep -Eq '^[0-9]+$'; then
   fix_attempts=0
 fi
