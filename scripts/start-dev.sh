@@ -8,6 +8,12 @@ set -euo pipefail
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
 if [ -n "${1:-}" ]; then
+  case "$1" in
+    ''|*[!0-9]*|0)
+      echo "ERROR: worker_id must be a positive integer (got '$1')" >&2
+      exit 1
+      ;;
+  esac
   LOG="$LOG_DIR/next-dev-w${1}.log"
   PIDFILE="$LOG_DIR/next-dev-w${1}.pid"
 else

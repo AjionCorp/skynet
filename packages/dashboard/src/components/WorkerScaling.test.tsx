@@ -155,6 +155,17 @@ describe("WorkerScaling", () => {
     });
   });
 
+  it("displays HTTP status when server returns non-JSON error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("Service unavailable", { status: 503 }))
+    );
+    renderWithProvider(<WorkerScaling pollInterval={999999} />);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to fetch worker data (HTTP 503)")).toBeDefined();
+    });
+  });
+
   it("displays error when fetch throws", async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<WorkerScaling pollInterval={999999} />);

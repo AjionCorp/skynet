@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Target,
   CheckCircle2,
@@ -52,7 +52,7 @@ Describe the mission purpose here.
 What the team is currently focused on.
 `;
 
-const WORKER_NAMES = [
+const DEFAULT_WORKER_NAMES = [
   "dev-worker-1",
   "dev-worker-2",
   "dev-worker-3",
@@ -121,6 +121,34 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
 
   // Mission tracking state
   const [tracking, setTracking] = useState<MissionTracking | null>(null);
+
+  const workerNames = useMemo(() => {
+    const names = new Set<string>(DEFAULT_WORKER_NAMES);
+    for (const worker of Object.keys(localAssignments)) {
+      if (worker) names.add(worker);
+    }
+    for (const missionSummary of missions) {
+      for (const worker of missionSummary.assignedWorkers ?? []) {
+        if (worker) names.add(worker);
+      }
+    }
+
+    const sortWeight = (name: string) => {
+      const dev = name.match(/^dev-worker-(\d+)$/);
+      if (dev) return [0, Number(dev[1])] as const;
+      const fixer = name.match(/^task-fixer-(\d+)$/);
+      if (fixer) return [1, Number(fixer[1])] as const;
+      return [2, Number.MAX_SAFE_INTEGER] as const;
+    };
+
+    return Array.from(names).sort((a, b) => {
+      const [aType, aNum] = sortWeight(a);
+      const [bType, bNum] = sortWeight(b);
+      if (aType !== bType) return aType - bType;
+      if (aNum !== bNum) return aNum - bNum;
+      return a.localeCompare(b);
+    });
+  }, [localAssignments, missions]);
 
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
@@ -941,7 +969,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {WORKER_NAMES.map((worker) => (
+            {workerNames.map((worker) => (
               <div key={worker} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
                 <span className="text-sm font-medium text-zinc-300">{worker}</span>
                 <select

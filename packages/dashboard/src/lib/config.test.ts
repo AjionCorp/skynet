@@ -10,6 +10,7 @@ describe("createConfig", () => {
     expect(config.workers).toBe(DEFAULT_WORKERS);
     expect(config.taskTags).toContain("FEAT");
     expect(config.taskTags).toContain("FIX");
+    expect(config.taskTags).toContain("DATA");
     expect(config.triggerableScripts).toContain("dev-worker");
   });
 

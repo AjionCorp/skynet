@@ -135,6 +135,12 @@ export function createTasksHandlers(config: SkynetConfig) {
         position?: "top" | "bottom";
         blockedBy?: string;
       };
+      const normalizedPosition =
+        position == null
+          ? "top"
+          : position === "top" || position === "bottom"
+            ? position
+            : null;
 
       if (!tag || !taskTags.includes(tag)) {
         return Response.json(
@@ -160,6 +166,12 @@ export function createTasksHandlers(config: SkynetConfig) {
       if (description && description.length > MAX_DESCRIPTION_LENGTH) {
         return Response.json(
           { data: null, error: `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer` },
+          { status: 400 }
+        );
+      }
+      if (!normalizedPosition) {
+        return Response.json(
+          { data: null, error: "Invalid position. Must be 'top' or 'bottom'" },
           { status: 400 }
         );
       }
@@ -237,7 +249,7 @@ export function createTasksHandlers(config: SkynetConfig) {
           title.trim(),
           tag,
           description?.trim() ?? "",
-          position ?? "top",
+          normalizedPosition,
           blockedBy?.trim() ?? "",
           missionHash ?? ""
         );
@@ -252,7 +264,7 @@ export function createTasksHandlers(config: SkynetConfig) {
           try {
             const raw = readFileSync(backlogPath, "utf-8");
             const lines = raw.split("\n");
-            if (position === "bottom") {
+            if (normalizedPosition === "bottom") {
               let lastPendingIndex = -1;
               for (let i = 0; i < lines.length; i++) {
                 if (lines[i].startsWith("- [ ] ") || lines[i].startsWith("- [>] ")) {
@@ -282,14 +294,14 @@ export function createTasksHandlers(config: SkynetConfig) {
           } catch (fallbackErr) {
             console.error(`[tasks POST] CRITICAL: Both SQLite export and file fallback failed. Task exists in SQLite only. Export error: ${exportErr instanceof Error ? exportErr.message : String(exportErr)}. File error: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`);
             return Response.json({
-              data: { inserted: taskLine, position: position ?? "top", warning: "Task saved to SQLite but backlog.md sync failed. Run watchdog to reconcile." },
+              data: { inserted: taskLine, position: normalizedPosition, warning: "Task saved to SQLite but backlog.md sync failed. Run watchdog to reconcile." },
               error: null,
             });
           }
         }
 
         return Response.json({
-          data: { inserted: taskLine, position: position ?? "top" },
+          data: { inserted: taskLine, position: normalizedPosition },
           error: null,
         });
       } finally {

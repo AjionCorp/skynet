@@ -154,4 +154,17 @@ describe("SyncDashboard", () => {
     // Only 1 endpoint configured
     expect(screen.getAllByText("1").length).toBeGreaterThanOrEqual(1);
   });
+
+  it("supports legacy array syncHealth payload shape", async () => {
+    mockFetchWith({
+      syncHealth: [
+        { endpoint: "legacy_endpoint", status: "ok", records: "10", notes: "", lastRun: "2024-01-01T00:00:00Z" },
+      ],
+    });
+    renderWithProvider(<SyncDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Legacy Endpoint")).toBeDefined();
+    });
+    expect(screen.getByText("Success")).toBeDefined();
+  });
 });

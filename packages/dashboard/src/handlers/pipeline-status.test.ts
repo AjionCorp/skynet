@@ -26,11 +26,15 @@ vi.mock("child_process", () => ({
 vi.mock("../lib/db", () => ({
   getSkynetDB: vi.fn(() => { throw new Error("SQLite not available"); }),
 }));
+vi.mock("../lib/process-locks", () => ({
+  listProjectDriverLocks: vi.fn(() => []),
+}));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { existsSync, statSync, readFileSync, readdirSync } from "fs";
 import { execSync, spawnSync } from "child_process";
+import { listProjectDriverLocks } from "../lib/process-locks";
 
 const mockReadDevFile = vi.mocked(readDevFile);
 const mockGetLastLogLine = vi.mocked(getLastLogLine);
@@ -42,6 +46,7 @@ const mockReadFileSync = vi.mocked(readFileSync);
 const mockExecSync = vi.mocked(execSync);
 const mockSpawnSync = vi.mocked(spawnSync);
 const mockReaddirSync = vi.mocked(readdirSync);
+const mockListProjectDriverLocks = vi.mocked(listProjectDriverLocks);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -64,6 +69,7 @@ describe("createPipelineStatusHandler", () => {
     mockExistsSync.mockReturnValue(false);
     mockExecSync.mockReturnValue("" as never);
     mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
+    mockListProjectDriverLocks.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -269,6 +275,34 @@ describe("createPipelineStatusHandler", () => {
     expect(data.backlogLocked).toBe(true);
   });
 
+  it("detects project-driver as running from lock dir pid", async () => {
+    mockReaddirSync.mockImplementation((p) => {
+      if (p === "/tmp") {
+        return ["skynet-test--project-driver-abcd1234.lock"] as unknown as ReturnType<typeof readdirSync>;
+      }
+      return [] as unknown as ReturnType<typeof readdirSync>;
+    });
+    mockExistsSync.mockImplementation((p) => {
+      return typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid");
+    });
+    mockReadFileSync.mockImplementation((p) => {
+      if (typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid")) return "4242";
+      return "";
+    });
+    mockSpawnSync.mockImplementation((cmd, args) => {
+      const a = (args as string[]) || [];
+      if (cmd === "kill" && a[0] === "-0" && a[1] === "4242") {
+        return { stdout: "", stderr: "", status: 0 } as never;
+      }
+      return { stdout: "", stderr: "", status: 0 } as never;
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+    expect(data.projectDriverRunning).toBe(true);
+  });
+
   it("parses post-commit gate log for pass result", async () => {
     mockGetLastLogLine.mockImplementation((_dir, script) => {
       if (script === "post-commit-gate") return "[2025-01-15 12:00:00] PASS abc1234 all checks green";
@@ -317,6 +351,23 @@ describe("createPipelineStatusHandler", () => {
     const res = await handler();
     const { data } = await res.json();
     expect(data.workers[0].category).toBe("core");
+  });
+
+  it("reports a running project driver from discovered mission-specific locks", async () => {
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-my-mission.lock",
+    ]);
+    mockGetWorkerStatus.mockImplementation((lockFile) => ({
+      running: lockFile.includes("project-driver-my-mission"),
+      pid: lockFile.includes("project-driver-my-mission") ? 321 : null,
+      ageMs: lockFile.includes("project-driver-my-mission") ? 5000 : null,
+    }));
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data.projectDriverRunning).toBe(true);
   });
 
   it("returns empty completed and failed arrays when files are empty", async () => {
