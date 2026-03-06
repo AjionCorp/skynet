@@ -26,7 +26,7 @@ LOCKFILE="${SKYNET_LOCK_PREFIX}-feature-validator.lock"
 if ! acquire_worker_lock "$LOCKFILE" "$LOG" "FEAT-VALIDATOR"; then
   exit 0
 fi
-trap 'rm -rf "$LOCKFILE"' EXIT INT TERM
+trap 'release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true' EXIT INT TERM
 
 log "Feature validator starting."
 tg "🔍 *$SKYNET_PROJECT_NAME_UPPER FEATURE-VALIDATOR* starting — deep page + API tests"

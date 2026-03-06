@@ -40,7 +40,7 @@ LOCKFILE="${SKYNET_LOCK_PREFIX}-sync-runner.lock"
 if ! acquire_worker_lock "$LOCKFILE" "$LOG" "SYNC"; then
   exit 0
 fi
-trap 'rm -rf "$LOCKFILE"' EXIT INT TERM
+trap 'release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true' EXIT INT TERM
 
 # --- Pre-flight: check if dev server is reachable ---
 if ! curl -sf "$BASE_URL/api/admin/pipeline/status" > /dev/null 2>&1; then
