@@ -25,7 +25,12 @@ LOCKFILE="${SKYNET_LOCK_PREFIX}-ui-tester.lock"
 if ! acquire_worker_lock "$LOCKFILE" "$LOG" "UI-TESTER"; then
   exit 0
 fi
-trap 'rm -rf "$LOCKFILE"' EXIT INT TERM
+_ui_tester_cleanup() {
+  release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
+}
+trap '_ui_tester_cleanup' EXIT
+trap '_ui_tester_cleanup; exit 130' INT
+trap '_ui_tester_cleanup; exit 143' TERM
 
 log "UI tester starting."
 tg "🧪 *$SKYNET_PROJECT_NAME_UPPER UI-TESTER* starting — running Playwright smoke tests"
