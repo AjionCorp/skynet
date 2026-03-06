@@ -104,7 +104,7 @@ describe("/api/admin/config route integration", () => {
       });
     });
 
-    it("masks sensitive key values in response", async () => {
+    it("redacts sensitive key values in response", async () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
         [
@@ -122,7 +122,9 @@ describe("/api/admin/config route integration", () => {
       const workersEntry = body.data.entries.find(
         (e: { key: string }) => e.key === "SKYNET_MAX_WORKERS"
       );
-      expect(tokenEntry.value).toBe("••••••••");
+      expect(tokenEntry.value).toBe("");
+      expect(tokenEntry.sensitive).toBe(true);
+      expect(tokenEntry.hasStoredValue).toBe(true);
       expect(workersEntry.value).toBe("4");
     });
 

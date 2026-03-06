@@ -15,6 +15,8 @@ interface ConfigEntry {
   key: string;
   value: string;
   comment: string;
+  sensitive?: boolean;
+  hasStoredValue?: boolean;
 }
 
 export interface SettingsDashboardProps {
@@ -64,7 +66,8 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
 
   const handleChange = (key: string, value: string) => {
     setEditedValues((prev) => {
-      const original = entries.find((e) => e.key === key)?.value ?? "";
+      const entry = entries.find((e) => e.key === key);
+      const original = entry?.sensitive ? "" : (entry?.value ?? "");
       if (value === original) {
         const next = { ...prev };
         delete next[key];
@@ -112,6 +115,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   };
 
   const dirtyCount = Object.keys(editedValues).length;
+  const refreshDisabled = dirtyCount > 0 || saving;
 
   if (loading && entries.length === 0) {
     return (
@@ -148,7 +152,9 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         <div className="flex items-center gap-2">
           <button
             onClick={fetchConfig}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+            disabled={refreshDisabled}
+            title={dirtyCount > 0 ? "Save or reset pending changes before refreshing" : undefined}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
@@ -221,7 +227,23 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
                 >
                   <label className="block">
                     <span className="text-xs font-mono text-zinc-500">{entry.key}</span>
-                    {isBooleanLike ? (
+                    {entry.sensitive ? (
+                      <>
+                        <input
+                          type="password"
+                          value={currentValue}
+                          onChange={(e) => handleChange(entry.key, e.target.value)}
+                          placeholder={entry.hasStoredValue ? "Leave blank to keep current value" : "Enter secret value"}
+                          autoComplete="new-password"
+                          className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-200 placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                        <span className="mt-1 block text-xs text-zinc-500">
+                          {entry.hasStoredValue
+                            ? "Stored value is hidden. Leave blank to keep the current secret."
+                            : "Secrets are write-only and will be hidden after save."}
+                        </span>
+                      </>
+                    ) : isBooleanLike ? (
                       <select
                         value={currentValue}
                         onChange={(e) => handleChange(entry.key, e.target.value)}

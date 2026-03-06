@@ -355,7 +355,7 @@ describe("createConfigHandler", () => {
       expect(body.error).toContain("path traversal (../)");
     });
 
-    it("masks SENSITIVE_KEYS in POST response", async () => {
+    it("redacts SENSITIVE_KEYS in POST response while preserving metadata", async () => {
       mockExistsSync.mockReturnValue(true);
       mockWriteFileSync.mockImplementation(() => {});
       mockRenameSync.mockImplementation(() => {});
@@ -375,12 +375,16 @@ describe("createConfigHandler", () => {
       const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
       const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
       const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
-      expect(tokenEntry.value).toBe("••••••••");
-      expect(slackEntry.value).toBe("••••••••");
+      expect(tokenEntry.value).toBe("");
+      expect(tokenEntry.sensitive).toBe(true);
+      expect(tokenEntry.hasStoredValue).toBe(true);
+      expect(slackEntry.value).toBe("");
+      expect(slackEntry.sensitive).toBe(true);
+      expect(slackEntry.hasStoredValue).toBe(true);
       expect(workersEntry.value).toBe("4");
     });
 
-    it("masks SENSITIVE_KEYS values in GET response", async () => {
+    it("redacts SENSITIVE_KEYS values in GET response", async () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
         [
@@ -398,9 +402,31 @@ describe("createConfigHandler", () => {
       const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
       const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
       const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
-      expect(tokenEntry.value).toBe("••••••••");
-      expect(slackEntry.value).toBe("••••••••");
+      expect(tokenEntry.value).toBe("");
+      expect(tokenEntry.sensitive).toBe(true);
+      expect(tokenEntry.hasStoredValue).toBe(true);
+      expect(slackEntry.value).toBe("");
+      expect(slackEntry.sensitive).toBe(true);
+      expect(slackEntry.hasStoredValue).toBe(true);
       expect(workersEntry.value).toBe("4");
+    });
+
+    it("ignores legacy sensitive placeholders in POST updates", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_TG_BOT_TOKEN="secret-token-123"\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_TG_BOT_TOKEN: "••••••••" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.updatedKeys).toEqual([]);
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        "/tmp/test/.dev/skynet.config.sh.tmp",
+        expect.stringContaining('export SKYNET_TG_BOT_TOKEN="secret-token-123"'),
+        "utf-8"
+      );
     });
 
     // ── TEST-P2-9: writeConfigFile missing key warning ──────────────────

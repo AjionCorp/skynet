@@ -162,6 +162,7 @@ export class SkynetDB {
 
     // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+    this.taskColumns = new Set(cols.map((c) => c.name));
     this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
     this.hasReasonCode = cols.some((c) => c.name === "reason_code");
     this.hasFilesTouched = cols.some((c) => c.name === "files_touched");

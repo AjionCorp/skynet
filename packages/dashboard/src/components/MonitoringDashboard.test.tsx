@@ -211,13 +211,6 @@ describe("MonitoringDashboard", () => {
   });
 
   it("shows error state when SSE returns error", async () => {
-    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes("/monitoring/status")) {
-        return new Response(JSON.stringify({ data: null, error: "Connection failed" }));
-      }
-      return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
-    }));
     renderWithProvider(<MonitoringDashboard />);
     await waitFor(() => {
       expect(screen.getByText("Workers Active")).toBeDefined();

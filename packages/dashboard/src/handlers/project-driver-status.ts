@@ -32,7 +32,7 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       const lockCandidates =
         discoveredLocks.length > 0
           ? discoveredLocks
-          : [`${lockPrefix}-project-driver.lock`];
+          : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
       const statuses = lockCandidates.map((lockFile) => ({
         lockFile,
         ...getWorkerStatus(lockFile),
@@ -61,8 +61,8 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       return Response.json({
         data: {
           running: statuses.some((status) => status.running),
-          pid: activeStatus.pid,
-          ageMs: activeStatus.ageMs,
+          pid,
+          ageMs,
           lastLog,
           lastLogTime,
           telemetry,

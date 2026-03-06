@@ -18,7 +18,7 @@ describe("LoginPage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
-    pushMock.mockReset();
+    pushSpy.mockReset();
   });
 
   it("renders without crashing", () => {
