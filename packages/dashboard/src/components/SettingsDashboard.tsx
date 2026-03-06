@@ -31,6 +31,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
 
   const fetchConfig = useCallback(async () => {
@@ -44,6 +45,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
       setEntries(json.data.entries ?? []);
       setConfigPath(json.data.configPath ?? "");
       setEditedValues({});
+      setSaveWarning(null);
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch config");
@@ -77,6 +79,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
     if (Object.keys(editedValues).length === 0) return;
     setSaving(true);
     setSaveSuccess(false);
+    setSaveWarning(null);
     setError(null);
 
     try {
@@ -92,6 +95,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
       }
       setEntries(json.data.entries ?? []);
       setEditedValues({});
+      setSaveWarning(json.data.warning ?? null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -104,6 +108,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   const handleReset = () => {
     setEditedValues({});
     setSaveSuccess(false);
+    setSaveWarning(null);
   };
 
   const dirtyCount = Object.keys(editedValues).length;
@@ -164,6 +169,13 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         <div className="flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-6 py-4">
           <Check className="h-5 w-5 shrink-0 text-emerald-400" />
           <p className="text-sm text-emerald-400">Configuration saved successfully</p>
+        </div>
+      )}
+
+      {saveWarning && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-6 py-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
+          <p className="text-sm text-amber-200">{saveWarning}</p>
         </div>
       )}
 

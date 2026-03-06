@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
+
+const pushMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: pushMock }),
 }));
 
 import LoginPage from "./page";
@@ -12,6 +14,7 @@ describe("LoginPage", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    pushMock.mockReset();
   });
 
   it("renders without crashing", () => {
@@ -44,5 +47,19 @@ describe("LoginPage", () => {
     render(<LoginPage />);
     const button = screen.getByRole("button", { name: /log in/i });
     expect(button.hasAttribute("disabled")).toBe(true);
+  });
+
+  it("redirects to the pipeline dashboard after a successful login", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByPlaceholderText("API key"), {
+      target: { value: "test-api-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith("/admin/pipeline");
+    });
   });
 });
