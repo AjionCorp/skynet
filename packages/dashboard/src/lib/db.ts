@@ -162,10 +162,9 @@ export class SkynetDB {
 
     // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
-    const taskColumns = new Set(cols.map((c) => c.name));
-    this.hasMissionHash = taskColumns.has("mission_hash");
-    this.hasReasonCode = taskColumns.has("reason_code");
-    this.hasFilesTouched = taskColumns.has("files_touched");
+    this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
+    this.hasReasonCode = cols.some((c) => c.name === "reason_code");
+    this.hasFilesTouched = cols.some((c) => c.name === "files_touched");
   }
 
   close(): void {
@@ -262,7 +261,8 @@ export class SkynetDB {
       : "'' AS files_touched";
     const rows = this.db
       .prepare(
-        `SELECT completed_at, title, branch, duration, notes, ${filesTouchedSelect}
+        `SELECT completed_at, title, branch, duration, notes,
+                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
          FROM tasks
          WHERE status IN ('completed','fixed')
            AND notes NOT LIKE '%phantom%'${missionFilter}
@@ -325,7 +325,9 @@ export class SkynetDB {
       : "'' AS files_touched";
     const rows = this.db
       .prepare(
-        `SELECT failed_at, title, branch, error, attempts, status, ${reasonCodeSelect}, ${filesTouchedSelect}
+        `SELECT failed_at, title, branch, error, attempts, status,
+                ${this.hasReasonCode ? "reason_code" : "'' AS reason_code"},
+                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
          FROM tasks
          WHERE (status IN ('failed','blocked','fixed','superseded')
             OR status LIKE 'fixing-%')${missionFilter}

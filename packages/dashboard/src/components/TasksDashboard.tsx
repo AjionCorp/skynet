@@ -132,9 +132,12 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        const insertedPosition = json.data?.position === "bottom" ? "bottom of backlog" : "top of backlog";
-        const missionSuffix = selectedSlug ? ` for mission '${selectedSlug}'` : "";
-        setSubmitResult({ ok: true, message: `Task added at ${insertedPosition}${missionSuffix}` });
+        setSubmitResult({
+          ok: true,
+          message: selectedSlug
+            ? `Task added to mission '${selectedSlug}'`
+            : "Task added to backlog",
+        });
         setTitle("");
         setDescription("");
         setBlockedByInput("");

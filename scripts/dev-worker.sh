@@ -143,7 +143,9 @@ _start_heartbeat() {
         fi
         _hb_last_epoch=$_hb_now
         date +%s > "$HEARTBEAT_FILE"
-        db_update_heartbeat_and_progress "$WORKER_ID" 2>/dev/null || true
+        # Heartbeats prove the worker process is alive; progress updates must come
+        # from main-loop checkpoints so the watchdog can still detect hung workers.
+        db_update_heartbeat "$WORKER_ID" 2>/dev/null || true
       fi
     done
   ) &

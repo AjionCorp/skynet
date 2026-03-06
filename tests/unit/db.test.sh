@@ -778,6 +778,24 @@ PR=$(sqlite3 "$DB_PATH" "SELECT progress_epoch FROM workers WHERE id=1;")
 assert_eq "$HB" "$PR" "combined update: heartbeat and progress epochs match"
 
 # ============================================================
+# TEST: Heartbeat-only update does not touch progress
+# ============================================================
+
+echo ""
+printf "  %s\n" "=== heartbeat-only update ==="
+
+sqlite3 "$DB_PATH" "DELETE FROM workers;"
+db_set_worker_status 1 "dev" "in_progress" "" "Active task" "" 2>/dev/null || true
+sqlite3 "$DB_PATH" "UPDATE workers SET progress_epoch = 1234 WHERE id=1;"
+
+db_update_heartbeat 1
+HB_ONLY=$(sqlite3 "$DB_PATH" "SELECT heartbeat_epoch FROM workers WHERE id=1;")
+PR_ONLY=$(sqlite3 "$DB_PATH" "SELECT progress_epoch FROM workers WHERE id=1;")
+
+[ -n "$HB_ONLY" ] && [ "$HB_ONLY" -gt 0 ] 2>/dev/null && pass "heartbeat-only: heartbeat_epoch set" || fail "heartbeat-only: heartbeat_epoch not set"
+assert_eq "$PR_ONLY" "1234" "heartbeat-only: existing progress_epoch preserved"
+
+# ============================================================
 # TEST: db_explain_claim returns query plan
 # ============================================================
 
