@@ -482,6 +482,7 @@ describe("SkynetDB", () => {
         branch: "skynet/fix-auth",
         duration: "5m",
         notes: "success",
+        filesTouched: "",
       });
     });
   });
@@ -673,6 +674,8 @@ describe("SkynetDB", () => {
         error: "OOM",
         attempts: "3",
         status: "failed",
+        outcomeReason: "",
+        filesTouched: "",
       });
     });
   });

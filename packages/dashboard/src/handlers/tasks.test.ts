@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createTasksHandlers } from "./tasks";
 import type { SkynetConfig } from "../types";
+import { _resetRateLimits } from "../lib/rate-limiter";
 
 vi.mock("fs", () => ({
   readFileSync: vi.fn(() => ""),
@@ -40,6 +41,7 @@ describe("createTasksHandlers", () => {
 
   beforeEach(() => {
     process.env.NODE_ENV = "development";
+    _resetRateLimits();
     vi.resetAllMocks();
     mockReadFileSync.mockReturnValue(SAMPLE_BACKLOG as never);
     mockWriteFileSync.mockReturnValue(undefined as never);
@@ -48,6 +50,7 @@ describe("createTasksHandlers", () => {
 
   afterEach(() => {
     process.env.NODE_ENV = originalNodeEnv;
+    _resetRateLimits();
     vi.restoreAllMocks();
   });
 

@@ -127,6 +127,8 @@ interface FixerStatRow {
 export class SkynetDB {
   private db: Database;
   private hasMissionHash: boolean;
+  private hasFilesTouched: boolean;
+  private hasReasonCode: boolean;
 
   constructor(dbPath: string, opts?: { readonly?: boolean }) {
     const Database = loadDriver();
@@ -157,9 +159,11 @@ export class SkynetDB {
     // Safe to call on every connection — no-op when stats are fresh.
     this.db.pragma("optimize");
 
-    // Detect optional columns (schema migrations add mission_hash).
+    // Detect optional columns from incremental schema migrations.
     const cols = this.db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
     this.hasMissionHash = cols.some((c) => c.name === "mission_hash");
+    this.hasFilesTouched = cols.some((c) => c.name === "files_touched");
+    this.hasReasonCode = cols.some((c) => c.name === "reason_code");
   }
 
   close(): void {
@@ -241,9 +245,12 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
+    const filesTouchedSelect = this.hasFilesTouched
+      ? "files_touched"
+      : "'' AS files_touched";
     const rows = this.db
       .prepare(
-        `SELECT completed_at, title, branch, duration, notes, files_touched
+        `SELECT completed_at, title, branch, duration, notes, ${filesTouchedSelect}
          FROM tasks
          WHERE status IN ('completed','fixed')
            AND notes NOT LIKE '%phantom%'${missionFilter}
@@ -298,9 +305,15 @@ export class SkynetDB {
       this.hasMissionHash && missionHash
         ? " AND mission_hash = ?"
         : "";
+    const reasonCodeSelect = this.hasReasonCode
+      ? "reason_code"
+      : "'' AS reason_code";
+    const filesTouchedSelect = this.hasFilesTouched
+      ? "files_touched"
+      : "'' AS files_touched";
     const rows = this.db
       .prepare(
-        `SELECT failed_at, title, branch, error, attempts, status, reason_code, files_touched
+        `SELECT failed_at, title, branch, error, attempts, status, ${reasonCodeSelect}, ${filesTouchedSelect}
          FROM tasks
          WHERE (status IN ('failed','blocked','fixed','superseded')
             OR status LIKE 'fixing-%')${missionFilter}
