@@ -181,6 +181,17 @@ describe("WorkerIntents", () => {
     });
   });
 
+  it("displays HTTP status when server returns non-JSON error", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("Service unavailable", { status: 502 }))
+    );
+    renderWithProvider(<WorkerIntents pollInterval={60000} />);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to fetch worker intents (HTTP 502)")).toBeDefined();
+    });
+  });
+
   it("displays error message on fetch failure", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Network error")));
     renderWithProvider(<WorkerIntents pollInterval={60000} />);

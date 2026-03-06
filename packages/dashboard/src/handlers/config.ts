@@ -188,13 +188,13 @@ function validateUpdates(updates: Record<string, string>): string | null {
       errors.push(`Unsafe characters in value for "${key}"`);
       continue;
     }
-    // Block non-ASCII control characters and Unicode whitespace
-    if (/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200B-\u200F\u2028-\u2029\uFEFF]/.test(value)) {
+    // Block non-ASCII control characters and Unicode zero-width/line-separator chars.
+    if (containsDisallowedChars(value)) {
       errors.push(`Non-printable characters in value for "${key}"`);
       continue;
     }
     if (EXECUTABLE_KEYS.has(key)) {
-      if (!/^[a-zA-Z0-9 .\/_:=-]+$/.test(value)) {
+      if (!/^[a-zA-Z0-9 ./_:=-]+$/.test(value)) {
         errors.push(`Executable config "${key}" contains disallowed characters`);
         continue;
       }
@@ -231,6 +231,22 @@ function validateUpdates(updates: Record<string, string>): string | null {
     }
   }
   return errors.length > 0 ? errors.join("; ") : null;
+}
+
+function containsDisallowedChars(value: string): boolean {
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    const isAsciiControl =
+      (code >= 0x00 && code <= 0x08) ||
+      code === 0x0b ||
+      code === 0x0c ||
+      (code >= 0x0e && code <= 0x1f) ||
+      (code >= 0x7f && code <= 0x9f);
+    if (isAsciiControl) return true;
+  }
+
+  // zero-width/control-like Unicode chars often used for obfuscation
+  return /[\u200B-\u200F\u2028-\u2029\uFEFF]/.test(value);
 }
 
 /**

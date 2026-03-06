@@ -10,6 +10,28 @@ export interface WorkerScalingProps {
   pollInterval?: number;
 }
 
+function getResponseError(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const error = (json as { error?: unknown }).error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+function getWorkers(json: unknown): WorkerScaleInfo[] | null {
+  if (!json || typeof json !== "object") return null;
+  const data = (json as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  const workers = (data as { workers?: unknown }).workers;
+  return Array.isArray(workers) ? (workers as WorkerScaleInfo[]) : null;
+}
+
+async function readJsonSafe(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export function WorkerScaling({ pollInterval = 15000 }: WorkerScalingProps) {
   const { apiPrefix } = useSkynet();
   const [workers, setWorkers] = useState<WorkerScaleInfo[]>([]);
@@ -20,13 +42,19 @@ export function WorkerScaling({ pollInterval = 15000 }: WorkerScalingProps) {
   const fetchCounts = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/workers/scale`);
-      const json = await res.json();
-      if (json.data) {
-        setWorkers(json.data.workers);
-        setError(null);
-      } else if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const workers = getWorkers(json);
+      const apiError = getResponseError(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to fetch worker data (HTTP ${res.status})`);
+        return;
       }
+      if (!workers) {
+        setError(apiError ?? "Invalid worker data response");
+        return;
+      }
+      setWorkers(workers);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch");
     } finally {
@@ -50,12 +78,13 @@ export function WorkerScaling({ pollInterval = 15000 }: WorkerScalingProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ workerType, count: newCount }),
         });
-        const json = await res.json();
-        if (json.error) {
-          setError(json.error);
-        } else {
-          await fetchCounts();
+        const json = await readJsonSafe(res);
+        const apiError = getResponseError(json);
+        if (!res.ok || apiError) {
+          setError(apiError ?? `Failed to scale workers (HTTP ${res.status})`);
+          return;
         }
+        await fetchCounts();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to scale");
       } finally {

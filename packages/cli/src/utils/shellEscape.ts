@@ -22,7 +22,7 @@ export function shellEscape(s: string): string {
  * Returns an error message or null if the value looks safe.
  */
 export function validateShellValue(value: string): string | null {
-  if (/[`"'|&><()#]|\$[({a-zA-Z_0-9?!@*#$\-]|;|\n|\r|\t/.test(value)) {
+  if (/[`"'|&><()#]|\$[({a-zA-Z_0-9?!@*#$-]|;|\n|\r|\t/.test(value)) {
     return "Value contains disallowed shell characters";
   }
   return null;
