@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
-const pushMock = vi.fn();
+const pushMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
@@ -49,15 +49,12 @@ describe("LoginPage", () => {
     expect(button.hasAttribute("disabled")).toBe(true);
   });
 
-  it("redirects to /admin/pipeline after successful login", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(new Response(null, { status: 200 })),
-    );
+  it("redirects to the pipeline dashboard after a successful login", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true }));
     render(<LoginPage />);
 
     fireEvent.change(screen.getByPlaceholderText("API key"), {
-      target: { value: "test-key" },
+      target: { value: "test-api-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: /log in/i }));
 

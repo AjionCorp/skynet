@@ -10,14 +10,19 @@ vi.mock("../lib/file-reader", () => ({
 vi.mock("../lib/worker-status", () => ({
   getWorkerStatus: vi.fn(() => ({ running: false, pid: null, ageMs: null })),
 }));
+vi.mock("../lib/process-locks", () => ({
+  listProjectDriverLocks: vi.fn(() => []),
+}));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
+import { listProjectDriverLocks } from "../lib/process-locks";
 
 const mockReadDevFile = vi.mocked(readDevFile);
 const mockGetLastLogLine = vi.mocked(getLastLogLine);
 const mockExtractTimestamp = vi.mocked(extractTimestamp);
 const mockGetWorkerStatus = vi.mocked(getWorkerStatus);
+const mockListProjectDriverLocks = vi.mocked(listProjectDriverLocks);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -37,6 +42,7 @@ describe("createProjectDriverStatusHandler", () => {
     mockGetLastLogLine.mockReturnValue(null);
     mockExtractTimestamp.mockReturnValue(null);
     mockGetWorkerStatus.mockReturnValue({ running: false, pid: null, ageMs: null });
+    mockListProjectDriverLocks.mockReturnValue([]);
   });
 
   afterEach(() => {
@@ -64,10 +70,10 @@ describe("createProjectDriverStatusHandler", () => {
     expect(data).toHaveProperty("telemetry");
   });
 
-  it("builds lock file path from config lockPrefix", async () => {
+  it("checks the global project-driver lock when no specific locks are present", async () => {
     const handler = createProjectDriverStatusHandler(makeConfig({ lockPrefix: "/tmp/skynet-myproj-" }));
     await handler();
-    expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-myproj--project-driver.lock");
+    expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-myproj--project-driver-global.lock");
   });
 
   it("returns running state when worker is active", async () => {
@@ -99,10 +105,31 @@ describe("createProjectDriverStatusHandler", () => {
     expect(data.lastLogTime).toBe("2026-03-03 10:00:00");
   });
 
-  it("passes devDir and script name to getLastLogLine", async () => {
+  it("passes devDir and the global project-driver log name to getLastLogLine", async () => {
     const handler = createProjectDriverStatusHandler(makeConfig({ devDir: "/custom/.dev" }));
     await handler();
-    expect(mockGetLastLogLine).toHaveBeenCalledWith("/custom/.dev", "project-driver");
+    expect(mockGetLastLogLine).toHaveBeenCalledWith("/custom/.dev", "project-driver-global");
+  });
+
+  it("uses discovered mission-specific project-driver locks and logs", async () => {
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-my-mission.lock",
+    ]);
+    mockGetWorkerStatus.mockReturnValue({ running: true, pid: 9876, ageMs: 1500 });
+    mockGetLastLogLine.mockImplementation((_devDir, script) =>
+      script === "project-driver-my-mission" ? "[2026-03-03 10:00:00] Mission cycle complete" : null
+    );
+    mockExtractTimestamp.mockReturnValue("2026-03-03 10:00:00");
+
+    const handler = createProjectDriverStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-test--project-driver-my-mission.lock");
+    expect(mockGetLastLogLine).toHaveBeenCalledWith("/tmp/test/.dev", "project-driver-my-mission");
+    expect(data.running).toBe(true);
+    expect(data.pid).toBe(9876);
+    expect(data.lastLog).toBe("[2026-03-03 10:00:00] Mission cycle complete");
   });
 
   it("parses valid telemetry JSON", async () => {

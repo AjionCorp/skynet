@@ -64,27 +64,14 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const fetchMissions = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/missions`);
-      const json = await res.json() as {
-        data?: { missions?: unknown; config?: { activeMission?: unknown } };
-      };
-      const missionList = Array.isArray(json.data?.missions)
-        ? json.data.missions.filter(
-          (m): m is MissionSummary =>
-            !!m &&
-            typeof m === "object" &&
-            typeof (m as { slug?: unknown }).slug === "string" &&
-            typeof (m as { name?: unknown }).name === "string"
-        )
-        : [];
-      setMissions(missionList);
-      setSelectedSlug((prev) => {
-        if (prev && missionList.some((m) => m.slug === prev)) return prev;
-        const activeMission = json.data?.config?.activeMission;
-        if (
-          typeof activeMission === "string" &&
-          missionList.some((m) => m.slug === activeMission)
-        ) {
-          return activeMission;
+      const json = await res.json();
+      if (json.data) {
+        const missionList = Array.isArray(json.data.missions) ? json.data.missions : [];
+        setMissions(missionList);
+
+        const activeMission = json.data.config?.activeMission;
+        if (!selectedSlug && typeof activeMission === "string" && activeMission) {
+          setSelectedSlug(activeMission);
         }
         return missionList[0]?.slug ?? null;
       });
@@ -147,9 +134,12 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       if (json.error) {
         setSubmitResult({ ok: false, message: json.error });
       } else {
-        const addedPosition = json.data?.position === "bottom" ? "bottom" : "top";
-        const missionLabel = selectedSlug ? ` for mission '${selectedSlug}'` : "";
-        setSubmitResult({ ok: true, message: `Task added at ${addedPosition} of backlog${missionLabel}` });
+        setSubmitResult({
+          ok: true,
+          message: selectedSlug
+            ? `Task added to mission '${selectedSlug}'`
+            : "Task added to backlog",
+        });
         setTitle("");
         setDescription("");
         setBlockedByInput("");

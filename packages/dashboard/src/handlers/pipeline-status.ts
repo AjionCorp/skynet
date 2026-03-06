@@ -11,6 +11,7 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
+import { listProjectDriverLocks } from "../lib/process-locks";
 
 /**
  * Extract significant keywords from the mission Goals section.
@@ -572,26 +573,14 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
               } catch { /* ignore */ }
             }
       
-            // Project-driver status
-            let projectDriverRunning = false;
-            try {
-              const lockParent = dirname(lockPrefix);
-              const lockBase = basename(lockPrefix);
-              const pdLocks = readdirSync(lockParent).filter((entry) =>
-                entry === `${lockBase}-project-driver.lock` ||
-                (entry.startsWith(`${lockBase}-project-driver-`) && entry.endsWith(".lock"))
-              );
-              for (const lockDir of pdLocks) {
-                const pidPath = resolve(lockParent, lockDir, "pid");
-                if (existsSync(pidPath)) {
-                  const pid = readFileSync(pidPath, "utf-8");
-                  if (isPidAlive(pid)) {
-                    projectDriverRunning = true;
-                    break;
-                  }
-                }
-              }
-            } catch { /* ignore */ }
+      // Project-driver status
+      const projectDriverLockFiles = listProjectDriverLocks(lockPrefix);
+      const projectDriverCandidates = projectDriverLockFiles.length > 0
+        ? projectDriverLockFiles
+        : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
+      const projectDriverRunning = projectDriverCandidates.some(
+        (lockFile) => getWorkerStatus(lockFile).running
+      );
       
             // Git status — run in project root (parent of devDir)
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.

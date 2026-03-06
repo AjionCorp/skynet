@@ -25,6 +25,33 @@ cd "$PROJECT_DIR"
 
 log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
 
+_initialize_boot_pause() {
+  local pause_file="$DEV_DIR/pipeline-paused"
+  local bootstrap_sentinel="$DEV_DIR/.watchdog-bootstrapped"
+
+  if [ ! -f "$bootstrap_sentinel" ]; then
+    if [ ! -f "$pause_file" ]; then
+      local pause_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
+      (
+        umask 077
+        printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$pause_tmp"
+      )
+      mv "$pause_tmp" "$pause_file" 2>/dev/null || true
+      log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+    else
+      log "Pipeline already paused (preserving existing pause state)."
+    fi
+    (umask 077; : > "$bootstrap_sentinel") 2>/dev/null || true
+    return 0
+  fi
+
+  if [ -f "$pause_file" ]; then
+    log "Pipeline remains paused (preserving existing pause state)."
+  else
+    log "Boot pause already acknowledged; preserving current running state."
+  fi
+}
+
 # --- Singleton enforcement via mkdir-based atomic lock ---
 if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
   if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
@@ -131,6 +158,8 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 
 # --- Initial Pause (Boot-to-Pause) ---
 # Pause on first boot only so operators can review state before workers run.
+# Subsequent watchdog restarts preserve the current pause/running state.
+_initialize_boot_pause
 # If already unpaused (operator resumed), don't re-pause on watchdog restart.
 if [ ! -f "$BOOT_TO_PAUSE_SENTINEL" ]; then
   if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
@@ -355,8 +384,11 @@ _cr_phase1_stale_locks() {
         # Dev workers write heartbeat files; if the heartbeat is recent,
         # the worker is legitimately busy on a long task — skip it.
         local wid=""
+        local fixer_id=""
         case "$lockfile" in
           *-dev-worker-*.lock) wid="${lockfile##*-dev-worker-}"; wid="${wid%.lock}" ;;
+          *-task-fixer.lock) fixer_id="1" ;;
+          *-task-fixer-*.lock) fixer_id="${lockfile##*-task-fixer-}"; fixer_id="${fixer_id%.lock}" ;;
         esac
         if [ -n "$wid" ]; then
           local hb_file="$DEV_DIR/worker-${wid}.heartbeat"
@@ -368,6 +400,12 @@ _cr_phase1_stale_locks() {
               log "Worker $wid lock is old but heartbeat is fresh (${hb_age}s) — skipping"
               continue
             fi
+          fi
+        elif [ -n "$fixer_id" ]; then
+          local fixer_timeout_secs=$(( ${SKYNET_AGENT_TIMEOUT_MINUTES:-45} * 60 ))
+          if [ "$lock_age_secs" -le "$fixer_timeout_secs" ]; then
+            log "Task-fixer $fixer_id lock is old (${lock_age_secs}s) but still within agent timeout (${fixer_timeout_secs}s) — skipping"
+            continue
           fi
         fi
         stale=true

@@ -62,15 +62,15 @@ export async function POST(request: Request) {
     // WARNING: Without a trusted reverse proxy, both x-forwarded-for and x-real-ip can be
     // spoofed by the client. When deploying without a proxy, rate limiting falls back to
     // the "unknown" key, effectively sharing a single bucket for all unauthenticated clients.
-    // TS-P1-1: Only trust proxy headers when SKYNET_TRUST_PROXY is explicitly set to "true".
-    // Without a trusted reverse proxy, x-forwarded-for can be spoofed by the client to bypass
-    // per-IP rate limiting. x-real-ip is set by the reverse proxy itself and is harder to spoof,
-    // but still requires explicit proxy trust. When neither trusted proxy header is available, rate limiting uses
-    // a shared "unknown" bucket (less precise but safe from IP spoofing).
     const trustProxy = process.env.SKYNET_TRUST_PROXY === "true";
     const realIp = trustProxy
       ? (request.headers.get("x-real-ip")?.trim() || "")
       : "";
+    // TS-P1-1: Only trust x-forwarded-for when SKYNET_TRUST_PROXY is explicitly set to "true".
+    // Without a trusted reverse proxy, x-forwarded-for can be spoofed by the client to bypass
+    // per-IP rate limiting. x-real-ip is set by the reverse proxy itself and is harder to spoof,
+    // but still requires explicit proxy trust. When neither trusted proxy header is available, rate limiting uses
+    // a shared "unknown" bucket (less precise but safe from IP spoofing).
     const forwardedIp = trustProxy
       ? (request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "")
       : "";
