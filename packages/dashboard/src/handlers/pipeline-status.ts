@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { spawnSync } from "child_process";
-import { dirname, resolve } from "path";
+import { basename, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import type { SkynetConfig, CodexAuthStatus, MissionState } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
@@ -222,6 +222,13 @@ function readCodexAuthStatus(
   }
 }
 
+function isPidAlive(pidRaw: string): boolean {
+  const pid = pidRaw.trim();
+  if (!/^\d+$/.test(pid)) return false;
+  const killResult = spawnSync("kill", ["-0", pid]);
+  return killResult.status === 0;
+}
+
 /**
  * Create a GET handler for the pipeline/status endpoint.
  * Returns full monitoring status including workers, tasks, backlog, sync health, auth, and git.
@@ -309,6 +316,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // Current tasks
       const activeMission = getActiveMissionSlug(devDir);
+      const missionScope = requestedMission || activeMission;
 
       let currentTasks: Record<string, ReturnType<typeof parseCurrentTask>> = {};
       if (usingSqlite && db) {
@@ -366,7 +374,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // Backlog
       let backlog: ReturnType<typeof parseBacklogWithBlocked>;
       if (usingSqlite && db) {
-        backlog = db.getBacklogItems(activeMission ?? "");
+        backlog = db.getBacklogItems(missionScope ?? "");
       } else {
         const backlogRaw = readDevFile(devDir, "backlog.md");
         backlog = parseBacklogWithBlocked(backlogRaw);
@@ -376,7 +384,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       let completed: { date: string; task: string; branch: string; duration: string; notes: string }[];
       let averageTaskDuration: string | null;
       if (usingSqlite && db) {
-        completed = db.getCompletedTasks(50, activeMission ?? "");
+        completed = db.getCompletedTasks(50, missionScope ?? "");
         averageTaskDuration = db.getAverageTaskDuration();
       } else {
         const completedRaw = readDevFile(devDir, "completed.md");
@@ -414,7 +422,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       // Failed tasks
       let failed: { date: string; task: string; branch: string; error: string; attempts: string; status: string }[];
       if (usingSqlite && db) {
-        failed = db.getFailedTasks(activeMission ?? "");
+        failed = db.getFailedTasks(missionScope ?? "");
       } else {
         const failedRaw = readDevFile(devDir, "failed-tasks.md");
         const failedLines = failedRaw
@@ -567,19 +575,19 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             // Project-driver status
             let projectDriverRunning = false;
             try {
-              const scriptsDir = resolve(devDir, "scripts");
-              // We look for any project-driver lock file
-              const pdLocks = readdirSync(devDir).filter(f => f.startsWith(`${lockPrefix}-project-driver-`) && f.endsWith(".lock"));
+              const lockParent = dirname(lockPrefix);
+              const lockBase = basename(lockPrefix);
+              const pdLocks = readdirSync(lockParent).filter((entry) =>
+                entry === `${lockBase}-project-driver.lock` ||
+                (entry.startsWith(`${lockBase}-project-driver-`) && entry.endsWith(".lock"))
+              );
               for (const lockDir of pdLocks) {
-                const pidPath = resolve(devDir, lockDir, "pid");
+                const pidPath = resolve(lockParent, lockDir, "pid");
                 if (existsSync(pidPath)) {
-                  const pid = readFileSync(pidPath, "utf-8").trim();
-                  if (pid) {
-                    const killResult = spawnSync("kill", ["-0", pid]);
-                    if (killResult.status === 0) {
-                      projectDriverRunning = true;
-                      break;
-                    }
+                  const pid = readFileSync(pidPath, "utf-8");
+                  if (isPidAlive(pid)) {
+                    projectDriverRunning = true;
+                    break;
                   }
                 }
               }
@@ -653,7 +661,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       if (usingSqlite && db) {
         healthScore = db.calculateHealthScore(maxW, config.staleMinutes);
-        const stats = db.getSelfCorrectionStats(activeMission ?? "");
+        const stats = db.getSelfCorrectionStats(missionScope ?? "");
         selfCorrectionStats = stats;
         failedPendingCount = stats.pending;
         const totalResolved = stats.selfCorrected + stats.blocked;
@@ -703,14 +711,14 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
 
       // NOTE: getCompletedCount() queries all terminal success states: completed, fixed, done.
       // Keep in sync with CLI status.ts and db.ts.
-      const completedTotal = (usingSqlite && db) ? db.getCompletedCount(activeMission ?? "") : completed.length;
+      const completedTotal = (usingSqlite && db) ? db.getCompletedCount(missionScope ?? "") : completed.length;
 
       const missionProgress = parseMissionProgress({
         devDir,
         completedCount: completedTotal,
         failedLines: failed,
         handlerCount,
-        missionSlug: requestedMission || activeMission,
+        missionSlug: missionScope,
       });
 
       // Per-worker performance stats with task-type affinity
@@ -736,7 +744,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
       const laggingGoals = missionProgress.filter(p => p.status === "not-met");
 
       // Mission alignment score
-      const goalKeywords = extractMissionGoalKeywords(devDir, requestedMission || activeMission);
+      const goalKeywords = extractMissionGoalKeywords(devDir, missionScope);
       const { score: missionAlignmentScore, nonAlignedCount: nonAlignedTaskCount } =
         computeMissionAlignment(completed, goalKeywords, selfCorrectionRate);
 
@@ -783,7 +791,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             lastCommit: postCommitLastCommit,
             lastTime: postCommitLastTime,
           },
-          missionState: getMissionState(devDir, requestedMission || activeMission),
+          missionState: getMissionState(devDir, missionScope),
           missionProgress,
           missionAlignmentScore,
           nonAlignedTaskCount,
