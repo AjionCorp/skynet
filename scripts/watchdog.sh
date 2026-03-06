@@ -18,6 +18,8 @@ LOG="$LOG_DIR/watchdog.log"
 WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
+WATCHDOG_LOCK_STALE_SECONDS="${SKYNET_WATCHDOG_LOCK_STALE_SECONDS:-60}"
+BOOT_TO_PAUSE_SENTINEL="$DEV_DIR/.boot-to-pause-initialized"
 
 cd "$PROJECT_DIR"
 
@@ -32,24 +34,47 @@ if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
   fi
 else
   # Lock dir exists — check for stale lock (owner PID no longer running)
-  if [ -d "$WATCHDOG_LOCK_DIR" ] && [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
-    _existing_pid=$(cat "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null || echo "")
-    if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
-      log "Watchdog already running (PID $_existing_pid). Exiting."
-      exit 0
-    fi
-    # Stale lock — reclaim atomically
-    mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
-    rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
-    if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
-      if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
-        rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
-        log "PID write failed. Exiting."
-        exit 1
+  if [ -d "$WATCHDOG_LOCK_DIR" ]; then
+    if [ -f "$WATCHDOG_LOCK_DIR/pid" ]; then
+      _existing_pid=$(cat "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null || echo "")
+      if [ -n "$_existing_pid" ] && kill -0 "$_existing_pid" 2>/dev/null; then
+        log "Watchdog already running (PID $_existing_pid). Exiting."
+        exit 0
+      fi
+      # Stale lock — reclaim atomically
+      mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+        if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+          rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+          log "PID write failed. Exiting."
+          exit 1
+        fi
+      else
+        log "Watchdog lock contention. Exiting."
+        exit 0
       fi
     else
-      log "Watchdog lock contention. Exiting."
-      exit 0
+      _now_epoch=$(date +%s 2>/dev/null || echo 0)
+      _lock_mtime=$(file_mtime "$WATCHDOG_LOCK_DIR")
+      _lock_age=$((_now_epoch - _lock_mtime))
+      if [ "$_lock_age" -lt "$WATCHDOG_LOCK_STALE_SECONDS" ]; then
+        log "Watchdog lock exists without PID (age ${_lock_age}s < ${WATCHDOG_LOCK_STALE_SECONDS}s). Exiting."
+        exit 0
+      fi
+      mv "$WATCHDOG_LOCK_DIR" "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      rm -rf "$WATCHDOG_LOCK_DIR.stale.$$" 2>/dev/null || true
+      if mkdir "$WATCHDOG_LOCK_DIR" 2>/dev/null; then
+        if ! echo "$$" > "$WATCHDOG_LOCK_DIR/pid" 2>/dev/null; then
+          rmdir "$WATCHDOG_LOCK_DIR" 2>/dev/null || true
+          log "PID write failed. Exiting."
+          exit 1
+        fi
+        log "Recovered stale watchdog lock without PID (age ${_lock_age}s)."
+      else
+        log "Watchdog lock contention. Exiting."
+        exit 0
+      fi
     fi
   else
     log "Watchdog lock contention. Exiting."
@@ -107,16 +132,23 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 # --- Initial Pause (Boot-to-Pause) ---
 # Pause on first boot only so operators can review state before workers run.
 # If already unpaused (operator resumed), don't re-pause on watchdog restart.
-if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
-  _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
-  (
-    umask 077
-    printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
-  )
-  mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
-  log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+if [ ! -f "$BOOT_TO_PAUSE_SENTINEL" ]; then
+  if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
+    _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
+    (
+      umask 077
+      printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
+    )
+    mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
+    log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
+  else
+    log "Pipeline already paused (preserving existing pause state)."
+  fi
+  _boot_to_pause_tmp="${BOOT_TO_PAUSE_SENTINEL}.tmp.$$"
+  (umask 077; printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_boot_to_pause_tmp")
+  mv "$_boot_to_pause_tmp" "$BOOT_TO_PAUSE_SENTINEL" 2>/dev/null || true
 else
-  log "Pipeline already paused (preserving existing pause state)."
+  log "Boot-to-pause already initialized; preserving current pause state."
 fi
 
 # --- Auto-start Admin Server ---
@@ -1640,8 +1672,6 @@ _archive_old_blockers() {
   # Rebuild blockers.md: everything before ## Resolved, then trimmed Resolved, then rest
   local blockers_tmp="$BLOCKERS.tmp.$$"
   local section=""
-  local past_resolved=0
-  local wrote_resolved=0
 
   while IFS= read -r line; do
     if echo "$line" | grep -q '^## Resolved$'; then
@@ -1649,13 +1679,11 @@ _archive_old_blockers() {
       printf '%s\n' "$line" >> "$blockers_tmp"
       printf '\n' >> "$blockers_tmp"
       printf '%s' "$keep_resolved" >> "$blockers_tmp"
-      wrote_resolved=1
       continue
     fi
     if [ "$section" = "resolved" ]; then
       if echo "$line" | grep -q '^## '; then
         section=""
-        past_resolved=1
         printf '%s\n' "$line" >> "$blockers_tmp"
       fi
       # Skip lines in old Resolved section (already replaced above)

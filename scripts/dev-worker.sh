@@ -8,8 +8,14 @@
 #   bash dev-worker.sh 2    → worker 2
 set -euo pipefail
 
-# Worker ID (1 or 2)
+# Worker ID (positive integer)
 WORKER_ID="${1:-1}"
+case "$WORKER_ID" in
+  ''|*[!0-9]*|0)
+    echo "[W?] ERROR: Worker ID must be a positive integer (got '$WORKER_ID')" >&2
+    exit 1
+    ;;
+esac
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
@@ -229,10 +235,11 @@ _compute_task_affinity() {
     [ -z "$_ptid" ] && continue
     local _pscore=50  # default for unknown tags
     if [ -n "$_pttag" ]; then
-      local _pmatch
-      _pmatch=$(grep "^${_pttag}|" "$_affinity_map" 2>/dev/null || true)
-      if [ -n "$_pmatch" ]; then
-        _pscore=$(echo "$_pmatch" | cut -d'|' -f2)
+      local _prate
+      # Match tag as a literal first field; avoid regex expansion/injection from tag text.
+      _prate=$(awk -F'|' -v _tag="$_pttag" '$1 == _tag { print $2; exit }' "$_affinity_map" 2>/dev/null || true)
+      if [ -n "$_prate" ]; then
+        _pscore=$_prate
       fi
     fi
     # Higher score wins; on tie, lower priority number wins (higher priority)
@@ -273,7 +280,7 @@ if ! acquire_worker_lock "$LOCKFILE" "$LOG" "W${WORKER_ID}"; then
 fi
 # Track current task for cleanup on unexpected exit
 _CURRENT_TASK_TITLE=""
-_CURRENT_TASK_DB_TITLE=""
+_CURRENT_TASK_ID=""
 cleanup_on_exit() {
   # Clean up any leaked _sql_exec/_sql_query temp files
   _db_cleanup_tmpfiles 2>/dev/null || true
@@ -298,8 +305,12 @@ cleanup_on_exit() {
   # Unclaim task if we were in the middle of one
   if [ -n "$_CURRENT_TASK_TITLE" ]; then
     if [ "${SKYNET_ONE_SHOT:-}" != "true" ]; then
-      # OPS-P2-2: Retry on failure to avoid inconsistent claim state
-      db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || { sleep 1; db_unclaim_task_by_title "$_CURRENT_TASK_DB_TITLE" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed twice — watchdog will recover"; }
+      if [ -n "$_CURRENT_TASK_ID" ]; then
+        # OPS-P2-2: Retry on failure to avoid inconsistent claim state.
+        db_unclaim_task "$_CURRENT_TASK_ID" 2>/dev/null || { sleep 1; db_unclaim_task "$_CURRENT_TASK_ID" 2>/dev/null || log "WARNING: db_unclaim_task failed twice for task $_CURRENT_TASK_ID — watchdog will recover"; }
+      else
+        log "WARNING: Missing task id during cleanup for '$_CURRENT_TASK_TITLE' — watchdog will recover if needed"
+      fi
     fi
     db_set_worker_idle "$WORKER_ID" "Unexpected exit — $_CURRENT_TASK_TITLE" 2>/dev/null || log "WARNING: db_set_worker_idle failed in cleanup — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: unexpected exit — $_CURRENT_TASK_TITLE"
@@ -444,7 +455,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
   # P0-WAL: Block claims while WAL checkpoint circuit breaker is open.
   # Sleep 30s and retry to avoid burning CPU in a tight loop.
   while ! db_is_wal_healthy; do
-    log "Waiting for WAL recovery before claiming... ($_db_wal_checkpoint_failures consecutive failures)"
+    log "Waiting for WAL recovery before claiming... (${_db_wal_checkpoint_failures:-unknown} consecutive failures)"
     sleep 30
     if $SHUTDOWN_REQUESTED; then
       log "Shutdown requested during WAL recovery wait"
@@ -598,7 +609,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
-  _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
+  _CURRENT_TASK_ID="${_db_task_id:-}"
   # shellcheck disable=SC2034
   task_type=$(echo "$task_title" | grep -o '^\[.*\]' | tr -d '[]')
   branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 40)"
@@ -633,7 +644,7 @@ EOF
     db_clear_intent "$WORKER_ID" 2>/dev/null || true
     [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     continue
   fi
 
@@ -663,7 +674,7 @@ EOF
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
-        _CURRENT_TASK_DB_TITLE=""
+        _CURRENT_TASK_ID=""
         break
       fi
       log "Failed to create worktree for existing branch $branch_name — unclaiming."
@@ -673,7 +684,7 @@ EOF
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       continue
     fi
     log "Reusing existing branch $branch_name in worktree"
@@ -687,7 +698,7 @@ EOF
         db_export_state_files 2>/dev/null || true
 
         _CURRENT_TASK_TITLE=""
-        _CURRENT_TASK_DB_TITLE=""
+        _CURRENT_TASK_ID=""
         break
       fi
       log "Failed to create worktree for $branch_name — unclaiming."
@@ -697,7 +708,7 @@ EOF
       db_export_state_files 2>/dev/null || true
 
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       continue
     fi
   fi
@@ -744,7 +755,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     log "DRY-RUN: Skipping agent execution, unclaiming task"
     [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     _stop_heartbeat
     cleanup_worktree "$branch_name"
     continue
@@ -798,7 +809,7 @@ ${SKYNET_WORKER_CONVENTIONS:-}"
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (claude failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed after claude failure — dashboard may show stale status"
     emit_event "worker_idle" "Worker $WORKER_ID: claude failed — $task_title"
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -826,7 +837,7 @@ EOF
       db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (worktree missing)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: worktree missing — $task_title"
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       _one_shot_exit=1
       cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -886,7 +897,7 @@ EOF
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title ($_gate_label failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: gate failed — $task_title"
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     _one_shot_exit=1
     cat > "$WORKER_TASK_FILE" <<EOF
 # Current Task
@@ -931,7 +942,7 @@ EOF
     db_set_worker_idle "$WORKER_ID" "Last failure: $task_title (bash-n failed)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
     emit_event "worker_idle" "Worker $WORKER_ID: bash-n failed — $task_title"
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     _one_shot_exit=1
     continue
   fi
@@ -949,7 +960,7 @@ EOF
     [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
 
     _CURRENT_TASK_TITLE=""
-    _CURRENT_TASK_DB_TITLE=""
+    _CURRENT_TASK_ID=""
     cleanup_worktree "$branch_name"
     break
   fi
@@ -1043,7 +1054,7 @@ WEOF
     0)
       # Success — merged + pushed
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       ;;
     1)
       # Merge conflict
@@ -1053,7 +1064,7 @@ WEOF
       [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "merge conflict" "merge_conflict" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       _one_shot_exit=1
       tg "❌ *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID}*: merge failed for $task_title"
       continue
@@ -1068,7 +1079,7 @@ WEOF
       db_set_worker_idle "$WORKER_ID" "Last: $task_title (typecheck failed post-merge)" 2>/dev/null || log "WARNING: db_set_worker_idle failed — dashboard may show stale worker status"
       emit_event "worker_idle" "Worker $WORKER_ID: typecheck failed post-merge — $task_title" || true
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       _one_shot_exit=1
       continue
       ;;
@@ -1078,7 +1089,7 @@ WEOF
       emit_event "revert_failed" "Worker $WORKER_ID: $task_title — critical merge failure" || true
       [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "critical merge failure" "critical_merge" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       exit 1
       ;;
     4)
@@ -1087,7 +1098,7 @@ WEOF
       [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       db_export_state_files 2>/dev/null || true
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       cleanup_worktree "$branch_name"
       continue
       ;;
@@ -1095,7 +1106,7 @@ WEOF
       # Pull failed
       [ -n "${_db_task_id:-}" ] && { db_unclaim_task "$_db_task_id" || { sleep 1; db_unclaim_task "$_db_task_id" 2>/dev/null || log "ERROR: db_unclaim_task failed twice for task $_db_task_id — watchdog will recover"; }; }
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       continue
       ;;
     6)
@@ -1106,7 +1117,7 @@ WEOF
       [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "push failed post-merge" "push_failed" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       continue
       ;;
     7)
@@ -1114,7 +1125,7 @@ WEOF
       [ -n "${_db_task_id:-}" ] && { db_fail_task "$_db_task_id" "$branch_name" "smoke test failed" "smoke_test" || log "WARNING: db_fail_task failed — task may not be recorded as failed"; }
       db_export_state_files
       _CURRENT_TASK_TITLE=""
-      _CURRENT_TASK_DB_TITLE=""
+      _CURRENT_TASK_ID=""
       _one_shot_exit=1
       tg "🔄 *$SKYNET_PROJECT_NAME_UPPER W${WORKER_ID} REVERTED*: $task_title (smoke test failed)"
       emit_event "task_reverted" "Worker $WORKER_ID: $task_title (smoke test failed)"

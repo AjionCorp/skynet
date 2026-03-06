@@ -8,6 +8,12 @@
 set -euo pipefail
 
 FIXER_ID="${1:-1}"
+case "$FIXER_ID" in
+  ''|*[!0-9]*|0)
+    echo "[F?] ERROR: Fixer ID must be a positive integer (got '$FIXER_ID')" >&2
+    exit 1
+    ;;
+esac
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_config.sh"
 
