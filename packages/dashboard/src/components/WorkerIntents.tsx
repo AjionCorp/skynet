@@ -15,6 +15,28 @@ const STATUS_COLORS: Record<string, string> = {
   idle: "bg-zinc-500/20 text-zinc-400 border-zinc-500/30",
 };
 
+function getResponseError(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const error = (json as { error?: unknown }).error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+function getIntents(json: unknown): WorkerIntent[] | null {
+  if (!json || typeof json !== "object") return null;
+  const data = (json as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+  const intents = (data as { intents?: unknown }).intents;
+  return Array.isArray(intents) ? (intents as WorkerIntent[]) : null;
+}
+
+async function readJsonSafe(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 function formatAge(ms: number | null): string {
   if (ms == null) return "—";
   const seconds = Math.floor(ms / 1000);
@@ -34,13 +56,19 @@ export function WorkerIntents({ pollInterval = 15000 }: WorkerIntentsProps) {
   const fetchIntents = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/workers/intents`);
-      const json = await res.json();
-      if (json.data) {
-        setIntents(json.data.intents);
-        setError(null);
-      } else if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const intents = getIntents(json);
+      const apiError = getResponseError(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to fetch worker intents (HTTP ${res.status})`);
+        return;
       }
+      if (!intents) {
+        setError(apiError ?? "Invalid worker intent response");
+        return;
+      }
+      setIntents(intents);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch");
     } finally {

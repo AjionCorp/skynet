@@ -47,6 +47,17 @@ describe("AdminLayout", () => {
     expect(activeLink).toBeDefined();
   });
 
+  it("highlights parent section for nested routes", () => {
+    render(
+      <AdminLayout pages={PAGES} currentPath="/admin/tasks/queue">
+        <div>content</div>
+      </AdminLayout>
+    );
+    const taskLinks = screen.getAllByText("Tasks");
+    const activeLink = taskLinks.find((el) => el.closest("a")?.getAttribute("aria-current") === "page");
+    expect(activeLink).toBeDefined();
+  });
+
   it("does not highlight inactive links", () => {
     render(
       <AdminLayout pages={PAGES} currentPath="/admin/tasks">
@@ -57,6 +68,17 @@ describe("AdminLayout", () => {
     const pipelineLinks = screen.getAllByText("Pipeline");
     const inactiveLink = pipelineLinks.find((el) => el.closest("a")?.className.includes("border-transparent"));
     expect(inactiveLink).toBeDefined();
+  });
+
+  it("marks active links with aria-current", () => {
+    render(
+      <AdminLayout pages={PAGES} currentPath="/admin/tasks">
+        <div>content</div>
+      </AdminLayout>
+    );
+    const taskLinks = screen.getAllByText("Tasks");
+    const hasAriaCurrent = taskLinks.some((el) => el.closest("a")?.getAttribute("aria-current") === "page");
+    expect(hasAriaCurrent).toBe(true);
   });
 
   it("renders children content area correctly", () => {
