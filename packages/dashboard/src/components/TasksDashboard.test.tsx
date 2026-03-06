@@ -25,9 +25,18 @@ function renderWithProvider(ui: React.ReactElement) {
 }
 
 function mockFetchWith(data: TaskBacklogData | null, error: string | null = null) {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
-    new Response(JSON.stringify({ data, error }))
-  ));
+  vi.stubGlobal("fetch", vi.fn((url: string) => {
+    if (url.includes("/missions")) {
+      return Promise.resolve(new Response(JSON.stringify({
+        data: {
+          missions: [],
+          config: { activeMission: null },
+        },
+        error: null,
+      })));
+    }
+    return Promise.resolve(new Response(JSON.stringify({ data, error })));
+  }));
 }
 
 describe("TasksDashboard", () => {

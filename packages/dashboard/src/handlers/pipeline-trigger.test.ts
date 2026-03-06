@@ -116,6 +116,44 @@ describe("createPipelineTriggerHandler", () => {
     expect(spawnArgs).toContain("2");
   });
 
+  it("accepts numbered dev-worker aliases and prepends the worker id", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig());
+    const res = await handler(makePostRequest({ script: "dev-worker-3" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ triggered: true, script: "dev-worker-3" });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "bash",
+      expect.arrayContaining([expect.stringContaining("dev-worker.sh"), "3"]),
+      expect.any(Object),
+    );
+    expect(mockOpenSync).toHaveBeenCalledWith(
+      expect.stringContaining("dev-worker-3.log"),
+      expect.any(Number),
+    );
+  });
+
+  it("accepts numbered task-fixer aliases and uses the canonical fixer log name", async () => {
+    const handler = createPipelineTriggerHandler(makeConfig({
+      triggerableScripts: ["watchdog", "dev-worker", "task-fixer"],
+    }));
+    const res = await handler(makePostRequest({ script: "task-fixer-1" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ triggered: true, script: "task-fixer-1" });
+    expect(mockSpawn).toHaveBeenCalledWith(
+      "bash",
+      expect.arrayContaining([expect.stringContaining("task-fixer.sh"), "1"]),
+      expect.any(Object),
+    );
+    expect(mockOpenSync).toHaveBeenCalledWith(
+      expect.stringContaining("task-fixer.log"),
+      expect.any(Number),
+    );
+  });
+
   it("defaults args to empty array when not provided", async () => {
     const handler = createPipelineTriggerHandler(makeConfig());
     await handler(makePostRequest({ script: "watchdog" }));

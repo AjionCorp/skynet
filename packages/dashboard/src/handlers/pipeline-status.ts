@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "fs";
 import { spawnSync } from "child_process";
-import { dirname, resolve } from "path";
+import { basename, dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 import type { SkynetConfig, CodexAuthStatus, MissionState } from "../types";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
@@ -567,11 +567,13 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             // Project-driver status
             let projectDriverRunning = false;
             try {
-              const scriptsDir = resolve(devDir, "scripts");
-              // We look for any project-driver lock file
-              const pdLocks = readdirSync(devDir).filter(f => f.startsWith(`${lockPrefix}-project-driver-`) && f.endsWith(".lock"));
-              for (const lockDir of pdLocks) {
-                const pidPath = resolve(devDir, lockDir, "pid");
+              const lockDir = dirname(lockPrefix);
+              const lockNamePrefix = `${basename(lockPrefix)}-project-driver-`;
+              const pdLocks = readdirSync(lockDir).filter((entry) =>
+                entry.startsWith(lockNamePrefix) && entry.endsWith(".lock")
+              );
+              for (const lockEntry of pdLocks) {
+                const pidPath = resolve(lockDir, lockEntry, "pid");
                 if (existsSync(pidPath)) {
                   const pid = readFileSync(pidPath, "utf-8").trim();
                   if (pid) {

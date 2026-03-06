@@ -19,7 +19,9 @@ import type {
   WorkerFailureStats,
 } from "../types";
 
-export function FailureAnalysisPanel() {
+export type FailureAnalysisPanelProps = Record<string, never>;
+
+export function FailureAnalysisPanel(_props: FailureAnalysisPanelProps = {}) {
   const { apiPrefix } = useSkynet();
   const [expanded, setExpanded] = useState(false);
   const [data, setData] = useState<FailureAnalysis | null>(null);
