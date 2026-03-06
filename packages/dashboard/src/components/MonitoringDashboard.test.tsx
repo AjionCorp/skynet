@@ -78,6 +78,33 @@ interface MockEventSource {
 
 let mockES: MockEventSource;
 
+function mockFetchResponse(url: string) {
+  if (url.includes("/monitoring/status")) {
+    return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+  }
+
+  if (url.includes("/monitoring/agents")) {
+    return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+  }
+
+  if (url.includes("/monitoring/logs")) {
+    return new Response(
+      JSON.stringify({
+        data: {
+          script: "dev-worker-1",
+          lines: [],
+          totalLines: 0,
+          fileSizeBytes: 0,
+          count: 0,
+        },
+        error: null,
+      }),
+    );
+  }
+
+  return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+}
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
@@ -90,18 +117,9 @@ describe("MonitoringDashboard", () => {
       mockES = Object.assign(this, { url });
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for bootstrap status fetches and sub-components.
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/monitoring/status")) {
-        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
-      }
-      if (url.includes("/monitoring/agents")) {
-        return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
-      }
-      if (url.includes("/monitoring/logs")) {
-        return new Response(JSON.stringify({ data: null, error: null }));
-      }
-      return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+      return Promise.resolve(mockFetchResponse(url));
     }));
   });
 
@@ -279,5 +297,30 @@ describe("MonitoringDashboard", () => {
       const options = Array.from(logSelect.options).map((o) => o.textContent);
       expect(options).toContain("Task Fixer 2");
     });
+  });
+
+  it("falls back to REST status when SSE is silent", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Workers Active")).toBeDefined();
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/admin/monitoring/status");
+  });
+
+  it("shows auto-managed state for non-triggerable workers", async () => {
+    renderWithProvider(<MonitoringDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
+    });
+
+    fireEvent.click(screen.getByText("Workers"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Auth Refresh")).toBeDefined();
+    });
+
+    expect(screen.getAllByText("Auto-managed").length).toBeGreaterThanOrEqual(1);
   });
 });

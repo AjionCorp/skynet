@@ -34,6 +34,7 @@ import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 import { MissionGoalProgress } from "./MissionGoalProgress";
 import { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
 import { FailureAnalysisPanel } from "./FailureAnalysisPanel";
+import { getWorkerTriggerTarget } from "../lib/worker-trigger";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -52,6 +53,14 @@ function extractTimestamp(logLine: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function isPipelineStatusPayload(data: unknown): data is PipelineStatus {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      Array.isArray((data as PipelineStatus).workers),
+  );
+}
+
 export function PipelineDashboard() {
   const { apiPrefix } = useSkynet();
   const [status, setStatus] = useState<PipelineStatus | null>(null);
@@ -68,13 +77,24 @@ export function PipelineDashboard() {
     sync: false,
   });
   const logEndRef = useRef<HTMLDivElement>(null);
+  const statusUpdateSeqRef = useRef(0);
 
   const fetchStatus = useCallback(async () => {
+    const requestSeq = statusUpdateSeqRef.current + 1;
+    statusUpdateSeqRef.current = requestSeq;
+
     try {
       const res = await fetch(`${apiPrefix}/pipeline/status`);
       const json = await res.json();
+      if (requestSeq !== statusUpdateSeqRef.current) {
+        return;
+      }
       if (json.error) {
         setError(json.error);
+        return;
+      }
+      if (!isPipelineStatusPayload(json.data)) {
+        setError("Invalid pipeline status response");
         return;
       }
       setStatus(json.data);
@@ -94,7 +114,8 @@ export function PipelineDashboard() {
   const fetchLogs = useCallback(async (script: string) => {
     setLogLoading(true);
     try {
-      const res = await fetch(`${apiPrefix}/pipeline/logs?script=${script}&lines=100`);
+      const params = new URLSearchParams({ script, lines: "100" });
+      const res = await fetch(`${apiPrefix}/pipeline/logs?${params}`);
       const json = await res.json();
       setLogLines(json.data?.lines ?? []);
     } catch {
@@ -129,6 +150,11 @@ export function PipelineDashboard() {
             setError(json.error);
             return;
           }
+          if (!isPipelineStatusPayload(json.data)) {
+            setError("Invalid pipeline stream payload");
+            return;
+          }
+          statusUpdateSeqRef.current += 1;
           setStatus(json.data);
           setError(null);
           setConnectionStatus('connected');
@@ -144,6 +170,7 @@ export function PipelineDashboard() {
         es.close();
         esRef.current = null;
         setConnectionStatus('reconnecting');
+        void fetchStatus();
         const delay = backoffRef.current;
         backoffRef.current = Math.min(delay * 2, BACKOFF_MAX);
         reconnectTimerRef.current = setTimeout(connect, delay);
@@ -195,13 +222,20 @@ export function PipelineDashboard() {
   }, [logViewer, fetchLogs]);
 
   async function triggerScript(script: string) {
+    const triggerTarget = getWorkerTriggerTarget(script);
+    if (!triggerTarget) {
+      setTriggerMsg((p) => ({ ...p, [script]: "Managed automatically" }));
+      setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
+      return;
+    }
+
     setTriggering((p) => ({ ...p, [script]: true }));
     setTriggerMsg((p) => ({ ...p, [script]: "" }));
     try {
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ script }),
+        body: JSON.stringify(triggerTarget),
       });
       const json = await res.json();
       if (json.error) {
@@ -519,6 +553,11 @@ export function PipelineDashboard() {
                   : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
               }`}
             >
+              {(() => {
+                const logTarget = w.logFile || w.name;
+                const triggerTarget = getWorkerTriggerTarget(w.name);
+                return (
+                  <>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
@@ -539,7 +578,7 @@ export function PipelineDashboard() {
                 </p>
               )}
               <div className="mt-3 flex items-center gap-2">
-                {w.name !== "watchdog" && (
+                {triggerTarget ? (
                   <button
                     onClick={() => triggerScript(w.name)}
                     disabled={triggering[w.name]}
@@ -552,11 +591,15 @@ export function PipelineDashboard() {
                     )}
                     Run
                   </button>
+                ) : (
+                  <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+                    Auto-managed
+                  </span>
                 )}
                 <button
-                  onClick={() => setLogViewer(logViewer === w.name ? null : w.name)}
+                  onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
                   className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    logViewer === w.name
+                    logViewer === logTarget
                       ? "bg-amber-500/20 text-amber-400"
                       : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                   }`}
@@ -570,6 +613,9 @@ export function PipelineDashboard() {
                   {triggerMsg[w.name]}
                 </p>
               )}
+                  </>
+                );
+              })()}
             </div>
           ))}
         </div>
