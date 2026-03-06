@@ -17,6 +17,90 @@ interface ConfigEntry {
   comment: string;
 }
 
+const BOOLEAN_KEYS = new Set([
+  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
+  "SKYNET_ONE_SHOT",
+  "SKYNET_POST_MERGE_SMOKE",
+  "SKYNET_POST_MERGE_TYPECHECK",
+  "SKYNET_TG_ENABLED",
+]);
+
+const NUMBER_KEYS = new Set([
+  "SKYNET_MAX_WORKERS",
+  "SKYNET_MAX_FIXERS",
+  "SKYNET_MAX_TASKS_PER_RUN",
+  "SKYNET_STALE_MINUTES",
+  "SKYNET_AGENT_TIMEOUT_MINUTES",
+  "SKYNET_MAX_FIX_ATTEMPTS",
+  "SKYNET_DRIVER_BACKLOG_THRESHOLD",
+  "SKYNET_HEALTH_ALERT_THRESHOLD",
+  "SKYNET_MAX_LOG_SIZE_KB",
+  "SKYNET_MAX_EVENTS_LOG_KB",
+  "SKYNET_WATCHDOG_INTERVAL",
+  "SKYNET_SMOKE_TIMEOUT",
+  "SKYNET_GIT_PUSH_TIMEOUT",
+  "SKYNET_DEV_PORT",
+]);
+
+const URL_KEYS = new Set([
+  "SKYNET_DEV_SERVER_URL",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+]);
+
+const MASKED_SECRET = "••••••••";
+
+function getResponseError(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const error = (json as { error?: unknown }).error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+function getConfigPayload(
+  json: unknown
+): { entries: ConfigEntry[]; configPath: string; warning?: string | null } | null {
+  if (!json || typeof json !== "object") return null;
+  const data = (json as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+
+  const entries = (data as { entries?: unknown }).entries;
+  const configPath = (data as { configPath?: unknown }).configPath;
+  const warning = (data as { warning?: unknown }).warning;
+
+  if (!Array.isArray(entries)) return null;
+  if (typeof configPath !== "string" && typeof configPath !== "undefined") return null;
+
+  return {
+    entries: entries as ConfigEntry[],
+    configPath: typeof configPath === "string" ? configPath : "",
+    warning: typeof warning === "string" ? warning : null,
+  };
+}
+
+async function readJsonSafe(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function getFieldHelp(entry: ConfigEntry): string | null {
+  if (entry.value === MASKED_SECRET) {
+    return "Masked secret. Leave unchanged to keep the current value, or enter a new value to replace it.";
+  }
+  if (BOOLEAN_KEYS.has(entry.key)) {
+    return "Boolean setting.";
+  }
+  if (URL_KEYS.has(entry.key)) {
+    return "URL value.";
+  }
+  if (NUMBER_KEYS.has(entry.key)) {
+    return "Numeric setting.";
+  }
+  return null;
+}
+
 export interface SettingsDashboardProps {
   /** Poll interval in milliseconds. Defaults to 0 (no polling — config is static). */
   pollInterval?: number;
@@ -37,13 +121,19 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/config`);
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const apiError = getResponseError(json);
+      const data = getConfigPayload(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to fetch config (HTTP ${res.status})`);
         return;
       }
-      setEntries(json.data.entries ?? []);
-      setConfigPath(json.data.configPath ?? "");
+      if (!data) {
+        setError(apiError ?? "Invalid config response");
+        return;
+      }
+      setEntries(data.entries);
+      setConfigPath(data.configPath);
       setEditedValues({});
       setSaveWarning(null);
       setError(null);
@@ -88,14 +178,21 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ updates: editedValues }),
       });
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const apiError = getResponseError(json);
+      const data = getConfigPayload(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to save config (HTTP ${res.status})`);
         return;
       }
-      setEntries(json.data.entries ?? []);
+      if (!data) {
+        setError(apiError ?? "Invalid config response");
+        return;
+      }
+      setEntries(data.entries);
       setEditedValues({});
-      setSaveWarning(json.data.warning ?? null);
+      setConfigPath(data.configPath || configPath);
+      setSaveWarning(data.warning ?? null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -206,9 +303,11 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
             {section.entries.map((entry) => {
               const currentValue = entry.key in editedValues ? editedValues[entry.key] : entry.value;
               const isDirty = entry.key in editedValues;
-              // Detect boolean-like or short values for inline display
-              const isBooleanLike = /^(true|false)$/i.test(entry.value);
+              const isBooleanLike = BOOLEAN_KEYS.has(entry.key) || /^(true|false)$/i.test(entry.value);
+              const isNumberLike = NUMBER_KEYS.has(entry.key);
+              const isUrlLike = URL_KEYS.has(entry.key);
               const isLongValue = entry.value.length > 60;
+              const helpText = getFieldHelp(entry);
 
               return (
                 <div
@@ -220,7 +319,14 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
                   }`}
                 >
                   <label className="block">
-                    <span className="text-xs font-mono text-zinc-500">{entry.key}</span>
+                    <span className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                      <span>{entry.key}</span>
+                      {isDirty && (
+                        <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-cyan-300">
+                          Modified
+                        </span>
+                      )}
+                    </span>
                     {isBooleanLike ? (
                       <select
                         value={currentValue}
@@ -239,11 +345,15 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
                       />
                     ) : (
                       <input
-                        type="text"
+                        type={isNumberLike ? "number" : isUrlLike ? "url" : "text"}
                         value={currentValue}
                         onChange={(e) => handleChange(entry.key, e.target.value)}
+                        inputMode={isNumberLike ? "numeric" : undefined}
                         className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-200 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
+                    )}
+                    {helpText && (
+                      <span className="mt-2 block text-xs text-zinc-500">{helpText}</span>
                     )}
                   </label>
                 </div>

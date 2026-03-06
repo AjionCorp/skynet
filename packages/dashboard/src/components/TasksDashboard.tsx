@@ -71,10 +71,9 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
           setSelectedSlug(json.data.config.activeMission);
         }
-        return missionList[0]?.slug ?? null;
-      });
+      }
     } catch { /* ignore */ }
-  }, [apiPrefix]);
+  }, [apiPrefix, selectedSlug]);
 
   const fetchBacklog = useCallback(async () => {
     try {
