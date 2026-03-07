@@ -190,7 +190,67 @@ describe("createConfigHandler", () => {
       const body = await res.json();
       expect(res.status).toBe(400);
       expect(body.error).toContain("SKYNET_STALE_MINUTES");
-      expect(body.error).toContain(">= 5");
+      expect(body.error).toContain("between 5 and 240");
+    });
+
+    it("rejects invalid boolean values for pipeline toggles", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_POST_MERGE_SMOKE: "maybe" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_POST_MERGE_SMOKE");
+      expect(body.error).toContain('"true" or "false"');
+    });
+
+    it("rejects invalid dev ports", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_DEV_PORT: "70000" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_DEV_PORT");
+      expect(body.error).toContain("between 1 and 65535");
+    });
+
+    it("rejects invalid dev server URLs", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_DEV_SERVER_URL: "localhost:3000" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_DEV_SERVER_URL");
+      expect(body.error).toContain("must use http: or https:");
+    });
+
+    it("accepts empty webhook URLs so notifications can be disabled", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_SLACK_WEBHOOK_URL=""\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_SLACK_WEBHOOK_URL: "" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+    });
+
+    it("rejects unsupported notification channels", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_NOTIFY_CHANNELS: "telegram,email" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_NOTIFY_CHANNELS");
+      expect(body.error).toContain("telegram, slack, and discord");
     });
 
     it("accepts valid SKYNET_MAX_WORKERS value", async () => {

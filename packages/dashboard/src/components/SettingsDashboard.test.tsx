@@ -219,6 +219,31 @@ describe("SettingsDashboard", () => {
     });
   });
 
+  it("displays an error when the config response shape is invalid", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: null, error: null }))
+    ));
+
+    renderWithProvider(<SettingsDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Invalid config response")).toBeDefined();
+    });
+  });
+
+  it("shows the HTTP status when fetch returns a non-JSON error response", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response("Upstream config proxy failed", {
+        status: 502,
+        headers: { "Content-Type": "text/plain" },
+      })
+    ));
+
+    renderWithProvider(<SettingsDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to fetch config (HTTP 502)")).toBeDefined();
+    });
+  });
+
   it("shows 'No changes' when nothing is edited", async () => {
     mockConfigGet(MOCK_ENTRIES);
     renderWithProvider(<SettingsDashboard />);

@@ -263,7 +263,7 @@ export class SkynetDB {
     const rows = this.db
       .prepare(
         `SELECT completed_at, title, branch, duration, notes,
-                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
+                ${filesTouchedSelect}
          FROM tasks
          WHERE status IN ('completed','fixed')
            AND notes NOT LIKE '%phantom%'${missionFilter}
@@ -327,8 +327,8 @@ export class SkynetDB {
     const rows = this.db
       .prepare(
         `SELECT failed_at, title, branch, error, attempts, status,
-                ${this.hasReasonCode ? "reason_code" : "'' AS reason_code"},
-                ${this.hasFilesTouched ? "files_touched" : "'' AS files_touched"}
+                ${reasonCodeSelect},
+                ${filesTouchedSelect}
          FROM tasks
          WHERE (status IN ('failed','blocked','fixed','superseded')
             OR status LIKE 'fixing-%')${missionFilter}

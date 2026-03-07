@@ -21,6 +21,18 @@ import type {
 
 export type FailureAnalysisPanelProps = Record<string, never>;
 
+function isFailureAnalysisPayload(data: unknown): data is FailureAnalysis {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      typeof (data as FailureAnalysis).summary?.total === "number" &&
+      Array.isArray((data as FailureAnalysis).errorPatterns) &&
+      Array.isArray((data as FailureAnalysis).timeline) &&
+      Array.isArray((data as FailureAnalysis).byWorker) &&
+      Array.isArray((data as FailureAnalysis).recentFailures),
+  );
+}
+
 export function FailureAnalysisPanel(_props: FailureAnalysisPanelProps = {}) {
   const { apiPrefix } = useSkynet();
   const [expanded, setExpanded] = useState(false);
@@ -30,7 +42,11 @@ export function FailureAnalysisPanel(_props: FailureAnalysisPanelProps = {}) {
     try {
       const res = await fetch(`${apiPrefix}/pipeline/failure-analysis`);
       const json = await res.json();
-      if (json.data) setData(json.data);
+      if (isFailureAnalysisPayload(json.data)) {
+        setData(json.data);
+      } else if (json.data === null) {
+        setData(null);
+      }
     } catch {
       // non-critical
     }

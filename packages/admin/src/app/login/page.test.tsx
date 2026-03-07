@@ -66,4 +66,42 @@ describe("LoginPage", () => {
       expect(pushSpy).toHaveBeenCalledWith("/admin/pipeline");
     });
   });
+
+  it("surfaces non-JSON auth errors instead of masking them as network failures", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response("Upstream auth proxy failed", {
+        status: 502,
+        headers: { "Content-Type": "text/plain" },
+      })
+    );
+
+    render(<LoginPage />);
+    fireEvent.change(screen.getByPlaceholderText("API key"), {
+      target: { value: "skynet-test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Upstream auth proxy failed")).toBeDefined();
+    });
+  });
+
+  it("falls back to the HTTP status when the error response body is empty", async () => {
+    vi.mocked(fetch).mockResolvedValue(
+      new Response(null, {
+        status: 401,
+        headers: { "Content-Type": "text/plain" },
+      })
+    );
+
+    render(<LoginPage />);
+    fireEvent.change(screen.getByPlaceholderText("API key"), {
+      target: { value: "skynet-test-key" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /log in/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Authentication failed (HTTP 401)")).toBeDefined();
+    });
+  });
 });

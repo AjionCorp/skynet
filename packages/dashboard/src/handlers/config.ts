@@ -169,6 +169,106 @@ const EXECUTABLE_KEYS = new Set([
   "SKYNET_CLAUDE_BIN", "SKYNET_CODEX_BIN", "SKYNET_GEMINI_BIN",
 ]);
 
+const BOOLEAN_KEYS = new Set([
+  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
+  "SKYNET_ONE_SHOT",
+  "SKYNET_POST_MERGE_SMOKE",
+  "SKYNET_POST_MERGE_TYPECHECK",
+  "SKYNET_TG_ENABLED",
+]);
+
+const INTEGER_RULES: Partial<Record<string, { min: number; max: number }>> = {
+  SKYNET_MAX_WORKERS: { min: 1, max: 16 },
+  SKYNET_MAX_FIXERS: { min: 0, max: 16 },
+  SKYNET_MAX_TASKS_PER_RUN: { min: 1, max: 100 },
+  SKYNET_STALE_MINUTES: { min: 5, max: 240 },
+  SKYNET_AGENT_TIMEOUT_MINUTES: { min: 0, max: 240 },
+  SKYNET_MAX_FIX_ATTEMPTS: { min: 1, max: 20 },
+  SKYNET_DRIVER_BACKLOG_THRESHOLD: { min: 0, max: 100 },
+  SKYNET_HEALTH_ALERT_THRESHOLD: { min: 0, max: 100 },
+  SKYNET_MAX_LOG_SIZE_KB: { min: 0, max: 102400 },
+  SKYNET_MAX_EVENTS_LOG_KB: { min: 0, max: 102400 },
+  SKYNET_WATCHDOG_INTERVAL: { min: 30, max: 600 },
+  SKYNET_SMOKE_TIMEOUT: { min: 1, max: 600 },
+  SKYNET_GIT_PUSH_TIMEOUT: { min: 1, max: 300 },
+  SKYNET_DEV_PORT: { min: 1, max: 65535 },
+};
+
+const URL_RULES: Partial<Record<string, { protocols: string[]; allowEmpty?: boolean }>> = {
+  SKYNET_DEV_SERVER_URL: { protocols: ["http:", "https:"] },
+  SKYNET_SLACK_WEBHOOK_URL: { protocols: ["https:"], allowEmpty: true },
+  SKYNET_DISCORD_WEBHOOK_URL: { protocols: ["https:"], allowEmpty: true },
+};
+
+const NOTIFY_CHANNELS = new Set(["telegram", "slack", "discord"]);
+
+function validateIntegerValue(
+  key: string,
+  value: string,
+  range: { min: number; max: number }
+): string | null {
+  const trimmed = value.trim();
+  if (!/^-?\d+$/.test(trimmed)) {
+    return `${key} must be an integer between ${range.min} and ${range.max}, got "${value}"`;
+  }
+  const n = Number(trimmed);
+  if (!Number.isSafeInteger(n) || n < range.min || n > range.max) {
+    return `${key} must be an integer between ${range.min} and ${range.max}, got "${value}"`;
+  }
+  return null;
+}
+
+function validateBooleanValue(key: string, value: string): string | null {
+  if (!/^(true|false)$/i.test(value.trim())) {
+    return `${key} must be "true" or "false", got "${value}"`;
+  }
+  return null;
+}
+
+function validateUrlValue(
+  key: string,
+  value: string,
+  rule: { protocols: string[]; allowEmpty?: boolean }
+): string | null {
+  const protocolLabel = rule.protocols.join(" or ");
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return rule.allowEmpty ? null : `${key} must be a valid ${protocolLabel} URL`;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (!rule.protocols.includes(parsed.protocol)) {
+      return `${key} must use ${protocolLabel} (got "${parsed.protocol}")`;
+    }
+    return null;
+  } catch {
+    return `${key} must be a valid ${protocolLabel} URL`;
+  }
+}
+
+function validateNotifyChannelsValue(value: string): string | null {
+  const channels = value
+    .split(",")
+    .map((channel) => channel.trim().toLowerCase())
+    .filter(Boolean);
+
+  if (channels.length === 0) return null;
+
+  const invalid = channels.filter((channel) => !NOTIFY_CHANNELS.has(channel));
+  if (invalid.length > 0) {
+    return `SKYNET_NOTIFY_CHANNELS supports only telegram, slack, and discord (got "${invalid.join(", ")}")`;
+  }
+  return null;
+}
+
+function validateTelegramChatIdValue(value: string): string | null {
+  if (value.trim().length === 0) return null;
+  if (!/^-?\d+$/.test(value.trim())) {
+    return `SKYNET_TG_CHAT_ID must be a numeric Telegram chat id, got "${value}"`;
+  }
+  return null;
+}
+
 /**
  * Validate config updates — reject dangerous values.
  */
@@ -214,18 +314,40 @@ function validateUpdates(updates: Record<string, string>): string | null {
       errors.push(`Key '${key}' is not in the list of updatable configuration keys`);
       continue;
     }
-    // Key-specific validation
-    if (key === "SKYNET_MAX_WORKERS") {
-      const n = Number(value);
-      if (!Number.isInteger(n) || n < 1 || n > 16) {
-        errors.push(`SKYNET_MAX_WORKERS must be an integer between 1 and 16, got "${value}"`);
+    const integerRule = INTEGER_RULES[key];
+    if (integerRule) {
+      const integerError = validateIntegerValue(key, value, integerRule);
+      if (integerError) {
+        errors.push(integerError);
         continue;
       }
     }
-    if (key === "SKYNET_STALE_MINUTES") {
-      const n = Number(value);
-      if (!Number.isInteger(n) || n < 5) {
-        errors.push(`SKYNET_STALE_MINUTES must be an integer >= 5, got "${value}"`);
+    if (BOOLEAN_KEYS.has(key)) {
+      const booleanError = validateBooleanValue(key, value);
+      if (booleanError) {
+        errors.push(booleanError);
+        continue;
+      }
+    }
+    const urlRule = URL_RULES[key];
+    if (urlRule) {
+      const urlError = validateUrlValue(key, value, urlRule);
+      if (urlError) {
+        errors.push(urlError);
+        continue;
+      }
+    }
+    if (key === "SKYNET_NOTIFY_CHANNELS") {
+      const notifyError = validateNotifyChannelsValue(value);
+      if (notifyError) {
+        errors.push(notifyError);
+        continue;
+      }
+    }
+    if (key === "SKYNET_TG_CHAT_ID") {
+      const chatIdError = validateTelegramChatIdValue(value);
+      if (chatIdError) {
+        errors.push(chatIdError);
         continue;
       }
     }

@@ -620,10 +620,10 @@ while [ "$local_n" -lt 30 ]; do
 done
 
 # After a successful rotation, _EVENTS_ROTATION_SKIPS should be 0
-if [ "$_EVENTS_ROTATION_SKIPS" -lt 10 ]; then
-  pass "skip reset: rotation skip counter decreased after successful rotation"
+if [ "$_EVENTS_ROTATION_SKIPS" -eq 0 ]; then
+  pass "skip reset: rotation skip counter reset to zero after successful rotation"
 else
-  fail "skip reset: skip counter should reset after successful rotation (got $_EVENTS_ROTATION_SKIPS)"
+  fail "skip reset: skip counter should reset to zero after successful rotation (got $_EVENTS_ROTATION_SKIPS)"
 fi
 
 # Reset
@@ -901,9 +901,8 @@ export SKYNET_MAX_EVENTS_LOG_KB="1"
 dd if=/dev/zero bs=1024 count=2 2>/dev/null | tr '\0' 'X' > "$events_log"
 emit_event "skip_precise" "trigger rotation"
 
-# After the successful rotation path: line 104 sets to 0, then line 135
-# increments unconditionally. So the expected value is 1.
-assert_eq "$_EVENTS_ROTATION_SKIPS" "1" "skip counter: value is 1 after successful rotation (reset + unconditional increment)"
+# After a successful rotation, the counter must stay at zero.
+assert_eq "$_EVENTS_ROTATION_SKIPS" "0" "skip counter: successful rotation leaves the counter at zero"
 
 # Reset
 _EVENTS_ROTATION_SKIPS=0

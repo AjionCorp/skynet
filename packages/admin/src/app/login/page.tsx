@@ -3,6 +3,32 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+async function getLoginErrorMessage(res: Response): Promise<string> {
+  const contentType = res.headers.get("content-type") ?? "";
+
+  if (contentType.includes("application/json")) {
+    try {
+      const data = await res.json() as { error?: unknown };
+      if (typeof data.error === "string" && data.error.trim().length > 0) {
+        return data.error;
+      }
+    } catch {
+      // Fall through to the HTTP-status fallback below.
+    }
+  } else {
+    try {
+      const text = (await res.text()).trim();
+      if (text.length > 0) {
+        return text;
+      }
+    } catch {
+      // Fall through to the HTTP-status fallback below.
+    }
+  }
+
+  return `Authentication failed (HTTP ${res.status})`;
+}
+
 export default function LoginPage() {
   const [apiKey, setApiKey] = useState("");
   const [error, setError] = useState("");
@@ -24,8 +50,7 @@ export default function LoginPage() {
       if (res.ok) {
         router.push("/admin/pipeline");
       } else {
-        const data = await res.json();
-        setError(data.error || "Authentication failed");
+        setError(await getLoginErrorMessage(res));
       }
     } catch {
       setError("Network error");
