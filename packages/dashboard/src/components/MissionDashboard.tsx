@@ -108,16 +108,6 @@ function formatWorkerLabel(workerName: string): string {
 
   return workerName;
 }
-const DEFAULT_WORKER_NAMES = [
-  "dev-worker-1",
-  "dev-worker-2",
-  "dev-worker-3",
-  "dev-worker-4",
-  "task-fixer-1",
-  "task-fixer-2",
-  "task-fixer-3",
-];
-
 const LLM_PROVIDERS: { value: LlmConfig["provider"]; label: string; color: string }[] = [
   { value: "auto", label: "Auto", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
   { value: "claude", label: "Claude", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
@@ -143,7 +133,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [missionConfig, setMissionConfig] = useState<MissionConfig>({ activeMission: "main", assignments: {} });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [workerNames, setWorkerNames] = useState<string[]>(() =>
+  const [assignableWorkerDefaults, setAssignableWorkerDefaults] = useState<string[]>(() =>
     getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS),
   );
 
@@ -240,7 +230,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
         setLocalAssignments(json.data.config.assignments);
-        setWorkerNames(
+        setAssignableWorkerDefaults(
           mergeAssignableWorkers(
             getAssignableWorkerNames(maxWorkers, maxFixers),
             json.data.config.assignments ?? {},
@@ -305,14 +295,20 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const handlePipelineControl = useCallback(async (action: "pause" | "resume" | "start" | "stop") => {
     setControlLoading(true);
     try {
-      await fetch(`${apiPrefix}/pipeline/control`, {
+      const res = await fetch(`${apiPrefix}/pipeline/control`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
+      const json = await res.json().catch(() => ({ data: null, error: null }));
+      if (!res.ok || json.error) {
+        setError(json.error ?? `Failed to ${action} pipeline`);
+        return;
+      }
+      setError(null);
       await fetchAll();
-    } catch {
-      setError(`Failed to ${action} pipeline`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} pipeline`);
     } finally {
       setControlLoading(false);
     }
@@ -549,7 +545,10 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") renameMission(m.slug, renameValue);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
                     if (e.key === "Escape") setRenamingSlug(null);
                   }}
                   onBlur={() => renameMission(m.slug, renameValue)}

@@ -382,7 +382,7 @@ function containsDisallowedChars(value: string): boolean {
  * the convention used across all handlers.
  */
 /**
- * Keys containing secrets that should be masked in GET responses.
+ * Keys containing secrets that should be redacted in GET responses.
  * These values are write-only from the dashboard's perspective.
  */
 export const SENSITIVE_KEYS = new Set([
@@ -391,6 +391,18 @@ export const SENSITIVE_KEYS = new Set([
   "SKYNET_DISCORD_WEBHOOK_URL",
   "SKYNET_DASHBOARD_API_KEY",
 ]);
+
+const SENSITIVE_PLACEHOLDER = "••••••••";
+
+function serializeConfigEntry(entry: { key: string; value: string; comment: string }) {
+  const isSensitive = SENSITIVE_KEYS.has(entry.key);
+  return {
+    ...entry,
+    value: isSensitive ? "" : entry.value,
+    sensitive: isSensitive,
+    hasStoredValue: isSensitive ? entry.value.length > 0 : undefined,
+  };
+}
 
 export function createConfigHandler(config: SkynetConfig) {
   const configPath = `${config.devDir}/skynet.config.sh`;
@@ -405,10 +417,7 @@ export function createConfigHandler(config: SkynetConfig) {
       }
 
       const raw = readFileSync(configPath, "utf-8");
-      const entries = parseConfigFile(raw).map(e => ({
-        ...e,
-        value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
-      }));
+      const entries = parseConfigFile(raw).map(serializeConfigEntry);
 
       return Response.json({
         data: { entries, configPath },
@@ -450,7 +459,13 @@ export function createConfigHandler(config: SkynetConfig) {
         );
       }
 
-      const validationError = validateUpdates(updates);
+      const normalizedUpdates = Object.fromEntries(
+        Object.entries(updates).filter(
+          ([key, value]) => !(SENSITIVE_KEYS.has(key) && value === SENSITIVE_PLACEHOLDER),
+        ),
+      );
+
+      const validationError = validateUpdates(normalizedUpdates);
       if (validationError) {
         return Response.json(
           { data: null, error: validationError },
@@ -506,21 +521,18 @@ export function createConfigHandler(config: SkynetConfig) {
       }
 
       try {
-        const missingKeys = writeConfigFile(configPath, updates);
+        const missingKeys = writeConfigFile(configPath, normalizedUpdates);
 
         // Re-read to return updated state
         const raw = readFileSync(configPath, "utf-8");
-        const entries = parseConfigFile(raw).map(e => ({
-          ...e,
-          value: SENSITIVE_KEYS.has(e.key) && e.value ? "••••••••" : e.value,
-        }));
+        const entries = parseConfigFile(raw).map(serializeConfigEntry);
 
         const warning = missingKeys.length > 0
           ? `Keys not found in config file (not updated): ${missingKeys.join(", ")}`
           : null;
 
         return Response.json({
-          data: { entries, configPath, updatedKeys: Object.keys(updates), ...(warning ? { warning } : {}) },
+          data: { entries, configPath, updatedKeys: Object.keys(normalizedUpdates), ...(warning ? { warning } : {}) },
           error: null,
         });
       } finally {

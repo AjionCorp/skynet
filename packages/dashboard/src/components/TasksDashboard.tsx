@@ -42,6 +42,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   // Mission state
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [scopeInitialized, setScopeInitialized] = useState(false);
 
   const [backlog, setBacklog] = useState<TaskBacklogData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,13 +69,16 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
       if (missionList) {
         setMissions(missionList);
-        if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
+        if (!scopeInitialized && typeof json.data?.config?.activeMission === "string") {
           setSelectedSlug(json.data.config.activeMission);
+          setScopeInitialized(true);
         }
-        return missionList[0]?.slug ?? null;
+        if (!scopeInitialized) {
+          setScopeInitialized(true);
+        }
       }
     } catch { /* ignore */ }
-  }, [apiPrefix, selectedSlug]);
+  }, [apiPrefix, scopeInitialized]);
 
   const fetchBacklog = useCallback(async () => {
     try {
@@ -158,11 +162,29 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           <Target className="h-3.5 w-3.5" />
           Scope:
         </span>
+        {missions.length > 0 && (
+          <button
+            onClick={() => {
+              setSelectedSlug(null);
+              setScopeInitialized(true);
+            }}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              selectedSlug === null
+                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+                : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+            }`}
+          >
+            Global backlog
+          </button>
+        )}
         {missions.length > 0 ? (
           missions.map((m) => (
             <button
               key={m.slug}
-              onClick={() => setSelectedSlug(m.slug)}
+              onClick={() => {
+                setSelectedSlug(m.slug);
+                setScopeInitialized(true);
+              }}
               className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
                 selectedSlug === m.slug
                   ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"

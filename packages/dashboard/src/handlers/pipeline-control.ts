@@ -27,13 +27,13 @@ export function createPipelineControlHandler(config: SkynetConfig) {
 
       if (!rawAction) {
         return Response.json(
-          { data: null, error: `Unknown action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Invalid or missing action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }
       if (!VALID_ACTIONS.includes(rawAction as typeof VALID_ACTIONS[number])) {
         return Response.json(
-          { data: null, error: `Unknown action '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Invalid or missing action '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }

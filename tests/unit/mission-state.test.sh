@@ -87,6 +87,24 @@ set +e  # _config.sh enables errexit; disable for test assertions
 
 echo "mission-state.test.sh — regression tests for mission state transitions"
 
+# ── 0. Shared mission state reader normalization ─────────────────────
+
+echo ""
+log "=== Shared mission state reader normalization ==="
+
+_state_file="$TMPDIR_ROOT/state-normalized.md"
+cat > "$_state_file" << 'MFILE'
+# Mission
+## State: ACTIVE
+MFILE
+assert_eq "$(_get_mission_state "$_state_file")" "active" "_get_mission_state: normalizes uppercase state to lowercase"
+
+cat > "$_state_file" << 'MFILE'
+# Mission
+State: Paused
+MFILE
+assert_eq "$(_get_mission_state "$_state_file")" "paused" "_get_mission_state: supports legacy State: format"
+
 # ── Helper: parse success criteria (extracted from project-driver.sh) ──
 
 # Mirrors the exact logic from project-driver.sh lines 518-522.

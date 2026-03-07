@@ -129,8 +129,10 @@ describe("createPipelineStatusHandler", () => {
     mockListProjectDriverLocks.mockReturnValue([
       "/tmp/skynet-test--project-driver-main.lock",
     ]);
-    mockReadPid.mockReturnValue(4242);
-    mockIsProcessAlive.mockReturnValue(true);
+    mockReadPid.mockImplementation((lockPath) =>
+      lockPath === "/tmp/skynet-test--project-driver-main.lock" ? 4242 : null
+    );
+    mockIsProcessAlive.mockImplementation((pid) => pid === 4242);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -299,8 +301,10 @@ describe("createPipelineStatusHandler", () => {
     mockListProjectDriverLocks.mockReturnValue([
       "/tmp/skynet-test--project-driver-abcd1234.lock",
     ]);
-    mockReadPid.mockReturnValue(4242);
-    mockIsProcessAlive.mockReturnValue(true);
+    mockReadPid.mockImplementation((lockPath) =>
+      lockPath === "/tmp/skynet-test--project-driver-abcd1234.lock" ? 4242 : null
+    );
+    mockIsProcessAlive.mockImplementation((pid) => pid === 4242);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -362,9 +366,9 @@ describe("createPipelineStatusHandler", () => {
     mockListProjectDriverLocks.mockReturnValue([
       "/tmp/skynet-test--project-driver-my-mission.lock",
     ]);
-    mockReadPid.mockImplementation((lockFile) =>
+    mockReadPid.mockImplementation((lockFile) => (
       lockFile.includes("project-driver-my-mission") ? 321 : null
-    );
+    ));
     mockIsProcessAlive.mockImplementation((pid) => pid === 321);
 
     const handler = createPipelineStatusHandler(makeConfig());
