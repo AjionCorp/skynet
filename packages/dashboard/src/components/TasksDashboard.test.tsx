@@ -220,6 +220,24 @@ describe("TasksDashboard", () => {
     });
   });
 
+  it("keeps the global backlog scope selectable after missions load", async () => {
+    const fetchMock = mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
+    renderWithProvider(<TasksDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Global backlog")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("Global backlog"));
+    fireEvent.click(screen.getByText("Refresh"));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url) === "/api/admin/tasks")
+      ).toBe(true);
+    });
+  });
+
   it("renders Refresh button", async () => {
     mockFetchWith(MOCK_BACKLOG);
     renderWithProvider(<TasksDashboard />);

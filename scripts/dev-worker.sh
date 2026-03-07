@@ -612,6 +612,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
+  _CURRENT_TASK_ID="${_db_task_id:-}"
   _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
   # Avoid grep here because set -e + pipefail would crash the worker when no [TAG] exists.
   task_type=""
@@ -621,7 +622,15 @@ EOF
       task_type="${task_type%%]*}"
       ;;
   esac
-  branch_name="${SKYNET_BRANCH_PREFIX}$(echo "$task_title" | sed 's/^\[[^]]*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 40)"
+  _branch_base=$(echo "$task_title" | sed 's/^\[[^]]*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | sed 's/^-*//' | head -c 32)
+  if [ -z "$_branch_base" ]; then
+    _branch_base="task"
+  fi
+  if [ -n "${_db_task_id:-}" ]; then
+    branch_name="${SKYNET_BRANCH_PREFIX}${_branch_base}-${_db_task_id}"
+  else
+    branch_name="${SKYNET_BRANCH_PREFIX}${_branch_base}"
+  fi
 
   # Load skills matching this task's tag
   SKILL_CONTENT="$(get_skills_for_tag "${task_type:-}")"

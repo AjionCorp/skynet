@@ -18,7 +18,12 @@ LOCK_FILE="${SKYNET_LOCK_PREFIX}-health-check.lock"
 if ! acquire_worker_lock "$LOCK_FILE" "$LOG" "HC"; then
   exit 0
 fi
-trap 'release_lock_if_owned "$LOCK_FILE" "$$" 2>/dev/null || true' EXIT INT TERM
+_health_check_cleanup() {
+  release_lock_if_owned "$LOCK_FILE" "$$" 2>/dev/null || true
+}
+trap '_health_check_cleanup' EXIT
+trap '_health_check_cleanup; exit 130' INT
+trap '_health_check_cleanup; exit 143' TERM
 
 # --- Claude Code auth pre-check (with alerting) ---
 source "$SCRIPTS_DIR/auth-check.sh"

@@ -95,6 +95,43 @@ fi
 kill "$_holder_pid" 2>/dev/null; wait "$_holder_pid" 2>/dev/null || true
 rm -rf "$lockdir"
 
+# ── Test 2b: Old live PID lock is NOT reclaimed just for age ─────────
+
+echo ""
+log "=== lock_backend_acquire: does not steal an old lock from a live PID ==="
+
+lockdir="$SKYNET_LOCK_PREFIX-test-lock-2b.lock"
+mkdir -p "$lockdir"
+sleep 300 &
+_holder_pid2b=$!
+echo "$_holder_pid2b" > "$lockdir/pid"
+touch -t "$(date -v-700S +%Y%m%d%H%M.%S 2>/dev/null || date -d '700 seconds ago' +%Y%m%d%H%M.%S 2>/dev/null)" "$lockdir/pid" 2>/dev/null || true
+
+if lock_backend_acquire "test-lock-2b" 1 2>/dev/null; then
+  fail "lock_backend_acquire: should not reclaim a stale-looking lock while the holder PID is still alive"
+else
+  pass "lock_backend_acquire: refuses to steal a lock from a live PID even when it is older than TTL"
+fi
+
+kill "$_holder_pid2b" 2>/dev/null; wait "$_holder_pid2b" 2>/dev/null || true
+rm -rf "$lockdir"
+
+# ── Test 2c: Missing PID is not reclaimed immediately ────────────────
+
+echo ""
+log "=== lock_backend_acquire: missing PID gets a grace period before reclaim ==="
+
+lockdir="$SKYNET_LOCK_PREFIX-test-lock-2c.lock"
+mkdir -p "$lockdir"
+
+if lock_backend_acquire "test-lock-2c" 1 2>/dev/null; then
+  fail "lock_backend_acquire: should not immediately reclaim a lock directory that has no PID yet"
+else
+  pass "lock_backend_acquire: waits before reclaiming a missing-PID lock"
+fi
+
+rm -rf "$lockdir"
+
 # ── Test 3: lock_backend_release releases when we own the lock ──────
 
 echo ""

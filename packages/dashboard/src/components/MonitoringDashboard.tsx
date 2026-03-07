@@ -33,7 +33,7 @@ import type {
 } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { WorkerScaling } from "./WorkerScaling";
-import { getWorkerTriggerSpec } from "../lib/worker-triggers";
+import { getWorkerTriggerTarget } from "../lib/worker-trigger";
 
 // ===== Constants =====
 
@@ -107,6 +107,14 @@ function getLogLineColor(line: string): string {
 function getTagColor(tag: string, extraColors?: Record<string, string>): string {
   const merged = { ...TAG_COLORS, ...extraColors };
   return merged[tag] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/25";
+}
+
+function isMonitoringStatusPayload(data: unknown): data is MonitoringStatus {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      Array.isArray((data as MonitoringStatus).workers),
+  );
 }
 
 // ===== Sub-components =====
@@ -292,6 +300,7 @@ function WorkerCard({
         <p className="mt-1.5 text-xs text-zinc-600">Last: {worker.lastLogTime}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
+        {getWorkerTriggerTarget(worker.name) ? (
         {canTrigger && (
           <button
             onClick={onTrigger}
@@ -301,6 +310,10 @@ function WorkerCard({
             {triggering ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             Run
           </button>
+        ) : (
+          <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+            Auto-managed
+          </span>
         )}
         <button
           onClick={onViewLogs}
@@ -367,6 +380,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     { value: "task-fixer", label: "Task Fixer" },
     { value: "watchdog", label: "Watchdog" },
     { value: "auth-refresh", label: "Auth Refresh" },
+    { value: "codex-auth-refresh", label: "Codex Auth Refresh" },
     { value: "health-check", label: "Health Check" },
     { value: "sync-runner", label: "Sync Runner" },
     { value: "post-commit-gate", label: "Post-Commit Gate" },
@@ -388,6 +402,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   const [logLoading, setLogLoading] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [connected, setConnected] = useState(false);
+  const statusUpdateSeqRef = useRef(0);
 
   // Build log list from static scripts + live worker status so scaled workers/fixers
   // automatically appear in the log viewer without manual dashboard configuration.
@@ -416,11 +431,21 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Fetch status (used as fallback and for manual refresh)
   const fetchStatus = useCallback(async () => {
+    const requestSeq = statusUpdateSeqRef.current + 1;
+    statusUpdateSeqRef.current = requestSeq;
+
     try {
       const res = await fetch(`${apiPrefix}/monitoring/status`);
       const json = await res.json();
+      if (requestSeq !== statusUpdateSeqRef.current) {
+        return;
+      }
       if (json.error) {
         setError(json.error);
+        return;
+      }
+      if (!isMonitoringStatusPayload(json.data)) {
+        setError("Invalid monitoring status response");
         return;
       }
       setStatus(json.data);
@@ -501,6 +526,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
           setError(json.error);
           return;
         }
+        if (!isMonitoringStatusPayload(json.data)) {
+          setError("Invalid monitoring stream payload");
+          return;
+        }
+        statusUpdateSeqRef.current += 1;
         setStatus(json.data);
         setError(null);
         stopFallbackPoll();
@@ -513,8 +543,8 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
     es.onerror = () => {
       setConnected(false);
-      fetchStatus();
-      startFallbackPoll();
+      void fetchStatus();
+      // EventSource auto-reconnects
     };
 
     return () => {
@@ -540,9 +570,9 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   }, [activeTab, fetchAgents]);
 
   async function triggerScript(script: string) {
-    const triggerSpec = getWorkerTriggerSpec(script);
-    if (!triggerSpec) {
-      setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
+    const triggerTarget = getWorkerTriggerTarget(script);
+    if (!triggerTarget) {
+       setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
       setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
       return;
     }
@@ -553,7 +583,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(triggerSpec),
+        body: JSON.stringify(triggerTarget),
       });
       const json = await res.json();
       if (json.error) {

@@ -34,7 +34,7 @@ import { WorkerPerformanceProfiles } from "./WorkerPerformanceProfiles";
 import { MissionGoalProgress } from "./MissionGoalProgress";
 import { VelocityEfficiencyPanel } from "./VelocityEfficiencyPanel";
 import { FailureAnalysisPanel } from "./FailureAnalysisPanel";
-import { getWorkerTriggerSpec } from "../lib/worker-triggers";
+import { getWorkerTriggerTarget } from "../lib/worker-trigger";
 
 function formatAge(ms: number | null): string {
   if (ms === null) return "";
@@ -53,6 +53,14 @@ function extractTimestamp(logLine: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function isPipelineStatusPayload(data: unknown): data is PipelineStatus {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      Array.isArray((data as PipelineStatus).workers),
+  );
+}
+
 export function PipelineDashboard() {
   const { apiPrefix } = useSkynet();
   const [status, setStatus] = useState<PipelineStatus | null>(null);
@@ -69,13 +77,24 @@ export function PipelineDashboard() {
     sync: false,
   });
   const logEndRef = useRef<HTMLDivElement>(null);
+  const statusUpdateSeqRef = useRef(0);
 
   const fetchStatus = useCallback(async () => {
+    const requestSeq = statusUpdateSeqRef.current + 1;
+    statusUpdateSeqRef.current = requestSeq;
+
     try {
       const res = await fetch(`${apiPrefix}/pipeline/status`);
       const json = await res.json();
+      if (requestSeq !== statusUpdateSeqRef.current) {
+        return;
+      }
       if (json.error) {
         setError(json.error);
+        return;
+      }
+      if (!isPipelineStatusPayload(json.data)) {
+        setError("Invalid pipeline status response");
         return;
       }
       setStatus(json.data);
@@ -95,7 +114,8 @@ export function PipelineDashboard() {
   const fetchLogs = useCallback(async (script: string) => {
     setLogLoading(true);
     try {
-      const res = await fetch(`${apiPrefix}/pipeline/logs?script=${script}&lines=100`);
+      const params = new URLSearchParams({ script, lines: "100" });
+      const res = await fetch(`${apiPrefix}/pipeline/logs?${params}`);
       const json = await res.json();
       setLogLines(json.data?.lines ?? []);
     } catch {
@@ -130,6 +150,11 @@ export function PipelineDashboard() {
             setError(json.error);
             return;
           }
+          if (!isPipelineStatusPayload(json.data)) {
+            setError("Invalid pipeline stream payload");
+            return;
+          }
+          statusUpdateSeqRef.current += 1;
           setStatus(json.data);
           setError(null);
           setConnectionStatus('connected');
@@ -145,6 +170,7 @@ export function PipelineDashboard() {
         es.close();
         esRef.current = null;
         setConnectionStatus('reconnecting');
+        void fetchStatus();
         const delay = backoffRef.current;
         backoffRef.current = Math.min(delay * 2, BACKOFF_MAX);
         reconnectTimerRef.current = setTimeout(connect, delay);
@@ -196,8 +222,8 @@ export function PipelineDashboard() {
   }, [logViewer, fetchLogs]);
 
   async function triggerScript(script: string) {
-    const triggerSpec = getWorkerTriggerSpec(script);
-    if (!triggerSpec) {
+    const triggerTarget = getWorkerTriggerTarget(script);
+    if (!triggerTarget) {
       setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
       setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
       return;
@@ -209,7 +235,7 @@ export function PipelineDashboard() {
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(triggerSpec),
+        body: JSON.stringify(triggerTarget),
       });
       const json = await res.json();
       if (json.error) {
@@ -518,31 +544,43 @@ export function PipelineDashboard() {
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {status.workers.map((w) => {
-            const triggerSpec = getWorkerTriggerSpec(w.name);
-            return (
-              <div
-                key={w.name}
-                className={`rounded-xl border p-4 transition ${
-                  w.running
-                    ? "border-emerald-500/30 bg-emerald-500/5"
-                    : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
-                    <span className="text-sm font-semibold text-white">{w.label}</span>
-                  </div>
-                  {w.running && (
-                    <span className="text-xs text-emerald-400">{formatAge(w.ageMs)}</span>
-                  )}
+          {status.workers.map((w) => (
+            <div
+              key={w.name}
+              className={`rounded-xl border p-4 transition ${
+                w.running
+                  ? "border-emerald-500/30 bg-emerald-500/5"
+                  : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+              }`}
+            >
+              {(() => {
+                const logTarget = w.logFile || w.name;
+                const triggerTarget = getWorkerTriggerTarget(w.name);
+                return (
+                  <>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
+                  <span className="text-sm font-semibold text-white">{w.label}</span>
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
                 <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
                 {w.running && w.pid && (
                   <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
                 )}
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
+              <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
+              {w.running && w.pid && (
+                <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
+              )}
+              {!w.running && w.lastLog && (
+                <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
+                  Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
+                </p>
+              )}
+              <div className="mt-3 flex items-center gap-2">
+                {triggerTarget ? (
                 {!w.running && w.lastLog && (
                   <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
                     Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
@@ -574,15 +612,33 @@ export function PipelineDashboard() {
                     <Terminal className="h-3 w-3" />
                     Logs
                   </button>
-                </div>
-                {triggerMsg[w.name] && (
-                  <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
-                    {triggerMsg[w.name]}
-                  </p>
+                ) : (
+                  <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+                    Auto-managed
+                  </span>
                 )}
+                <button
+                  onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                    logViewer === logTarget
+                      ? "bg-amber-500/20 text-amber-400"
+                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                  }`}
+                >
+                  <Terminal className="h-3 w-3" />
+                  Logs
+                </button>
               </div>
-            );
-          })}
+              {triggerMsg[w.name] && (
+                <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+                  {triggerMsg[w.name]}
+                </p>
+              )}
+                  </>
+                );
+              })()}
+            </div>
+          ))}
         </div>
       </div>
 

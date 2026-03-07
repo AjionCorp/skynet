@@ -190,7 +190,67 @@ describe("createConfigHandler", () => {
       const body = await res.json();
       expect(res.status).toBe(400);
       expect(body.error).toContain("SKYNET_STALE_MINUTES");
-      expect(body.error).toContain(">= 5");
+      expect(body.error).toContain("between 5 and 240");
+    });
+
+    it("rejects invalid boolean values for pipeline toggles", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_POST_MERGE_SMOKE: "maybe" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_POST_MERGE_SMOKE");
+      expect(body.error).toContain('"true" or "false"');
+    });
+
+    it("rejects invalid dev ports", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_DEV_PORT: "70000" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_DEV_PORT");
+      expect(body.error).toContain("between 1 and 65535");
+    });
+
+    it("rejects invalid dev server URLs", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+
+      const res = await POST(makeRequest({ updates: { SKYNET_DEV_SERVER_URL: "localhost:3000" } }));
+      const body = await res.json();
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_DEV_SERVER_URL");
+      expect(body.error).toContain("must use http: or https:");
+    });
+
+    it("accepts empty webhook URLs so notifications can be disabled", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_SLACK_WEBHOOK_URL=""\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_SLACK_WEBHOOK_URL: "" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+    });
+
+    it("rejects unsupported notification channels", async () => {
+      mockExistsSync.mockReturnValue(true);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_NOTIFY_CHANNELS: "telegram,email" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(body.error).toContain("SKYNET_NOTIFY_CHANNELS");
+      expect(body.error).toContain("telegram, slack, and discord");
     });
 
     it("accepts valid SKYNET_MAX_WORKERS value", async () => {
@@ -355,7 +415,7 @@ describe("createConfigHandler", () => {
       expect(body.error).toContain("path traversal (../)");
     });
 
-    it("masks SENSITIVE_KEYS in POST response", async () => {
+    it("redacts SENSITIVE_KEYS in POST response while preserving metadata", async () => {
       mockExistsSync.mockReturnValue(true);
       mockWriteFileSync.mockImplementation(() => {});
       mockRenameSync.mockImplementation(() => {});
@@ -375,12 +435,16 @@ describe("createConfigHandler", () => {
       const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
       const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
       const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
-      expect(tokenEntry.value).toBe("••••••••");
-      expect(slackEntry.value).toBe("••••••••");
+      expect(tokenEntry.value).toBe("");
+      expect(tokenEntry.sensitive).toBe(true);
+      expect(tokenEntry.hasStoredValue).toBe(true);
+      expect(slackEntry.value).toBe("");
+      expect(slackEntry.sensitive).toBe(true);
+      expect(slackEntry.hasStoredValue).toBe(true);
       expect(workersEntry.value).toBe("4");
     });
 
-    it("masks SENSITIVE_KEYS values in GET response", async () => {
+    it("redacts SENSITIVE_KEYS values in GET response", async () => {
       mockExistsSync.mockReturnValue(true);
       mockReadFileSync.mockReturnValue(
         [
@@ -398,9 +462,31 @@ describe("createConfigHandler", () => {
       const tokenEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_TG_BOT_TOKEN");
       const slackEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_SLACK_WEBHOOK_URL");
       const workersEntry = body.data.entries.find((e: { key: string }) => e.key === "SKYNET_MAX_WORKERS");
-      expect(tokenEntry.value).toBe("••••••••");
-      expect(slackEntry.value).toBe("••••••••");
+      expect(tokenEntry.value).toBe("");
+      expect(tokenEntry.sensitive).toBe(true);
+      expect(tokenEntry.hasStoredValue).toBe(true);
+      expect(slackEntry.value).toBe("");
+      expect(slackEntry.sensitive).toBe(true);
+      expect(slackEntry.hasStoredValue).toBe(true);
       expect(workersEntry.value).toBe("4");
+    });
+
+    it("ignores legacy sensitive placeholders in POST updates", async () => {
+      mockExistsSync.mockReturnValue(true);
+      mockReadFileSync.mockReturnValue('export SKYNET_TG_BOT_TOKEN="secret-token-123"\n' as never);
+
+      const { POST } = createConfigHandler(makeConfig());
+      const res = await POST(makeRequest({ updates: { SKYNET_TG_BOT_TOKEN: "••••••••" } }));
+      const body = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(body.error).toBeNull();
+      expect(body.data.updatedKeys).toEqual([]);
+      expect(mockWriteFileSync).toHaveBeenCalledWith(
+        "/tmp/test/.dev/skynet.config.sh.tmp",
+        expect.stringContaining('export SKYNET_TG_BOT_TOKEN="secret-token-123"'),
+        "utf-8"
+      );
     });
 
     // ── TEST-P2-9: writeConfigFile missing key warning ──────────────────
