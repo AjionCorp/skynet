@@ -241,7 +241,7 @@ describe("MonitoringDashboard", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/monitoring/status")) {
-        return new Response(JSON.stringify({ data: null, error: "Connection failed" }));
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
       }
       return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
     }));

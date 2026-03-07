@@ -28,13 +28,15 @@ vi.mock("../lib/db", () => ({
 }));
 vi.mock("../lib/process-locks", () => ({
   listProjectDriverLocks: vi.fn(() => []),
+  readPid: vi.fn(() => null),
+  isProcessAlive: vi.fn(() => false),
 }));
 
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { existsSync, statSync, readFileSync, readdirSync } from "fs";
 import { execSync, spawnSync } from "child_process";
-import { listProjectDriverLocks } from "../lib/process-locks";
+import { listProjectDriverLocks, readPid, isProcessAlive } from "../lib/process-locks";
 
 const mockReadDevFile = vi.mocked(readDevFile);
 const mockGetLastLogLine = vi.mocked(getLastLogLine);
@@ -47,6 +49,8 @@ const mockExecSync = vi.mocked(execSync);
 const mockSpawnSync = vi.mocked(spawnSync);
 const mockReaddirSync = vi.mocked(readdirSync);
 const mockListProjectDriverLocks = vi.mocked(listProjectDriverLocks);
+const mockReadPid = vi.mocked(readPid);
+const mockIsProcessAlive = vi.mocked(isProcessAlive);
 
 function makeConfig(overrides?: Partial<SkynetConfig>): SkynetConfig {
   return {
@@ -70,6 +74,8 @@ describe("createPipelineStatusHandler", () => {
     mockExecSync.mockReturnValue("" as never);
     mockSpawnSync.mockReturnValue({ stdout: "", stderr: "", status: 0 } as never);
     mockListProjectDriverLocks.mockReturnValue([]);
+    mockReadPid.mockReturnValue(null);
+    mockIsProcessAlive.mockReturnValue(false);
   });
 
   afterEach(() => {
@@ -120,21 +126,11 @@ describe("createPipelineStatusHandler", () => {
   });
 
   it("detects project-driver locks from the lock directory, not devDir", async () => {
-    mockReaddirSync.mockImplementation((path) => {
-      if (path === "/tmp") return ["skynet-test--project-driver-main.lock"] as never;
-      return [] as never;
-    });
-    mockExistsSync.mockImplementation((path) =>
-      typeof path === "string" && path === "/tmp/skynet-test--project-driver-main.lock/pid"
-    );
-    mockReadFileSync.mockImplementation((path) =>
-      path === "/tmp/skynet-test--project-driver-main.lock/pid" ? "4242\n" : ""
-    );
-    mockSpawnSync.mockImplementation((_cmd, args) => {
-      const a = (args as string[]) || [];
-      if (a[0] === "-0" && a[1] === "4242") return { stdout: "", stderr: "", status: 0 } as never;
-      return { stdout: "", stderr: "", status: 0 } as never;
-    });
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-main.lock",
+    ]);
+    mockReadPid.mockReturnValue(4242);
+    mockIsProcessAlive.mockReturnValue(true);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -300,11 +296,11 @@ describe("createPipelineStatusHandler", () => {
   });
 
   it("detects project-driver as running from lock dir pid", async () => {
-    mockGetWorkerStatus.mockImplementation((lockFile) => ({
-      running: lockFile.endsWith("project-driver-global.lock"),
-      pid: lockFile.endsWith("project-driver-global.lock") ? 4242 : null,
-      ageMs: lockFile.endsWith("project-driver-global.lock") ? 5000 : null,
-    }));
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-abcd1234.lock",
+    ]);
+    mockReadPid.mockReturnValue(4242);
+    mockIsProcessAlive.mockReturnValue(true);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -366,11 +362,10 @@ describe("createPipelineStatusHandler", () => {
     mockListProjectDriverLocks.mockReturnValue([
       "/tmp/skynet-test--project-driver-my-mission.lock",
     ]);
-    mockGetWorkerStatus.mockImplementation((lockFile) => ({
-      running: lockFile.includes("project-driver-my-mission"),
-      pid: lockFile.includes("project-driver-my-mission") ? 321 : null,
-      ageMs: lockFile.includes("project-driver-my-mission") ? 5000 : null,
-    }));
+    mockReadPid.mockImplementation((lockFile) =>
+      lockFile.includes("project-driver-my-mission") ? 321 : null
+    );
+    mockIsProcessAlive.mockImplementation((pid) => pid === 321);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();

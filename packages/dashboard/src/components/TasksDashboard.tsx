@@ -74,7 +74,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         return missionList[0]?.slug ?? null;
       }
     } catch { /* ignore */ }
-  }, [apiPrefix]);
+  }, [apiPrefix, selectedSlug]);
 
   const fetchBacklog = useCallback(async () => {
     try {

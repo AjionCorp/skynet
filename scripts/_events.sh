@@ -128,13 +128,14 @@ emit_event() {
         fi
         if $_rot_force; then
           rm -rf "$_rot_lock" 2>/dev/null || true
+        else
+          # Another writer is actively rotating — count only real contention,
+          # not successful rotations or stale-lock cleanup.
+          _EVENTS_ROTATION_SKIPS=$((_EVENTS_ROTATION_SKIPS + 1))
+          if [ "$_EVENTS_ROTATION_SKIPS" -ge 5 ]; then
+            echo "WARNING: events rotation skipped $_EVENTS_ROTATION_SKIPS times due to lock contention" >&2
+          fi
         fi
-        # If lock was stale and reclaimed, next emit will pick up rotation
-      fi
-      # If lock acquisition failed, another writer is rotating — skip this cycle
-      _EVENTS_ROTATION_SKIPS=$((_EVENTS_ROTATION_SKIPS + 1))
-      if [ "$_EVENTS_ROTATION_SKIPS" -ge 5 ]; then
-        echo "WARNING: events rotation skipped $_EVENTS_ROTATION_SKIPS times due to lock contention" >&2
       fi
     fi
   fi
