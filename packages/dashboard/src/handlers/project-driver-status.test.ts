@@ -154,7 +154,7 @@ describe("createProjectDriverStatusHandler", () => {
     const handler = createProjectDriverStatusHandler(makeConfig());
     const res = await handler();
     const { data } = await res.json();
-    expect(data.telemetry).toEqual(telemetry);
+    expect(data.telemetry).toEqual({ ...telemetry, fixRate: 75 });
   });
 
   it("returns null telemetry when file is empty", async () => {

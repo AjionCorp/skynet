@@ -64,16 +64,20 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const fetchMissions = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/missions`);
+      if (!res.ok) return null;
       const json = await res.json();
       const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
       if (missionList) {
         setMissions(missionList);
-        if (!selectedSlug && typeof json.data?.config?.activeMission === "string") {
-          setSelectedSlug(json.data.config.activeMission);
+        if (typeof json.data?.config?.activeMission === "string") {
+          setSelectedSlug((current) => current ?? json.data.config.activeMission);
         }
         return missionList[0]?.slug ?? null;
-      });
-    } catch { /* ignore */ }
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }, [apiPrefix]);
 
   const fetchBacklog = useCallback(async () => {
@@ -158,25 +162,29 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           <Target className="h-3.5 w-3.5" />
           Scope:
         </span>
-        {missions.length > 0 ? (
-          missions.map((m) => (
-            <button
-              key={m.slug}
-              onClick={() => setSelectedSlug(m.slug)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                selectedSlug === m.slug
-                  ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
-                  : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
-              }`}
-            >
-              {m.name}
-            </button>
-          ))
-        ) : (
-          <span className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-500">
-            Global backlog
-          </span>
-        )}
+        <button
+          onClick={() => setSelectedSlug(null)}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+            selectedSlug === null
+              ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+              : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+          }`}
+        >
+          Global backlog
+        </button>
+        {missions.map((m) => (
+          <button
+            key={m.slug}
+            onClick={() => setSelectedSlug(m.slug)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+              selectedSlug === m.slug
+                ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+                : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+            }`}
+          >
+            {m.name}
+          </button>
+        ))}
       </div>
 
       {/* Summary cards */}

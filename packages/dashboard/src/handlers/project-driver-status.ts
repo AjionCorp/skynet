@@ -5,6 +5,11 @@ import { logHandlerError } from "../lib/handler-error";
 import { listProjectDriverLocks } from "../lib/process-locks";
 
 function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
+  const globalLock = `${lockPrefix}-project-driver-global.lock`;
+  if (lockPath === globalLock) {
+    return "project-driver-global";
+  }
+
   const legacyLock = `${lockPrefix}-project-driver.lock`;
   if (lockPath === legacyLock) {
     return "project-driver";
@@ -32,13 +37,13 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       const lockCandidates =
         discoveredLocks.length > 0
           ? discoveredLocks
-          : [`${lockPrefix}-project-driver.lock`];
+          : [`${lockPrefix}-project-driver-global.lock`];
       const statuses = lockCandidates.map((lockFile) => ({
         lockFile,
         ...getWorkerStatus(lockFile),
       }));
       const activeLock = statuses.find((status) => status.running) ?? statuses[0];
-      const { running, pid, ageMs } = activeLock;
+      const { pid, ageMs } = activeLock;
 
       // Last log line
       const logScript = getProjectDriverLogName(lockPrefix, activeLock.lockFile);
@@ -53,6 +58,12 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       if (telemetryRaw) {
         try {
           telemetry = JSON.parse(telemetryRaw) as ProjectDriverTelemetry;
+          if (typeof telemetry.fixRate === "number" && telemetry.fixRate >= 0 && telemetry.fixRate <= 1) {
+            telemetry = {
+              ...telemetry,
+              fixRate: Math.round(telemetry.fixRate * 100),
+            };
+          }
         } catch {
           // Malformed JSON — treat as missing
         }
@@ -61,8 +72,8 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       return Response.json({
         data: {
           running: statuses.some((status) => status.running),
-          pid: activeStatus.pid,
-          ageMs: activeStatus.ageMs,
+          pid,
+          ageMs,
           lastLog,
           lastLogTime,
           telemetry,

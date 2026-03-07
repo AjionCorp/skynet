@@ -227,4 +227,13 @@ describe("TasksDashboard", () => {
       expect(screen.getByText("Refresh")).toBeDefined();
     });
   });
+
+  it("keeps the global backlog visible when missions exist", async () => {
+    mockFetchWith(MOCK_BACKLOG);
+    renderWithProvider(<TasksDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Mission Alpha")).toBeDefined();
+    });
+    expect(screen.getByText("Global backlog")).toBeDefined();
+  });
 });

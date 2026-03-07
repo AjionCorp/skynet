@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync, unlinkSync, mkdirSync } from "fs";
+import { existsSync, writeFileSync, unlinkSync, mkdirSync, rmSync } from "fs";
 import { spawn } from "child_process";
 import { openSync, closeSync, constants } from "fs";
 import { resolve } from "path";
@@ -27,13 +27,13 @@ export function createPipelineControlHandler(config: SkynetConfig) {
 
       if (!rawAction) {
         return Response.json(
-          { data: null, error: `Unknown action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Invalid or missing action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }
       if (!VALID_ACTIONS.includes(rawAction as typeof VALID_ACTIONS[number])) {
         return Response.json(
-          { data: null, error: `Unknown action '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Invalid or missing action. Received '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }
@@ -71,7 +71,6 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         if (existsSync(watchdogLock)) {
           console.log(`[PipelineControl] Cleaning up stale watchdog lock: ${watchdogLock}`);
           try {
-            const { rmSync } = require("fs") as typeof import("fs");
             rmSync(watchdogLock, { recursive: true, force: true });
           } catch (e) {
             console.error(`[PipelineControl] Failed to remove stale lock: ${e}`);
@@ -134,7 +133,7 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         // Kill project-driver(s)
         const pdLocks = listProjectDriverLocks(lockPrefix);
         if (pdLocks.length === 0) {
-          if (killByLock(`${lockPrefix}-project-driver.lock`)) killed.push("project-driver");
+          if (killByLock(`${lockPrefix}-project-driver-global.lock`)) killed.push("project-driver");
         } else {
           for (const lockPath of pdLocks) {
             if (killByLock(lockPath)) {

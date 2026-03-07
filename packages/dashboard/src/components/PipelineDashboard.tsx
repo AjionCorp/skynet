@@ -53,6 +53,10 @@ function extractTimestamp(logLine: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function getWorkerLogTarget(worker: { logFile?: string | null; name: string }): string {
+  return worker.logFile || worker.name;
+}
+
 export function PipelineDashboard() {
   const { apiPrefix } = useSkynet();
   const [status, setStatus] = useState<PipelineStatus | null>(null);
@@ -520,6 +524,7 @@ export function PipelineDashboard() {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {status.workers.map((w) => {
             const triggerSpec = getWorkerTriggerSpec(w.name);
+            const logTarget = getWorkerLogTarget(w);
             return (
               <div
                 key={w.name}
@@ -564,9 +569,9 @@ export function PipelineDashboard() {
                     </button>
                   )}
                   <button
-                    onClick={() => setLogViewer(logViewer === w.logFile ? null : w.logFile)}
+                    onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
                     className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                      logViewer === w.logFile
+                      logViewer === logTarget
                         ? "bg-amber-500/20 text-amber-400"
                         : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                     }`}
