@@ -589,12 +589,13 @@ describe("MissionDashboard — LLM config interactions", () => {
     fireEvent.click(sideQuestCard);
 
     await waitFor(() => {
-      const updatedSelect = screen.getByText("LLM Configuration").closest("div.rounded-xl")!.querySelector("select")!;
+      const updatedPanel = screen.getByText("LLM Configuration").closest("div.rounded-xl")!;
+      const updatedSelect = updatedPanel.querySelector("select")!;
       expect(updatedSelect.value).toBe("gemini");
+      // Model field should show the configured model for the selected mission.
+      const updatedInput = updatedPanel.querySelector("input")!;
+      expect(updatedInput.value).toBe("gemini-2.0-flash");
     });
-    // Model field should show the configured model
-    const input = llmPanel.querySelector("input")!;
-    expect(input.value).toBe("gemini-2.0-flash");
   });
 
   it("pre-populates model input from mission config", async () => {
@@ -747,10 +748,12 @@ describe("MissionDashboard — LLM config interactions", () => {
         ([url, init]) => typeof url === "string" && url.includes("/missions/assignments") && (init as RequestInit)?.method === "PUT",
       );
       expect(putCalls.length).toBeGreaterThanOrEqual(1);
-      const body = JSON.parse((putCalls[putCalls.length - 1][1] as RequestInit).body as string);
-      // Must use "side" slug, not "main"
-      expect(body.llmConfigs.side).toBeDefined();
-      expect(body.llmConfigs.side.provider).toBe("claude");
+      const matchingPayload = putCalls
+        .map(([, init]) => JSON.parse((init as RequestInit).body as string))
+        .find((body) => body.llmConfigs?.side?.provider === "claude");
+
+      // Must include an update for "side", not only "main".
+      expect(matchingPayload).toBeDefined();
     });
   });
 

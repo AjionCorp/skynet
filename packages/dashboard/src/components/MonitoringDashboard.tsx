@@ -303,8 +303,7 @@ function WorkerCard({
         <p className="mt-1.5 text-xs text-zinc-600">Last: {worker.lastLogTime}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
-        {getWorkerTriggerTarget(worker.name) ? (
-        {canTrigger && (
+        {canTrigger ? (
           <button
             onClick={onTrigger}
             disabled={triggering}
@@ -904,7 +903,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {categoryWorkers.map((w) => {
-                    const triggerSpec = getWorkerTriggerSpec(w.name);
+                    const triggerTarget = getWorkerTriggerTarget(w.name);
                     const logTarget = getWorkerLogTarget(w);
                     // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
                     const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
@@ -918,7 +917,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                       <WorkerCard
                         worker={w}
                         heartbeat={hbKey ? status.heartbeats?.[hbKey] : undefined}
-                        canTrigger={triggerSpec !== null}
+                        canTrigger={triggerTarget !== null}
                         onTrigger={() => triggerScript(w.name)}
                         onViewLogs={() => switchToLogs(logTarget)}
                         triggering={!!triggering[w.name]}

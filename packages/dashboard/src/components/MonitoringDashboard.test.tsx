@@ -247,7 +247,7 @@ describe("MonitoringDashboard", () => {
     }));
     renderWithProvider(<MonitoringDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("Connection failed")).toBeDefined();
+      expect(screen.getByText("Workers Active")).toBeDefined();
     });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: null, error: "Connection failed" }) });

@@ -135,9 +135,9 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         setError(apiError ?? "Invalid config response");
         return;
       }
-      const nextEntries = (json.data.entries ?? []) as ConfigEntry[];
+      const nextEntries = data.entries;
       setEntries(nextEntries);
-      setConfigPath(json.data.configPath ?? "");
+      setConfigPath(data.configPath ?? "");
       setEditedValues((prev) => {
         if (Object.keys(prev).length === 0) {
           return prev;
@@ -228,9 +228,6 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
     setSaveSuccess(false);
     setSaveWarning(null);
   };
-
-  const dirtyCount = Object.keys(editedValues).length;
-  const refreshDisabled = dirtyCount > 0 || saving;
 
   if (loading && entries.length === 0) {
     return (

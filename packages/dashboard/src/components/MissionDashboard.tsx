@@ -70,6 +70,19 @@ function getAssignableWorkerNames(maxWorkers: number, maxFixers: number): string
   return workers;
 }
 
+function mergeAssignableWorkers(
+  baseWorkers: string[],
+  assignments: Record<string, string | null | undefined>,
+): string[] {
+  const merged = new Set(baseWorkers);
+  for (const worker of Object.keys(assignments)) {
+    if (worker) {
+      merged.add(worker);
+    }
+  }
+  return Array.from(merged).sort(compareWorkerNames);
+}
+
 function compareWorkerNames(left: string, right: string): number {
   const parseWorker = (name: string): { group: number; slot: number; raw: string } => {
     const devMatch = name.match(/^dev-worker-(\d+)$/);
@@ -226,7 +239,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         setLocalAssignments(json.data.config.assignments);
         setAvailableWorkerNames(
           mergeAssignableWorkers(
-            getAssignableWorkerNames(maxWorkers, maxFixers),
+            nextDefaultWorkerNames,
             json.data.config.assignments ?? {},
           ),
         );
@@ -242,7 +255,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
     } catch {
       // Non-fatal — we still show whatever we have
     }
-  }, [apiPrefix, assignmentsDirty, llmConfigDirty]);
+  }, [apiPrefix, assignmentsDirty, llmConfigDirty, selectedSlug]);
 
   // Fetch selected mission detail
   const fetchMissionDetail = useCallback(async () => {
