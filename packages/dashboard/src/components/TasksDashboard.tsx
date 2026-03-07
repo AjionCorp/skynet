@@ -42,6 +42,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   // Mission state
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [scopeInitialized, setScopeInitialized] = useState(false);
 
   const [backlog, setBacklog] = useState<TaskBacklogData | null>(null);
   const [loading, setLoading] = useState(true);

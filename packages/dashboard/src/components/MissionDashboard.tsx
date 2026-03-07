@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Target,
   CheckCircle2,
@@ -54,6 +54,10 @@ What the team is currently focused on.
 
 const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_MAX_FIXERS = 3;
+const DEFAULT_ASSIGNABLE_WORKER_NAMES = getAssignableWorkerNames(
+  DEFAULT_MAX_WORKERS,
+  DEFAULT_MAX_FIXERS,
+);
 
 function getAssignableWorkerNames(maxWorkers: number, maxFixers: number): string[] {
   const workers: string[] = [];
@@ -86,13 +90,6 @@ function compareWorkerNames(left: string, right: string): number {
   if (a.group !== b.group) return a.group - b.group;
   if (a.slot !== b.slot) return a.slot - b.slot;
   return a.raw.localeCompare(b.raw);
-}
-
-function mergeAssignableWorkers(
-  defaults: string[],
-  assignments: Record<string, string | null>,
-): string[] {
-  return Array.from(new Set([...defaults, ...Object.keys(assignments)])).sort(compareWorkerNames);
 }
 
 function formatWorkerLabel(workerName: string): string {
@@ -159,10 +156,12 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   // Worker assignment state
   const [localAssignments, setLocalAssignments] = useState<Record<string, string | null>>({});
   const [assignmentsDirty, setAssignmentsDirty] = useState(false);
+  const assignmentsDirtyRef = useRef(assignmentsDirty);
 
   // LLM config state
   const [localLlmConfigs, setLocalLlmConfigs] = useState<Record<string, LlmConfig>>({});
   const [llmConfigDirty, setLlmConfigDirty] = useState(false);
+  const llmConfigDirtyRef = useRef(llmConfigDirty);
 
   // Rename state
   const [renamingSlug, setRenamingSlug] = useState<string | null>(null);
@@ -171,11 +170,20 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   // Mission tracking state
   const [tracking, setTracking] = useState<MissionTracking | null>(null);
 
+  useEffect(() => {
+    assignmentsDirtyRef.current = assignmentsDirty;
+  }, [assignmentsDirty]);
+
+  useEffect(() => {
+    llmConfigDirtyRef.current = llmConfigDirty;
+  }, [llmConfigDirty]);
+
   const workerNames = useMemo(() => {
     const names = new Set<string>(availableWorkerNames);
     for (const worker of Object.keys(localAssignments)) {
       if (worker) names.add(worker);
     }
+    
     for (const missionSummary of missions) {
       for (const worker of missionSummary.assignedWorkers ?? []) {
         if (worker) names.add(worker);
@@ -212,6 +220,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         } catch {
           // Keep defaults when config is unavailable.
         }
+        const nextDefaultWorkerNames = getAssignableWorkerNames(maxWorkers, maxFixers);
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
         setLocalAssignments(json.data.config.assignments);
@@ -228,11 +237,12 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         if (!selectedSlug && json.data.config.activeMission) {
           setSelectedSlug(json.data.config.activeMission);
         }
+        setSelectedSlug((current) => current ?? json.data.config.activeMission ?? null);
       }
     } catch {
       // Non-fatal — we still show whatever we have
     }
-  }, [apiPrefix, selectedSlug]);
+  }, [apiPrefix, assignmentsDirty, llmConfigDirty]);
 
   // Fetch selected mission detail
   const fetchMissionDetail = useCallback(async () => {
@@ -280,14 +290,20 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const handlePipelineControl = useCallback(async (action: "pause" | "resume" | "start" | "stop") => {
     setControlLoading(true);
     try {
-      await fetch(`${apiPrefix}/pipeline/control`, {
+      const res = await fetch(`${apiPrefix}/pipeline/control`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
       });
+      const json = await res.json().catch(() => ({ data: null, error: null }));
+      if (!res.ok || json.error) {
+        setError(json.error ?? `Failed to ${action} pipeline`);
+        return;
+      }
+      setError(null);
       await fetchAll();
-    } catch {
-      setError(`Failed to ${action} pipeline`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : `Failed to ${action} pipeline`);
     } finally {
       setControlLoading(false);
     }
@@ -392,6 +408,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const json = await res.json();
       if (json.error) setError(json.error);
       else {
+        assignmentsDirtyRef.current = false;
         setAssignmentsDirty(false);
         await fetchMissions();
       }
@@ -411,6 +428,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const json = await res.json();
       if (json.error) setError(json.error);
       else {
+        llmConfigDirtyRef.current = false;
         setLlmConfigDirty(false);
         await fetchMissions();
       }
@@ -524,7 +542,10 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") renameMission(m.slug, renameValue);
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    }
                     if (e.key === "Escape") setRenamingSlug(null);
                   }}
                   onBlur={() => renameMission(m.slug, renameValue)}
@@ -1028,7 +1049,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
             )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {workerNames.map((worker) => (
+            {availableWorkerNames.map((worker) => (
               <div key={worker} className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-3">
                 <div className="min-w-0">
                   <span className="block text-sm font-medium text-zinc-300">{formatWorkerLabel(worker)}</span>
@@ -1041,6 +1062,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                       ...prev,
                       [worker]: e.target.value || null,
                     }));
+                    assignmentsDirtyRef.current = true;
                     setAssignmentsDirty(true);
                   }}
                   className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 focus:border-cyan-500/50 focus:outline-none"
@@ -1085,6 +1107,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                     ...prev,
                     [selectedSlug]: { ...prev[selectedSlug], provider, model: undefined },
                   }));
+                  llmConfigDirtyRef.current = true;
                   setLlmConfigDirty(true);
                 }}
                 className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 focus:border-cyan-500/50 focus:outline-none"
@@ -1107,6 +1130,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                       model: e.target.value || undefined,
                     },
                   }));
+                  llmConfigDirtyRef.current = true;
                   setLlmConfigDirty(true);
                 }}
                 placeholder="e.g. claude-sonnet-4-6"

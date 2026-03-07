@@ -15,6 +15,92 @@ interface ConfigEntry {
   key: string;
   value: string;
   comment: string;
+  sensitive?: boolean;
+  hasStoredValue?: boolean;
+}
+
+const BOOLEAN_KEYS = new Set([
+  "SKYNET_FIXER_IGNORE_USAGE_LIMIT",
+  "SKYNET_ONE_SHOT",
+  "SKYNET_POST_MERGE_SMOKE",
+  "SKYNET_POST_MERGE_TYPECHECK",
+  "SKYNET_TG_ENABLED",
+]);
+
+const NUMBER_KEYS = new Set([
+  "SKYNET_MAX_WORKERS",
+  "SKYNET_MAX_FIXERS",
+  "SKYNET_MAX_TASKS_PER_RUN",
+  "SKYNET_STALE_MINUTES",
+  "SKYNET_AGENT_TIMEOUT_MINUTES",
+  "SKYNET_MAX_FIX_ATTEMPTS",
+  "SKYNET_DRIVER_BACKLOG_THRESHOLD",
+  "SKYNET_HEALTH_ALERT_THRESHOLD",
+  "SKYNET_MAX_LOG_SIZE_KB",
+  "SKYNET_MAX_EVENTS_LOG_KB",
+  "SKYNET_WATCHDOG_INTERVAL",
+  "SKYNET_SMOKE_TIMEOUT",
+  "SKYNET_GIT_PUSH_TIMEOUT",
+  "SKYNET_DEV_PORT",
+]);
+
+const URL_KEYS = new Set([
+  "SKYNET_DEV_SERVER_URL",
+  "SKYNET_SLACK_WEBHOOK_URL",
+  "SKYNET_DISCORD_WEBHOOK_URL",
+]);
+
+const MASKED_SECRET = "••••••••";
+
+function getResponseError(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const error = (json as { error?: unknown }).error;
+  return typeof error === "string" && error.length > 0 ? error : null;
+}
+
+function getConfigPayload(
+  json: unknown
+): { entries: ConfigEntry[]; configPath: string; warning?: string | null } | null {
+  if (!json || typeof json !== "object") return null;
+  const data = (json as { data?: unknown }).data;
+  if (!data || typeof data !== "object") return null;
+
+  const entries = (data as { entries?: unknown }).entries;
+  const configPath = (data as { configPath?: unknown }).configPath;
+  const warning = (data as { warning?: unknown }).warning;
+
+  if (!Array.isArray(entries)) return null;
+  if (typeof configPath !== "string" && typeof configPath !== "undefined") return null;
+
+  return {
+    entries: entries as ConfigEntry[],
+    configPath: typeof configPath === "string" ? configPath : "",
+    warning: typeof warning === "string" ? warning : null,
+  };
+}
+
+async function readJsonSafe(res: Response): Promise<unknown> {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function getFieldHelp(entry: ConfigEntry): string | null {
+  if (entry.value === MASKED_SECRET) {
+    return "Masked secret. Leave unchanged to keep the current value, or enter a new value to replace it.";
+  }
+  if (BOOLEAN_KEYS.has(entry.key)) {
+    return "Boolean setting.";
+  }
+  if (URL_KEYS.has(entry.key)) {
+    return "URL value.";
+  }
+  if (NUMBER_KEYS.has(entry.key)) {
+    return "Numeric setting.";
+  }
+  return null;
 }
 
 export interface SettingsDashboardProps {
@@ -33,18 +119,39 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const dirtyCount = Object.keys(editedValues).length;
 
   const fetchConfig = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/config`);
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const apiError = getResponseError(json);
+      const data = getConfigPayload(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to fetch config (HTTP ${res.status})`);
         return;
       }
-      setEntries(json.data.entries ?? []);
+      if (!data) {
+        setError(apiError ?? "Invalid config response");
+        return;
+      }
+      const nextEntries = (json.data.entries ?? []) as ConfigEntry[];
+      setEntries(nextEntries);
       setConfigPath(json.data.configPath ?? "");
-      setEditedValues({});
+      setEditedValues((prev) => {
+        if (Object.keys(prev).length === 0) {
+          return prev;
+        }
+
+        const serverValues = new Map(nextEntries.map((entry) => [entry.key, entry.value]));
+        const preserved: Record<string, string> = {};
+        for (const [key, value] of Object.entries(prev)) {
+          if (value !== (serverValues.get(key) ?? "")) {
+            preserved[key] = value;
+          }
+        }
+        return preserved;
+      });
       setSaveWarning(null);
       setError(null);
     } catch (err) {
@@ -56,15 +163,19 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
 
   useEffect(() => {
     fetchConfig();
-    if (pollInterval > 0) {
+  }, [fetchConfig]);
+
+  useEffect(() => {
+    if (pollInterval > 0 && dirtyCount === 0) {
       const interval = setInterval(fetchConfig, pollInterval);
       return () => clearInterval(interval);
     }
-  }, [fetchConfig, pollInterval]);
+  }, [dirtyCount, fetchConfig, pollInterval]);
 
   const handleChange = (key: string, value: string) => {
     setEditedValues((prev) => {
-      const original = entries.find((e) => e.key === key)?.value ?? "";
+      const entry = entries.find((e) => e.key === key);
+      const original = entry?.sensitive ? "" : (entry?.value ?? "");
       if (value === original) {
         const next = { ...prev };
         delete next[key];
@@ -88,14 +199,21 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ updates: editedValues }),
       });
-      const json = await res.json();
-      if (json.error) {
-        setError(json.error);
+      const json = await readJsonSafe(res);
+      const apiError = getResponseError(json);
+      const data = getConfigPayload(json);
+      if (!res.ok) {
+        setError(apiError ?? `Failed to save config (HTTP ${res.status})`);
         return;
       }
-      setEntries(json.data.entries ?? []);
+      if (!data) {
+        setError(apiError ?? "Invalid config response");
+        return;
+      }
+      setEntries(data.entries);
       setEditedValues({});
-      setSaveWarning(json.data.warning ?? null);
+      setConfigPath(data.configPath || configPath);
+      setSaveWarning(data.warning ?? null);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (err) {
@@ -112,6 +230,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   };
 
   const dirtyCount = Object.keys(editedValues).length;
+  const refreshDisabled = dirtyCount > 0 || saving;
 
   if (loading && entries.length === 0) {
     return (
@@ -144,11 +263,18 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
           <p className="mt-1 text-sm text-zinc-500">
             {configPath ? configPath : "skynet.config.sh"}
           </p>
+          {dirtyCount > 0 && (
+            <p className="mt-1 text-xs text-amber-300/80">
+              Refresh keeps your local edits until you save or reset them.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={fetchConfig}
-            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white"
+            disabled={dirtyCount > 0}
+            className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            title={dirtyCount > 0 ? "Save or reset your changes before refreshing" : undefined}
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
@@ -179,6 +305,15 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         </div>
       )}
 
+      {dirtyCount > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-6 py-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-cyan-300" />
+          <p className="text-sm text-cyan-100">
+            Unsaved changes are being preserved. Auto-refresh is paused until you save or reset them.
+          </p>
+        </div>
+      )}
+
       {/* Empty state */}
       {entries.length === 0 && !error && (
         <div className="flex flex-col items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 py-16">
@@ -206,9 +341,11 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
             {section.entries.map((entry) => {
               const currentValue = entry.key in editedValues ? editedValues[entry.key] : entry.value;
               const isDirty = entry.key in editedValues;
-              // Detect boolean-like or short values for inline display
-              const isBooleanLike = /^(true|false)$/i.test(entry.value);
+              const isBooleanLike = BOOLEAN_KEYS.has(entry.key) || /^(true|false)$/i.test(entry.value);
+              const isNumberLike = NUMBER_KEYS.has(entry.key);
+              const isUrlLike = URL_KEYS.has(entry.key);
               const isLongValue = entry.value.length > 60;
+              const helpText = getFieldHelp(entry);
 
               return (
                 <div
@@ -221,7 +358,23 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
                 >
                   <label className="block">
                     <span className="text-xs font-mono text-zinc-500">{entry.key}</span>
-                    {isBooleanLike ? (
+                    {entry.sensitive ? (
+                      <>
+                        <input
+                          type="password"
+                          value={currentValue}
+                          onChange={(e) => handleChange(entry.key, e.target.value)}
+                          placeholder={entry.hasStoredValue ? "Leave blank to keep current value" : "Enter secret value"}
+                          autoComplete="new-password"
+                          className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-200 placeholder-zinc-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                        />
+                        <span className="mt-1 block text-xs text-zinc-500">
+                          {entry.hasStoredValue
+                            ? "Stored value is hidden. Leave blank to keep the current secret."
+                            : "Secrets are write-only and will be hidden after save."}
+                        </span>
+                      </>
+                    ) : isBooleanLike ? (
                       <select
                         value={currentValue}
                         onChange={(e) => handleChange(entry.key, e.target.value)}
@@ -239,11 +392,15 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
                       />
                     ) : (
                       <input
-                        type="text"
+                        type={isNumberLike ? "number" : isUrlLike ? "url" : "text"}
                         value={currentValue}
                         onChange={(e) => handleChange(entry.key, e.target.value)}
+                        inputMode={isNumberLike ? "numeric" : undefined}
                         className="mt-1 block w-full rounded-md border border-zinc-700 bg-zinc-900 px-3 py-2 font-mono text-sm text-zinc-200 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
+                    )}
+                    {helpText && (
+                      <span className="mt-2 block text-xs text-zinc-500">{helpText}</span>
                     )}
                   </label>
                 </div>

@@ -133,7 +133,12 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         // Kill project-driver(s)
         const pdLocks = listProjectDriverLocks(lockPrefix);
         if (pdLocks.length === 0) {
-          if (killByLock(`${lockPrefix}-project-driver-global.lock`)) killed.push("project-driver");
+          if (
+            killByLock(`${lockPrefix}-project-driver-global.lock`) ||
+            killByLock(`${lockPrefix}-project-driver.lock`)
+          ) {
+            killed.push("project-driver");
+          }
         } else {
           for (const lockPath of pdLocks) {
             if (killByLock(lockPath)) {

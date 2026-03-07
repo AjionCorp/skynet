@@ -19,7 +19,6 @@ WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)
 WORKTREE_BASE="${SKYNET_WORKTREE_BASE:-${DEV_DIR}/worktrees}"
 WATCHDOG_LOCK_STALE_SECONDS="${SKYNET_WATCHDOG_LOCK_STALE_SECONDS:-60}"
-BOOT_TO_PAUSE_SENTINEL="$DEV_DIR/.boot-to-pause-initialized"
 
 cd "$PROJECT_DIR"
 
@@ -27,7 +26,7 @@ log() { _log "info" "WATCHDOG" "$*" "$LOG"; }
 
 _initialize_boot_pause() {
   local pause_file="$DEV_DIR/pipeline-paused"
-  local bootstrap_sentinel="$DEV_DIR/.watchdog-bootstrapped"
+  local bootstrap_sentinel="$DEV_DIR/.boot-to-pause-initialized"
 
   if [ ! -f "$bootstrap_sentinel" ]; then
     if [ ! -f "$pause_file" ]; then
@@ -160,25 +159,6 @@ log "Watchdog started (PID $$, interval ${WATCHDOG_INTERVAL}s)"
 # Pause on first boot only so operators can review state before workers run.
 # Subsequent watchdog restarts preserve the current pause/running state.
 _initialize_boot_pause
-# If already unpaused (operator resumed), don't re-pause on watchdog restart.
-if [ ! -f "$BOOT_TO_PAUSE_SENTINEL" ]; then
-  if [ ! -f "$DEV_DIR/pipeline-paused" ]; then
-    _pause_sentinel_tmp="$DEV_DIR/pipeline-paused.tmp.$$"
-    (
-      umask 077
-      printf '{\n  "pausedAt": "%s",\n  "pausedBy": "system",\n  "reason": "Boot-to-pause (resume via Admin UI or skynet resume)"\n}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_pause_sentinel_tmp"
-    )
-    mv "$_pause_sentinel_tmp" "$DEV_DIR/pipeline-paused" 2>/dev/null || true
-    log "Pipeline initialized in PAUSED state. Use 'skynet resume' or Admin UI to start."
-  else
-    log "Pipeline already paused (preserving existing pause state)."
-  fi
-  _boot_to_pause_tmp="${BOOT_TO_PAUSE_SENTINEL}.tmp.$$"
-  (umask 077; printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$_boot_to_pause_tmp")
-  mv "$_boot_to_pause_tmp" "$BOOT_TO_PAUSE_SENTINEL" 2>/dev/null || true
-else
-  log "Boot-to-pause already initialized; preserving current pause state."
-fi
 
 # --- Auto-start Admin Server ---
 log "Starting admin dev server..."
@@ -452,9 +432,21 @@ _cr_phase2_orphaned_tasks() {
     # Check if this worker's task file shows in_progress
     if [ -f "$task_file" ] && grep -q "in_progress" "$task_file" 2>/dev/null; then
       local stuck_title
+      local stuck_task_id=""
+      local worker_row=""
       stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
-      if [ -n "$stuck_title" ]; then
-        db_unclaim_task_by_title "$stuck_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$stuck_title' (worker $wid) — task may remain orphaned"
+      worker_row=$(db_get_worker_status "$wid" 2>/dev/null || true)
+      if [ -n "$worker_row" ]; then
+        local _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info
+        IFS="$_DB_SEP" read -r _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info <<< "$worker_row"
+        stuck_task_id="${_db_task_id:-}"
+      fi
+      if [ -n "$stuck_title" ] || [ -n "$stuck_task_id" ]; then
+        if [ -n "$stuck_task_id" ]; then
+          db_unclaim_task "$stuck_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed for id=$stuck_task_id '$stuck_title' (worker $wid) — task may remain orphaned"
+        else
+          db_unclaim_task_by_title "$stuck_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$stuck_title' (worker $wid) — task may remain orphaned"
+        fi
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -1340,11 +1332,23 @@ _handle_stale_worker() {
 
     # Unclaim its task in backlog
     local task_title=""
+    local task_id=""
     if [ -f "$task_file" ]; then
       task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
     fi
-    if [ -n "$task_title" ]; then
-      db_unclaim_task_by_title "$task_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$task_title' — task may remain stuck as claimed"
+    local worker_row=""
+    worker_row=$(db_get_worker_status "$wid" 2>/dev/null || true)
+    if [ -n "$worker_row" ]; then
+      local _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info
+      IFS="$_DB_SEP" read -r _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info <<< "$worker_row"
+      task_id="${_db_task_id:-}"
+    fi
+    if [ -n "$task_title" ] || [ -n "$task_id" ]; then
+      if [ -n "$task_id" ]; then
+        db_unclaim_task "$task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed for id=$task_id '$task_title' — task may remain stuck as claimed"
+      else
+        db_unclaim_task_by_title "$task_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$task_title' — task may remain stuck as claimed"
+      fi
       log "Unclaimed task: $task_title"
     fi
 

@@ -33,7 +33,7 @@ import type {
 } from "../types";
 import { useSkynet } from "./SkynetProvider";
 import { WorkerScaling } from "./WorkerScaling";
-import { getWorkerTriggerSpec } from "../lib/worker-triggers";
+import { getWorkerTriggerTarget } from "../lib/worker-trigger";
 
 // ===== Constants =====
 
@@ -111,6 +111,13 @@ function getTagColor(tag: string, extraColors?: Record<string, string>): string 
 
 function getWorkerLogTarget(worker: { logFile?: string | null; name: string }): string {
   return worker.logFile || worker.name;
+}
+function isMonitoringStatusPayload(data: unknown): data is MonitoringStatus {
+  return Boolean(
+    data &&
+      typeof data === "object" &&
+      Array.isArray((data as MonitoringStatus).workers),
+  );
 }
 
 // ===== Sub-components =====
@@ -296,6 +303,7 @@ function WorkerCard({
         <p className="mt-1.5 text-xs text-zinc-600">Last: {worker.lastLogTime}</p>
       )}
       <div className="mt-3 flex items-center gap-2">
+        {getWorkerTriggerTarget(worker.name) ? (
         {canTrigger && (
           <button
             onClick={onTrigger}
@@ -305,6 +313,10 @@ function WorkerCard({
             {triggering ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
             Run
           </button>
+        ) : (
+          <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+            Auto-managed
+          </span>
         )}
         <button
           onClick={onViewLogs}
@@ -322,10 +334,12 @@ function LogTerminal({
   logData,
   loading,
   autoScroll,
+  error,
 }: {
   logData: LogData | null;
   loading: boolean;
   autoScroll: boolean;
+  error: string | null;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -334,6 +348,15 @@ function LogTerminal({
       endRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [logData?.lines, autoScroll]);
+
+  if (error && !logData) {
+    return (
+      <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-red-400">
+        <AlertTriangle className="h-4 w-4" />
+        {error}
+      </div>
+    );
+  }
 
   if (!logData || logData.lines.length === 0) {
     return <p className="px-4 py-8 text-center text-sm text-zinc-600">No log entries</p>;
@@ -371,6 +394,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
     { value: "task-fixer", label: "Task Fixer" },
     { value: "watchdog", label: "Watchdog" },
     { value: "auth-refresh", label: "Auth Refresh" },
+    { value: "codex-auth-refresh", label: "Codex Auth Refresh" },
     { value: "health-check", label: "Health Check" },
     { value: "sync-runner", label: "Sync Runner" },
     { value: "post-commit-gate", label: "Post-Commit Gate" },
@@ -390,8 +414,10 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   const [logSearch, setLogSearch] = useState("");
   const [logLines, setLogLines] = useState(200);
   const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [connected, setConnected] = useState(false);
+  const statusUpdateSeqRef = useRef(0);
 
   // Build log list from static scripts + live worker status so scaled workers/fixers
   // automatically appear in the log viewer without manual dashboard configuration.
@@ -420,11 +446,21 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Fetch status (used as fallback and for manual refresh)
   const fetchStatus = useCallback(async () => {
+    const requestSeq = statusUpdateSeqRef.current + 1;
+    statusUpdateSeqRef.current = requestSeq;
+
     try {
       const res = await fetch(`${apiPrefix}/monitoring/status`);
       const json = await res.json();
+      if (requestSeq !== statusUpdateSeqRef.current) {
+        return;
+      }
       if (json.error) {
         setError(json.error);
+        return;
+      }
+      if (!isMonitoringStatusPayload(json.data)) {
+        setError("Invalid monitoring status response");
         return;
       }
       setStatus(json.data);
@@ -453,7 +489,15 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         const params = new URLSearchParams({ script, lines: String(logLines) });
         if (logSearch) params.set("search", logSearch);
         const res = await fetch(`${apiPrefix}/monitoring/logs?${params}`);
+        if (!res.ok) {
+          setLogError(`Failed to load logs for ${script}`);
+          return;
+        }
         const json = await res.json();
+        if (json?.error) {
+          setLogError(typeof json.error === "string" ? json.error : `Failed to load logs for ${script}`);
+          return;
+        }
         const data = json?.data;
         if (
           data &&
@@ -463,11 +507,12 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
           typeof data.fileSizeBytes === "number"
         ) {
           setLogData(data as LogData);
+          setLogError(null);
         } else {
-          setLogData(null);
+          setLogError(`Received an invalid log payload for ${script}`);
         }
       } catch {
-        setLogData(null);
+        setLogError(`Failed to load logs for ${script}`);
       } finally {
         setLogLoading(false);
       }
@@ -505,6 +550,11 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
           setError(json.error);
           return;
         }
+        if (!isMonitoringStatusPayload(json.data)) {
+          setError("Invalid monitoring stream payload");
+          return;
+        }
+        statusUpdateSeqRef.current += 1;
         setStatus(json.data);
         setError(null);
         stopFallbackPoll();
@@ -517,8 +567,8 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
     es.onerror = () => {
       setConnected(false);
-      fetchStatus();
-      startFallbackPoll();
+      void fetchStatus();
+      // EventSource auto-reconnects
     };
 
     return () => {
@@ -544,9 +594,9 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   }, [activeTab, fetchAgents]);
 
   async function triggerScript(script: string) {
-    const triggerSpec = getWorkerTriggerSpec(script);
-    if (!triggerSpec) {
-      setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
+    const triggerTarget = getWorkerTriggerTarget(script);
+    if (!triggerTarget) {
+       setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
       setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
       return;
     }
@@ -557,7 +607,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       const res = await fetch(`${apiPrefix}/pipeline/trigger`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(triggerSpec),
+        body: JSON.stringify(triggerTarget),
       });
       const json = await res.json();
       if (json.error) {
@@ -774,6 +824,39 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 </div>
               );
             })}
+            {(!status.currentTasks || Object.keys(status.currentTasks).length === 0) && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:col-span-2">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  <Zap className="h-3.5 w-3.5" />
+                  Current Task
+                </div>
+                {status.currentTask.status === "in_progress" || status.currentTask.status === "working" ? (
+                  <div className="mt-3">
+                    <p className="text-sm font-semibold text-emerald-400">
+                      {status.currentTask.title ?? "Task in progress"}
+                    </p>
+                    {status.currentTask.branch && (
+                      <p className="mt-1 text-xs text-zinc-500">
+                        <GitBranch className="mr-1 inline h-3 w-3" />
+                        {status.currentTask.branch}
+                      </p>
+                    )}
+                    {status.currentTask.started && (
+                      <p className="mt-0.5 text-xs text-zinc-500">Started: {status.currentTask.started}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <p className="text-sm text-zinc-500">
+                      {status.currentTask.status === "completed" ? "Completed" : "Idle"}
+                    </p>
+                    {status.currentTask.lastInfo && (
+                      <p className="mt-1 truncate text-xs text-zinc-600">{status.currentTask.lastInfo}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Recent activity */}
@@ -1015,6 +1098,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
               onChange={(e) => {
                 setSelectedLog(e.target.value);
                 setLogData(null);
+                setLogError(null);
               }}
               className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
             >
@@ -1089,9 +1173,16 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
             </div>
           )}
 
+          {logError && logData && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {logError}
+            </div>
+          )}
+
           {/* Terminal */}
           <div className="overflow-hidden rounded-xl border border-zinc-800">
-            <LogTerminal logData={logData} loading={logLoading} autoScroll={autoScroll} />
+            <LogTerminal logData={logData} loading={logLoading} autoScroll={autoScroll} error={logError} />
           </div>
         </div>
       )}

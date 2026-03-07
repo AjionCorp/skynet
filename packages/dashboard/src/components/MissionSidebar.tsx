@@ -34,6 +34,7 @@ export function MissionSidebar() {
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const getStatus = () => {
     if (!pipeline) return { label: "UNKNOWN", color: "text-zinc-500", icon: Activity };
@@ -61,13 +62,30 @@ export function MissionSidebar() {
         fetch(`${apiPrefix}/missions`),
         fetch(`${apiPrefix}/pipeline/status`)
       ]);
-      
+
+      if (!missionsRes.ok || !pipelineRes.ok) {
+        throw new Error("Failed to refresh mission intelligence");
+      }
+
       const missionsJson = await missionsRes.json();
       const pipelineJson = await pipelineRes.json();
-      
-      if (missionsJson.data) setMissions(missionsJson.data.missions);
-      if (pipelineJson.data) setPipeline(pipelineJson.data);
+
+      if (missionsJson.error) {
+        throw new Error(typeof missionsJson.error === "string" ? missionsJson.error : "Failed to load missions");
+      }
+      if (pipelineJson.error) {
+        throw new Error(typeof pipelineJson.error === "string" ? pipelineJson.error : "Failed to load pipeline status");
+      }
+
+      if (Array.isArray(missionsJson.data?.missions)) {
+        setMissions(missionsJson.data.missions);
+      }
+      if (pipelineJson.data) {
+        setPipeline(pipelineJson.data);
+      }
+      setError(null);
     } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch sidebar data");
       console.error("Failed to fetch sidebar data:", err);
     } finally {
       setLoading(false);
@@ -148,7 +166,18 @@ export function MissionSidebar() {
             <Target className="h-4 w-4 text-cyan-400" />
             <span className="text-xs font-bold uppercase tracking-wider">Mission Intelligence</span>
           </div>
+          {error && (
+            <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+              Stale
+            </span>
+          )}
         </div>
+
+        {error && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+            {error}
+          </div>
+        )}
 
         {/* Global Pipeline Status */}
         <div className="bg-zinc-900/80 rounded-lg p-3 border border-zinc-800">

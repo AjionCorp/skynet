@@ -20,6 +20,10 @@ function getLogSources(maxWorkers: number, maxFixers: number) {
     { value: "watchdog", label: "Watchdog" },
     { value: "health-check", label: "Health Check" },
     { value: "project-driver", label: "Project Driver" },
+    { value: "auth-refresh", label: "Auth Refresh" },
+    { value: "codex-auth-refresh", label: "Codex Auth Refresh" },
+    { value: "sync-runner", label: "Sync Runner" },
+    { value: "post-commit-gate", label: "Post-Commit Gate" },
   );
   return sources;
 }

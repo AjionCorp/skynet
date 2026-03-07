@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { AdminLayout } from "./AdminLayout";
 import type { AdminLayoutPage } from "./AdminLayout";
@@ -18,8 +18,21 @@ const PAGES: AdminLayoutPage[] = [
 ];
 
 describe("AdminLayout", () => {
+  beforeEach(() => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (url.includes("/missions")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: { missions: [] }, error: null })));
+      }
+      if (url.includes("/pipeline/status")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: null, error: null })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: null, error: null })));
+    }));
+  });
+
   afterEach(() => {
     cleanup();
+    vi.restoreAllMocks();
   });
 
   it("renders sidebar navigation with all expected links", () => {

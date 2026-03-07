@@ -11,13 +11,14 @@ function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
   }
 
   const legacyLock = `${lockPrefix}-project-driver.lock`;
-  if (lockPath === legacyLock) {
-    return "project-driver";
+ 
+  if (lockPath === globalLock) {
+    return "project-driver-global";
   }
 
   const prefix = `${lockPrefix}-project-driver-`;
   if (!lockPath.startsWith(prefix) || !lockPath.endsWith(".lock")) {
-    return "project-driver";
+    return "project-driver-global";
   }
 
   return `project-driver-${lockPath.slice(prefix.length, -".lock".length)}`;

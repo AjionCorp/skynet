@@ -41,6 +41,15 @@ describe("KeyboardShortcutsHelp", () => {
     expect(screen.getByText("0")).toBeDefined();
   });
 
+  it("does not advertise a numeric shortcut for pages after the 10th", () => {
+    const elevenPages = Array.from({ length: 11 }, (_, i) => ({
+      href: `/page/${i}`,
+      label: `Page ${i + 1}`,
+    }));
+    render(<KeyboardShortcutsHelp pages={elevenPages} onClose={vi.fn()} />);
+    expect(screen.getAllByText("No shortcut").length).toBeGreaterThanOrEqual(1);
+  });
+
   it("renders general shortcuts (? and Esc)", () => {
     render(<KeyboardShortcutsHelp pages={PAGES} onClose={vi.fn()} />);
     expect(screen.getByText("Show shortcuts")).toBeDefined();

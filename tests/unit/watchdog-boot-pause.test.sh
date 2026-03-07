@@ -2,7 +2,7 @@
 # tests/unit/watchdog-boot-pause.test.sh — Unit tests for watchdog boot-to-pause initialization
 #
 # Verifies:
-#   1. First boot creates both pipeline-paused and the bootstrap sentinel.
+#   1. First boot creates both pipeline-paused and the boot-to-pause sentinel.
 #   2. Later watchdog restarts preserve a resumed pipeline instead of re-pausing it.
 #
 # Usage: bash tests/unit/watchdog-boot-pause.test.sh
@@ -62,7 +62,7 @@ _initialize_boot_pause
 OUTPUT=$(cat "$LOG_CAPTURE")
 
 assert_file_exists "$DEV_DIR/pipeline-paused" "first boot: pause file created"
-assert_file_exists "$DEV_DIR/.watchdog-bootstrapped" "first boot: bootstrap sentinel created"
+assert_file_exists "$DEV_DIR/.boot-to-pause-initialized" "first boot: boot-to-pause sentinel created"
 assert_contains "$OUTPUT" "Pipeline initialized in PAUSED state" "first boot: initialization logged"
 
 echo ""

@@ -220,6 +220,24 @@ describe("TasksDashboard", () => {
     });
   });
 
+  it("keeps the global backlog scope selectable after missions load", async () => {
+    const fetchMock = mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
+    renderWithProvider(<TasksDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Global backlog")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("Global backlog"));
+    fireEvent.click(screen.getByText("Refresh"));
+
+    await waitFor(() => {
+      expect(
+        fetchMock.mock.calls.some(([url]) => String(url) === "/api/admin/tasks")
+      ).toBe(true);
+    });
+  });
+
   it("renders Refresh button", async () => {
     mockFetchWith(MOCK_BACKLOG);
     renderWithProvider(<TasksDashboard />);
@@ -228,12 +246,26 @@ describe("TasksDashboard", () => {
     });
   });
 
-  it("keeps the global backlog visible when missions exist", async () => {
-    mockFetchWith(MOCK_BACKLOG);
+  it("keeps the global backlog scope available when missions exist", async () => {
+    const fetchMock = mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
     renderWithProvider(<TasksDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("Mission Alpha")).toBeDefined();
+      expect(screen.getByText("Global backlog")).toBeDefined();
     });
-    expect(screen.getByText("Global backlog")).toBeDefined();
+
+    fireEvent.click(screen.getByText("Global backlog"));
+
+    const titleInput = screen.getByPlaceholderText(
+      "e.g. Add dark mode toggle to settings page"
+    ) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "Global task" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Task added to backlog")).toBeDefined();
+    });
+
+    const postCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(String(postCall?.[0])).toBe("/api/admin/tasks");
   });
 });

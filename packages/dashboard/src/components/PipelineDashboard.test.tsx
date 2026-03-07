@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, waitFor, cleanup, act } from "@testing-library/react";
+import { render, screen, waitFor, cleanup, act, fireEvent } from "@testing-library/react";
 import { PipelineDashboard } from "./PipelineDashboard";
 import { SkynetProvider } from "./SkynetProvider";
 import type { PipelineStatus } from "../types";
@@ -103,6 +103,18 @@ interface MockEventSource {
 let mockES: MockEventSource;
 const EventSourceSpy = vi.fn();
 
+function mockFetchResponse(url: string) {
+  if (url.includes("/pipeline/status")) {
+    return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+  }
+
+  if (url.includes("/pipeline/logs")) {
+    return new Response(JSON.stringify({ data: { lines: [] }, error: null }));
+  }
+
+  return new Response(JSON.stringify({ data: [], error: null }));
+}
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
@@ -118,15 +130,9 @@ describe("PipelineDashboard", () => {
       EventSourceSpy(url);
     } as unknown as typeof EventSource) as unknown as typeof EventSource;
     // Default fetch mock for bootstrap status fetches and log polling.
-    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
-      if (url.includes("/pipeline/status")) {
-        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
-      }
-      if (url.includes("/pipeline/logs")) {
-        return new Response(JSON.stringify({ data: { lines: [] }, error: null }));
-      }
-      return new Response(JSON.stringify({ data: [], error: null }));
+      return Promise.resolve(mockFetchResponse(url));
     }));
   });
 
@@ -341,5 +347,132 @@ describe("PipelineDashboard", () => {
     const { unmount } = renderWithProvider(<PipelineDashboard />);
     unmount();
     expect(mockES.close).toHaveBeenCalled();
+  });
+
+  it("falls back to REST status when SSE is silent", async () => {
+    renderWithProvider(<PipelineDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Pipeline Dashboard")).toBeDefined();
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith("/api/admin/pipeline/status");
+  });
+
+  it("maps numbered worker runs to triggerable scripts", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+
+      if (url.includes("/pipeline/status")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...MOCK_STATUS,
+                workers: [
+                  ...MOCK_STATUS.workers,
+                  {
+                    name: "task-fixer-2",
+                    label: "Task Fixer 2",
+                    category: "core",
+                    schedule: "on demand",
+                    description: "Fixes failed tasks",
+                    running: false,
+                    pid: null,
+                    ageMs: null,
+                    lastLog: null,
+                    lastLogTime: null,
+                    logFile: "task-fixer-2",
+                  },
+                ],
+              },
+              error: null,
+            }),
+          ),
+        );
+      }
+
+      if (url.includes("/pipeline/trigger")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: { ok: true, body: init?.body }, error: null })));
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ data: [], error: null })));
+    }));
+
+    renderWithProvider(<PipelineDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Run").length).toBeGreaterThanOrEqual(2);
+    });
+
+    fireEvent.click(screen.getAllByText("Run")[0]);
+
+    await waitFor(() => {
+      const triggerCall = vi.mocked(global.fetch).mock.calls.find(([input]) =>
+        String(input).includes("/pipeline/trigger"),
+      );
+      expect(triggerCall).toBeDefined();
+      expect(triggerCall?.[1]).toMatchObject({
+        method: "POST",
+        body: JSON.stringify({ script: "dev-worker", args: ["1"] }),
+      });
+    });
+  });
+
+  it("marks auto-managed workers instead of showing broken run buttons", async () => {
+    vi.stubGlobal("fetch", vi.fn((input: string | URL | Request) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+      if (url.includes("/pipeline/status")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              data: {
+                ...MOCK_STATUS,
+                workers: [
+                  ...MOCK_STATUS.workers,
+                  {
+                    name: "auth-refresh",
+                    label: "Auth Refresh",
+                    category: "infra",
+                    schedule: "every 5m",
+                    description: "Refreshes auth token",
+                    running: false,
+                    pid: null,
+                    ageMs: null,
+                    lastLog: null,
+                    lastLogTime: null,
+                    logFile: "auth-refresh",
+                  },
+                  {
+                    name: "codex-auth-refresh",
+                    label: "Codex Auth Refresh",
+                    category: "infra",
+                    schedule: "every 30m",
+                    description: "Refreshes Codex auth token",
+                    running: false,
+                    pid: null,
+                    ageMs: null,
+                    lastLog: null,
+                    lastLogTime: null,
+                    logFile: "codex-auth-refresh",
+                  },
+                ],
+              },
+              error: null,
+            }),
+          ),
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: [], error: null })));
+    }));
+
+    renderWithProvider(<PipelineDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Auth Refresh")).toBeDefined();
+    });
+
+    expect(screen.getAllByText("Auto-managed").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText("Run")).toHaveLength(1);
   });
 });
