@@ -72,7 +72,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           setSelectedSlug(json.data.config.activeMission);
         }
         return missionList[0]?.slug ?? null;
-      });
+      }
     } catch { /* ignore */ }
   }, [apiPrefix]);
 

@@ -300,26 +300,11 @@ describe("createPipelineStatusHandler", () => {
   });
 
   it("detects project-driver as running from lock dir pid", async () => {
-    mockReaddirSync.mockImplementation((p) => {
-      if (p === "/tmp") {
-        return ["skynet-test--project-driver-abcd1234.lock"] as unknown as ReturnType<typeof readdirSync>;
-      }
-      return [] as unknown as ReturnType<typeof readdirSync>;
-    });
-    mockExistsSync.mockImplementation((p) => {
-      return typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid");
-    });
-    mockReadFileSync.mockImplementation((p) => {
-      if (typeof p === "string" && p.endsWith("/skynet-test--project-driver-abcd1234.lock/pid")) return "4242";
-      return "";
-    });
-    mockSpawnSync.mockImplementation((cmd, args) => {
-      const a = (args as string[]) || [];
-      if (cmd === "kill" && a[0] === "-0" && a[1] === "4242") {
-        return { stdout: "", stderr: "", status: 0 } as never;
-      }
-      return { stdout: "", stderr: "", status: 0 } as never;
-    });
+    mockGetWorkerStatus.mockImplementation((lockFile) => ({
+      running: lockFile.endsWith("project-driver-global.lock"),
+      pid: lockFile.endsWith("project-driver-global.lock") ? 4242 : null,
+      ageMs: lockFile.endsWith("project-driver-global.lock") ? 5000 : null,
+    }));
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
