@@ -76,6 +76,18 @@ describe("createProjectDriverStatusHandler", () => {
     expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-myproj--project-driver-global.lock");
   });
 
+  it("prefers numbered project-driver locks when present", async () => {
+    mockListProjectDriverLocks.mockReturnValue([
+      "/tmp/skynet-test--project-driver-global.lock",
+    ]);
+
+    const handler = createProjectDriverStatusHandler(makeConfig());
+    await handler();
+
+    expect(mockGetWorkerStatus).toHaveBeenCalledWith("/tmp/skynet-test--project-driver-global.lock");
+    expect(mockGetLastLogLine).toHaveBeenCalledWith("/tmp/test/.dev", "project-driver-global");
+  });
+
   it("returns running state when worker is active", async () => {
     mockGetWorkerStatus.mockReturnValue({ running: true, pid: 12345, ageMs: 60000 });
     const handler = createProjectDriverStatusHandler(makeConfig());

@@ -101,7 +101,7 @@ describe("SyncDashboard", () => {
     mockFetchWith(MOCK_PIPELINE_STATUS);
     renderWithProvider(<SyncDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("Connection timeout")).toBeDefined();
+      expect(screen.getAllByText("Connection timeout").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -139,6 +139,15 @@ describe("SyncDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Refresh")).toBeDefined();
     });
+  });
+
+  it("shows the last pipeline sync run summary", async () => {
+    mockFetchWith(MOCK_PIPELINE_STATUS);
+    renderWithProvider(<SyncDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Last Pipeline Sync Run")).toBeDefined();
+    });
+    expect(screen.queryByText("Never")).toBeNull();
   });
 
   it("supports custom endpoints prop", async () => {

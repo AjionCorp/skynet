@@ -43,6 +43,7 @@ describe("createTasksHandlers", () => {
     process.env.NODE_ENV = "development";
     _resetRateLimits();
     vi.resetAllMocks();
+    _resetRateLimits();
     mockReadFileSync.mockReturnValue(SAMPLE_BACKLOG as never);
     mockWriteFileSync.mockReturnValue(undefined as never);
     mockMkdirSync.mockReturnValue(undefined as never);
@@ -419,9 +420,8 @@ describe("createTasksHandlers", () => {
       );
       const results = await Promise.all(requests);
 
-      // All requests should succeed (200), get lock contention (423),
-      // or be rate limited under high contention (429), but never 500.
-      // but none should error (500)
+      // All requests should succeed (200), get lock contention (423), or hit
+      // the in-memory rate limiter (429), but none should error (500).
       for (const res of results) {
         expect([200, 423, 429]).toContain(res.status);
       }

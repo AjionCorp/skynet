@@ -275,7 +275,7 @@ export SKYNET_INTENTS_DIR="$_saved_intents_dir"
 # Use our own PID as a "still alive" worker
 _our_pid=$$
 printf "stale|0" > "$SKYNET_INTENTS_DIR/worker-53"
-# Create a fake worker lock directory with pid file
+# Create a fake dir-based worker lock with our PID
 mkdir -p "${SKYNET_LOCK_PREFIX}-dev-worker-53.lock" 2>/dev/null || true
 echo "$_our_pid" > "${SKYNET_LOCK_PREFIX}-dev-worker-53.lock/pid"
 _intent_prune 0

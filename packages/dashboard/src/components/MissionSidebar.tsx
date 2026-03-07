@@ -1,9 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Target, Users, Layout, ChevronRight, Activity, Play, Pause, Square, Brain, ShieldCheck, ShieldAlert } from "lucide-react";
+import { Target, Users, Activity, Play, Pause, Square, Brain, ShieldCheck } from "lucide-react";
 import type { MissionSummary, PipelineStatus, CurrentTask } from "../types";
 import { useSkynet } from "./SkynetProvider";
+
+function getWorkerTaskKey(workerName: string): string | null {
+  const devWorkerMatch = workerName.match(/^dev-worker-(\d+)$/);
+  return devWorkerMatch ? `worker-${devWorkerMatch[1]}` : null;
+}
+
+function getFixerId(workerName: string): string | null {
+  const fixerMatch = workerName.match(/^task-fixer(?:-(\d+))?$/);
+  return fixerMatch ? fixerMatch[1] ?? "1" : null;
+}
+
+function getWorkerShortName(workerName: string): string {
+  const devWorkerMatch = workerName.match(/^dev-worker-(\d+)$/);
+  if (devWorkerMatch) {
+    return `W${devWorkerMatch[1]}`;
+  }
+
+  const fixerId = getFixerId(workerName);
+  if (fixerId) {
+    return `F${fixerId}`;
+  }
+
+  return workerName;
+}
 
 export function MissionSidebar() {
   const { apiPrefix } = useSkynet();
@@ -71,9 +95,49 @@ export function MissionSidebar() {
     );
   }
 
-  const getWorkerTask = (workerId: string): CurrentTask | null => {
-    if (!pipeline?.currentTasks) return null;
-    return pipeline.currentTasks[workerId] || null;
+  const getWorkerTask = (workerName: string): CurrentTask | null => {
+    if (!pipeline) return null;
+
+    const taskKey = getWorkerTaskKey(workerName);
+    if (taskKey) {
+      return pipeline.currentTasks?.[taskKey] || null;
+    }
+
+    const fixerId = getFixerId(workerName);
+    if (!fixerId) return null;
+
+    const activeFix = pipeline.failed.find((failedTask) => failedTask.status === `fixing-${fixerId}`);
+    if (activeFix) {
+      return {
+        status: "in_progress",
+        title: activeFix.task,
+        branch: activeFix.branch || null,
+        started: null,
+        worker: workerName,
+        lastInfo: activeFix.error || null,
+      };
+    }
+
+    const fixer = pipeline.workers.find((worker) => worker.name === workerName);
+    if (fixer?.running) {
+      return {
+        status: "working",
+        title: null,
+        branch: null,
+        started: null,
+        worker: workerName,
+        lastInfo: null,
+      };
+    }
+
+    return {
+      status: "idle",
+      title: null,
+      branch: null,
+      started: null,
+      worker: workerName,
+      lastInfo: null,
+    };
   };
 
   return (
@@ -168,14 +232,14 @@ export function MissionSidebar() {
                 
                 <div className="space-y-1.5">
                   {mission.assignedWorkers.map((workerName) => {
-                    const task = getWorkerTask(workerName.replace("dev-worker-", "worker-"));
+                    const task = getWorkerTask(workerName);
                     return (
                       <div key={workerName} className="bg-zinc-900/50 rounded p-2 border border-zinc-800/50">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[10px] font-mono text-cyan-500/80">
-                            {workerName.replace("dev-worker-", "W")}
+                            {getWorkerShortName(workerName)}
                           </span>
-                          {task?.status === "in_progress" && (
+                          {(task?.status === "in_progress" || task?.status === "working") && (
                             <Activity className="h-2.5 w-2.5 text-green-500 animate-pulse" />
                           )}
                         </div>

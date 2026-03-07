@@ -224,7 +224,7 @@ export function PipelineDashboard() {
   async function triggerScript(script: string) {
     const triggerTarget = getWorkerTriggerTarget(script);
     if (!triggerTarget) {
-      setTriggerMsg((p) => ({ ...p, [script]: "Managed automatically" }));
+      setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
       setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
       return;
     }
@@ -563,8 +563,10 @@ export function PipelineDashboard() {
                   <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
                   <span className="text-sm font-semibold text-white">{w.label}</span>
                 </div>
-                {w.running && (
-                  <span className="text-xs text-emerald-400">{formatAge(w.ageMs)}</span>
+                <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
+                <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
+                {w.running && w.pid && (
+                  <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
                 )}
               </div>
               <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
@@ -579,17 +581,36 @@ export function PipelineDashboard() {
               )}
               <div className="mt-3 flex items-center gap-2">
                 {triggerTarget ? (
+                {!w.running && w.lastLog && (
+                  <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
+                    Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
+                  </p>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  {triggerSpec && (
+                    <button
+                      onClick={() => triggerScript(w.name)}
+                      disabled={triggering[w.name]}
+                      className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    >
+                      {triggering[w.name] ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : (
+                        <Play className="h-3 w-3" />
+                      )}
+                      Run
+                    </button>
+                  )}
                   <button
-                    onClick={() => triggerScript(w.name)}
-                    disabled={triggering[w.name]}
-                    className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
+                    onClick={() => setLogViewer(logViewer === w.logFile ? null : w.logFile)}
+                    className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+                      logViewer === w.logFile
+                        ? "bg-amber-500/20 text-amber-400"
+                        : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
+                    }`}
                   >
-                    {triggering[w.name] ? (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <Play className="h-3 w-3" />
-                    )}
-                    Run
+                    <Terminal className="h-3 w-3" />
+                    Logs
                   </button>
                 ) : (
                   <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">

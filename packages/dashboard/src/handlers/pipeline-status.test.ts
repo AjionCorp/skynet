@@ -119,6 +119,30 @@ describe("createPipelineStatusHandler", () => {
     expect(data.workers[0].pid).toBe(1234);
   });
 
+  it("detects project-driver locks from the lock directory, not devDir", async () => {
+    mockReaddirSync.mockImplementation((path) => {
+      if (path === "/tmp") return ["skynet-test--project-driver-main.lock"] as never;
+      return [] as never;
+    });
+    mockExistsSync.mockImplementation((path) =>
+      typeof path === "string" && path === "/tmp/skynet-test--project-driver-main.lock/pid"
+    );
+    mockReadFileSync.mockImplementation((path) =>
+      path === "/tmp/skynet-test--project-driver-main.lock/pid" ? "4242\n" : ""
+    );
+    mockSpawnSync.mockImplementation((_cmd, args) => {
+      const a = (args as string[]) || [];
+      if (a[0] === "-0" && a[1] === "4242") return { stdout: "", stderr: "", status: 0 } as never;
+      return { stdout: "", stderr: "", status: 0 } as never;
+    });
+
+    const handler = createPipelineStatusHandler(makeConfig());
+    const res = await handler();
+    const { data } = await res.json();
+
+    expect(data.projectDriverRunning).toBe(true);
+  });
+
   it("parses current-task.md fields", async () => {
     mockReadDevFile.mockImplementation((_dir, filename) => {
       if (filename === "current-task.md") return "## Implement login page\n**Status:** running\n**Branch:** feat/login\n**Started:** 2025-01-01\n**Worker:** dev-worker-1";

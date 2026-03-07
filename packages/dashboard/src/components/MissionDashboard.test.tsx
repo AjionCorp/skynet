@@ -247,7 +247,45 @@ describe("MissionDashboard", () => {
     await waitFor(() => {
       expect(screen.getByText("Worker Assignments")).toBeDefined();
     });
+    expect(screen.getByText("Worker 1")).toBeDefined();
     expect(screen.getByText("dev-worker-1")).toBeDefined();
+  });
+
+  it("derives assignable workers from config and keeps fixer 1 canonical", async () => {
+    vi.stubGlobal("fetch", vi.fn((url: string) => {
+      if (url.includes("/missions")) {
+        return Promise.resolve(new Response(JSON.stringify(MOCK_MISSIONS_RESPONSE)));
+      }
+      if (url.includes("/config")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          data: {
+            entries: [
+              { key: "SKYNET_MAX_WORKERS", value: "2" },
+              { key: "SKYNET_MAX_FIXERS", value: "2" },
+            ],
+          },
+          error: null,
+        })));
+      }
+      if (url.includes("/mission/status")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: MOCK_MISSION, error: null })));
+      }
+      if (url.includes("/pipeline/status")) {
+        return Promise.resolve(new Response(JSON.stringify({ data: MOCK_PIPELINE_STATUS, error: null })));
+      }
+      return Promise.resolve(new Response(JSON.stringify({ data: null, error: null })));
+    }));
+
+    renderWithProvider(<MissionDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Worker Assignments")).toBeDefined();
+    });
+
+    expect(screen.getByText("Worker 2")).toBeDefined();
+    expect(screen.getByText("Fixer 1")).toBeDefined();
+    expect(screen.getByText("task-fixer")).toBeDefined();
+    expect(screen.queryByText("task-fixer-1")).toBeNull();
   });
 });
 

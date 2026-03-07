@@ -3,7 +3,20 @@ import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reade
 import { getWorkerStatus } from "../lib/worker-status";
 import { logHandlerError } from "../lib/handler-error";
 import { listProjectDriverLocks } from "../lib/process-locks";
-import { basename } from "path";
+
+function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
+  const legacyLock = `${lockPrefix}-project-driver.lock`;
+  if (lockPath === legacyLock) {
+    return "project-driver";
+  }
+
+  const prefix = `${lockPrefix}-project-driver-`;
+  if (!lockPath.startsWith(prefix) || !lockPath.endsWith(".lock")) {
+    return "project-driver";
+  }
+
+  return `project-driver-${lockPath.slice(prefix.length, -".lock".length)}`;
+}
 
 /**
  * Create a GET handler for the project-driver/status endpoint.
@@ -14,28 +27,24 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
 
   return async function GET(): Promise<Response> {
     try {
+      // Running status via PID lock
       const discoveredLocks = listProjectDriverLocks(lockPrefix);
-      const lockFiles = discoveredLocks.length > 0
-        ? discoveredLocks
-        : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
-      const lockPrefixBase = `${basename(lockPrefix)}-`;
-      const statuses = lockFiles.map((lockFile) => ({
+      const lockCandidates =
+        discoveredLocks.length > 0
+          ? discoveredLocks
+          : [`${lockPrefix}-project-driver.lock`];
+      const statuses = lockCandidates.map((lockFile) => ({
         lockFile,
         ...getWorkerStatus(lockFile),
       }));
-      const activeStatus = statuses.find((status) => status.running) ?? statuses[0];
-      const processName = basename(activeStatus.lockFile)
-        .replace(lockPrefixBase, "")
-        .replace(/\.lock$/, "");
+      const activeLock = statuses.find((status) => status.running) ?? statuses[0];
+      const { running, pid, ageMs } = activeLock;
 
-      const logCandidates = Array.from(
-        new Set([processName, "project-driver-global", "project-driver"])
-      );
-      let lastLog: string | null = null;
-      for (const logName of logCandidates) {
-        lastLog = getLastLogLine(devDir, logName);
-        if (lastLog) break;
-      }
+      // Last log line
+      const logScript = getProjectDriverLogName(lockPrefix, activeLock.lockFile);
+      const lastLog =
+        getLastLogLine(devDir, logScript) ??
+        (logScript !== "project-driver" ? getLastLogLine(devDir, "project-driver") : null);
       const lastLogTime = extractTimestamp(lastLog);
 
       // Telemetry snapshot (may not exist)

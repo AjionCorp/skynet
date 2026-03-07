@@ -254,12 +254,14 @@ function PipelineFlow({ workers }: { workers: WorkerInfo[] }) {
 function WorkerCard({
   worker,
   heartbeat,
+  canTrigger,
   onTrigger,
   onViewLogs,
   triggering,
 }: {
   worker: WorkerInfo;
   heartbeat?: WorkerHeartbeat;
+  canTrigger: boolean;
   onTrigger: () => void;
   onViewLogs: () => void;
   triggering: boolean;
@@ -299,6 +301,7 @@ function WorkerCard({
       )}
       <div className="mt-3 flex items-center gap-2">
         {getWorkerTriggerTarget(worker.name) ? (
+        {canTrigger && (
           <button
             onClick={onTrigger}
             disabled={triggering}
@@ -495,10 +498,26 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
 
   // Stream status via SSE (same stream endpoint as PipelineDashboard)
   useEffect(() => {
-    void fetchStatus();
+    let fallbackPoll: ReturnType<typeof setInterval> | null = null;
+    const startFallbackPoll = () => {
+      if (!fallbackPoll) {
+        fallbackPoll = setInterval(fetchStatus, 15000);
+      }
+    };
+    const stopFallbackPoll = () => {
+      if (fallbackPoll) {
+        clearInterval(fallbackPoll);
+        fallbackPoll = null;
+      }
+    };
+
+    fetchStatus();
     const es = new EventSource(`${apiPrefix}/pipeline/stream`);
 
-    es.onopen = () => setConnected(true);
+    es.onopen = () => {
+      setConnected(true);
+      stopFallbackPoll();
+    };
 
     es.onmessage = (event) => {
       try {
@@ -514,6 +533,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         statusUpdateSeqRef.current += 1;
         setStatus(json.data);
         setError(null);
+        stopFallbackPoll();
       } catch (err) {
         console.error('[SSE] Failed to parse event data:', err, 'raw:', event.data?.substring(0, 200));
       } finally {
@@ -527,7 +547,10 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
       // EventSource auto-reconnects
     };
 
-    return () => es.close();
+    return () => {
+      stopFallbackPoll();
+      es.close();
+    };
   }, [apiPrefix, fetchStatus]);
 
   // Poll logs every 3s when on logs tab
@@ -549,7 +572,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   async function triggerScript(script: string) {
     const triggerTarget = getWorkerTriggerTarget(script);
     if (!triggerTarget) {
-      setTriggerMsg((p) => ({ ...p, [script]: "Managed automatically" }));
+       setTriggerMsg((p) => ({ ...p, [script]: "Error: This worker cannot be started from the dashboard" }));
       setTimeout(() => setTriggerMsg((p) => ({ ...p, [script]: "" })), 4000);
       return;
     }
@@ -824,6 +847,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {categoryWorkers.map((w) => {
+                    const triggerSpec = getWorkerTriggerSpec(w.name);
                     // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
                     const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
                     const fixerMatch = w.name.match(/task-fixer-?(\d+)?/);
@@ -836,6 +860,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                       <WorkerCard
                         worker={w}
                         heartbeat={hbKey ? status.heartbeats?.[hbKey] : undefined}
+                        canTrigger={triggerSpec !== null}
                         onTrigger={() => triggerScript(w.name)}
                         onViewLogs={() => switchToLogs(w.logFile)}
                         triggering={!!triggering[w.name]}

@@ -1,16 +1,20 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 
-const pushMock = vi.fn();
-
+const pushSpy = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  useRouter: () => ({ push: pushSpy }),
 }));
 
 import LoginPage from "./page";
 
 describe("LoginPage", () => {
+  beforeEach(() => {
+    pushSpy.mockReset();
+    vi.stubGlobal("fetch", vi.fn());
+  });
+
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -49,17 +53,17 @@ describe("LoginPage", () => {
     expect(button.hasAttribute("disabled")).toBe(true);
   });
 
-  it("redirects successful logins to the pipeline dashboard", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
+  it("redirects to the pipeline dashboard after a successful login", async () => {
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 200 }));
 
     render(<LoginPage />);
     fireEvent.change(screen.getByPlaceholderText("API key"), {
-      target: { value: "test-key" },
+      target: { value: "skynet-test-key" },
     });
     fireEvent.click(screen.getByRole("button", { name: /log in/i }));
 
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/admin/pipeline");
+      expect(pushSpy).toHaveBeenCalledWith("/admin/pipeline");
     });
   });
 });

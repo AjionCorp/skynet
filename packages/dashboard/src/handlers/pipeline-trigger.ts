@@ -6,6 +6,42 @@ import { parseBody } from "../lib/parse-body";
 import { SAFE_SCRIPT_NAME } from "../lib/constants";
 import { logHandlerError } from "../lib/handler-error";
 
+function normalizeTriggerRequest(script: string, args: string[]): {
+  requestedScript: string;
+  script: string;
+  args: string[];
+  logSuffix: string;
+} {
+  const devWorkerMatch = script.match(/^dev-worker-(\d+)$/);
+  if (devWorkerMatch) {
+    const workerId = devWorkerMatch[1];
+    return {
+      requestedScript: script,
+      script: "dev-worker",
+      args: [workerId, ...args],
+      logSuffix: `dev-worker-${workerId}`,
+    };
+  }
+
+  const fixerMatch = script.match(/^task-fixer-(\d+)$/);
+  if (fixerMatch) {
+    const fixerId = fixerMatch[1];
+    return {
+      requestedScript: script,
+      script: "task-fixer",
+      args: [fixerId, ...args],
+      logSuffix: fixerId === "1" ? "task-fixer" : `task-fixer-${fixerId}`,
+    };
+  }
+
+  return {
+    requestedScript: script,
+    script,
+    args,
+    logSuffix: args.length > 0 ? `${script}-${args[0]}` : script,
+  };
+}
+
 /**
  * Create a POST handler for the pipeline/trigger endpoint.
  * Fires off a script in the background, protected by PID lock files.
@@ -20,10 +56,10 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
       if (parseError || !body) {
         return Response.json({ data: null, error: parseError }, { status: parseStatus ?? 400 });
       }
-      const script = body.script;
-      const args = body.args ?? [];
+      const requestedScript = body.script;
+      const requestedArgs = body.args ?? [];
 
-      if (!script || !triggerableScripts.includes(script)) {
+      if (!requestedScript) {
         return Response.json(
           {
             data: null,
@@ -33,10 +69,25 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
         );
       }
 
-      // Validate script name is safe (alphanumeric + hyphens only)
-      if (!SAFE_SCRIPT_NAME.test(script)) {
+      // Validate requested script name first so alias forms remain safe.
+      if (!SAFE_SCRIPT_NAME.test(requestedScript)) {
         return Response.json(
-          { data: null, error: "Invalid script name" },
+          {
+            data: null,
+            error: "Invalid script name",
+          },
+          { status: 400 }
+        );
+      }
+
+      const { script, args, logSuffix } = normalizeTriggerRequest(requestedScript, requestedArgs);
+
+      if (!triggerableScripts.includes(script)) {
+        return Response.json(
+          {
+            data: null,
+            error: `Invalid script. Allowed: ${triggerableScripts.join(", ")}`,
+          },
           { status: 400 }
         );
       }
@@ -69,7 +120,6 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
 
       // Logs go to devDir/scripts/ (e.g. .dev/scripts/), not the source scriptsDir
       const logDir = resolve(devDir, "scripts");
-      const logSuffix = args.length > 0 ? `${script}-${args[0]}` : script;
       const logPath = resolve(logDir, `${logSuffix}.log`);
 
       // Fire and forget using spawn with explicit argv (no shell injection)
@@ -86,7 +136,7 @@ export function createPipelineTriggerHandler(config: SkynetConfig) {
       }
 
       return Response.json({
-        data: { triggered: true, script },
+        data: { triggered: true, script: requestedScript },
         error: null,
       });
     } catch (err) {

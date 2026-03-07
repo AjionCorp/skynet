@@ -11,7 +11,7 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
-import { listProjectDriverLocks } from "../lib/process-locks";
+import { listProjectDriverLocks, readPid, isProcessAlive } from "../lib/process-locks";
 
 /**
  * Extract significant keywords from the mission Goals section.
@@ -574,13 +574,20 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
             }
       
       // Project-driver status
-      const projectDriverLockFiles = listProjectDriverLocks(lockPrefix);
-      const projectDriverCandidates = projectDriverLockFiles.length > 0
-        ? projectDriverLockFiles
-        : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
-      const projectDriverRunning = projectDriverCandidates.some(
-        (lockFile) => getWorkerStatus(lockFile).running
-      );
+      let projectDriverRunning = false;
+      try {
+        const projectDriverLocks = listProjectDriverLocks(lockPrefix);
+        const lockCandidates = projectDriverLocks.length > 0
+          ? projectDriverLocks
+          : [`${lockPrefix}-project-driver.lock`];
+
+        projectDriverRunning = lockCandidates.some((lockPath) => {
+          const pid = readPid(lockPath);
+          return pid !== null && isProcessAlive(pid);
+        });
+      } catch {
+        /* ignore */
+      }
       
             // Git status — run in project root (parent of devDir)
       // NOTE: spawnSync calls are blocking but each completes in <10ms for git metadata queries.
