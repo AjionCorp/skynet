@@ -13,7 +13,7 @@ const mockGET = vi.hoisted(() =>
           pendingBacklog: 3,
           claimedBacklog: 1,
           pendingRetries: 0,
-          fixRate: 0.75,
+          fixRate: 75,
           duplicateSkipped: 2,
           maxNewTasks: 5,
           driver_low_fix_rate_mode: false,

@@ -53,6 +53,10 @@ function extractTimestamp(logLine: string | null): string | null {
   return match?.[1] ?? null;
 }
 
+function getWorkerLogTarget(worker: { logFile?: string | null; name: string }): string {
+  return worker.logFile || worker.name;
+}
+
 function isPipelineStatusPayload(data: unknown): data is PipelineStatus {
   return Boolean(
     data &&
@@ -544,24 +548,26 @@ export function PipelineDashboard() {
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {status.workers.map((w) => (
-            <div
-              key={w.name}
-              className={`rounded-xl border p-4 transition ${
-                w.running
-                  ? "border-emerald-500/30 bg-emerald-500/5"
-                  : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
-              }`}
-            >
-              {(() => {
-                const logTarget = w.logFile || w.name;
-                const triggerTarget = getWorkerTriggerTarget(w.name);
-                return (
-                  <>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
-                  <span className="text-sm font-semibold text-white">{w.label}</span>
+          {status.workers.map((w) => {
+            const triggerSpec = getWorkerTriggerSpec(w.name);
+            const logTarget = getWorkerLogTarget(w);
+            return (
+              <div
+                key={w.name}
+                className={`rounded-xl border p-4 transition ${
+                  w.running
+                    ? "border-emerald-500/30 bg-emerald-500/5"
+                    : "border-zinc-800 bg-zinc-900 hover:border-zinc-700"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className={`h-2 w-2 rounded-full ${w.running ? "bg-emerald-400 animate-pulse" : "bg-zinc-600"}`} />
+                    <span className="text-sm font-semibold text-white">{w.label}</span>
+                  </div>
+                  {w.running && (
+                    <span className="text-xs text-emerald-400">{formatAge(w.ageMs)}</span>
+                  )}
                 </div>
                 <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
                 <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
@@ -602,9 +608,9 @@ export function PipelineDashboard() {
                     </button>
                   )}
                   <button
-                    onClick={() => setLogViewer(logViewer === w.logFile ? null : w.logFile)}
+                    onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
                     className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                      logViewer === w.logFile
+                      logViewer === logTarget
                         ? "bg-amber-500/20 text-amber-400"
                         : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
                     }`}

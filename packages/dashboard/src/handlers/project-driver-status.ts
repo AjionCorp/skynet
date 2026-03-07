@@ -6,6 +6,10 @@ import { listProjectDriverLocks } from "../lib/process-locks";
 
 function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
   const globalLock = `${lockPrefix}-project-driver-global.lock`;
+  if (lockPath === globalLock) {
+    return "project-driver-global";
+  }
+
   const legacyLock = `${lockPrefix}-project-driver.lock`;
  
   if (lockPath === globalLock) {
@@ -55,6 +59,12 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       if (telemetryRaw) {
         try {
           telemetry = JSON.parse(telemetryRaw) as ProjectDriverTelemetry;
+          if (typeof telemetry.fixRate === "number" && telemetry.fixRate >= 0 && telemetry.fixRate <= 1) {
+            telemetry = {
+              ...telemetry,
+              fixRate: Math.round(telemetry.fixRate * 100),
+            };
+          }
         } catch {
           // Malformed JSON — treat as missing
         }

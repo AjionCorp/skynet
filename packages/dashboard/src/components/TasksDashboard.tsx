@@ -65,6 +65,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
   const fetchMissions = useCallback(async () => {
     try {
       const res = await fetch(`${apiPrefix}/missions`);
+      if (!res.ok) return null;
       const json = await res.json();
       const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
       if (missionList) {
@@ -74,8 +75,11 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         }
         return missionList[0]?.slug ?? null;
       }
-    } catch { /* ignore */ }
-  }, [apiPrefix, selectedSlug]);
+      return null;
+    } catch {
+      return null;
+    }
+  }, [apiPrefix]);
 
   const fetchBacklog = useCallback(async () => {
     try {
@@ -159,43 +163,29 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           <Target className="h-3.5 w-3.5" />
           Scope:
         </span>
-        {missions.length > 0 && (
+        <button
+          onClick={() => setSelectedSlug(null)}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+            selectedSlug === null
+              ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+              : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+          }`}
+        >
+          Global backlog
+        </button>
+        {missions.map((m) => (
           <button
-            onClick={() => {
-              setSelectedSlug(null);
-              setScopeInitialized(true);
-            }}
+            key={m.slug}
+            onClick={() => setSelectedSlug(m.slug)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-              selectedSlug === null
+              selectedSlug === m.slug
                 ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
                 : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
             }`}
           >
-            Global backlog
+            {m.name}
           </button>
-        )}
-        {missions.length > 0 ? (
-          missions.map((m) => (
-            <button
-              key={m.slug}
-              onClick={() => {
-                setSelectedSlug(m.slug);
-                setScopeInitialized(true);
-              }}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                selectedSlug === m.slug
-                  ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
-                  : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
-              }`}
-            >
-              {m.name}
-            </button>
-          ))
-        ) : (
-          <span className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-500">
-            No missions configured
-          </span>
-        )}
+        ))}
       </div>
 
       {/* Summary cards */}

@@ -85,6 +85,9 @@ export function ProjectDriverDashboard({ pollInterval = 15_000 }: ProjectDriverD
   }
 
   const t = status?.telemetry;
+  const fixRatePct = t
+    ? (t.fixRate <= 1 ? Math.round(t.fixRate * 100) : Math.round(t.fixRate))
+    : null;
 
   return (
     <div className="space-y-6">
@@ -181,9 +184,9 @@ export function ProjectDriverDashboard({ pollInterval = 15_000 }: ProjectDriverD
           />
           <MetricCard
             label="Fix Rate"
-            value={`${t.fixRate}%`}
+            value={fixRatePct !== null ? `${fixRatePct}%` : "\u2014"}
             icon={<BarChart3 className="h-4 w-4 text-emerald-400" />}
-            warn={t.fixRate < 50}
+            warn={fixRatePct !== null && fixRatePct < 50}
           />
         </div>
       ) : (

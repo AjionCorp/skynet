@@ -289,20 +289,15 @@ cleanup_on_exit() {
   _db_cleanup_tmpfiles 2>/dev/null || true
   # Stop heartbeat writer
   _stop_heartbeat 2>/dev/null || true
-  # SH-P3-2: These git abort commands run in PROJECT_DIR (the main repo checkout),
-  # NOT in the worker's worktree. In normal flow they are no-ops because the main
-  # repo is not mid-rebase/merge. They serve as safety nets only if the worker was
-  # killed during do_merge_to_main() which operates in PROJECT_DIR. Theoretical
-  # risk: if two workers share the same PROJECT_DIR and one is in cleanup while
-  # another is mid-merge, these aborts could interfere. In practice each worker's
-  # merge is serialized by the merge lock, so this cannot happen.
-  # Ensure we're on main branch (may be on feature branch if killed during merge recovery)
-  cd "$PROJECT_DIR" 2>/dev/null || true
-  git rebase --abort 2>/dev/null || true
-  git merge --abort 2>/dev/null || true
-  git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
-  # Release merge lock if held
-  release_merge_lock 2>/dev/null || true
+  # Only touch shared-repo merge state if this worker died mid-merge. Avoid
+  # aborting another worker's merge/rebase in the shared checkout.
+  if $_IN_MERGE; then
+    cd "$PROJECT_DIR" 2>/dev/null || true
+    git rebase --abort 2>/dev/null || true
+    git merge --abort 2>/dev/null || true
+    git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+    release_merge_lock 2>/dev/null || true
+  fi
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were in the middle of one
@@ -675,6 +670,7 @@ EOF
 **Status:** in_progress
 **Started:** $(date '+%Y-%m-%d %H:%M')
 **Branch:** $branch_name
+**Task ID:** ${_CURRENT_TASK_ID:-unknown}
 **Worker:** $WORKER_ID
 EOF
 

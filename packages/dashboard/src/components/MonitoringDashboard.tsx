@@ -109,6 +109,9 @@ function getTagColor(tag: string, extraColors?: Record<string, string>): string 
   return merged[tag] ?? "bg-zinc-500/15 text-zinc-400 border-zinc-500/25";
 }
 
+function getWorkerLogTarget(worker: { logFile?: string | null; name: string }): string {
+  return worker.logFile || worker.name;
+}
 function isMonitoringStatusPayload(data: unknown): data is MonitoringStatus {
   return Boolean(
     data &&
@@ -902,6 +905,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {categoryWorkers.map((w) => {
                     const triggerSpec = getWorkerTriggerSpec(w.name);
+                    const logTarget = getWorkerLogTarget(w);
                     // Map worker names to heartbeat keys (dev-worker-1 -> worker-1)
                     const hbKey = w.name.match(/dev-worker-(\d+)/) ? `worker-${w.name.match(/dev-worker-(\d+)/)?.[1]}` : undefined;
                     const fixerMatch = w.name.match(/task-fixer-?(\d+)?/);
@@ -916,7 +920,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                         heartbeat={hbKey ? status.heartbeats?.[hbKey] : undefined}
                         canTrigger={triggerSpec !== null}
                         onTrigger={() => triggerScript(w.name)}
-                        onViewLogs={() => switchToLogs(w.logFile)}
+                        onViewLogs={() => switchToLogs(logTarget)}
                         triggering={!!triggering[w.name]}
                       />
                       {fixerTask && (

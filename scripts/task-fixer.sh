@@ -102,16 +102,18 @@ cleanup_on_exit() {
   local exit_code=$?
   # Clean up any leaked _sql_exec/_sql_query temp files
   _db_cleanup_tmpfiles 2>/dev/null || true
-  # Release merge lock if held
-  release_merge_lock 2>/dev/null || true
-  # Abort any in-progress git merge on the main branch
-  cd "$PROJECT_DIR" 2>/dev/null || true
-  if [ -f "$PROJECT_DIR/.git/MERGE_HEAD" ]; then
-    git merge --abort 2>/dev/null || true
-    log "Crash recovery: aborted in-progress merge"
+  # Only touch shared-repo merge state if this fixer died mid-merge. Avoid
+  # clobbering another process that currently owns the shared checkout state.
+  if $_IN_MERGE; then
+    cd "$PROJECT_DIR" 2>/dev/null || true
+    if [ -f "$PROJECT_DIR/.git/MERGE_HEAD" ]; then
+      git merge --abort 2>/dev/null || true
+      log "Crash recovery: aborted in-progress merge"
+    fi
+    git rebase --abort 2>/dev/null || true
+    git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
+    release_merge_lock 2>/dev/null || true
   fi
-  git rebase --abort 2>/dev/null || true
-  git checkout "$SKYNET_MAIN_BRANCH" 2>/dev/null || true
   # Clean up worktree if it exists
   cleanup_worktree 2>/dev/null || true
   # Unclaim task if we were mid-fix (revert fixing-N back to pending).

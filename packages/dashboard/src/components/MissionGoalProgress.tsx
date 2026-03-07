@@ -116,6 +116,11 @@ export function MissionGoalProgress({
 
   const alignLevel =
     alignmentScore >= 80 ? "emerald" : alignmentScore >= 50 ? "amber" : "red";
+  const alignTone = {
+    amber: "text-amber-400",
+    emerald: "text-emerald-400",
+    red: "text-red-400",
+  }[alignLevel];
 
   // Match burndown entries to criteria by index
   const getBurndown = (idx: number): GoalBurndownEntry | undefined =>
@@ -151,7 +156,7 @@ export function MissionGoalProgress({
               {overallEta.confidence === "low" && " *"}
             </span>
           )}
-          <span className={`text-xs font-medium text-${alignLevel}-400`}>
+          <span className={`text-xs font-medium ${alignTone}`}>
             {alignmentScore}% aligned
           </span>
           {expanded ? (
@@ -167,7 +172,7 @@ export function MissionGoalProgress({
           <div className="bg-zinc-900/50 px-5 py-3">
             <div className="flex items-center justify-between text-xs text-zinc-500 mb-1.5">
               <span>Mission Alignment</span>
-              <span className={`font-medium text-${alignLevel}-400`}>{alignmentScore}%</span>
+              <span className={`font-medium ${alignTone}`}>{alignmentScore}%</span>
             </div>
             <div className="h-1.5 w-full rounded-full bg-zinc-800">
               <div

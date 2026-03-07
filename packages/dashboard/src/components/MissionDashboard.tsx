@@ -105,8 +105,6 @@ function formatWorkerLabel(workerName: string): string {
 
   return workerName;
 }
-const DEFAULT_WORKER_NAMES = getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS);
-
 const LLM_PROVIDERS: { value: LlmConfig["provider"]; label: string; color: string }[] = [
   { value: "auto", label: "Auto", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
   { value: "claude", label: "Claude", color: "text-violet-400 bg-violet-500/10 border-violet-500/20" },
@@ -132,7 +130,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [missionConfig, setMissionConfig] = useState<MissionConfig>({ activeMission: "main", assignments: {} });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [assignableWorkerDefaults, setAssignableWorkerDefaults] = useState<string[]>(() =>
+  const [availableWorkerNames, setAvailableWorkerNames] = useState<string[]>(() =>
     getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS),
   );
 
@@ -181,8 +179,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   }, [llmConfigDirty]);
 
   const workerNames = useMemo(() => {
-    const names = new Set<string>();
-    
+    const names = new Set<string>(availableWorkerNames);
     for (const worker of Object.keys(localAssignments)) {
       if (worker) names.add(worker);
     }
@@ -192,23 +189,8 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         if (worker) names.add(worker);
       }
     }
-
-    const sortWeight = (name: string) => {
-      const dev = name.match(/^dev-worker-(\d+)$/);
-      if (dev) return [0, Number(dev[1])] as const;
-      const fixer = name.match(/^task-fixer-(\d+)$/);
-      if (fixer) return [1, Number(fixer[1])] as const;
-      return [2, Number.MAX_SAFE_INTEGER] as const;
-    };
-
-    return Array.from(names).sort((a, b) => {
-      const [aType, aNum] = sortWeight(a);
-      const [bType, bNum] = sortWeight(b);
-      if (aType !== bType) return aType - bType;
-      if (aNum !== bNum) return aNum - bNum;
-      return a.localeCompare(b);
-    });
-  }, [localAssignments, missions, workerNames]);
+    return Array.from(names).sort(compareWorkerNames);
+  }, [availableWorkerNames, localAssignments, missions]);
 
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
@@ -241,15 +223,16 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         const nextDefaultWorkerNames = getAssignableWorkerNames(maxWorkers, maxFixers);
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
-        setAssignableWorkerNames(getAssignableWorkerNames(maxWorkers, maxFixers));
-        if (!assignmentsDirtyRef.current) {
-          setLocalAssignments(json.data.config.assignments ?? {});
-          setAssignmentsDirty(false);
-        }
-        if (!llmConfigDirtyRef.current) {
-          setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
-          setLlmConfigDirty(false);
-        }
+        setLocalAssignments(json.data.config.assignments);
+        setAvailableWorkerNames(
+          mergeAssignableWorkers(
+            getAssignableWorkerNames(maxWorkers, maxFixers),
+            json.data.config.assignments ?? {},
+          ),
+        );
+        setAssignmentsDirty(false);
+        setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
+        setLlmConfigDirty(false);
         // Auto-select the active mission if nothing selected
         if (!selectedSlug && json.data.config.activeMission) {
           setSelectedSlug(json.data.config.activeMission);
