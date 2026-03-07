@@ -579,7 +579,7 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
         const projectDriverLocks = listProjectDriverLocks(lockPrefix);
         const lockCandidates = projectDriverLocks.length > 0
           ? projectDriverLocks
-          : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
+          : [`${lockPrefix}-project-driver-global.lock`];
 
         projectDriverRunning = lockCandidates.some((lockPath) => {
           const pid = readPid(lockPath);

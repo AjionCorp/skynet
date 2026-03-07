@@ -134,9 +134,23 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         setError(apiError ?? "Invalid config response");
         return;
       }
-      setEntries(data.entries);
-      setConfigPath(data.configPath);
-      setEditedValues({});
+      const nextEntries = (json.data.entries ?? []) as ConfigEntry[];
+      setEntries(nextEntries);
+      setConfigPath(json.data.configPath ?? "");
+      setEditedValues((prev) => {
+        if (Object.keys(prev).length === 0) {
+          return prev;
+        }
+
+        const serverValues = new Map(nextEntries.map((entry) => [entry.key, entry.value]));
+        const preserved: Record<string, string> = {};
+        for (const [key, value] of Object.entries(prev)) {
+          if (value !== (serverValues.get(key) ?? "")) {
+            preserved[key] = value;
+          }
+        }
+        return preserved;
+      });
       setSaveWarning(null);
       setError(null);
     } catch (err) {
@@ -245,6 +259,11 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
           <p className="mt-1 text-sm text-zinc-500">
             {configPath ? configPath : "skynet.config.sh"}
           </p>
+          {dirtyCount > 0 && (
+            <p className="mt-1 text-xs text-amber-300/80">
+              Refresh keeps your local edits until you save or reset them.
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <button

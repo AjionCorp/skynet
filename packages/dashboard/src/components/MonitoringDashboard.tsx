@@ -800,6 +800,39 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
                 </div>
               );
             })}
+            {(!status.currentTasks || Object.keys(status.currentTasks).length === 0) && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900 p-5 sm:col-span-2">
+                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+                  <Zap className="h-3.5 w-3.5" />
+                  Current Task
+                </div>
+                {status.currentTask.status === "in_progress" || status.currentTask.status === "working" ? (
+                  <div className="mt-3">
+                    <p className="text-sm font-semibold text-emerald-400">
+                      {status.currentTask.title ?? "Task in progress"}
+                    </p>
+                    {status.currentTask.branch && (
+                      <p className="mt-1 text-xs text-zinc-500">
+                        <GitBranch className="mr-1 inline h-3 w-3" />
+                        {status.currentTask.branch}
+                      </p>
+                    )}
+                    {status.currentTask.started && (
+                      <p className="mt-0.5 text-xs text-zinc-500">Started: {status.currentTask.started}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <p className="text-sm text-zinc-500">
+                      {status.currentTask.status === "completed" ? "Completed" : "Idle"}
+                    </p>
+                    {status.currentTask.lastInfo && (
+                      <p className="mt-1 truncate text-xs text-zinc-600">{status.currentTask.lastInfo}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Recent activity */}

@@ -39,6 +39,7 @@ WORKER_DEV_URL="http://localhost:${WORKER_PORT}"
 LOG="$LOG_DIR/dev-worker-${WORKER_ID}.log"
 STALE_MINUTES="$SKYNET_STALE_MINUTES"
 MAX_TASKS_PER_RUN="$SKYNET_MAX_TASKS_PER_RUN"
+CLAIM_TRACKER="${SKYNET_RUNTIME_TMP_DIR}/claim-attempts"
 
 # One-shot mode: run a single provided task, skip backlog
 if [ "${SKYNET_ONE_SHOT:-}" = "true" ]; then
@@ -192,7 +193,7 @@ _compute_task_affinity() {
   [ -z "$_tag_stats" ] && return 0
 
   # Build tag→score map in a temp file (bash 3.2: no associative arrays)
-  local _affinity_map="/tmp/skynet-affinity-${worker_id}-$$"
+  local _affinity_map="${SKYNET_RUNTIME_TMP_DIR}/affinity-${worker_id}-$$"
   : > "$_affinity_map"
   while IFS=$'\x1f' read -r _atag _acompleted _afailed; do
     [ -z "$_atag" ] && continue
@@ -504,7 +505,7 @@ while [ "$tasks_attempted" -lt "$MAX_TASKS_PER_RUN" ]; do
       # OPS-P1-3: Rate limit on task claim loops — if the same task has been
       # claimed >3 times in 5 minutes, it likely fails immediately on each attempt
       # (e.g., worktree creation fails). Skip it to avoid rapid retry storms.
-      _claim_tracker="/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts"
+      _claim_tracker="$CLAIM_TRACKER"
       _now_epoch=$(date +%s)
       _cutoff_epoch=$((_now_epoch - 300))
       # Prune old entries and count recent claims for this task ID
@@ -1154,8 +1155,8 @@ WEOF
   # OPS-P1-3: Clear claim tracker for this task on successful completion.
   # P0-FIX: Wrap in the same mkdir lock used for claim tracker reads (lines 337-384)
   # to prevent concurrent workers from overwriting each other's pruning.
-  if [ -n "${_db_task_id:-}" ] && [ -f "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" ]; then
-    _ct_cleanup_lock="/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.lock"
+  if [ -n "${_db_task_id:-}" ] && [ -f "$CLAIM_TRACKER" ]; then
+    _ct_cleanup_lock="${CLAIM_TRACKER}.lock"
     _ct_cleanup_locked=false
     _ct_cleanup_i=0
     while [ "$_ct_cleanup_i" -lt 5 ]; do
@@ -1167,8 +1168,8 @@ WEOF
       perl -e 'select(undef,undef,undef,0.1)' 2>/dev/null || sleep 1
     done
     if $_ct_cleanup_locked; then
-      grep -v "|${_db_task_id}$" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" > "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" 2>/dev/null || true
-      mv "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts.tmp" "/tmp/skynet-${SKYNET_PROJECT_NAME}-claim-attempts" 2>/dev/null || true
+      grep -v "|${_db_task_id}$" "$CLAIM_TRACKER" > "${CLAIM_TRACKER}.tmp" 2>/dev/null || true
+      mv "${CLAIM_TRACKER}.tmp" "$CLAIM_TRACKER" 2>/dev/null || true
       rmdir "$_ct_cleanup_lock" 2>/dev/null || rm -rf "$_ct_cleanup_lock" 2>/dev/null || true
     else
       log "WARNING: Claim tracker lock contention during cleanup — skipping prune for task $_db_task_id"

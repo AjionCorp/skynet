@@ -218,7 +218,7 @@ if $_consec_all_fail; then
     echo "$_newest_fail_epoch" > "$FIXER_COOLDOWN_STREAK_EPOCH"
     log "Fixer paused: 5 consecutive failures, cooling down 30min"
     emit_event "fixer_idle" "Fixer $FIXER_ID: cooldown after 5 consecutive failures"
-    rm -rf "$LOCKFILE"
+    release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
     exit 0
   fi
 fi

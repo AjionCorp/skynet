@@ -54,29 +54,8 @@ while [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; do
     log "Typecheck failed (attempt $attempt/$MAX_FIX_ATTEMPTS)."
 
     if [ "$attempt" -lt "$MAX_FIX_ATTEMPTS" ]; then
-      log "Asking Claude Code to fix type errors..."
-      errors=$(eval "$SKYNET_TYPECHECK_CMD" 2>&1 | tail -50)
-      PROMPT="You are working on the ${SKYNET_PROJECT_NAME} project at $PROJECT_DIR.
-
-The TypeScript typecheck is failing. Here are the errors:
-
-\`\`\`
-$errors
-\`\`\`
-
-Fix these type errors. Do NOT change the behavior of the code — only fix the types.
-After fixing, run '$SKYNET_TYPECHECK_CMD' to verify.
-Commit fixes with message 'fix: resolve type errors (auto health-check)'."
-
-      # LIMITATION: The health-check agent runs in the main project directory
-      # (not a worktree). Concurrent worker merges to main could cause git
-      # conflicts if the agent modifies files while a merge is in progress.
-      # Guard: skip agent run if git working tree is dirty to avoid conflicts.
-      if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
-        log "WARNING: git working tree is dirty — skipping auto-fix agent to avoid merge conflicts"
-      else
-        run_agent "$PROMPT" "$LOG" || true
-      fi
+      log "Skipping auto-fix: health-check runs in the shared checkout, so agent edits here can race with normal worker merges."
+      break
     fi
   fi
 done

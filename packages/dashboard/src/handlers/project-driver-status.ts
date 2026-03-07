@@ -5,9 +5,9 @@ import { logHandlerError } from "../lib/handler-error";
 import { listProjectDriverLocks } from "../lib/process-locks";
 
 function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
-  const defaultLock = `${lockPrefix}-project-driver-global.lock`;
+  const globalLock = `${lockPrefix}-project-driver-global.lock`;
   const legacyLock = `${lockPrefix}-project-driver.lock`;
-  if (lockPath === defaultLock) {
+  if (lockPath === globalLock) {
     return "project-driver-global";
   }
   if (lockPath === legacyLock) {
@@ -36,12 +36,13 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
       const lockCandidates =
         discoveredLocks.length > 0
           ? discoveredLocks
-          : [`${lockPrefix}-project-driver-global.lock`, `${lockPrefix}-project-driver.lock`];
+          : [`${lockPrefix}-project-driver-global.lock`];
       const statuses = lockCandidates.map((lockFile) => ({
         lockFile,
         ...getWorkerStatus(lockFile),
       }));
       const activeLock = statuses.find((status) => status.running) ?? statuses[0];
+      const { pid, ageMs } = activeLock;
 
       // Last log line
       const logScript = getProjectDriverLogName(lockPrefix, activeLock.lockFile);

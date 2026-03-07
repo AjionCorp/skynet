@@ -88,8 +88,11 @@ fi
 # Auth token cache — stored in user-private directory, NOT world-readable /tmp
 _skynet_token_dir="${HOME}/.cache/skynet"
 mkdir -p "$_skynet_token_dir" 2>/dev/null && chmod 700 "$_skynet_token_dir" 2>/dev/null
+_skynet_runtime_tmp_dir="${_skynet_token_dir}/${SKYNET_PROJECT_NAME}"
+mkdir -p "$_skynet_runtime_tmp_dir" 2>/dev/null && chmod 700 "$_skynet_runtime_tmp_dir" 2>/dev/null
 export SKYNET_AUTH_TOKEN_CACHE="${SKYNET_AUTH_TOKEN_CACHE:-${_skynet_token_dir}/claude-token-${SKYNET_PROJECT_NAME}}"
 export SKYNET_AUTH_FAIL_FLAG="${SKYNET_AUTH_FAIL_FLAG:-${_skynet_token_dir}/auth-failed-${SKYNET_PROJECT_NAME}}"
+export SKYNET_RUNTIME_TMP_DIR="${SKYNET_RUNTIME_TMP_DIR:-${_skynet_runtime_tmp_dir}}"
 export SKYNET_AUTH_KEYCHAIN_ACCOUNT="${SKYNET_AUTH_KEYCHAIN_ACCOUNT:-${USER}}"
 export SKYNET_BRANCH_PREFIX="${SKYNET_BRANCH_PREFIX:-dev/}"
 export SKYNET_MAIN_BRANCH="${SKYNET_MAIN_BRANCH:-main}"
@@ -354,19 +357,19 @@ _resolve_active_mission() {
   echo "$MISSION"
 }
 
-# Read the ## State: <value> line from a mission file.
-# Returns the normalized lowercase state string (e.g. "active", "paused", "complete")
-# or empty if not found.
+# Read the mission state from a mission file.
+# Returns the normalized lowercase state (e.g. "active", "paused", "complete").
+# Supports both canonical "## State:" and legacy "State:" headings.
+# Defaults to "draft" when the file exists but has no state heading.
 # Usage: state=$(_get_mission_state "/path/to/mission.md")
 _get_mission_state() {
   local file="${1:-}"
   [ -n "$file" ] && [ -f "$file" ] || { echo ""; return; }
   local state
-  state=$(sed -n \
-    -e 's/^## [Ss]tate:[[:space:]]*\(.*\)[[:space:]]*$/\1/p' \
-    -e 's/^[Ss]tate:[[:space:]]*\(.*\)[[:space:]]*$/\1/p' \
-    "$file" | head -1 | tr '[:upper:]' '[:lower:]')
-  echo "${state:-}"
+  state=$(grep -iE '^(## )?State:' "$file" 2>/dev/null | head -1 \
+    | sed 's/^## //' | sed 's/^[Ss]tate:[[:space:]]*//' | sed 's/[[:space:]]*$//' \
+    | tr '[:upper:]' '[:lower:]')
+  echo "${state:-draft}"
 }
 
 # Read per-mission LLM config from _config.json.

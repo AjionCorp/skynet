@@ -69,13 +69,10 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
       const missionList = Array.isArray(json.data?.missions) ? json.data.missions : null;
       if (missionList) {
         setMissions(missionList);
-        if (!scopeInitialized && typeof json.data?.config?.activeMission === "string") {
-          setSelectedSlug(json.data.config.activeMission);
-          setScopeInitialized(true);
+        if (typeof json.data?.config?.activeMission === "string") {
+          setSelectedSlug((current) => current ?? json.data.config.activeMission);
         }
-        if (!scopeInitialized) {
-          setScopeInitialized(true);
-        }
+        return;
       }
     } catch { /* ignore */ }
   }, [apiPrefix, scopeInitialized]);

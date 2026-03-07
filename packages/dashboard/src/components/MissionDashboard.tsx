@@ -54,6 +54,10 @@ What the team is currently focused on.
 
 const DEFAULT_MAX_WORKERS = 4;
 const DEFAULT_MAX_FIXERS = 3;
+const DEFAULT_ASSIGNABLE_WORKER_NAMES = getAssignableWorkerNames(
+  DEFAULT_MAX_WORKERS,
+  DEFAULT_MAX_FIXERS,
+);
 
 function getAssignableWorkerNames(maxWorkers: number, maxFixers: number): string[] {
   const workers: string[] = [];
@@ -227,6 +231,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         } catch {
           // Keep defaults when config is unavailable.
         }
+        const nextDefaultWorkerNames = getAssignableWorkerNames(maxWorkers, maxFixers);
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
         setLocalAssignments(json.data.config.assignments);
@@ -236,18 +241,18 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
             json.data.config.assignments ?? {},
           ),
         );
-        setAssignmentsDirty(false);
-        setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
-        setLlmConfigDirty(false);
-        // Auto-select the active mission if nothing selected
-        if (!selectedSlug && json.data.config.activeMission) {
-          setSelectedSlug(json.data.config.activeMission);
+        if (!assignmentsDirty) {
+          setLocalAssignments(json.data.config.assignments ?? {});
         }
+        if (!llmConfigDirty) {
+          setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
+        }
+        setSelectedSlug((current) => current ?? json.data.config.activeMission ?? null);
       }
     } catch {
       // Non-fatal — we still show whatever we have
     }
-  }, [apiPrefix, selectedSlug]);
+  }, [apiPrefix, assignmentsDirty, llmConfigDirty]);
 
   // Fetch selected mission detail
   const fetchMissionDetail = useCallback(async () => {

@@ -84,11 +84,36 @@ setup_worktree() {
 
 # Remove worktree. Optionally delete the branch too.
 # shellcheck disable=SC2120  # args are passed by callers in dev-worker.sh/task-fixer.sh
+_worktree_path_is_safe() {
+  local candidate_path="$1"
+  local resolved_candidate=""
+  local resolved_base=""
+
+  [ -n "$candidate_path" ] || return 1
+  resolved_candidate=$(realpath_portable "$candidate_path" 2>/dev/null || echo "")
+  resolved_base=$(realpath_portable "$SKYNET_WORKTREE_BASE" 2>/dev/null || echo "")
+
+  [ -n "$resolved_candidate" ] || return 1
+  [ -n "$resolved_base" ] || return 1
+  [ "$resolved_candidate" != "/" ] || return 1
+
+  case "$resolved_candidate" in
+    "$resolved_base"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 cleanup_worktree() {
   local delete_branch="${1:-}"
   cd "$PROJECT_DIR" || return  # ensure we're not inside the worktree
   if [ -d "$WORKTREE_DIR" ]; then
-    git worktree remove "$WORKTREE_DIR" --force 2>/dev/null || rm -rf "$WORKTREE_DIR" 2>/dev/null || true
+    if ! git worktree remove "$WORKTREE_DIR" --force 2>/dev/null; then
+      if _worktree_path_is_safe "$WORKTREE_DIR"; then
+        rm -rf "$WORKTREE_DIR" 2>/dev/null || true
+      else
+        log "WARNING: Skipping unsafe worktree cleanup path: $WORKTREE_DIR"
+      fi
+    fi
   fi
   git worktree prune 2>/dev/null || true
   if [ -n "$delete_branch" ]; then

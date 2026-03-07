@@ -63,9 +63,9 @@ export function killAllWorkers(lockPrefix: string, maxWorkers: number, maxFixers
   }
   const pdLocks = listProjectDriverLocks(lockPrefix);
   if (pdLocks.length === 0) {
-    if (killByLock(`${lockPrefix}-project-driver-global.lock`)) {
-      killed.push("project-driver");
-    } else if (killByLock(`${lockPrefix}-project-driver.lock`)) {
+    if (killByLock(`${lockPrefix}-project-driver-global.lock`) ||
+      killByLock(`${lockPrefix}-project-driver.lock`)
+    ) {
       killed.push("project-driver");
     }
   } else {
