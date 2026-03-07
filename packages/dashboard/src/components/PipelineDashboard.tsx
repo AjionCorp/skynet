@@ -549,7 +549,7 @@ export function PipelineDashboard() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {status.workers.map((w) => {
-            const triggerSpec = getWorkerTriggerSpec(w.name);
+            const triggerTarget = getWorkerTriggerTarget(w.name);
             const logTarget = getWorkerLogTarget(w);
             return (
               <div
@@ -574,29 +574,16 @@ export function PipelineDashboard() {
                 {w.running && w.pid && (
                   <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
                 )}
-              </div>
-              <p className="mt-1 text-xs text-zinc-500">{w.description}</p>
-              <p className="mt-0.5 text-xs text-zinc-600">{w.schedule}</p>
-              {w.running && w.pid && (
-                <p className="mt-1 text-xs text-zinc-600">PID {w.pid}</p>
-              )}
-              {!w.running && w.lastLog && (
-                <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
-                  Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
-                </p>
-              )}
-              <div className="mt-3 flex items-center gap-2">
-                {triggerTarget ? (
                 {!w.running && w.lastLog && (
                   <p className="mt-1.5 truncate text-xs text-zinc-600" title={w.lastLog}>
                     Last: {extractTimestamp(w.lastLog) ?? "\u2014"}
                   </p>
                 )}
                 <div className="mt-3 flex items-center gap-2">
-                  {triggerSpec && (
+                  {triggerTarget ? (
                     <button
                       onClick={() => triggerScript(w.name)}
-                      disabled={triggering[w.name]}
+                      disabled={!!triggering[w.name]}
                       className="flex items-center gap-1 rounded-lg bg-cyan-500/10 px-2.5 py-1 text-xs font-medium text-cyan-400 transition hover:bg-cyan-500/20 disabled:opacity-50"
                     >
                       {triggering[w.name] ? (
@@ -606,6 +593,10 @@ export function PipelineDashboard() {
                       )}
                       Run
                     </button>
+                  ) : (
+                    <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
+                      Auto-managed
+                    </span>
                   )}
                   <button
                     onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
@@ -618,33 +609,15 @@ export function PipelineDashboard() {
                     <Terminal className="h-3 w-3" />
                     Logs
                   </button>
-                ) : (
-                  <span className="rounded-lg border border-zinc-800 bg-zinc-950 px-2.5 py-1 text-xs text-zinc-500">
-                    Auto-managed
-                  </span>
+                </div>
+                {triggerMsg[w.name] && (
+                  <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
+                    {triggerMsg[w.name]}
+                  </p>
                 )}
-                <button
-                  onClick={() => setLogViewer(logViewer === logTarget ? null : logTarget)}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-                    logViewer === logTarget
-                      ? "bg-amber-500/20 text-amber-400"
-                      : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white"
-                  }`}
-                >
-                  <Terminal className="h-3 w-3" />
-                  Logs
-                </button>
               </div>
-              {triggerMsg[w.name] && (
-                <p className={`mt-2 text-xs ${triggerMsg[w.name].startsWith("Error") ? "text-red-400" : "text-emerald-400"}`}>
-                  {triggerMsg[w.name]}
-                </p>
-              )}
-                  </>
-                );
-              })()}
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

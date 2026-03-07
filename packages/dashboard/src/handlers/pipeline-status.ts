@@ -11,7 +11,7 @@ import { parseBacklogWithBlocked } from "../lib/backlog-parser";
 import { decodeJwtExp } from "../lib/jwt";
 import { calculateHealthScore } from "../lib/health";
 import { parseMissionProgress } from "../lib/mission";
-import { listProjectDriverLocks } from "../lib/process-locks";
+import { isProcessAlive, listProjectDriverLocks, readPid } from "../lib/process-locks";
 
 /**
  * Extract significant keywords from the mission Goals section.
@@ -599,19 +599,8 @@ export function createPipelineStatusHandler(config: SkynetConfig) {
           if (status.running) {
             return true;
           }
-          const pidPath = resolve(lockPath, "pid");
-          if (!existsSync(pidPath)) {
-            return false;
-          }
-          try {
-            const pid = readFileSync(pidPath, "utf-8").trim();
-            if (!pid) {
-              return false;
-            }
-            return spawnSync("kill", ["-0", pid]).status === 0;
-          } catch {
-            return false;
-          }
+          const pid = readPid(lockPath);
+          return pid !== null && isProcessAlive(pid);
         });
       } catch {
         /* ignore */
