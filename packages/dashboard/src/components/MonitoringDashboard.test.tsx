@@ -220,7 +220,7 @@ describe("MonitoringDashboard", () => {
     }));
     renderWithProvider(<MonitoringDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("Workers Active")).toBeDefined();
+      expect(screen.getByText("Connection failed")).toBeDefined();
     });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: null, error: "Connection failed" }) });
@@ -303,6 +303,33 @@ describe("MonitoringDashboard", () => {
       const logSelect = screen.getByDisplayValue("Dev Worker 1") as HTMLSelectElement;
       const options = Array.from(logSelect.options).map((o) => o.textContent);
       expect(options).toContain("Task Fixer 2");
+    });
+  });
+
+  it("surfaces log fetch failures instead of showing an empty log state", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/monitoring/status")) {
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+      }
+      if (url.includes("/monitoring/logs")) {
+        return new Response(JSON.stringify({ data: null, error: "Log reader offline" }), { status: 500 });
+      }
+      if (url.includes("/monitoring/agents")) {
+        return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+      }
+      return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+    }));
+
+    renderWithProvider(<MonitoringDashboard />);
+    await act(async () => {
+      mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
+    });
+
+    fireEvent.click(screen.getByText("Logs"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Failed to load logs for dev-worker-1/i)).toBeDefined();
     });
   });
 });

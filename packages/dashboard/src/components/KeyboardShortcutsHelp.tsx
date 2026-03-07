@@ -10,6 +10,11 @@ interface KeyboardShortcutsHelpProps {
 
 export function KeyboardShortcutsHelp({ pages, onClose }: KeyboardShortcutsHelpProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
+  const getShortcutLabel = (index: number) => {
+    if (index < 9) return String(index + 1);
+    if (index === 9) return "0";
+    return "No shortcut";
+  };
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -49,7 +54,7 @@ export function KeyboardShortcutsHelp({ pages, onClose }: KeyboardShortcutsHelpP
               <div key={page.href} className="flex items-center justify-between py-1">
                 <span className="text-sm text-zinc-300">{page.label}</span>
                 <kbd className="rounded border border-zinc-700 bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-300">
-                  {i === 9 ? "0" : String(i + 1)}
+                  {getShortcutLabel(i)}
                 </kbd>
               </div>
             ))}

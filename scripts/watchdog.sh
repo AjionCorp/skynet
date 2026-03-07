@@ -452,9 +452,21 @@ _cr_phase2_orphaned_tasks() {
     # Check if this worker's task file shows in_progress
     if [ -f "$task_file" ] && grep -q "in_progress" "$task_file" 2>/dev/null; then
       local stuck_title
+      local stuck_task_id=""
+      local worker_row=""
       stuck_title=$(grep "^##" "$task_file" 2>/dev/null | head -1 | sed 's/^## //')
-      if [ -n "$stuck_title" ]; then
-        db_unclaim_task_by_title "$stuck_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$stuck_title' (worker $wid) — task may remain orphaned"
+      worker_row=$(db_get_worker_status "$wid" 2>/dev/null || true)
+      if [ -n "$worker_row" ]; then
+        local _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info
+        IFS="$_DB_SEP" read -r _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info <<< "$worker_row"
+        stuck_task_id="${_db_task_id:-}"
+      fi
+      if [ -n "$stuck_title" ] || [ -n "$stuck_task_id" ]; then
+        if [ -n "$stuck_task_id" ]; then
+          db_unclaim_task "$stuck_task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed for id=$stuck_task_id '$stuck_title' (worker $wid) — task may remain orphaned"
+        else
+          db_unclaim_task_by_title "$stuck_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$stuck_title' (worker $wid) — task may remain orphaned"
+        fi
         log "Unclaimed stuck task from worker $wid: $stuck_title"
         recovered=$((recovered + 1))
         _cr_orphaned_tasks=$((_cr_orphaned_tasks + 1))
@@ -1340,11 +1352,23 @@ _handle_stale_worker() {
 
     # Unclaim its task in backlog
     local task_title=""
+    local task_id=""
     if [ -f "$task_file" ]; then
       task_title=$(grep "^##" "$task_file" | head -1 | sed 's/^## //')
     fi
-    if [ -n "$task_title" ]; then
-      db_unclaim_task_by_title "$task_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$task_title' — task may remain stuck as claimed"
+    local worker_row=""
+    worker_row=$(db_get_worker_status "$wid" 2>/dev/null || true)
+    if [ -n "$worker_row" ]; then
+      local _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info
+      IFS="$_DB_SEP" read -r _db_wid _db_type _db_status _db_task_id _db_title _db_branch _db_started _db_hb _db_info <<< "$worker_row"
+      task_id="${_db_task_id:-}"
+    fi
+    if [ -n "$task_title" ] || [ -n "$task_id" ]; then
+      if [ -n "$task_id" ]; then
+        db_unclaim_task "$task_id" 2>/dev/null || log "WARNING: db_unclaim_task failed for id=$task_id '$task_title' — task may remain stuck as claimed"
+      else
+        db_unclaim_task_by_title "$task_title" 2>/dev/null || log "WARNING: db_unclaim_task_by_title failed for '$task_title' — task may remain stuck as claimed"
+      fi
       log "Unclaimed task: $task_title"
     fi
 

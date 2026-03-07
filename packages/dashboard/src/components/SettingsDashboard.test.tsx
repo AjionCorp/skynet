@@ -225,6 +225,29 @@ describe("SettingsDashboard", () => {
     });
   });
 
+  it("pauses refresh while there are unsaved edits", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: { entries: MOCK_ENTRIES, configPath: "" }, error: null }))
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProvider(<SettingsDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("MAX_WORKERS")).toBeDefined();
+    });
+
+    const inputs = document.querySelectorAll<HTMLInputElement>("input[type='text']");
+    const maxWorkersInput = Array.from(inputs).find((i) => i.value === "4");
+    fireEvent.change(maxWorkersInput!, { target: { value: "8" } });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unsaved changes are being preserved/)).toBeDefined();
+    });
+
+    const refreshButton = screen.getByRole("button", { name: "Refresh" });
+    expect(refreshButton.getAttribute("disabled")).not.toBeNull();
+  });
+
   it("fetches from correct API endpoint", async () => {
     mockConfigGet([]);
     renderWithProvider(<SettingsDashboard />);

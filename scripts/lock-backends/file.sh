@@ -10,6 +10,13 @@ lock_backend_acquire() {
   local lockdir="${SKYNET_LOCK_PREFIX}-${name}.lock"
   local lock_ttl="${SKYNET_LOCK_TTL_SECS:-600}"  # 10 minutes default
 
+  # Merge lock TTL is computed dynamically from recent merge/typecheck timings.
+  # Reuse that same TTL for stale-lock detection in the mkdir fallback path so a
+  # valid long-running merge is not force-released while still in progress.
+  if [ "$name" = "merge" ]; then
+    lock_ttl="${SKYNET_MERGE_LOCK_TTL:-$lock_ttl}"
+  fi
+
   if [ "${SKYNET_USE_FLOCK:-true}" = "true" ] && { command -v flock >/dev/null 2>&1 || command -v perl >/dev/null 2>&1; }; then
     _acquire_file_lock "$flockfile" "$timeout"
     local _flock_rc=$?

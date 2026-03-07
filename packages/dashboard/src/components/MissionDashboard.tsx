@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Target,
   CheckCircle2,
@@ -88,13 +88,6 @@ function compareWorkerNames(left: string, right: string): number {
   return a.raw.localeCompare(b.raw);
 }
 
-function mergeAssignableWorkers(
-  defaults: string[],
-  assignments: Record<string, string | null>,
-): string[] {
-  return Array.from(new Set([...defaults, ...Object.keys(assignments)])).sort(compareWorkerNames);
-}
-
 function formatWorkerLabel(workerName: string): string {
   const devMatch = workerName.match(/^dev-worker-(\d+)$/);
   if (devMatch) {
@@ -108,15 +101,7 @@ function formatWorkerLabel(workerName: string): string {
 
   return workerName;
 }
-const DEFAULT_WORKER_NAMES = [
-  "dev-worker-1",
-  "dev-worker-2",
-  "dev-worker-3",
-  "dev-worker-4",
-  "task-fixer-1",
-  "task-fixer-2",
-  "task-fixer-3",
-];
+const DEFAULT_WORKER_NAMES = getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS);
 
 const LLM_PROVIDERS: { value: LlmConfig["provider"]; label: string; color: string }[] = [
   { value: "auto", label: "Auto", color: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20" },
@@ -143,9 +128,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   const [missions, setMissions] = useState<MissionSummary[]>([]);
   const [missionConfig, setMissionConfig] = useState<MissionConfig>({ activeMission: "main", assignments: {} });
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
-  const [workerNames, setWorkerNames] = useState<string[]>(() =>
-    getAssignableWorkerNames(DEFAULT_MAX_WORKERS, DEFAULT_MAX_FIXERS),
-  );
+  const [assignableWorkerNames, setAssignableWorkerNames] = useState<string[]>(DEFAULT_WORKER_NAMES);
 
   // Selected mission detail state
   const [mission, setMission] = useState<MissionStatus | null>(null);
@@ -169,10 +152,12 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   // Worker assignment state
   const [localAssignments, setLocalAssignments] = useState<Record<string, string | null>>({});
   const [assignmentsDirty, setAssignmentsDirty] = useState(false);
+  const assignmentsDirtyRef = useRef(assignmentsDirty);
 
   // LLM config state
   const [localLlmConfigs, setLocalLlmConfigs] = useState<Record<string, LlmConfig>>({});
   const [llmConfigDirty, setLlmConfigDirty] = useState(false);
+  const llmConfigDirtyRef = useRef(llmConfigDirty);
 
   // Rename state
   const [renamingSlug, setRenamingSlug] = useState<string | null>(null);
@@ -181,8 +166,16 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
   // Mission tracking state
   const [tracking, setTracking] = useState<MissionTracking | null>(null);
 
+  useEffect(() => {
+    assignmentsDirtyRef.current = assignmentsDirty;
+  }, [assignmentsDirty]);
+
+  useEffect(() => {
+    llmConfigDirtyRef.current = llmConfigDirty;
+  }, [llmConfigDirty]);
+
   const workerNames = useMemo(() => {
-    const names = new Set<string>(DEFAULT_WORKER_NAMES);
+    const names = new Set<string>(assignableWorkerNames);
     for (const worker of Object.keys(localAssignments)) {
       if (worker) names.add(worker);
     }
@@ -192,22 +185,8 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       }
     }
 
-    const sortWeight = (name: string) => {
-      const dev = name.match(/^dev-worker-(\d+)$/);
-      if (dev) return [0, Number(dev[1])] as const;
-      const fixer = name.match(/^task-fixer-(\d+)$/);
-      if (fixer) return [1, Number(fixer[1])] as const;
-      return [2, Number.MAX_SAFE_INTEGER] as const;
-    };
-
-    return Array.from(names).sort((a, b) => {
-      const [aType, aNum] = sortWeight(a);
-      const [bType, bNum] = sortWeight(b);
-      if (aType !== bType) return aType - bType;
-      if (aNum !== bNum) return aNum - bNum;
-      return a.localeCompare(b);
-    });
-  }, [localAssignments, missions]);
+    return Array.from(names).sort(compareWorkerNames);
+  }, [assignableWorkerNames, localAssignments, missions]);
 
   // AI Creator state
   const [showCreator, setShowCreator] = useState(false);
@@ -239,16 +218,15 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
         }
         setMissions(json.data.missions);
         setMissionConfig(json.data.config);
-        setLocalAssignments(json.data.config.assignments);
-        setWorkerNames(
-          mergeAssignableWorkers(
-            getAssignableWorkerNames(maxWorkers, maxFixers),
-            json.data.config.assignments ?? {},
-          ),
-        );
-        setAssignmentsDirty(false);
-        setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
-        setLlmConfigDirty(false);
+        setAssignableWorkerNames(getAssignableWorkerNames(maxWorkers, maxFixers));
+        if (!assignmentsDirtyRef.current) {
+          setLocalAssignments(json.data.config.assignments ?? {});
+          setAssignmentsDirty(false);
+        }
+        if (!llmConfigDirtyRef.current) {
+          setLocalLlmConfigs(json.data.config.llmConfigs ?? {});
+          setLlmConfigDirty(false);
+        }
         // Auto-select the active mission if nothing selected
         if (!selectedSlug && json.data.config.activeMission) {
           setSelectedSlug(json.data.config.activeMission);
@@ -417,6 +395,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const json = await res.json();
       if (json.error) setError(json.error);
       else {
+        assignmentsDirtyRef.current = false;
         setAssignmentsDirty(false);
         await fetchMissions();
       }
@@ -436,6 +415,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
       const json = await res.json();
       if (json.error) setError(json.error);
       else {
+        llmConfigDirtyRef.current = false;
         setLlmConfigDirty(false);
         await fetchMissions();
       }
@@ -1066,6 +1046,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                       ...prev,
                       [worker]: e.target.value || null,
                     }));
+                    assignmentsDirtyRef.current = true;
                     setAssignmentsDirty(true);
                   }}
                   className="ml-auto rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 focus:border-cyan-500/50 focus:outline-none"
@@ -1110,6 +1091,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                     ...prev,
                     [selectedSlug]: { ...prev[selectedSlug], provider, model: undefined },
                   }));
+                  llmConfigDirtyRef.current = true;
                   setLlmConfigDirty(true);
                 }}
                 className="rounded-md border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 focus:border-cyan-500/50 focus:outline-none"
@@ -1132,6 +1114,7 @@ export function MissionDashboard({ pollInterval = 30_000 }: MissionDashboardProp
                       model: e.target.value || undefined,
                     },
                   }));
+                  llmConfigDirtyRef.current = true;
                   setLlmConfigDirty(true);
                 }}
                 placeholder="e.g. claude-sonnet-4-6"

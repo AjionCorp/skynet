@@ -72,9 +72,9 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           setSelectedSlug(json.data.config.activeMission);
         }
         return missionList[0]?.slug ?? null;
-      });
+      }
     } catch { /* ignore */ }
-  }, [apiPrefix]);
+  }, [apiPrefix, selectedSlug]);
 
   const fetchBacklog = useCallback(async () => {
     try {
@@ -158,6 +158,16 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           <Target className="h-3.5 w-3.5" />
           Scope:
         </span>
+        <button
+          onClick={() => setSelectedSlug(null)}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+            selectedSlug === null
+              ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400"
+              : "border-zinc-800 bg-zinc-900/50 text-zinc-400 hover:border-zinc-700 hover:text-zinc-300"
+          }`}
+        >
+          Global backlog
+        </button>
         {missions.length > 0 ? (
           missions.map((m) => (
             <button
@@ -174,7 +184,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           ))
         ) : (
           <span className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-500">
-            Global backlog
+            No missions configured
           </span>
         )}
       </div>

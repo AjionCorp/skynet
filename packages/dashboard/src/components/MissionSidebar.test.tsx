@@ -298,6 +298,8 @@ describe("MissionSidebar", () => {
     await waitFor(() => {
       expect(consoleSpy).toHaveBeenCalledWith("Failed to fetch sidebar data:", expect.any(Error));
     });
+    expect(screen.getByText("Stale")).toBeDefined();
+    expect(screen.getByText("Network error")).toBeDefined();
   });
 
   it("shows dashes when pipeline data is null", async () => {

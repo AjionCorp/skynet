@@ -611,6 +611,7 @@ EOF
   # Extract task details
   task_title=$(echo "$next_task" | sed 's/^- \[ \] //')
   _CURRENT_TASK_TITLE="$task_title"
+  _CURRENT_TASK_ID="${_db_task_id:-}"
   _CURRENT_TASK_DB_TITLE="${_db_title:-$task_title}"
   # Avoid grep here because set -e + pipefail would crash the worker when no [TAG] exists.
   task_type=""
