@@ -41,7 +41,7 @@ describe("LogViewer", () => {
     expect(select).toBeDefined();
 
     const options = select.querySelectorAll("option");
-    expect(options.length).toBe(10);
+    expect(options.length).toBe(14);
 
     // Verify some labels
     const labels = Array.from(options).map((o) => o.textContent);
@@ -51,6 +51,10 @@ describe("LogViewer", () => {
     expect(labels).toContain("Watchdog");
     expect(labels).toContain("Health Check");
     expect(labels).toContain("Project Driver");
+    expect(labels).toContain("Auth Refresh");
+    expect(labels).toContain("Codex Auth Refresh");
+    expect(labels).toContain("Sync Runner");
+    expect(labels).toContain("Post-Commit Gate");
   });
 
   it("displays log content in monospace pre block", async () => {
