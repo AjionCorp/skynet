@@ -78,6 +78,33 @@ interface MockEventSource {
 
 let mockES: MockEventSource;
 
+function mockFetchResponse(url: string) {
+  if (url.includes("/monitoring/status")) {
+    return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+  }
+
+  if (url.includes("/monitoring/agents")) {
+    return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+  }
+
+  if (url.includes("/monitoring/logs")) {
+    return new Response(
+      JSON.stringify({
+        data: {
+          script: "dev-worker-1",
+          lines: [],
+          totalLines: 0,
+          fileSizeBytes: 0,
+          count: 0,
+        },
+        error: null,
+      }),
+    );
+  }
+
+  return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+}
+
 function renderWithProvider(ui: React.ReactElement) {
   return render(<SkynetProvider apiPrefix="/api/admin">{ui}</SkynetProvider>);
 }
@@ -214,7 +241,7 @@ describe("MonitoringDashboard", () => {
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.includes("/monitoring/status")) {
-        return new Response(JSON.stringify({ data: null, error: "Connection failed" }));
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
       }
       return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
     }));

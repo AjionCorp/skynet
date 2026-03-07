@@ -8,7 +8,19 @@ lock_backend_acquire() {
   local timeout="${2:-30}"
   local flockfile="${SKYNET_LOCK_PREFIX}-${name}.flock"
   local lockdir="${SKYNET_LOCK_PREFIX}-${name}.lock"
-  local lock_ttl="${SKYNET_LOCK_TTL_SECS:-600}"  # 10 minutes default
+  local lock_ttl="${timeout:-}"
+  local missing_pid_grace="${SKYNET_LOCK_MISSING_PID_GRACE_SECS:-5}"
+
+  case "$lock_ttl" in
+    ''|*[!0-9]*)
+      lock_ttl="${SKYNET_LOCK_TTL_SECS:-600}"  # 10 minutes default
+      ;;
+  esac
+  case "$missing_pid_grace" in
+    ''|*[!0-9]*)
+      missing_pid_grace=5
+      ;;
+  esac
 
   # Merge lock TTL is computed dynamically from recent merge/typecheck timings.
   # Reuse that same TTL for stale-lock detection in the mkdir fallback path so a
@@ -32,7 +44,8 @@ lock_backend_acquire() {
   local attempts=0
   local max_attempts=$(( timeout * 2 ))
   while ! mkdir "$lockdir" 2>/dev/null; do
-    # Check for stale lock: holder PID is dead OR lock is older than TTL
+    # Check for stale lock. Never reclaim a lock owned by a live PID based on
+    # age alone: long merges/typechecks/pushes are valid and must remain single-holder.
     if [ -d "$lockdir" ]; then
       local _pid=""
       [ -f "$lockdir/pid" ] && _pid=$(cat "$lockdir/pid" 2>/dev/null || echo "")
@@ -44,27 +57,31 @@ lock_backend_acquire() {
         _force_release=true
       fi
 
-      # Case 2: Lock age exceeds TTL (dead worker that left no PID, or stuck process)
-      if ! $_force_release && [ -f "$lockdir/pid" ]; then
+      # Case 2: Missing/empty PID long enough to be considered stale.
+      # This covers crashes between mkdir and PID write without racing a live
+      # process that has not finished writing its PID yet.
+      if ! $_force_release && { [ ! -f "$lockdir/pid" ] || [ -z "$_pid" ]; }; then
         local _lock_age=0
         local _lock_mtime
+        local _lock_age_threshold="$missing_pid_grace"
+        if [ "$lock_ttl" -lt "$_lock_age_threshold" ]; then
+          _lock_age_threshold="$lock_ttl"
+        fi
+        if [ "$_lock_age_threshold" -lt 1 ]; then
+          _lock_age_threshold=1
+        fi
         if [ "$(uname -s)" = "Darwin" ]; then
-          _lock_mtime=$(stat -f %m "$lockdir/pid" 2>/dev/null || echo 0)
+          _lock_mtime=$(stat -f %m "$lockdir" 2>/dev/null || echo 0)
         else
-          _lock_mtime=$(stat -c %Y "$lockdir/pid" 2>/dev/null || echo 0)
+          _lock_mtime=$(stat -c %Y "$lockdir" 2>/dev/null || echo 0)
         fi
         _lock_age=$(( $(date +%s) - _lock_mtime ))
-        if [ "$_lock_age" -gt "$lock_ttl" ]; then
+        if [ "$_lock_age" -gt "$_lock_age_threshold" ]; then
           _force_release=true
           if declare -f log >/dev/null 2>&1; then
-            log "WARNING: Force-releasing stale $name lock (age=${_lock_age}s > TTL=${lock_ttl}s, holder PID=${_pid:-unknown})"
+            log "WARNING: Force-releasing stale $name lock with missing PID (age=${_lock_age}s > grace=${_lock_age_threshold}s)"
           fi
         fi
-      fi
-
-      # Case 3: No PID file at all (crash between mkdir and PID write)
-      if ! $_force_release && [ ! -f "$lockdir/pid" ]; then
-        _force_release=true
       fi
 
       if $_force_release; then

@@ -8,6 +8,8 @@ interface ConfigEntry {
   key: string;
   value: string;
   comment: string;
+  sensitive?: boolean;
+  hasStoredValue?: boolean;
 }
 
 const MOCK_ENTRIES: ConfigEntry[] = [
@@ -217,6 +219,31 @@ describe("SettingsDashboard", () => {
     });
   });
 
+  it("displays an error when the config response shape is invalid", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ data: null, error: null }))
+    ));
+
+    renderWithProvider(<SettingsDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Invalid config response")).toBeDefined();
+    });
+  });
+
+  it("shows the HTTP status when fetch returns a non-JSON error response", async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+      new Response("Upstream config proxy failed", {
+        status: 502,
+        headers: { "Content-Type": "text/plain" },
+      })
+    ));
+
+    renderWithProvider(<SettingsDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to fetch config (HTTP 502)")).toBeDefined();
+    });
+  });
+
   it("shows 'No changes' when nothing is edited", async () => {
     mockConfigGet(MOCK_ENTRIES);
     renderWithProvider(<SettingsDashboard />);
@@ -225,11 +252,45 @@ describe("SettingsDashboard", () => {
     });
   });
 
-  it("pauses refresh while there are unsaved edits", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ data: { entries: MOCK_ENTRIES, configPath: "" }, error: null }))
-    );
-    vi.stubGlobal("fetch", fetchMock);
+  it("renders sensitive entries as blank password inputs and only submits replacements", async () => {
+    const sensitiveEntries: ConfigEntry[] = [
+      { key: "SKYNET_TG_BOT_TOKEN", value: "", comment: "Notifications", sensitive: true, hasStoredValue: true },
+      { key: "SKYNET_MAX_WORKERS", value: "4", comment: "Workers" },
+    ];
+
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { entries: sensitiveEntries, configPath: "" }, error: null }))
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ data: { entries: sensitiveEntries, configPath: "" }, error: null }))
+      ));
+
+    renderWithProvider(<SettingsDashboard />);
+
+    await waitFor(() => {
+      expect(screen.getByText("SKYNET_TG_BOT_TOKEN")).toBeDefined();
+    });
+
+    const secretInput = screen.getByPlaceholderText("Leave blank to keep current value") as HTMLInputElement;
+    expect(secretInput.type).toBe("password");
+    expect(secretInput.value).toBe("");
+
+    fireEvent.change(secretInput, { target: { value: "new-secret-token" } });
+    fireEvent.click(screen.getByText("Save Changes"));
+
+    await waitFor(() => {
+      const postCall = vi.mocked(global.fetch).mock.calls.find(
+        (c: unknown[]) => typeof c[1] === "object" && (c[1] as RequestInit).method === "POST"
+      );
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body.updates).toEqual({ SKYNET_TG_BOT_TOKEN: "new-secret-token" });
+    });
+  });
+
+  it("disables refresh while there are unsaved changes", async () => {
+    mockConfigGet(MOCK_ENTRIES);
     renderWithProvider(<SettingsDashboard />);
 
     await waitFor(() => {
@@ -241,11 +302,10 @@ describe("SettingsDashboard", () => {
     fireEvent.change(maxWorkersInput!, { target: { value: "8" } });
 
     await waitFor(() => {
-      expect(screen.getByText(/Unsaved changes are being preserved/)).toBeDefined();
+      expect(screen.getByText("1 unsaved change")).toBeDefined();
     });
 
-    const refreshButton = screen.getByRole("button", { name: "Refresh" });
-    expect(refreshButton.getAttribute("disabled")).not.toBeNull();
+    expect(screen.getByText("Refresh").hasAttribute("disabled")).toBe(true);
   });
 
   it("fetches from correct API endpoint", async () => {

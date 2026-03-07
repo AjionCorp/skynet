@@ -33,7 +33,7 @@ export function createPipelineControlHandler(config: SkynetConfig) {
       }
       if (!VALID_ACTIONS.includes(rawAction as typeof VALID_ACTIONS[number])) {
         return Response.json(
-          { data: null, error: `Invalid or missing action. Must be one of: ${VALID_ACTIONS.join(", ")}` },
+          { data: null, error: `Invalid or missing action '${rawAction}'. Must be one of: ${VALID_ACTIONS.join(", ")}` },
           { status: 400 },
         );
       }
@@ -134,7 +134,12 @@ export function createPipelineControlHandler(config: SkynetConfig) {
         // Kill project-driver(s)
         const pdLocks = listProjectDriverLocks(lockPrefix);
         if (pdLocks.length === 0) {
-          if (killByLock(`${lockPrefix}-project-driver-global.lock`)) killed.push("project-driver");
+          if (
+            killByLock(`${lockPrefix}-project-driver-global.lock`) ||
+            killByLock(`${lockPrefix}-project-driver.lock`)
+          ) {
+            killed.push("project-driver");
+          }
         } else {
           for (const lockPath of pdLocks) {
             if (killByLock(lockPath)) {

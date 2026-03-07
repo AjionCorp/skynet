@@ -218,7 +218,7 @@ if $_consec_all_fail; then
     echo "$_newest_fail_epoch" > "$FIXER_COOLDOWN_STREAK_EPOCH"
     log "Fixer paused: 5 consecutive failures, cooling down 30min"
     emit_event "fixer_idle" "Fixer $FIXER_ID: cooldown after 5 consecutive failures"
-    rm -rf "$LOCKFILE"
+    release_lock_if_owned "$LOCKFILE" "$$" 2>/dev/null || true
     exit 0
   fi
 fi
@@ -312,13 +312,13 @@ _handle_worktree_failure() {
 
 _make_fix_branch() {
   local _branch_base
-  _branch_base="$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 40)"
+  _branch_base="$(echo "$task_title" | sed 's/^\[.*\] //' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | tr -cd 'a-z0-9-' | head -c 28)"
   if [ -z "$_branch_base" ] || ! echo "$_branch_base" | grep -qE '^[a-z0-9]'; then
     log "WARNING: Could not sanitize task title into valid branch name, using fallback: task-$_db_task_id"
     # use a fallback based on task ID
     _branch_base="task-$_db_task_id"
   fi
-  branch_name="fix/$_branch_base"
+  branch_name="fix/${_branch_base}-${_db_task_id}"
   if ! setup_worktree "$branch_name" true; then
     _handle_worktree_failure
   fi
