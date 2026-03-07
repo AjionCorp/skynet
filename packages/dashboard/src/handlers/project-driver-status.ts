@@ -7,16 +7,14 @@ import { listProjectDriverLocks } from "../lib/process-locks";
 function getProjectDriverLogName(lockPrefix: string, lockPath: string): string {
   const globalLock = `${lockPrefix}-project-driver-global.lock`;
   const legacyLock = `${lockPrefix}-project-driver.lock`;
+ 
   if (lockPath === globalLock) {
     return "project-driver-global";
-  }
-  if (lockPath === legacyLock) {
-    return "project-driver";
   }
 
   const prefix = `${lockPrefix}-project-driver-`;
   if (!lockPath.startsWith(prefix) || !lockPath.endsWith(".lock")) {
-    return "project-driver";
+    return "project-driver-global";
   }
 
   return `project-driver-${lockPath.slice(prefix.length, -".lock".length)}`;

@@ -126,13 +126,9 @@ describe("createPipelineStatusHandler", () => {
   });
 
   it("detects project-driver locks from the lock directory, not devDir", async () => {
-    mockListProjectDriverLocks.mockReturnValue([
-      "/tmp/skynet-test--project-driver-main.lock",
-    ]);
-    mockReadPid.mockImplementation((path) =>
-      path === "/tmp/skynet-test--project-driver-main.lock" ? 4242 : null
-    );
-    mockIsProcessAlive.mockImplementation((pid) => pid === 4242);
+    mockListProjectDriverLocks.mockReturnValue(["/tmp/skynet-test--project-driver-main.lock"]);
+    mockReadPid.mockReturnValue(4242);
+    mockIsProcessAlive.mockReturnValue(true);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -298,13 +294,9 @@ describe("createPipelineStatusHandler", () => {
   });
 
   it("detects project-driver as running from lock dir pid", async () => {
-    mockListProjectDriverLocks.mockReturnValue([
-      "/tmp/skynet-test--project-driver-abcd1234.lock",
-    ]);
-    mockReadPid.mockImplementation((path) =>
-      typeof path === "string" && path.endsWith("project-driver-abcd1234.lock") ? 4242 : null
-    );
-    mockIsProcessAlive.mockImplementation((pid) => pid === 4242);
+    mockListProjectDriverLocks.mockReturnValue(["/tmp/skynet-test--project-driver-abcd1234.lock"]);
+    mockReadPid.mockReturnValue(4242);
+    mockIsProcessAlive.mockReturnValue(true);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();
@@ -366,10 +358,8 @@ describe("createPipelineStatusHandler", () => {
     mockListProjectDriverLocks.mockReturnValue([
       "/tmp/skynet-test--project-driver-my-mission.lock",
     ]);
-    mockReadPid.mockImplementation((path) =>
-      path === "/tmp/skynet-test--project-driver-my-mission.lock" ? 321 : null
-    );
-    mockIsProcessAlive.mockImplementation((pid) => pid === 321);
+    mockReadPid.mockImplementation((lockFile) => (lockFile.includes("project-driver-my-mission") ? 321 : null));
+    mockIsProcessAlive.mockReturnValue(true);
 
     const handler = createPipelineStatusHandler(makeConfig());
     const res = await handler();

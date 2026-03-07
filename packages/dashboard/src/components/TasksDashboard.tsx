@@ -72,10 +72,10 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
         if (typeof json.data?.config?.activeMission === "string") {
           setSelectedSlug((current) => current ?? json.data.config.activeMission);
         }
-        return;
+        return missionList[0]?.slug ?? null;
       }
     } catch { /* ignore */ }
-  }, [apiPrefix, scopeInitialized]);
+  }, [apiPrefix, selectedSlug]);
 
   const fetchBacklog = useCallback(async () => {
     try {
@@ -193,7 +193,7 @@ export function TasksDashboard({ taskTags, tagColors }: TasksDashboardProps = {}
           ))
         ) : (
           <span className="rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-1.5 text-xs text-zinc-500">
-            Global backlog
+            No missions configured
           </span>
         )}
       </div>

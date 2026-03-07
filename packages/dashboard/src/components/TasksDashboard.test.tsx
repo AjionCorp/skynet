@@ -245,4 +245,27 @@ describe("TasksDashboard", () => {
       expect(screen.getByText("Refresh")).toBeDefined();
     });
   });
+
+  it("keeps the global backlog scope available when missions exist", async () => {
+    const fetchMock = mockFetchWith(MOCK_BACKLOG, null, { position: "top" });
+    renderWithProvider(<TasksDashboard />);
+    await waitFor(() => {
+      expect(screen.getByText("Global backlog")).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText("Global backlog"));
+
+    const titleInput = screen.getByPlaceholderText(
+      "e.g. Add dark mode toggle to settings page"
+    ) as HTMLInputElement;
+    fireEvent.change(titleInput, { target: { value: "Global task" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Task" }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Task added to backlog")).toBeDefined();
+    });
+
+    const postCall = fetchMock.mock.calls.find(([, init]) => init?.method === "POST");
+    expect(String(postCall?.[0])).toBe("/api/admin/tasks");
+  });
 });

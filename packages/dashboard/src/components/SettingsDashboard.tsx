@@ -119,6 +119,7 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveWarning, setSaveWarning] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const dirtyCount = Object.keys(editedValues).length;
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -162,11 +163,14 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
 
   useEffect(() => {
     fetchConfig();
-    if (pollInterval > 0) {
+  }, [fetchConfig]);
+
+  useEffect(() => {
+    if (pollInterval > 0 && dirtyCount === 0) {
       const interval = setInterval(fetchConfig, pollInterval);
       return () => clearInterval(interval);
     }
-  }, [fetchConfig, pollInterval]);
+  }, [dirtyCount, fetchConfig, pollInterval]);
 
   const handleChange = (key: string, value: string) => {
     setEditedValues((prev) => {
@@ -268,9 +272,9 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         <div className="flex items-center gap-2">
           <button
             onClick={fetchConfig}
-            disabled={refreshDisabled}
-            title={dirtyCount > 0 ? "Save or reset pending changes before refreshing" : undefined}
+            disabled={dirtyCount > 0}
             className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900 px-4 py-2 text-sm font-medium text-zinc-400 transition hover:border-zinc-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            title={dirtyCount > 0 ? "Save or reset your changes before refreshing" : undefined}
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
@@ -298,6 +302,15 @@ export function SettingsDashboard({ pollInterval = 0 }: SettingsDashboardProps =
         <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-6 py-4">
           <AlertTriangle className="h-5 w-5 shrink-0 text-amber-300" />
           <p className="text-sm text-amber-200">{saveWarning}</p>
+        </div>
+      )}
+
+      {dirtyCount > 0 && (
+        <div className="flex items-center gap-3 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-6 py-4">
+          <AlertTriangle className="h-5 w-5 shrink-0 text-cyan-300" />
+          <p className="text-sm text-cyan-100">
+            Unsaved changes are being preserved. Auto-refresh is paused until you save or reset them.
+          </p>
         </div>
       )}
 

@@ -331,10 +331,12 @@ function LogTerminal({
   logData,
   loading,
   autoScroll,
+  error,
 }: {
   logData: LogData | null;
   loading: boolean;
   autoScroll: boolean;
+  error: string | null;
 }) {
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -343,6 +345,15 @@ function LogTerminal({
       endRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [logData?.lines, autoScroll]);
+
+  if (error && !logData) {
+    return (
+      <div className="flex items-center justify-center gap-2 px-4 py-8 text-sm text-red-400">
+        <AlertTriangle className="h-4 w-4" />
+        {error}
+      </div>
+    );
+  }
 
   if (!logData || logData.lines.length === 0) {
     return <p className="px-4 py-8 text-center text-sm text-zinc-600">No log entries</p>;
@@ -400,6 +411,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
   const [logSearch, setLogSearch] = useState("");
   const [logLines, setLogLines] = useState(200);
   const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [connected, setConnected] = useState(false);
   const statusUpdateSeqRef = useRef(0);
@@ -474,7 +486,15 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
         const params = new URLSearchParams({ script, lines: String(logLines) });
         if (logSearch) params.set("search", logSearch);
         const res = await fetch(`${apiPrefix}/monitoring/logs?${params}`);
+        if (!res.ok) {
+          setLogError(`Failed to load logs for ${script}`);
+          return;
+        }
         const json = await res.json();
+        if (json?.error) {
+          setLogError(typeof json.error === "string" ? json.error : `Failed to load logs for ${script}`);
+          return;
+        }
         const data = json?.data;
         if (
           data &&
@@ -484,11 +504,12 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
           typeof data.fileSizeBytes === "number"
         ) {
           setLogData(data as LogData);
+          setLogError(null);
         } else {
-          setLogData(null);
+          setLogError(`Received an invalid log payload for ${script}`);
         }
       } catch {
-        setLogData(null);
+        setLogError(`Failed to load logs for ${script}`);
       } finally {
         setLogLoading(false);
       }
@@ -1073,6 +1094,7 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
               onChange={(e) => {
                 setSelectedLog(e.target.value);
                 setLogData(null);
+                setLogError(null);
               }}
               className="rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none"
             >
@@ -1147,9 +1169,16 @@ export function MonitoringDashboard({ logScripts: logScriptsProp, tagColors }: M
             </div>
           )}
 
+          {logError && logData && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              {logError}
+            </div>
+          )}
+
           {/* Terminal */}
           <div className="overflow-hidden rounded-xl border border-zinc-800">
-            <LogTerminal logData={logData} loading={logLoading} autoScroll={autoScroll} />
+            <LogTerminal logData={logData} loading={logLoading} autoScroll={autoScroll} error={logError} />
           </div>
         </div>
       )}

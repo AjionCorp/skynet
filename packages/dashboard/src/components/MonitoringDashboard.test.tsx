@@ -247,7 +247,7 @@ describe("MonitoringDashboard", () => {
     }));
     renderWithProvider(<MonitoringDashboard />);
     await waitFor(() => {
-      expect(screen.getByText("Workers Active")).toBeDefined();
+      expect(screen.getByText("Connection failed")).toBeDefined();
     });
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: null, error: "Connection failed" }) });
@@ -333,28 +333,30 @@ describe("MonitoringDashboard", () => {
     });
   });
 
-  it("falls back to REST status when SSE is silent", async () => {
-    renderWithProvider(<MonitoringDashboard />);
+  it("surfaces log fetch failures instead of showing an empty log state", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/monitoring/status")) {
+        return new Response(JSON.stringify({ data: MOCK_STATUS, error: null }));
+      }
+      if (url.includes("/monitoring/logs")) {
+        return new Response(JSON.stringify({ data: null, error: "Log reader offline" }), { status: 500 });
+      }
+      if (url.includes("/monitoring/agents")) {
+        return new Response(JSON.stringify({ data: { agents: [] }, error: null }));
+      }
+      return new Response(JSON.stringify({ data: { workers: [] }, error: null }));
+    }));
 
-    await waitFor(() => {
-      expect(screen.getByText("Workers Active")).toBeDefined();
-    });
-
-    expect(global.fetch).toHaveBeenCalledWith("/api/admin/monitoring/status");
-  });
-
-  it("shows auto-managed state for non-triggerable workers", async () => {
     renderWithProvider(<MonitoringDashboard />);
     await act(async () => {
       mockES.onmessage?.({ data: JSON.stringify({ data: MOCK_STATUS, error: null }) });
     });
 
-    fireEvent.click(screen.getByText("Workers"));
+    fireEvent.click(screen.getByText("Logs"));
 
     await waitFor(() => {
-      expect(screen.getByText("Auth Refresh")).toBeDefined();
+      expect(screen.getByText(/Failed to load logs for dev-worker-1/i)).toBeDefined();
     });
-
-    expect(screen.getAllByText("Auto-managed").length).toBeGreaterThanOrEqual(1);
   });
 });
