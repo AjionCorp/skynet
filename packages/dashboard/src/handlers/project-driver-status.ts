@@ -1,4 +1,6 @@
 import type { SkynetConfig, ProjectDriverTelemetry } from "../types";
+import * as fs from "fs";
+import * as path from "path";
 import { readDevFile, getLastLogLine, extractTimestamp } from "../lib/file-reader";
 import { getWorkerStatus } from "../lib/worker-status";
 import { logHandlerError } from "../lib/handler-error";
@@ -53,6 +55,25 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
         (logScript !== "project-driver" ? getLastLogLine(devDir, "project-driver") : null);
       const lastLogTime = extractTimestamp(lastLog);
 
+      // Try to parse Project Driver Learnings from scripts/project-driver.sh
+      let learnings: string | null = null;
+      try {
+        const scriptPath = path.resolve(devDir, "../scripts/project-driver.sh");
+        if (fs.existsSync(scriptPath)) {
+          const content = fs.readFileSync(scriptPath, "utf-8");
+          const learningsMatch = content.match(/## PROJECT DRIVER LEARNINGS\n([\s\S]*?)\n"/);
+          if (learningsMatch && learningsMatch[1]) {
+            learnings = learningsMatch[1].trim();
+            // If it's just the default placeholder, don't show it
+            if (learnings === "(Append specific, contextual lessons here to improve future task generation)") {
+              learnings = null;
+            }
+          }
+        }
+      } catch {
+        // Ignore file read errors
+      }
+
       // Telemetry snapshot (may not exist)
       let telemetry: ProjectDriverTelemetry | null = null;
       const telemetryRaw = readDevFile(devDir, "project-driver-telemetry.json");
@@ -78,6 +99,7 @@ export function createProjectDriverStatusHandler(config: SkynetConfig) {
           lastLog,
           lastLogTime,
           telemetry,
+          learnings,
         },
         error: null,
       });

@@ -14,6 +14,19 @@ source "$SCRIPTS_DIR/mission-state.sh"
 # even if individual checks fail. Each cleanup step has its own error handling.
 set +e
 
+# --- Task normalization for deduplication ---
+# Strip tag prefix, strip "FRESH implementation" suffix, lowercase, collapse whitespace, first 50 chars
+_normalize_title() {
+  echo "$1" \
+    | sed 's/^[[:space:]]*//' \
+    | sed 's/^\[[^]]*\][[:space:]]*//' \
+    | sed 's/ — FRESH implementation.*//' \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/[[:space:]][[:space:]]*/ /g' \
+    | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' \
+    | cut -c1-50
+}
+
 LOG="$LOG_DIR/watchdog.log"
 WATCHDOG_LOCK_DIR="${SKYNET_LOCK_PREFIX}-watchdog.lock"
 WATCHDOG_INTERVAL="${SKYNET_WATCHDOG_INTERVAL:-180}"  # seconds between cycles (default 3 min)

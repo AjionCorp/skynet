@@ -382,6 +382,7 @@ export interface ProjectDriverStatus {
   lastLog: string | null;
   lastLogTime: string | null;
   telemetry: ProjectDriverTelemetry | null;
+  learnings?: string | null;
 }
 
 // ===== Task Velocity Types =====
