@@ -89,6 +89,7 @@ mkdir -p "$MOCK_SCRIPTS_DIR" "$MOCK_DEV_DIR" "$MOCK_PROJECT_DIR" \
 
 # Copy script under test
 cp "$REPO_ROOT/scripts/project-driver.sh" "$MOCK_SCRIPTS_DIR/project-driver.sh"
+cp "$REPO_ROOT/scripts/mission-state.sh" "$MOCK_SCRIPTS_DIR/mission-state.sh"
 
 # Write mock auth-check.sh
 cat > "$MOCK_SCRIPTS_DIR/auth-check.sh" << 'AUTHSTUB'
