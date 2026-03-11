@@ -477,7 +477,7 @@ skynet/
 │   ├── watchdog.sh        Dispatcher + crash recovery
 │   ├── dev-worker.sh      Worker (worktree > agent > gates > merge)
 │   ├── task-fixer.sh      Failed task retry
-│   ├── project-driver.sh  Mission-driven task generator
+│   ├── project-driver.sh  Self-improving mission-driven task generator
 │   ├── agents/            Agent plugins (claude, codex, echo)
 │   └── notify/            Notification plugins (telegram, slack, discord)
 └── templates/             Scaffolded by `skynet init`
@@ -503,12 +503,16 @@ pnpm dev:admin        # dashboard on port 3100
 
 ## Writing a Good Mission
 
-The mission file (`.dev/mission.md`) drives everything. Tips:
+The mission file (`.dev/mission.md`) drives everything. The Project Driver evaluates this file, generates tasks from it, and even updates the file itself if criteria are met or goals need adjustment based on technical realities. Tips:
 
 - **Be specific.** "Add user auth" is vague. "JWT auth with email/password login, registration, and password reset" generates focused tasks.
 - **Use Current Focus.** The project-driver generates tasks for whatever's in this section first.
 - **Define success criteria.** Without these, the pipeline can't know when it's done.
-- **Update as you go.** Move completed goals out. Add new focus areas.
+- **Self-Improving Mission:** The AI will actively rewrite the mission document if it determines the goals are too broad, or when it achieves a major milestone.
+
+### Project Driver Learnings
+
+The `project-driver.sh` script is capable of self-prompt evolution. When tasks fail repeatedly, the driver analyzes the failures and appends contextual lessons to its own prompt block (`## PROJECT DRIVER LEARNINGS`). This allows Skynet to get smarter over time for your specific project, avoiding the same mistakes. You can view these learnings directly in the Admin Dashboard.
 
 Example:
 
