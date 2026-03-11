@@ -74,31 +74,6 @@ export function AdminLayout({
             <RefreshCw className="h-4 w-4 text-cyan-400" />
             <span className="text-sm font-semibold text-white">Admin</span>
           </div>
-          {pages.length > 0 && (
-            <>
-              <span className="text-zinc-700">/</span>
-              <nav className="flex items-center gap-1">
-                {pages.map((page) => {
-                  const isActive = isPageActive(page.href);
-                  return (
-                    <Link
-                      key={page.href}
-                      href={page.href}
-                      className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition ${
-                        isActive
-                          ? "bg-cyan-500/10 text-cyan-300"
-                          : "text-zinc-400 hover:bg-zinc-800 hover:text-white"
-                      }`}
-                      aria-current={isActive ? "page" : undefined}
-                    >
-                      {page.icon && <page.icon className="h-3.5 w-3.5" />}
-                      {page.label}
-                    </Link>
-                  );
-                })}
-              </nav>
-            </>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <button

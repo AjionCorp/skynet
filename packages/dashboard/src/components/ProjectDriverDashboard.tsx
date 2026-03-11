@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   Circle,
   BarChart3,
+  Lightbulb,
 } from "lucide-react";
 import type { ProjectDriverStatus } from "../types";
 import { useSkynet } from "./SkynetProvider";
@@ -221,6 +222,21 @@ export function ProjectDriverDashboard({ pollInterval = 15_000 }: ProjectDriverD
             <p className="mt-1 text-lg font-bold text-white">
               {t.ts ? new Date(t.ts).toLocaleString() : "—"}
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Project Driver Learnings */}
+      {status?.learnings && (
+        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+          <div className="mb-2 flex items-center gap-2">
+            <Lightbulb className="h-4 w-4 text-cyan-400" />
+            <p className="text-xs font-medium uppercase tracking-wider text-cyan-400/80">
+              Project Driver Learnings
+            </p>
+          </div>
+          <div className="prose prose-sm prose-invert max-w-none text-zinc-300">
+            <pre className="whitespace-pre-wrap font-sans text-sm">{status.learnings}</pre>
           </div>
         </div>
       )}
